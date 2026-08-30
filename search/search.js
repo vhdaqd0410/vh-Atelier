@@ -66,6 +66,7 @@
     }
 
     // ---------- 加载索引 ----------
+    // 用异步读取 + 分块，避免同步 readFileSync 阻塞窗口弹出（6.79MB JSON 同步解析会卡）
     function loadIndex() {
         try {
             if (!fs.existsSync(indexFile)) {
@@ -73,15 +74,34 @@
                 renderEmpty('还没有音效索引\n请先到主面板「音效库」tab 扫描一次目录');
                 return;
             }
-            var c = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
-            if (c && Array.isArray(c.files)) {
-                allFiles = c.files;
-            } else {
-                allFiles = [];
-            }
-            el.count.textContent = '共 ' + allFiles.length + ' 个音效';
-            log('index loaded: ' + allFiles.length + ' files');
-            renderEmpty('输入关键词搜索音效\n回车或双击插入当前序列 · 可拖拽到时间轴');
+            el.count.textContent = '正在加载索引...';
+            fs.readFile(indexFile, 'utf8', function (err, text) {
+                if (err) {
+                    el.count.textContent = '索引加载失败';
+                    renderEmpty('索引加载失败: ' + err.message);
+                    return;
+                }
+                // JSON.parse 仍会阻塞，用 setTimeout 让 UI 先渲染一帧再解析
+                setTimeout(function () {
+                    try {
+                        var c = JSON.parse(text);
+                        if (c && Array.isArray(c.files)) {
+                            allFiles = c.files;
+                        } else {
+                            allFiles = [];
+                        }
+                        el.count.textContent = '共 ' + allFiles.length + ' 个音效';
+                        log('index loaded: ' + allFiles.length + ' files');
+                        // 若用户已经在输入，立即重滤
+                        if (el.q.value.trim()) doFilter();
+                        else renderEmpty('输入关键词搜索音效\n回车或双击插入当前序列 · 可拖拽到时间轴');
+                    } catch (e2) {
+                        el.count.textContent = '索引解析失败';
+                        log('index parse error: ' + e2.message);
+                        renderEmpty('索引解析失败: ' + e2.message);
+                    }
+                }, 0);
+            });
         } catch (e) {
             el.count.textContent = '索引加载失败';
             log('index load error: ' + e.message);

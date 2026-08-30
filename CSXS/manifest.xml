@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <ExtensionManifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     ExtensionBundleId="com.vh.atelier"
-    ExtensionBundleVersion="0.1.3"
+    ExtensionBundleVersion="0.1.4"
     Version="6.0">
 
     <ExtensionList>
-        <Extension Id="com.vh.atelier.panel" Version="0.1.3"/>
-        <Extension Id="com.vh.atelier.bg" Version="0.1.3"/>
-        <Extension Id="com.vh.atelier.search" Version="0.1.3"/>
+        <Extension Id="com.vh.atelier.panel" Version="0.1.4"/>
+        <Extension Id="com.vh.atelier.bg" Version="0.1.4"/>
+        <Extension Id="com.vh.atelier.search" Version="0.1.4"/>
     </ExtensionList>
 
     <ExecutionEnvironment>
@@ -105,7 +105,9 @@
                     </StartOn>
                 </Lifecycle>
                 <UI>
-                    <Type>ModalDialog</Type>
+                    <!-- Modeless：非模态浮窗，不锁宿主，因此支持拖拽到 PR 时间轴。
+                         ModalDialog 会锁死宿主，拖拽时显示禁止图标。 -->
+                    <Type>Modeless</Type>
                     <Menu>音效搜索</Menu>
                     <Geometry>
                         <Size>
