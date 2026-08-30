@@ -651,6 +651,62 @@ function vcGetMediaByPath(pathStr) {
 
 
 // ==================== 板块三：音效库 ====================
+// 获取当前序列播放头位置（秒），音效插入默认用它
+function sfxGetPlayerPosition() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: '没有激活的序列' });
+        var pos = seq.getPlayerPosition();
+        var sec = 0;
+        if (pos) {
+            try { sec = pos.seconds; } catch (e) {}
+            if (typeof sec !== 'number' || isNaN(sec)) sec = 0;
+        }
+        return JSON.stringify({ positionSec: sec });
+    } catch (e) {
+        return JSON.stringify({ positionSec: 0 });
+    }
+}
+
+// 把一个音效文件插入到激活序列（插入语义，不覆盖后续片段）
+// 从全局变量 sfxInsertPayload 读 { path, positionSec }
+function sfxInsertToTimelineStr() {
+    try {
+        var payload = sfxInsertPayload;
+        if (!payload || !payload.path) return JSON.stringify({ error: '无插入数据' });
+        var filePath = payload.path;
+        var positionSec = payload.positionSec || 0;
+
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: '没有激活的序列' });
+
+        // 1. 导入到项目（返回 boolean）
+        var f = new File(filePath);
+        if (!f.exists) return JSON.stringify({ error: '文件不存在: ' + filePath });
+        var ok = app.project.importFiles([f.fsName], true, app.project.rootItem, false);
+        if (!ok) return JSON.stringify({ error: '导入失败（importFiles 返回 false）' });
+
+        // 2. 按路径找回刚导入的 ProjectItem
+        var projectItem = null;
+        try {
+            var found = app.project.rootItem.findItemsMatchingMediaPath(f.fsName, 1);
+            if (found && found.length !== undefined && found.length > 0) projectItem = found[0];
+            else if (found && found.length === undefined) projectItem = found;
+        } catch (e) {}
+        if (!projectItem) return JSON.stringify({ error: '导入成功但未找到 ProjectItem' });
+
+        // 3. 计算 ticks（254016000000 ticks/秒），插入到最末一条音轨
+        var ticks = String(Math.round(positionSec * 254016000000));
+        var aTrackIndex = seq.audioTracks.numTracks - 1;
+        if (aTrackIndex < 0) aTrackIndex = 0;
+        seq.audioTracks[aTrackIndex].insertClip(projectItem, ticks, -1, aTrackIndex);
+
+        return JSON.stringify({ ok: true, trackIndex: aTrackIndex, positionSec: positionSec, name: f.name });
+    } catch (e) {
+        return JSON.stringify({ error: '插入时间线失败: ' + e.toString() });
+    }
+}
+
 // 导入一个音效文件到「音效库」素材箱（从全局变量 sfxImportPayload 读文件列表）
 function sfxImportToBinStr() {
     try {

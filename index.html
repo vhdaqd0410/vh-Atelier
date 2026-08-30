@@ -326,32 +326,121 @@
         }
 
         /* ===== 音效库板块专用 ===== */
-        #sfxDir { flex: 1; }
-        .filter-tabs { display: flex; gap: 6px; }
-        .filter-tabs button { flex: 0 0 auto; padding: 5px 12px; font-size: 12px; }
-        .filter-tabs button.on {
+        #panel-sfx {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 130px);
+            overflow: hidden;
+        }
+        .sfx-toolbar {
+            flex: 0 0 auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+        .sfx-toolbar .tr {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .sfx-toolbar .tr + .tr { margin-top: 6px; }
+        #sfxDir { flex: 1; min-width: 0; }
+        #sfxSearch { flex: 1; min-width: 0; }
+        #sfxSubdir { flex: 0 0 auto; max-width: 130px; }
+        .sfx-toolbar .tbtn {
+            flex: 0 0 auto;
+            padding: 6px 10px;
+            font-size: 12px;
+            background: var(--panel2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .sfx-toolbar .tbtn:hover { background: #3c3c3c; }
+        .sfx-toolbar .tbtn.on {
             background: var(--accent);
             color: #fff;
+            border-color: var(--accent);
         }
         .sfx-list {
-            max-height: 320px;
+            flex: 1;
+            min-height: 0;
             overflow-y: auto;
             background: var(--panel2);
             border-radius: 6px;
-            padding: 4px;
+            position: relative;
+        }
+        .sfx-spacer {
+            position: relative;
+            width: 100%;
+        }
+        #sfxCount {
+            flex: 0 0 auto;
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 6px;
+            font-variant-numeric: tabular-nums;
         }
         .sfx-item {
+            position: absolute;
+            left: 4px;
+            right: 4px;
+            height: 44px;
             display: flex;
             align-items: center;
             gap: 8px;
-            padding: 7px 8px;
+            padding: 6px 8px;
             border-radius: 4px;
-            cursor: pointer;
             font-size: 12px;
         }
         .sfx-item:hover { background: #3a3a3a; }
         .sfx-item.playing { background: #3a4b6b; }
-        .sfx-item .nm { flex: 1; word-break: break-all; line-height: 1.4; }
+        .sfx-item .playbtn {
+            flex: 0 0 auto;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 22px;
+            text-align: center;
+            padding: 0;
+        }
+        .sfx-item .playbtn:hover { border-color: var(--accent); }
+        .sfx-item .wave {
+            flex: 1;
+            min-width: 60px;
+            height: 32px;
+            cursor: pointer;
+        }
+        .sfx-item .nm {
+            flex: 1;
+            min-width: 0;
+            max-width: 220px;
+            background: transparent;
+            border: none;
+            color: var(--accent);
+            text-align: left;
+            font-size: 12px;
+            padding: 0;
+            cursor: pointer;
+            word-break: break-all;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .sfx-item .nm:hover { text-decoration: underline; }
+        .sfx-item .dur {
+            flex: 0 0 auto;
+            font-variant-numeric: tabular-nums;
+            color: var(--muted);
+            font-size: 11px;
+        }
         .sfx-item .ext {
             flex: 0 0 auto;
             font-size: 10px;
@@ -381,6 +470,31 @@
             line-height: 1.5;
             word-break: break-all;
             white-space: pre-wrap;
+        }
+        #sfxContextMenu {
+            position: fixed;
+            z-index: 9999;
+            min-width: 160px;
+            background: #2b2b2b;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+            display: none;
+        }
+        #sfxContextMenu .ctx-item {
+            padding: 7px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--text);
+            white-space: nowrap;
+        }
+        #sfxContextMenu .ctx-item:hover { background: #3a4b6b; }
+        #sfxContextMenu .ctx-sep {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 6px;
         }
         #sfxStatus.ok { color: var(--ok); }
         #sfxStatus.err { color: var(--err); }
@@ -591,35 +705,34 @@
 
     <!-- ==================== 板块三：音效库 ==================== -->
     <div class="tab-panel" id="panel-sfx" style="display:none;">
-        <div class="card">
-            <h2>1 · 音效库目录</h2>
-            <div class="row">
-                <input type="text" id="sfxDir" placeholder="音效文件夹路径（点击「浏览」选择）">
-                <button id="btnSfxBrowse" class="secondary mini">浏览</button>
+        <div class="sfx-toolbar">
+            <div class="tr">
+                <input type="text" id="sfxDir" placeholder="音效文件夹路径">
+                <button id="btnSfxBrowse" class="tbtn">浏览</button>
+                <button id="btnSfxScan" class="tbtn">扫描</button>
             </div>
-            <div class="row" style="margin-top:8px;">
-                <button id="btnSfxScan" class="secondary">扫描目录</button>
+            <div class="tr">
+                <input type="text" id="sfxSearch" placeholder="搜索音效名...">
+                <select id="sfxSubdir"><option value="">全部</option></select>
+                <button id="btnSfxAll" class="tbtn on">全部</button>
+                <button id="btnSfxFav" class="tbtn">★ 收藏</button>
             </div>
-            <div class="hint">递归扫描该目录下所有 mp3 / wav / ogg / flac / m4a / aac / aiff / wma。双击条目导入 PR 项目面板。</div>
-        </div>
-
-        <div class="card">
-            <h2>2 · 搜索 · 收藏</h2>
-            <input type="text" id="sfxSearch" placeholder="输入音效名关键词过滤...">
-            <div class="filter-tabs" style="margin-top:8px;">
-                <button id="btnSfxAll" class="secondary on">全部</button>
-                <button id="btnSfxFav" class="secondary">★ 收藏</button>
+            <div class="tr">
+                <span style="font-size:11px;color:var(--muted);flex:0 0 auto;">全局热键</span>
+                <input type="text" id="sfxHotkey" placeholder="alt+f5" style="flex:0 0 auto;width:120px;">
+                <button id="btnSfxHotkey" class="tbtn">保存</button>
+                <span id="sfxHotkeyHint" style="font-size:10px;color:var(--muted);flex:1;">支持 ctrl/shift/alt/win + 字母或 F1-F12</span>
             </div>
-            <div class="note" id="sfxCount" style="margin-top:6px;"></div>
         </div>
-
-        <div class="card">
-            <h2>3 · 列表</h2>
-            <div class="sfx-list" id="sfxList"><div class="sfx-empty">先选择音效库目录并「扫描目录」</div></div>
+        <div class="sfx-list" id="sfxList">
+            <div class="sfx-spacer" id="sfxSpacer"></div>
+            <div class="sfx-empty" id="sfxEmpty" style="display:none;">先选择音效库目录并「扫描目录」</div>
         </div>
-
+        <div id="sfxCount"></div>
         <div id="sfxStatus"></div>
     </div>
+
+    <div id="sfxContextMenu"></div>
 
     <audio id="sfxPlayer" style="display:none;"></audio>
 
@@ -629,6 +742,7 @@
     <script src="js/main.js"></script>
     <script src="js/subtitle.js"></script>
     <script src="js/clone.js"></script>
+    <script src="js/wavesurfer.js"></script>
     <script src="js/sfx.js"></script>
 </body>
 </html>

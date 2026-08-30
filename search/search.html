@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>音效搜索</title>
+    <style>
+        :root {
+            --bg: #1e1e1e;
+            --panel: #2a2a2a;
+            --panel2: #333333;
+            --text: #e8e8e8;
+            --muted: #9a9a9a;
+            --accent: #8b5cf6;
+            --accent-hover: #a07bf7;
+            --ok: #3fb950;
+            --err: #f85149;
+            --warn: #d29922;
+            --border: #3f3f3f;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 13px;
+            user-select: none;
+            -webkit-user-select: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .search-bar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+        }
+        .search-bar .icon { font-size: 15px; opacity: .8; }
+        .search-bar input {
+            flex: 1;
+            min-width: 0;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text);
+            font-size: 15px;
+            padding: 6px 0;
+        }
+        .search-bar input::placeholder { color: var(--muted); }
+        .search-bar .hint {
+            flex: 0 0 auto;
+            font-size: 10px;
+            color: var(--muted);
+            padding: 2px 7px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+        }
+
+        .results {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 6px;
+        }
+        .results .empty {
+            padding: 40px 16px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .results .empty .big { font-size: 26px; display: block; margin-bottom: 8px; }
+
+        .item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .item:hover { background: #333333; }
+        .item.selected {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        .item.selected .nm, .item.selected .dur, .item.selected .star { color: #fff; }
+        .item.selected .ext { background: rgba(255,255,255,.2); color: #fff; }
+
+        .item .playbtn {
+            flex: 0 0 auto;
+            width: 24px;
+            height: 24px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 1;
+            padding: 0;
+            text-align: center;
+        }
+        .item .playbtn:hover { border-color: var(--accent); }
+        .item .nm {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 12px;
+        }
+        .item .dur {
+            flex: 0 0 auto;
+            color: var(--muted);
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+        }
+        .item .ext {
+            flex: 0 0 auto;
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: #3a4b6b;
+            color: #8ab0ff;
+        }
+        .item .star {
+            flex: 0 0 auto;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--muted);
+            padding: 0 2px;
+        }
+        .item .star.on { color: var(--warn); }
+
+        .footer {
+            flex: 0 0 auto;
+            padding: 6px 12px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .footer .status-ok { color: var(--ok); }
+        .footer .status-err { color: var(--err); }
+    </style>
+</head>
+<body>
+    <div class="search-bar">
+        <span class="icon">🔍</span>
+        <input id="q" type="text" placeholder="输入音效名搜索，回车 / 双击插入时间线..." autocomplete="off" spellcheck="false">
+        <span class="hint">Esc 关闭</span>
+    </div>
+    <div class="results" id="results">
+        <div class="empty"><span class="big">🔎</span>输入关键词搜索音效<br><span style="font-size:11px;">回车或双击插入当前序列 · 可拖拽到时间轴</span></div>
+    </div>
+    <div class="footer">
+        <span id="count">加载索引中...</span>
+        <span id="status"></span>
+    </div>
+
+    <script src="../js/CSInterface.js"></script>
+    <script src="./search.js"></script>
+</body>
+</html>

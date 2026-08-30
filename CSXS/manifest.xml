@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <ExtensionManifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     ExtensionBundleId="com.vh.atelier"
-    ExtensionBundleVersion="0.1.0"
+    ExtensionBundleVersion="0.1.3"
     Version="6.0">
 
     <ExtensionList>
-        <Extension Id="com.vh.atelier.panel" Version="0.1.0"/>
+        <Extension Id="com.vh.atelier.panel" Version="0.1.3"/>
+        <Extension Id="com.vh.atelier.bg" Version="0.1.3"/>
+        <Extension Id="com.vh.atelier.search" Version="0.1.3"/>
     </ExtensionList>
 
     <ExecutionEnvironment>
@@ -44,6 +46,80 @@
                             <Height>640</Height>
                             <Width>400</Width>
                         </Size>
+                    </Geometry>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+
+        <!-- 隐藏面板：全局热键桥，PR 启动即加载，spawn 钩子进程并广播热键事件 -->
+        <Extension Id="com.vh.atelier.bg">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./bg/bg.html</MainPath>
+                    <CEFCommandLine>
+                        <Parameter>--enable-nodejs</Parameter>
+                        <Parameter>--allow-file-access</Parameter>
+                        <Parameter>--allow-file-access-from-files</Parameter>
+                        <Parameter>--allow-running-insecure-content</Parameter>
+                        <Parameter>--mixed-context</Parameter>
+                    </CEFCommandLine>
+                </Resources>
+                <Lifecycle>
+                    <AutoVisible>false</AutoVisible>
+                    <StartOn>
+                        <Event>com.adobe.csxs.events.ApplicationInitialized</Event>
+                    </StartOn>
+                </Lifecycle>
+                <UI>
+                    <Type>Custom</Type>
+                    <Geometry>
+                        <Size>
+                            <Height>100</Height>
+                            <Width>100</Width>
+                        </Size>
+                    </Geometry>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+
+        <!-- 音效搜索浮窗：Spotlight 式全局搜索，热键弹出 -->
+        <Extension Id="com.vh.atelier.search">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./search/search.html</MainPath>
+                    <ScriptPath>./jsx/host.jsx</ScriptPath>
+                    <CEFCommandLine>
+                        <Parameter>--enable-nodejs</Parameter>
+                        <Parameter>--allow-file-access</Parameter>
+                        <Parameter>--allow-file-access-from-files</Parameter>
+                        <Parameter>--allow-running-insecure-content</Parameter>
+                    </CEFCommandLine>
+                </Resources>
+                <Lifecycle>
+                    <!-- AutoVisible=false + StartOn：PR 启动时预加载（JS 执行、DOM 就绪）
+                         但不显示窗口；热键 requestOpenExtension 时一次到位直接弹出。
+                         用 AutoVisible=true 反而会让 ModalDialog 启动时自动弹出。 -->
+                    <AutoVisible>false</AutoVisible>
+                    <StartOn>
+                        <Event>com.adobe.csxs.events.ApplicationInitialized</Event>
+                    </StartOn>
+                </Lifecycle>
+                <UI>
+                    <Type>ModalDialog</Type>
+                    <Menu>音效搜索</Menu>
+                    <Geometry>
+                        <Size>
+                            <Height>420</Height>
+                            <Width>480</Width>
+                        </Size>
+                        <MinSize>
+                            <Height>320</Height>
+                            <Width>360</Width>
+                        </MinSize>
+                        <MaxSize>
+                            <Height>720</Height>
+                            <Width>720</Width>
+                        </MaxSize>
                     </Geometry>
                 </UI>
             </DispatchInfo>
