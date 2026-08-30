@@ -648,3 +648,37 @@ function vcGetMediaByPath(pathStr) {
         return JSON.stringify({ error: '读取素材失败: ' + e.toString() });
     }
 }
+
+
+// ==================== 板块三：音效库 ====================
+// 导入一个音效文件到「音效库」素材箱（从全局变量 sfxImportPayload 读文件列表）
+function sfxImportToBinStr() {
+    try {
+        var files = sfxImportPayload;
+        if (!files || files.length === 0) return JSON.stringify({ error: '没有要导入的文件' });
+        var root = app.project.rootItem;
+        var bin = null;
+        for (var i = 0; i < root.children.numItems; i++) {
+            var c = root.children[i];
+            try {
+                if (c.name === '音效库') { bin = c; break; }
+            } catch (e) {}
+        }
+        if (!bin) {
+            try { bin = root.createBin('音效库'); } catch (e) {
+                return JSON.stringify({ error: '创建素材箱失败: ' + e.toString() });
+            }
+        }
+        var imported = [];
+        for (var j = 0; j < files.length; j++) {
+            var f = new File(files[j]);
+            if (!f.exists) { imported.push(f.name + '(不存在)'); continue; }
+            var ok = app.project.importFiles([f.fsName], true, bin, false);
+            if (ok) imported.push(f.name);
+            else imported.push(f.name + '(失败)');
+        }
+        return JSON.stringify({ ok: true, bin: '音效库', imported: imported });
+    } catch (e) {
+        return JSON.stringify({ error: '导入音效失败: ' + e.toString() });
+    }
+}

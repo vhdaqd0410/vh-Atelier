@@ -3,7 +3,8 @@
     var tabs = document.querySelectorAll('.tab');
     var panels = {
         subtitle: document.getElementById('panel-subtitle'),
-        clone: document.getElementById('panel-clone')
+        clone: document.getElementById('panel-clone'),
+        sfx: document.getElementById('panel-sfx')
     };
 
     function switchTab(name) {
