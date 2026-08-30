@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>vh-Atelier</title>
+    <style>
+        :root {
+            --bg: #1e1e1e;
+            --panel: #2a2a2a;
+            --panel2: #333333;
+            --text: #e8e8e8;
+            --muted: #9a9a9a;
+            --accent: #8b5cf6;
+            --accent-hover: #a07bf7;
+            --ok: #3fb950;
+            --err: #f85149;
+            --warn: #d29922;
+            --border: #3f3f3f;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            font-size: 13px;
+            padding: 14px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        h1 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+        .sub { color: var(--muted); font-size: 11px; margin-bottom: 12px; }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 12px;
+        }
+        .tab {
+            flex: 1;
+            background: transparent;
+            color: var(--muted);
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background .15s, color .15s;
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .card h2 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 8px;
+        }
+
+        .row { display: flex; gap: 8px; align-items: center; }
+        .row + .row { margin-top: 8px; }
+
+        button {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background .15s;
+            flex: 1;
+        }
+        button:hover { background: var(--accent-hover); }
+        button:disabled { background: #3a3a3a; color: #777; cursor: not-allowed; }
+        button.secondary {
+            background: var(--panel2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        button.secondary:hover { background: #3c3c3c; }
+        button.danger {
+            background: #4a2a2a;
+            color: #ff9a9a;
+            border: 1px solid #5a3a3a;
+        }
+        button.danger:hover { background: #5a3535; }
+        button.mini {
+            flex: 0 0 auto;
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+
+        label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+        textarea, input[type=text], select {
+            background: var(--panel2);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 7px 8px;
+            font-size: 12px;
+            width: 100%;
+            font-family: inherit;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        textarea { resize: vertical; line-height: 1.5; }
+        select { cursor: pointer; width: auto; }
+
+        .check-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--text);
+        }
+        .check-row input[type=checkbox] { cursor: pointer; }
+        .note { color: var(--muted); font-size: 11px; }
+
+        .progress-wrap { margin-top: 10px; display: none; }
+        .progress-wrap.show { display: block; }
+        .progress-bar {
+            height: 8px;
+            background: var(--panel2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            width: 0;
+            background: var(--accent);
+            transition: width .2s;
+        }
+        .progress-bar .fill.indet {
+            width: 30%;
+            animation: slide 1s infinite;
+        }
+        @keyframes slide {
+            0% { margin-left: 0; }
+            50% { margin-left: 70%; }
+            100% { margin-left: 0; }
+        }
+        #wsProgressText, #vcProgressText {
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+        #wsProgressTime {
+            margin-top: 2px;
+            font-size: 11px;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        #wsStatus, #vcStatus {
+            margin-top: 8px;
+            font-size: 12px;
+            min-height: 16px;
+            line-height: 1.5;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+        #wsStatus.ok, #vcStatus.ok { color: var(--ok); }
+        #wsStatus.err, #vcStatus.err { color: var(--err); }
+        #wsStatus.warn, #vcStatus.warn { color: var(--warn); }
+
+        .hint { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.5; }
+
+        /* ===== 字幕板块专用 ===== */
+        #seqList {
+            max-height: 180px;
+            overflow-y: auto;
+            background: var(--panel2);
+            border-radius: 6px;
+            padding: 4px;
+            margin-top: 8px;
+        }
+        .seq-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .seq-item:hover { background: #3a3a3a; }
+        .seq-item input[type=checkbox] { cursor: pointer; }
+        .seq-item .nm { flex: 1; }
+        .seq-item .dur { color: var(--muted); font-variant-numeric: tabular-nums; }
+        .seq-item .badge {
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 8px;
+            background: #3a4b6b;
+            color: #8ab0ff;
+        }
+        #resultSummary {
+            margin-top: 8px;
+            max-height: 140px;
+            overflow-y: auto;
+            background: var(--panel2);
+            border-radius: 6px;
+            padding: 6px;
+        }
+        .result-item {
+            padding: 5px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .result-item:hover { background: #3a3a3a; }
+        .result-item.sel { background: #3a4b6b; }
+        .result-item .nm { flex: 1; }
+        .result-item .cnt { color: var(--muted); font-variant-numeric: tabular-nums; }
+        .result-item .ok-tag { color: var(--ok); }
+        .result-item .err-tag { color: var(--err); }
+        #subtitleList {
+            margin-top: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--panel2);
+            border-radius: 6px;
+            padding: 6px;
+        }
+        .subtitle-item {
+            padding: 5px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1.5;
+            display: flex;
+            gap: 8px;
+        }
+        .subtitle-item:hover { background: #3a3a3a; }
+        .subtitle-item .t { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .subtitle-item .x { flex: 1; }
+
+        /* ===== 语音克隆板块专用 ===== */
+        .ref-box {
+            background: var(--panel2);
+            border: 1px dashed var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+            word-break: break-all;
+        }
+        .ref-box.has { color: var(--text); border-style: solid; }
+        .speed-row { display: flex; align-items: center; gap: 10px; }
+        .speed-row input[type=range] { flex: 1; }
+        .speed-row .val {
+            min-width: 44px;
+            text-align: center;
+            color: var(--accent);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        .result-info {
+            margin-top: 8px;
+            background: var(--panel2);
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 12px;
+            line-height: 1.6;
+            display: none;
+        }
+        .result-info.show { display: block; }
+        .result-info .k { color: var(--muted); }
+        .player-panel {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .player-panel.show { display: flex; }
+        .ptime {
+            font-size: 11px;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+            min-width: 34px;
+            text-align: center;
+        }
+        .seek {
+            flex: 1;
+            height: 6px;
+            background: var(--panel2);
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+        }
+        .seek-fill {
+            height: 100%;
+            width: 0;
+            background: var(--accent);
+            border-radius: 3px;
+            pointer-events: none;
+        }
+        .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .grid2 label { margin-bottom: 2px; }
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 12px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>vh-Atelier</h1>
+    <div class="sub">本地字幕识别 · 语音克隆 · 人声分离</div>
+
+    <div class="tabs">
+        <button class="tab active" data-tab="subtitle">字幕识别</button>
+        <button class="tab" data-tab="clone">语音克隆</button>
+    </div>
+
+    <!-- ==================== 板块一：字幕识别 ==================== -->
+    <div class="tab-panel" id="panel-subtitle">
+        <div class="card">
+            <h2>1 · 序列（可多选）</h2>
+            <div class="row">
+                <button id="btnRefreshSeq" class="secondary">刷新序列列表</button>
+                <button id="btnToggleAll" class="secondary">全选</button>
+            </div>
+            <div id="seqList"><div class="hint" style="padding:6px 8px;">点「刷新序列列表」加载项目所有序列</div></div>
+        </div>
+
+        <div class="card">
+            <h2>2 · 识别设置</h2>
+            <label>语言</label>
+            <select id="selLang">
+                <option value="zh" selected>中文</option>
+                <option value="en">英文</option>
+                <option value="auto">自动检测</option>
+                <option value="ja">日语</option>
+                <option value="ko">韩语</option>
+            </select>
+            <label style="margin-top:10px;">识别基准</label>
+            <select id="selRange">
+                <option value="all" selected>整条时间轴</option>
+                <option value="inout">入点到出点</option>
+                <option value="selection">选中的片段</option>
+            </select>
+            <div class="note" style="margin-top:4px;">入点/出点：先在时间轴按 I / O 设置范围；选中片段：先在时间轴点选块</div>
+            <label style="margin-top:10px;">模型</label>
+            <select id="selModel">
+                <option value="funasr-zh">FunASR（中文·paraformer，1.2GB）</option>
+                <option value="ggml-large-v3-q5_0.bin">large-v3（英文/多语言，1.0GB）</option>
+            </select>
+            <div class="note" style="margin-top:4px;">中文→FunASR（paraformer，断句细、抗噪强）；英文/其他→whisper large-v3</div>
+            <div class="check-row">
+                <input type="checkbox" id="chkGpu" checked>
+                <label for="chkGpu" style="margin:0; display:inline;">使用 GPU 加速（NVIDIA CUDA）</label>
+            </div>
+            <div class="note" style="margin-top:4px;">GPU 仅对英文 whisper 生效；中文 FunASR 纯 CPU 已比实时快 30 倍</div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 执行</h2>
+            <div class="row">
+                <button id="btnBatch">批量识别选中序列</button>
+                <button id="btnStop" class="danger" style="flex:0 0 64px; display:none;">停止</button>
+            </div>
+            <div class="progress-wrap" id="wsProgressWrap">
+                <div class="progress-bar"><div class="fill indet" id="wsProgressFill"></div></div>
+                <div id="wsProgressText"></div>
+                <div id="wsProgressTime"></div>
+            </div>
+            <div id="wsStatus"></div>
+        </div>
+
+        <div class="card" id="resultCard" style="display:none;">
+            <h2>4 · 识别结果</h2>
+            <div id="resultSummary"></div>
+            <div id="subtitleList"></div>
+            <div class="row" style="margin-top:10px;">
+                <button id="btnWriteBack">回写当前序列</button>
+                <button id="btnExportSrt" class="secondary">导出当前 SRT</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>5 · 人声分离</h2>
+            <div class="note" style="margin-bottom:8px;">先在时间轴选中含人声+伴奏的音频块，再点分离。Spleeter 本地引擎，无需联网。</div>
+            <div class="row">
+                <button id="btnSeparate">分离人声 / 伴奏</button>
+            </div>
+            <div class="row">
+                <button id="btnImportVocals" class="secondary" disabled>导入人声</button>
+                <button id="btnImportAccomp" class="secondary" disabled>导入伴奏</button>
+            </div>
+            <div class="progress-wrap" id="sepProgressWrap">
+                <div class="progress-bar"><div class="fill indet" id="sepProgressFill"></div></div>
+                <div id="sepProgressText"></div>
+            </div>
+            <div id="sepStatus"></div>
+        </div>
+    </div>
+
+    <!-- ==================== 板块二：语音克隆 ==================== -->
+    <div class="tab-panel" id="panel-clone" style="display:none;">
+        <div class="card">
+            <h2>1 · 参考音色</h2>
+            <div class="hint" style="margin-bottom:6px;">两种方式拿参考音频：① 时间轴选片段点「抓取」；② 从项目素材列表选一个并指定片段范围。</div>
+            <div class="row">
+                <button id="btnGrab">从时间轴抓取参考音色</button>
+            </div>
+            <div class="ref-box" id="refInfo">尚未抓取参考音频</div>
+            <label style="margin-top:10px;">参考音频对应文字（说什么就填什么）</label>
+            <div class="row" style="margin-top:4px;">
+                <input type="text" id="refText" placeholder="例如：今天天气真不错" style="flex:1;">
+                <button id="btnAutoRef" class="secondary mini">自动识别</button>
+            </div>
+            <div class="hint">自动识别会用 whisper 听一遍参考音频，识别结果自动填入，建议核对后使用。</div>
+
+            <div class="divider"></div>
+            <h2 style="margin-top:2px;">或从项目素材选择</h2>
+            <div class="row" style="margin-top:6px;">
+                <select id="projectMediaSel" style="flex:1;"><option value="">（点「刷新」加载项目素材）</option></select>
+                <button id="btnRefreshMedia" class="secondary mini">刷新</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <label style="margin:0;flex:0 0 auto;">起始秒</label>
+                <input type="text" id="mediaStart" placeholder="0" style="flex:1;">
+                <label style="margin:0;flex:0 0 auto;">时长秒</label>
+                <input type="text" id="mediaDur" placeholder="5" style="flex:1;">
+            </div>
+            <div class="row" style="margin-top:8px;">
+                <button id="btnGrabFromMedia" class="secondary">从项目素材截取参考音频</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>2 · 合成文本 & 语速</h2>
+            <label>要克隆说出的文字</label>
+            <textarea id="ttsText" rows="3" placeholder="输入要合成的话，中英文均可"></textarea>
+            <div class="grid2" style="margin-top:10px;">
+                <div>
+                    <label>语速 <span id="speedVal" style="color:var(--accent);font-weight:600;">1.0</span>×</label>
+                    <div class="speed-row">
+                        <input type="range" id="speedRange" min="0.5" max="2.0" step="0.05" value="1.0">
+                        <span class="val" id="speedLabel">1.0×</span>
+                    </div>
+                </div>
+                <div>
+                    <label>模型</label>
+                    <select id="modelSel">
+                        <option value="base" selected>基础版（llm.pt）</option>
+                        <option value="rl">RL 强化学习版（llm.rl.pt）</option>
+                    </select>
+                </div>
+            </div>
+            <div class="hint">模型：基础版音色稳定；RL 版内容准确度更高（官方 CER 0.81 vs 1.21），效果不满意可切换对比。</div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 生成</h2>
+            <div class="row">
+                <button id="btnClone" disabled>克隆生成</button>
+            </div>
+            <div class="progress-wrap" id="vcProgressWrap">
+                <div class="progress-bar"><div class="fill indet" id="vcProgressFill"></div></div>
+                <div id="vcProgressText"></div>
+            </div>
+            <div id="vcStatus"></div>
+            <div class="result-info" id="resultInfo"></div>
+            <div class="row" style="margin-top:10px;">
+                <button id="btnPlay" class="secondary" disabled>▶ 试听</button>
+                <button id="btnImport" class="secondary" disabled>导入素材箱</button>
+            </div>
+            <div class="player-panel" id="playerPanel">
+                <span class="ptime" id="playCur">0:00</span>
+                <div class="seek" id="seekBar"><div class="seek-fill" id="seekFill"></div></div>
+                <span class="ptime" id="playDur">0:00</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>4 · 导入到时间线</h2>
+            <div class="grid2">
+                <div>
+                    <label>目标音轨</label>
+                    <select id="trackSel"><option value="">（未加载）</option></select>
+                </div>
+                <div>
+                    <label>标签颜色</label>
+                    <select id="colorSel">
+                        <option value="0">蓝 Iris</option>
+                        <option value="1">绿 Forest</option>
+                        <option value="2">粉 Rose</option>
+                        <option value="3" selected>橙 Mango</option>
+                        <option value="4">紫 Violet</option>
+                        <option value="5">青 Caribbean</option>
+                        <option value="6">紫红 Lavender</option>
+                        <option value="7">灰 Slate</option>
+                    </select>
+                </div>
+            </div>
+            <label style="margin-top:8px;">插入位置（秒，默认播放头）</label>
+            <input type="text" id="insertPos" placeholder="留空 = 播放头位置">
+            <div class="row" style="margin-top:8px;">
+                <button id="btnRefreshTrack" class="secondary mini">刷新音轨</button>
+                <button id="btnInsertTimeline" class="secondary" disabled>插入到时间线</button>
+            </div>
+            <div class="hint">插入语义：新片段插到指定轨道，后续片段整体后移，不覆盖任何已有音频。</div>
+        </div>
+    </div>
+
+    <audio id="player" style="display:none;"></audio>
+
+    <script src="js/CSInterface.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/subtitle.js"></script>
+    <script src="js/clone.js"></script>
+</body>
+</html>

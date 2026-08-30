@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 大模型 / 引擎（不随仓库分发，运行时回退到旧字幕插件 CEP 目录或本机部署）
+models/*.bin
+models/funasr/
+models/spleeter/
+bin/whisper/
+bin/sherpa/
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
