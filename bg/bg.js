@@ -28,8 +28,9 @@
     // 默认命令→热键映射（无配置文件时用）
     var DEFAULT_MAP = {
         openSearch: 'ctrl+f2',
-        applyEffect: 'ctrl+f3',
-        applyTransition: 'ctrl+f4'
+        openFxSearch: 'ctrl+f3',
+        applyEffect: 'ctrl+f4',
+        applyTransition: 'ctrl+f5'
     };
 
     function log(msg) {
@@ -174,6 +175,10 @@
     function dispatch(id, data) {
         if (id === 'openSearch') {
             openSearch('sfx');
+            return;
+        }
+        if (id === 'openFxSearch') {
+            openSearch('fx');
             return;
         }
         if (id === 'applyEffect' || id === 'applyTransition') {

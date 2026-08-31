@@ -41,6 +41,7 @@
         subdir: document.getElementById('sfxSubdir'),
         search: document.getElementById('sfxSearch'),
         hotkey: document.getElementById('sfxHotkey'),
+        fxHotkey: document.getElementById('fxHotkey'),
         btnHotkey: document.getElementById('btnSfxHotkey'),
         hotkeyHint: document.getElementById('sfxHotkeyHint'),
         btnAll: document.getElementById('btnSfxAll'),
@@ -648,8 +649,12 @@
         if (data && data.type === 'ready') {
             log('onHotkey READY received: ' + (data.combo || ''));
             // 回显实际生效的键到输入框（若未手动编辑）
-            if (!el.hotkey.dataset.editing) {
-                el.hotkey.value = data.combo || DEFAULT_COMBO;
+            var map = data.hotkeys || {};
+            if (!el.hotkey.dataset.editing && map.openSearch) {
+                el.hotkey.value = map.openSearch;
+            }
+            if (el.fxHotkey && !el.fxHotkey.dataset.editing && map.openFxSearch) {
+                el.fxHotkey.value = map.openFxSearch;
             }
         } else if (data && data.type === 'hotkey') {
             // 命中热键时 bg 面板已直接弹搜索浮窗，主面板无需再切 tab
@@ -694,13 +699,27 @@
 
     function saveHotkey() {
         var combo = normalizeCombo(el.hotkey.value);
+        var fxCombo = normalizeCombo(el.fxHotkey ? el.fxHotkey.value : '');
         if (!combo) {
-            setStatus('热键格式不对，例如 alt+f5、ctrl+shift+k', 'err');
+            setStatus('音效热键格式不对，例如 alt+f5、ctrl+shift+k', 'err');
+            return;
+        }
+        if (!fxCombo) {
+            setStatus('特效热键格式不对，例如 ctrl+f3、ctrl+shift+x', 'err');
             return;
         }
         try {
             if (!fs.existsSync(collectDir)) fs.mkdirSync(collectDir, { recursive: true });
-            fs.writeFileSync(hotkeyFile, JSON.stringify({ combo: combo }, null, 2), 'utf8');
+            var map = {};
+            try {
+                if (fs.existsSync(hotkeyFile)) {
+                    var old = JSON.parse(fs.readFileSync(hotkeyFile, 'utf8'));
+                    if (old && old.map) map = old.map;
+                }
+            } catch (e) {}
+            map.openSearch = combo;
+            map.openFxSearch = fxCombo;
+            fs.writeFileSync(hotkeyFile, JSON.stringify({ map: map }, null, 2), 'utf8');
         } catch (e) {
             setStatus('热键保存失败: ' + e.message, 'err');
             return;
@@ -712,25 +731,41 @@
         } catch (e) {}
         el.hotkey.value = combo;
         el.hotkey.dataset.editing = '1';
-        setStatus('热键已保存为 ' + combo + '，正在生效...', 'ok');
+        if (el.fxHotkey) el.fxHotkey.value = fxCombo;
+        if (el.fxHotkey) el.fxHotkey.dataset.editing = '1';
+        setStatus('热键已保存：音效 ' + combo + ' · 特效 ' + fxCombo, 'ok');
         // 几秒后回显解除锁定
-        setTimeout(function () { delete el.hotkey.dataset.editing; }, 3000);
+        setTimeout(function () {
+            delete el.hotkey.dataset.editing;
+            if (el.fxHotkey) delete el.fxHotkey.dataset.editing;
+        }, 3000);
     }
 
     el.btnHotkey.addEventListener('click', saveHotkey);
     el.hotkey.addEventListener('keydown', function (ev) {
         if (ev.key === 'Enter') { ev.preventDefault(); saveHotkey(); }
     });
+    if (el.fxHotkey) {
+        el.fxHotkey.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') { ev.preventDefault(); saveHotkey(); }
+        });
+    }
 
     // 初始化：显示当前配置的热键（读共享文件）
     function loadHotkeyDisplay() {
         try {
             if (fs.existsSync(hotkeyFile)) {
                 var obj = JSON.parse(fs.readFileSync(hotkeyFile, 'utf8'));
+                if (obj && obj.map) {
+                    if (obj.map.openSearch) el.hotkey.value = obj.map.openSearch;
+                    if (obj.map.openFxSearch && el.fxHotkey) el.fxHotkey.value = obj.map.openFxSearch;
+                    return;
+                }
                 if (obj && obj.combo) { el.hotkey.value = obj.combo; return; }
             }
         } catch (e) {}
         el.hotkey.value = DEFAULT_COMBO;
+        if (el.fxHotkey) el.fxHotkey.value = 'ctrl+f3';
     }
 
     // ---------- 事件绑定 ----------
