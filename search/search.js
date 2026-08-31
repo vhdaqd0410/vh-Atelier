@@ -84,13 +84,22 @@
         } catch (e) {}
     }
 
+    // 判断缓存数组是否有效（至少有一条非空 name/matchName）
+    function cacheIsValid(arr) {
+        if (!Array.isArray(arr) || arr.length === 0) return false;
+        for (var i = 0; i < arr.length; i++) {
+            if ((arr[i] && (arr[i].name || arr[i].matchName))) return true;
+        }
+        return false;
+    }
+
     // ---------- 加载 fx 缓存（效果/转场，来自 host.jsx 枚举，本地缓存避免每次枚举）----------
     function loadFxCache() {
         try {
             if (fs.existsSync(fxCacheFile)) {
                 var c = JSON.parse(fs.readFileSync(fxCacheFile, 'utf8'));
-                if (c && Array.isArray(c.effects)) allEffects = c.effects;
-                if (c && Array.isArray(c.transitions)) allTransitions = c.transitions;
+                if (c && Array.isArray(c.effects) && cacheIsValid(c.effects)) allEffects = c.effects;
+                if (c && Array.isArray(c.transitions) && cacheIsValid(c.transitions)) allTransitions = c.transitions;
             }
         } catch (e) {}
     }

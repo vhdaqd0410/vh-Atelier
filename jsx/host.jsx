@@ -945,10 +945,11 @@ function fxApplyTransitionStr() {
         var qeTrack = qeSeq.getVideoTrackAt(loc.trackIndex);
         var qeClip = qeTrack.getItemAt(loc.itemIndex);
 
-        // 转场对象（若能取到）
+        // 转场对象（若能取到）：正确 API 是 getVideoTransitionByName（诊断已确认）
         var trans = null;
-        if (qeHasMethod(qe.project, 'getTransitionByName')) {
-            try { trans = qe.project.getTransitionByName(payload.matchName, true); } catch (e) {}
+        try { trans = qe.project.getVideoTransitionByName(payload.matchName); } catch (e) {}
+        if (!trans) {
+            try { trans = qe.project.getVideoTransitionByName(payload.name); } catch (e2) {}
         }
 
         // 候选签名列表：每个是 { args: [...] }，依次尝试
