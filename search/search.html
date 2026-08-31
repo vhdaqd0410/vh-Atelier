@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>音效搜索</title>
+    <title>vh-Atelier 搜索</title>
     <style>
         :root {
             --bg: #1e1e1e;
@@ -31,13 +31,38 @@
             overflow: hidden;
         }
 
+        .tabs {
+            flex: 0 0 auto;
+            display: flex;
+            gap: 2px;
+            padding: 8px 8px 0 8px;
+            background: var(--bg);
+        }
+        .tab {
+            flex: 1;
+            background: transparent;
+            color: var(--muted);
+            border: none;
+            border-bottom: 2px solid transparent;
+            padding: 7px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: color .15s, border-color .15s;
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+            font-weight: 600;
+        }
+
         .search-bar {
             flex: 0 0 auto;
             display: flex;
             align-items: center;
             gap: 8px;
             padding: 10px 12px;
-            background: var(--panel);
+            background: var(--bg);
             border-bottom: 1px solid var(--border);
         }
         .search-bar .icon { font-size: 15px; opacity: .8; }
@@ -121,6 +146,10 @@
             color: var(--muted);
             font-size: 11px;
             font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .item .ext {
             flex: 0 0 auto;
@@ -151,19 +180,25 @@
         }
         .footer .status-ok { color: var(--ok); }
         .footer .status-err { color: var(--err); }
+        .footer .status-warn { color: var(--warn); }
     </style>
 </head>
 <body>
+    <div class="tabs">
+        <button class="tab active" data-tab="sfx">音效</button>
+        <button class="tab" data-tab="effect">效果</button>
+        <button class="tab" data-tab="transition">转场</button>
+    </div>
     <div class="search-bar">
         <span class="icon">🔍</span>
-        <input id="q" type="text" placeholder="输入音效名搜索，回车 / 双击插入时间线..." autocomplete="off" spellcheck="false">
+        <input id="q" type="text" placeholder="输入关键词搜索..." autocomplete="off" spellcheck="false">
         <span class="hint">Esc 关闭</span>
     </div>
     <div class="results" id="results">
-        <div class="empty"><span class="big">🔎</span>输入关键词搜索音效<br><span style="font-size:11px;">回车或双击插入当前序列 · 可拖拽到时间轴</span></div>
+        <div class="empty"><span class="big">🔎</span>输入关键词开始搜索</div>
     </div>
     <div class="footer">
-        <span id="count">加载索引中...</span>
+        <span id="count">就绪</span>
         <span id="status"></span>
     </div>
 

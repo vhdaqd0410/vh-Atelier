@@ -1,0 +1,7 @@
+﻿{
+    "map":  {
+                "applyEffect":  "ctrl+f3",
+                "openSearch":  "ctrl+f2",
+                "applyTransition":  "ctrl+f4"
+            }
+}

@@ -738,3 +738,220 @@ function sfxImportToBinStr() {
         return JSON.stringify({ error: '导入音效失败: ' + e.toString() });
     }
 }
+
+
+// ==================== 板块四：QE 效果 / 转场（fx 前缀）====================
+// QE DOM 是 Adobe 未正式文档化但公开可用的 API，用于枚举和施加效果/转场。
+// 施加对象定位策略：优先「播放头下方的剪辑」，因为全局快捷键语义就是"对当前
+// 剪辑快速操作"（参照 Excalibur 的 selectClipAtPlayhead）。
+
+// ---------- 探测 QE API 方法列表（诊断用，方法名在不同 PR 版本可能不同）----------
+function qeProbe() {
+    try {
+        app.enableQE();
+        var methods = [];
+        try {
+            var m = qe.project.reflect.methods;
+            for (var i = 0; i < m.length; i++) {
+                methods.push(String(m[i].name));
+            }
+        } catch (e) {}
+        return JSON.stringify({ ok: true, methods: methods });
+    } catch (e) {
+        return JSON.stringify({ error: 'probe 失败: ' + e.toString() });
+    }
+}
+
+// 判断对象是否有某个方法（用 reflect，避免直接调用不存在的方法抛错）
+function qeHasMethod(obj, name) {
+    try {
+        var m = obj.reflect.methods;
+        for (var i = 0; i < m.length; i++) {
+            if (String(m[i].name) === name) return true;
+        }
+    } catch (e) {}
+    return false;
+}
+
+// 从效果/转场对象上尽力取 displayName（可能叫 name / displayName / matchName）
+function qePickName(obj) {
+    try { if (obj.displayName !== undefined && obj.displayName !== '') return String(obj.displayName); } catch (e) {}
+    try { if (obj.name !== undefined && obj.name !== '') return String(obj.name); } catch (e) {}
+    try { if (obj.matchName !== undefined && obj.matchName !== '') return String(obj.matchName); } catch (e) {}
+    return '';
+}
+function qePickMatchName(obj) {
+    try { if (obj.matchName !== undefined && obj.matchName !== '') return String(obj.matchName); } catch (e) {}
+    return '';
+}
+
+// ---------- 枚举视频效果 ----------
+function qeListEffects() {
+    try {
+        app.enableQE();
+        var list = null;
+        // 方法名候选，按优先级尝试
+        var candidates = ['getVideoEffectList', 'getEffectList', 'getVideoEffects'];
+        for (var ci = 0; ci < candidates.length; ci++) {
+            if (qeHasMethod(qe.project, candidates[ci])) {
+                list = qe.project[candidates[ci]]();
+                break;
+            }
+        }
+        if (!list) return JSON.stringify({ error: '当前 PR 版本未找到效果枚举 API' });
+        var out = [];
+        var n = list.length !== undefined ? list.length : list.numItems;
+        for (var i = 0; i < n; i++) {
+            var e = list[i];
+            if (!e) continue;
+            out.push({ name: qePickName(e), matchName: qePickMatchName(e) });
+        }
+        return JSON.stringify({ ok: true, items: out, count: out.length });
+    } catch (e) {
+        return JSON.stringify({ error: '枚举效果失败: ' + e.toString() });
+    }
+}
+
+// ---------- 枚举转场 ----------
+function qeListTransitions() {
+    try {
+        app.enableQE();
+        var list = null;
+        var candidates = ['getTransitionList', 'getVideoTransitionList', 'getTransitions'];
+        for (var ci = 0; ci < candidates.length; ci++) {
+            if (qeHasMethod(qe.project, candidates[ci])) {
+                list = qe.project[candidates[ci]]();
+                break;
+            }
+        }
+        if (!list) return JSON.stringify({ error: '当前 PR 版本未找到转场枚举 API' });
+        var out = [];
+        var n = list.length !== undefined ? list.length : list.numItems;
+        for (var i = 0; i < n; i++) {
+            var t = list[i];
+            if (!t) continue;
+            out.push({ name: qePickName(t), matchName: qePickMatchName(t) });
+        }
+        return JSON.stringify({ ok: true, items: out, count: out.length });
+    } catch (e) {
+        return JSON.stringify({ error: '枚举转场失败: ' + e.toString() });
+    }
+}
+
+// ---------- 定位播放头下方的第一个视频剪辑（非 QE 遍历 + 映射到 QE 索引）----------
+// 返回 { trackIndex, itemIndex, clipName }，找不到返回 null
+function qeLocatePlayheadClip() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return null;
+        var pos = seq.getPlayerPosition();
+        var sec = 0;
+        try { sec = pos.seconds; } catch (e) {}
+        if (typeof sec !== 'number' || isNaN(sec)) sec = 0;
+        for (var i = 0; i < seq.videoTracks.numTracks; i++) {
+            var tr = seq.videoTracks[i];
+            for (var j = 0; j < tr.clips.numItems; j++) {
+                var c = tr.clips[j];
+                var st = c.start.seconds;
+                var en = c.end.seconds;
+                if (st <= sec && sec < en) {
+                    return { trackIndex: i, itemIndex: j, clipName: c.name || '' };
+                }
+            }
+        }
+        return null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// ---------- 施加视频效果到播放头下方剪辑 ----------
+// 从全局变量 fxPayload 读 { matchName }
+function fxApplyEffectStr() {
+    try {
+        var payload = fxPayload;
+        if (!payload || !payload.matchName) return JSON.stringify({ error: '无 matchName' });
+        var loc = qeLocatePlayheadClip();
+        if (!loc) return JSON.stringify({ error: '播放头下方没有视频剪辑' });
+
+        app.enableQE();
+        var qeSeq = qe.project.getActiveSequence();
+        var qeTrack = qeSeq.getVideoTrackAt(loc.trackIndex);
+        var qeClip = qeTrack.getItemAt(loc.itemIndex);
+
+        // 取效果对象：优先按名字查，拿不到就用 matchName 直接施加
+        var effect = null;
+        if (qeHasMethod(qe.project, 'getVideoEffectByName')) {
+            try { effect = qe.project.getVideoEffectByName(payload.matchName, true); } catch (e) {}
+        }
+        if (effect) {
+            qeClip.addVideoEffect(effect);
+        } else {
+            qeClip.addVideoEffect(payload.matchName);
+        }
+        return JSON.stringify({ ok: true, clip: loc.clipName, matchName: payload.matchName });
+    } catch (e) {
+        return JSON.stringify({ error: '施加效果失败: ' + e.toString() });
+    }
+}
+
+// ---------- 施加转场到播放头下方剪辑（多签名运行时探测）----------
+// 转场 addTransition 参数社区未钉死，这里按候选签名逐一尝试，首个成功即返回。
+// 从全局变量 fxPayload 读 { matchName, alignment }
+function fxApplyTransitionStr() {
+    try {
+        var payload = fxPayload;
+        if (!payload || !payload.matchName) return JSON.stringify({ error: '无 matchName' });
+        var loc = qeLocatePlayheadClip();
+        if (!loc) return JSON.stringify({ error: '播放头下方没有视频剪辑' });
+
+        app.enableQE();
+        var qeSeq = qe.project.getActiveSequence();
+        var qeTrack = qeSeq.getVideoTrackAt(loc.trackIndex);
+        var qeClip = qeTrack.getItemAt(loc.itemIndex);
+
+        // 转场对象（若能取到）
+        var trans = null;
+        if (qeHasMethod(qe.project, 'getTransitionByName')) {
+            try { trans = qe.project.getTransitionByName(payload.matchName, true); } catch (e) {}
+        }
+
+        // 候选签名列表：每个是 { args: [...] }，依次尝试
+        var attempts = [];
+        if (trans) {
+            attempts.push([trans]);
+            attempts.push([trans, 0]);
+            attempts.push([trans, 0, 0]);
+        }
+        attempts.push([payload.matchName]);
+        attempts.push([payload.matchName, 0]);
+        attempts.push([payload.matchName, 0, 0]);
+        attempts.push([payload.matchName, 0, 0, 0]);
+
+        var lastErr = '';
+        for (var i = 0; i < attempts.length; i++) {
+            try {
+                var args = attempts[i];
+                if (args.length === 1) qeClip.addTransition(args[0]);
+                else if (args.length === 2) qeClip.addTransition(args[0], args[1]);
+                else if (args.length === 3) qeClip.addTransition(args[0], args[1], args[2]);
+                else if (args.length === 4) qeClip.addTransition(args[0], args[1], args[2], args[3]);
+                return JSON.stringify({ ok: true, clip: loc.clipName, matchName: payload.matchName, signature: args.length });
+            } catch (e) {
+                lastErr = e.toString();
+            }
+        }
+        return JSON.stringify({ error: '施加转场失败（已尝试 ' + attempts.length + ' 种签名）: ' + lastErr });
+    } catch (e) {
+        return JSON.stringify({ error: '施加转场失败: ' + e.toString() });
+    }
+}
+
+// 一次性探测：枚举效果 + 转场 + API 方法，写进一个 JSON 供诊断
+function qeDump() {
+    var r = {};
+    try { r.probe = JSON.parse(qeProbe()); } catch (e) { r.probe = { error: e.toString() }; }
+    try { r.effects = JSON.parse(qeListEffects()); } catch (e) { r.effects = { error: e.toString() }; }
+    try { r.transitions = JSON.parse(qeListTransitions()); } catch (e) { r.transitions = { error: e.toString() }; }
+    return JSON.stringify(r);
+}

@@ -1,11 +1,11 @@
-// vh_keyhook.exe 源码
-// 全局键盘钩子：监听一个可配置热键（默认 Alt+Space），按下时把 JSON 打到 stdout。
-// 由隐藏 CEP 面板 spawn 并读取 stdout，再广播给 vh-Atelier 面板。
-// 用法：vh_keyhook.exe [组合键表达式]  [appName]
-//   组合键表达式支持: ctrl / shift / alt / win 修饰 + 主键
-//   示例: "alt+space"  "ctrl+f9"  "ctrl+shift+k"
-//   参数省略时默认 alt+space
-//   appName 仅用于输出展示，可省略
+// vh_keyhook.exe 源码（多热键版）
+// 全局键盘钩子：监听多个可配置热键，每个热键带一个命令 id。
+// 命中时把 JSON 打到 stdout，由隐藏 CEP 面板 spawn 读取并广播给 vh-Atelier 面板。
+// 用法：vh_keyhook.exe [id=combo] [id=combo] ...
+//   每个参数形如 "openSearch=ctrl+f2"；左边是命令 id，右边是组合键表达式。
+//   组合键表达式支持: ctrl / shift / alt / win 修饰 + 主键（字母/数字/F1-F12/方向键等）。
+//   若参数不含 '='（向后兼容旧版），视为 id=openSearch 的组合键。
+//   示例: vh_keyhook.exe "openSearch=ctrl+f2" "applyEffect=ctrl+f3"
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -55,19 +55,50 @@ namespace VhKeyHook
             { "up", 0x26 }, { "down", 0x28 }, { "left", 0x25 }, { "right", 0x27 }, { "pgup", 0x21 }, { "pgdn", 0x22 }
         };
 
-        static int _mainKey = 0x20;                 // 默认 space
-        static List<int> _modKeys = new List<int>();
-        static string _comboText = "alt+space";
-        static bool _fired = false;
+        // 单个热键定义
+        class Hotkey
+        {
+            public string Id;
+            public int MainKey;
+            public List<int> ModKeys = new List<int>();
+            public string ComboText;
+            public bool Fired;
+        }
+
+        static List<Hotkey> _hotkeys = new List<Hotkey>();
 
         static void Main(string[] args)
         {
-            if (args.Length >= 1 && !string.IsNullOrEmpty(args[0]))
+            // 解析参数：每个参数 "id=combo"；不含 '=' 的参数视为 openSearch
+            if (args != null && args.Length >= 1)
             {
-                try { ParseCombo(args[0]); } catch { /* 解析失败用默认 */ }
+                foreach (var a in args)
+                {
+                    if (string.IsNullOrEmpty(a)) continue;
+                    string id, comboExpr;
+                    int eq = a.IndexOf('=');
+                    if (eq >= 0)
+                    {
+                        id = a.Substring(0, eq).Trim();
+                        comboExpr = a.Substring(eq + 1).Trim();
+                    }
+                    else
+                    {
+                        id = "openSearch";
+                        comboExpr = a.Trim();
+                    }
+                    if (id.Length == 0 || comboExpr.Length == 0) continue;
+                    Hotkey hk = ParseCombo(id, comboExpr);
+                    if (hk != null) _hotkeys.Add(hk);
+                }
             }
 
-            string appName = args.Length >= 2 ? args[1] : "";
+            // 一个都没有：给默认 openSearch=alt+space
+            if (_hotkeys.Count == 0)
+            {
+                _hotkeys.Add(ParseCombo("openSearch", "alt+space"));
+            }
+
             Console.OutputEncoding = Encoding.UTF8;
 
             _proc = HookCallback;
@@ -84,8 +115,14 @@ namespace VhKeyHook
                 return;
             }
 
-            // 心跳，让宿主知道钩子已就绪
-            Console.WriteLine("{\"type\":\"ready\",\"combo\":\"" + _comboText + "\"}");
+            // 心跳：列出所有已注册热键
+            var readyList = new StringBuilder();
+            foreach (var hk in _hotkeys)
+            {
+                if (readyList.Length > 0) readyList.Append(",");
+                readyList.Append("\"" + hk.Id + "\":\"" + hk.ComboText + "\"");
+            }
+            Console.WriteLine("{\"type\":\"ready\",\"hotkeys\":{" + readyList.ToString() + "}}");
             Console.Out.Flush();
 
             // 消息循环，保持进程存活
@@ -93,7 +130,7 @@ namespace VhKeyHook
             UnhookWindowsHookEx(_hook);
         }
 
-        static void ParseCombo(string s)
+        static Hotkey ParseCombo(string id, string s)
         {
             var parts = s.ToLower().Split('+');
             var mods = new List<int>();
@@ -107,9 +144,13 @@ namespace VhKeyHook
                 else if (keys.ContainsKey(t)) { main = keys[t]; mainName = t; }
                 else if (t.Length == 1) { main = (int)char.ToUpper(t[0]); mainName = t.ToUpper(); }
             }
-            if (main == 0) throw new Exception("no main key");
-            _mainKey = main;
-            _modKeys = mods;
+            if (main == 0) return null;
+
+            var hk = new Hotkey();
+            hk.Id = id;
+            hk.MainKey = main;
+            hk.ModKeys = mods;
+
             var sb = new StringBuilder();
             foreach (var m in mods)
             {
@@ -118,12 +159,13 @@ namespace VhKeyHook
             }
             if (sb.Length > 0) sb.Append("+");
             sb.Append(mainName);
-            _comboText = sb.ToString();
+            hk.ComboText = sb.ToString();
+            return hk;
         }
 
-        static bool ModsDown()
+        static bool ModsDown(Hotkey hk)
         {
-            foreach (var m in _modKeys)
+            foreach (var m in hk.ModKeys)
             {
                 if (!IsDown(m)) return false;
             }
@@ -140,18 +182,21 @@ namespace VhKeyHook
             if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
             {
                 KBDLLHOOKSTRUCT info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
-                if (info.vkCode == _mainKey && ModsDown())
+                foreach (var hk in _hotkeys)
                 {
-                    if (!_fired)
+                    if (info.vkCode == hk.MainKey && ModsDown(hk))
                     {
-                        _fired = true;
-                        Console.WriteLine("{\"type\":\"hotkey\",\"combo\":\"" + _comboText + "\",\"key\":" + info.vkCode + ",\"time\":" + DateTimeOffset.Now.ToUnixTimeMilliseconds() + "}");
-                        Console.Out.Flush();
+                        if (!hk.Fired)
+                        {
+                            hk.Fired = true;
+                            Console.WriteLine("{\"type\":\"hotkey\",\"id\":\"" + hk.Id + "\",\"combo\":\"" + hk.ComboText + "\",\"key\":" + info.vkCode + ",\"time\":" + DateTimeOffset.Now.ToUnixTimeMilliseconds() + "}");
+                            Console.Out.Flush();
+                        }
                     }
-                }
-                else
-                {
-                    _fired = false;
+                    else
+                    {
+                        hk.Fired = false;
+                    }
                 }
             }
             return CallNextHookEx(_hook, nCode, wParam, lParam);
