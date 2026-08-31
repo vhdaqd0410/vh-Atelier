@@ -871,25 +871,45 @@ function qeListTransitions() {
     }
 }
 
-// ---------- 定位播放头下方的第一个视频剪辑（非 QE 遍历 + 映射到 QE 索引）----------
-// 返回 { trackIndex, itemIndex, clipName }，找不到返回 null
-function qeLocatePlayheadClip() {
+// ---------- 定位播放头下方的第一个视频剪辑（QE 域内遍历，修正 gap 索引错位）----------
+// 根因：之前用非 QE 的 clip 序号去 QE getItemAt() 取 item，但 QE 把剪辑间的空隙(gap)
+// 也算作 item，导致索引错位、效果加到了空隙或隔壁剪辑上（静默无效）。
+// 现在全部在 QE 域内遍历，索引天然一致；并跳过转场(type=1)/空隙(type=2)。
+// 返回 { clip, trackIndex, itemIndex, name, type }，找不到返回 null
+function qeFindPlayheadClip() {
     try {
-        var seq = app.project.activeSequence;
-        if (!seq) return null;
-        var pos = seq.getPlayerPosition();
+        app.enableQE();
+        var qeSeq = qe.project.getActiveSequence();
+        if (!qeSeq) return null;
         var sec = 0;
-        try { sec = pos.seconds; } catch (e) {}
-        if (typeof sec !== 'number' || isNaN(sec)) sec = 0;
-        for (var i = 0; i < seq.videoTracks.numTracks; i++) {
-            var tr = seq.videoTracks[i];
-            for (var j = 0; j < tr.clips.numItems; j++) {
-                var c = tr.clips[j];
-                var st = c.start.seconds;
-                var en = c.end.seconds;
-                if (st <= sec && sec < en) {
-                    return { trackIndex: i, itemIndex: j, clipName: c.name || '' };
-                }
+        try {
+            var ap = app.project.activeSequence;
+            if (ap) { var pp = ap.getPlayerPosition(); if (pp && pp.seconds !== undefined) sec = Number(pp.seconds); }
+        } catch (e) {}
+        var trackCount = 0;
+        try { trackCount = qeSeq.numVideoTracks; } catch (e) {
+            try { trackCount = qeSeq.numTracks; } catch (e2) {}
+        }
+        for (var t = 0; t < trackCount; t++) {
+            var track = null;
+            try { track = qeSeq.getVideoTrackAt(t); } catch (e) {}
+            if (!track) continue;
+            var n = 0;
+            try { n = track.numItems; } catch (e) {}
+            for (var i = 0; i < n; i++) {
+                var item = null;
+                try { item = track.getItemAt(i); } catch (e) {}
+                if (!item) continue;
+                var typ = -1;
+                try { typ = item.type; } catch (e) {}
+                if (typ === 1 || typ === 2) continue; // 转场/空隙
+                var name = '';
+                try { name = item.name || ''; } catch (e) {}
+                var st = qeItemSeconds(item, true);
+                var en = qeItemSeconds(item, false);
+                if (st < 0 || en < 0 || st > sec || sec >= en) continue;
+                if (typ === -1 && name === '') continue; // type 读不到时，空名视为 gap
+                return { clip: item, trackIndex: t, itemIndex: i, name: name, type: typ };
             }
         }
         return null;
@@ -898,33 +918,38 @@ function qeLocatePlayheadClip() {
     }
 }
 
+// 取 QE trackItem 的起止秒数（兼容 start/end 与 startTime/endTime 两种字段名）
+function qeItemSeconds(item, isStart) {
+    var obj = null;
+    try { obj = isStart ? item.start : item.end; } catch (e) {}
+    if (obj) { try { if (obj.seconds !== undefined) return Number(obj.seconds); } catch (e) {} }
+    try { obj = isStart ? item.startTime : item.endTime; } catch (e) {}
+    if (obj) { try { if (obj.seconds !== undefined) return Number(obj.seconds); } catch (e) {} }
+    return -1;
+}
+
 // ---------- 施加视频效果到播放头下方剪辑 ----------
 // 从全局变量 fxPayload 读 { matchName }
 function fxApplyEffectStr() {
     try {
         var payload = fxPayload;
         if (!payload || !payload.matchName) return JSON.stringify({ error: '无 matchName' });
-        var loc = qeLocatePlayheadClip();
-        if (!loc) return JSON.stringify({ error: '播放头下方没有视频剪辑' });
-
+        var loc = qeFindPlayheadClip();
+        if (!loc) return JSON.stringify({ error: '播放头下方没有视频剪辑（或定位失败）' });
         app.enableQE();
-        var qeSeq = qe.project.getActiveSequence();
-        var qeTrack = qeSeq.getVideoTrackAt(loc.trackIndex);
-        var qeClip = qeTrack.getItemAt(loc.itemIndex);
-
-        // 取效果对象：官方签名 getVideoEffectByName(name) 单参数（显示名）
+        var qeClip = loc.clip;
+        var name = payload.matchName;
         var effect = null;
-        try { effect = qe.project.getVideoEffectByName(payload.matchName); } catch (e) {}
-        if (!effect) {
-            // 退回 matchName（若 payload 里单独给了 matchName）
-            try { effect = qe.project.getVideoEffectByName(payload.name); } catch (e2) {}
-        }
+        try { effect = qe.project.getVideoEffectByName(name); } catch (e) {}
+        var applied = false;
         if (effect) {
             qeClip.addVideoEffect(effect);
+            applied = true;
         } else {
-            qeClip.addVideoEffect(payload.matchName);
+            try { qeClip.addVideoEffect(name); applied = true; } catch (e) {}
         }
-        return JSON.stringify({ ok: true, clip: loc.clipName, matchName: payload.matchName });
+        if (!applied) return JSON.stringify({ error: 'addVideoEffect 调用失败（名字未识别: ' + name + '）' });
+        return JSON.stringify({ ok: true, clip: loc.name, itemIndex: loc.itemIndex, type: loc.type, matchName: name });
     } catch (e) {
         return JSON.stringify({ error: '施加效果失败: ' + e.toString() });
     }
@@ -937,20 +962,13 @@ function fxApplyTransitionStr() {
     try {
         var payload = fxPayload;
         if (!payload || !payload.matchName) return JSON.stringify({ error: '无 matchName' });
-        var loc = qeLocatePlayheadClip();
-        if (!loc) return JSON.stringify({ error: '播放头下方没有视频剪辑' });
-
+        var loc = qeFindPlayheadClip();
+        if (!loc) return JSON.stringify({ error: '播放头下方没有视频剪辑（或定位失败）' });
         app.enableQE();
-        var qeSeq = qe.project.getActiveSequence();
-        var qeTrack = qeSeq.getVideoTrackAt(loc.trackIndex);
-        var qeClip = qeTrack.getItemAt(loc.itemIndex);
-
-        // 转场对象（若能取到）：正确 API 是 getVideoTransitionByName（诊断已确认）
+        var qeClip = loc.clip;
         var trans = null;
         try { trans = qe.project.getVideoTransitionByName(payload.matchName); } catch (e) {}
-        if (!trans) {
-            try { trans = qe.project.getVideoTransitionByName(payload.name); } catch (e2) {}
-        }
+        if (!trans) { try { trans = qe.project.getVideoTransitionByName(payload.name); } catch (e2) {} }
 
         // 候选签名列表：每个是 { args: [...] }，依次尝试
         var attempts = [];
@@ -972,7 +990,7 @@ function fxApplyTransitionStr() {
                 else if (args.length === 2) qeClip.addTransition(args[0], args[1]);
                 else if (args.length === 3) qeClip.addTransition(args[0], args[1], args[2]);
                 else if (args.length === 4) qeClip.addTransition(args[0], args[1], args[2], args[3]);
-                return JSON.stringify({ ok: true, clip: loc.clipName, matchName: payload.matchName, signature: args.length });
+                return JSON.stringify({ ok: true, clip: loc.name, itemIndex: loc.itemIndex, type: loc.type, matchName: payload.matchName, signature: args.length });
             } catch (e) {
                 lastErr = e.toString();
             }
@@ -990,4 +1008,57 @@ function qeDump() {
     try { r.effects = JSON.parse(qeListEffects()); } catch (e) { r.effects = { error: e.toString() }; }
     try { r.transitions = JSON.parse(qeListTransitions()); } catch (e) { r.transitions = { error: e.toString() }; }
     return JSON.stringify(r);
+}
+
+// 诊断：定位播放头剪辑 + 尝试施加一个指定名字的效果，并回读该剪辑上已有的效果列表
+// 用法：先 fxPayload = { matchName: '某个效果名' }; 再调用 fxDiagnoseApply()
+function fxDiagnoseApply() {
+    var r = {};
+    try {
+        var payload = fxPayload || {};
+        var loc = qeFindPlayheadClip();
+        if (!loc) { r.locate = 'fail'; r.error = '未定位到播放头剪辑'; return JSON.stringify(r); }
+        r.locate = 'ok';
+        r.trackIndex = loc.trackIndex;
+        r.itemIndex = loc.itemIndex;
+        r.clipName = loc.name;
+        r.clipType = loc.type;
+        // 施加前该剪辑上的效果
+        r.before = qeListClipEffects(loc.clip);
+        if (payload.matchName) {
+            var ok = false;
+            try {
+                var eff = null;
+                try { eff = qe.project.getVideoEffectByName(payload.matchName); } catch (e) {}
+                if (eff) { loc.clip.addVideoEffect(eff); ok = true; }
+                else { try { loc.clip.addVideoEffect(payload.matchName); ok = true; } catch (e) {} }
+            } catch (e) { r.applyErr = e.toString(); }
+            r.applyOk = ok;
+        }
+        r.after = qeListClipEffects(loc.clip);
+        r.ok = true;
+        return JSON.stringify(r);
+    } catch (e) {
+        r.fatal = e.toString();
+        return JSON.stringify(r);
+    }
+}
+
+// 读取一个 QE trackItem 上已有的视频效果（displayName + matchName）
+function qeListClipEffects(clip) {
+    var out = [];
+    try {
+        var n = clip.numVideoEffects !== undefined ? clip.numVideoEffects : (clip.numEffects || 0);
+        for (var i = 0; i < n; i++) {
+            var comp = null;
+            try { comp = clip.getVideoEffectAt(i); } catch (e) {
+                try { comp = clip.getEffectAt(i); } catch (e2) {}
+            }
+            if (!comp) continue;
+            var nm = qePickName(comp);
+            var mn = qePickMatchName(comp);
+            if (nm || mn) out.push({ name: nm, matchName: mn });
+        }
+    } catch (e) {}
+    return out;
 }

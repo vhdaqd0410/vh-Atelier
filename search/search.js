@@ -14,6 +14,7 @@
     var favsFile = path.join(collectDir, 'favs.json');
     var fxCacheFile = path.join(collectDir, 'fxcache.json');
     var lastAppliedFile = path.join(collectDir, 'lastapplied.json');
+    var openTabFile = path.join(collectDir, 'opentab.json');
 
     var AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'aiff', 'wma'];
 
@@ -574,6 +575,11 @@
     // ---------- 键盘交互 ----------
     function onKey(ev) {
         if (ev.key === 'Escape') {
+            // 广播「正在关闭」，bg 面板据此进入冷却，避免紧接着的重开被吞
+            try {
+                var cev = new CSEvent('com.vh.atelier.search.closing', 'APPLICATION');
+                cs.dispatchEvent(cev);
+            } catch (e) {}
             try { cs.closeExtension(); } catch (e) {}
             return;
         }
@@ -624,22 +630,49 @@
         if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
     }
 
-    // ---------- 监听 bg 传来的初始 tab（requestOpenExtension 参数）----------
+    // ---------- 监听 bg 传来的初始 tab ----------
+    // 两个通道：① opentab.json（面板首次加载时读） ② CSEvent EVENT_TAB（面板已加载时实时切）
+    function applyTab(tab) {
+        if (tab === 'fx' || tab === 'effect' || tab === 'transition') {
+            switchTab('fx');
+        } else if (tab === 'sfx') {
+            switchTab('sfx');
+        } else {
+            switchTab('sfx');
+        }
+    }
+
     function initTab() {
+        // 通道 1：从 opentab.json 读（面板冷启动时，bg 已写入）
+        try {
+            if (fs.existsSync(openTabFile)) {
+                var obj = JSON.parse(fs.readFileSync(openTabFile, 'utf8'));
+                if (obj && obj.tab) {
+                    applyTab(obj.tab);
+                    return;
+                }
+            }
+        } catch (e) {}
+        // 通道 2：window.location.search（兼容旧逻辑）
         try {
             var params = new URLSearchParams(window.location.search);
             var t = params.get('tab');
-            if (t === 'fx' || t === 'effect' || t === 'transition') {
-                switchTab('fx');
-                return;
-            }
-            if (t === 'sfx') {
-                switchTab('sfx');
-                return;
-            }
+            if (t) { applyTab(t); return; }
         } catch (e) {}
-        switchTab('sfx');
+        applyTab('sfx');
     }
+
+    // 通道 3：bg 广播 EVENT_TAB（面板已加载时实时切换）
+    try {
+        cs.addEventListener('com.vh.atelier.search.tab', function (evt) {
+            var data = evt.data;
+            if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { data = null; } }
+            if (data && data.tab) {
+                log('got tab event: ' + data.tab);
+                applyTab(data.tab);
+            }
+        });
+    } catch (e) { log('tab listener err: ' + e.message); }
 
     // ---------- 初始化 ----------
     el.tabs.forEach(function (t) {

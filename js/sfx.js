@@ -812,6 +812,30 @@
     var btnQeDump = document.getElementById('btnQeDump');
     if (btnQeDump) btnQeDump.addEventListener('click', runQeDump);
 
+    // ---------- 施加诊断（定位播放头剪辑 + 试施加 + 回读效果列表） ----------
+    function runFxDiag() {
+        var out = document.getElementById('qeDumpOut');
+        var nameInp = document.getElementById('fxDiagName');
+        if (!out) return;
+        var name = nameInp ? nameInp.value.trim() : '';
+        out.textContent = '正在定位播放头剪辑并试施加...';
+        try {
+            var script = 'fxPayload = ' + JSON.stringify({ matchName: name }) + '; fxDiagnoseApply()';
+            csInterface.evalScript(script, function (result) {
+                try {
+                    var obj = JSON.parse(result);
+                    out.textContent = JSON.stringify(obj, null, 2);
+                } catch (e) {
+                    out.textContent = '原始返回: ' + result;
+                }
+            });
+        } catch (e) {
+            out.textContent = '调用失败: ' + e.message;
+        }
+    }
+    var btnFxDiag = document.getElementById('btnFxDiag');
+    if (btnFxDiag) btnFxDiag.addEventListener('click', runFxDiag);
+
     // 面板内快捷键
     document.addEventListener('keydown', function (ev) {
         var tag = (ev.target && ev.target.tagName) ? ev.target.tagName.toLowerCase() : '';

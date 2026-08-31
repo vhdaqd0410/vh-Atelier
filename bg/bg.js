@@ -15,6 +15,8 @@
 
     var EVENT_HOTKEY = 'com.vh.atelier.hotkey';
     var EVENT_RELOAD = 'com.vh.atelier.hotkey.reload';
+    var EVENT_TAB = 'com.vh.atelier.search.tab';
+    var EVENT_CLOSING = 'com.vh.atelier.search.closing';
     var SEARCH_EXT_ID = 'com.vh.atelier.search';
     var MAIN_EXT_ID = 'com.vh.atelier.panel';
 
@@ -22,8 +24,10 @@
     var hookPath = path.join(extRoot, 'keyhook', 'vh_keyhook.exe');
     var collectDir = path.join(extRoot, 'collect');
     var hotkeyFile = path.join(collectDir, 'hotkey.json');
+    var openTabFile = path.join(collectDir, 'opentab.json');
 
     var child = null;
+    var lastCloseTime = 0; // search 面板上次关闭时间（用于重开冷却）
 
     // 默认命令→热键映射（无配置文件时用）
     var DEFAULT_MAP = {
@@ -53,10 +57,35 @@
         }
     }
 
-    // 打开搜索浮窗（Spotlight 式），可带初始 tab 参数
+    // 打开搜索浮窗（Spotlight 式），带初始 tab 参数
     function openSearch(tab) {
+        // 刚关闭不久：延迟重开，避免 closeExtension 异步未完成导致 requestOpenExtension 被吞
+        var now = Date.now();
+        if (now - lastCloseTime < 800) {
+            var delay = Math.max(0, 450 - (now - lastCloseTime));
+            log('cooling down, retry open in ' + delay + 'ms (tab=' + (tab || '') + ')');
+            setTimeout(function () { openSearchNow(tab); }, delay);
+            return;
+        }
+        openSearchNow(tab);
+    }
+
+    function openSearchNow(tab) {
         try {
-            cs.requestOpenExtension(SEARCH_EXT_ID, tab || '');
+            // 用共享文件 + CSEvent 广播把 tab 传给 search 面板（requestOpenExtension 的参数不可靠）
+            try {
+                if (!fs.existsSync(collectDir)) fs.mkdirSync(collectDir, { recursive: true });
+                fs.writeFileSync(openTabFile, JSON.stringify({ tab: tab || 'sfx', ts: Date.now() }), 'utf8');
+            } catch (e) { log('write opentab err: ' + e.message); }
+            cs.requestOpenExtension(SEARCH_EXT_ID, '');
+            // 请求打开后延迟广播 tab（面板已加载时靠它切 tab；未加载时靠 opentab.json）
+            setTimeout(function () {
+                try {
+                    var evt = new CSEvent(EVENT_TAB, 'APPLICATION');
+                    evt.data = JSON.stringify({ tab: tab || 'sfx' });
+                    cs.dispatchEvent(evt);
+                } catch (e) { log('broadcast tab err: ' + e.message); }
+            }, 120);
             log('requestOpenExtension sent: ' + SEARCH_EXT_ID + ' tab=' + (tab || ''));
         } catch (e) {
             log('openSearch err: ' + e.message);
@@ -196,6 +225,12 @@
     cs.addEventListener(EVENT_RELOAD, function () {
         log('reload event received');
         start();
+    });
+
+    // search 面板 Esc 关闭时广播 closing，这里记录时间用于重开冷却
+    cs.addEventListener(EVENT_CLOSING, function () {
+        lastCloseTime = Date.now();
+        log('search panel closing, cooldown set');
     });
 
     // PR 应用初始化完成时加载；这里直接 start（面板随 PR 启动即加载）
