@@ -756,6 +756,27 @@
         setVisibleFiles(currentFiltered());
     });
 
+    // ---------- QE 诊断 ----------
+    function runQeDump() {
+        var out = document.getElementById('qeDumpOut');
+        if (!out) return;
+        out.textContent = '正在探测 QE DOM...';
+        try {
+            csInterface.evalScript('qeDump()', function (result) {
+                try {
+                    var obj = JSON.parse(result);
+                    out.textContent = JSON.stringify(obj, null, 2);
+                } catch (e) {
+                    out.textContent = '原始返回: ' + result;
+                }
+            });
+        } catch (e) {
+            out.textContent = '调用失败: ' + e.message;
+        }
+    }
+    var btnQeDump = document.getElementById('btnQeDump');
+    if (btnQeDump) btnQeDump.addEventListener('click', runQeDump);
+
     // 面板内快捷键
     document.addEventListener('keydown', function (ev) {
         var tag = (ev.target && ev.target.tagName) ? ev.target.tagName.toLowerCase() : '';

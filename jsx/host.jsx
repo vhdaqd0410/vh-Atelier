@@ -747,19 +747,46 @@ function sfxImportToBinStr() {
 
 // ---------- 探测 QE API 方法列表（诊断用，方法名在不同 PR 版本可能不同）----------
 function qeProbe() {
+    var r = { ok: false };
     try {
         app.enableQE();
-        var methods = [];
+        r.qeExists = (typeof qe !== 'undefined');
+        r.projectExists = (typeof qe !== 'undefined' && typeof qe.project !== 'undefined');
+        // 顶层 reflect
         try {
-            var m = qe.project.reflect.methods;
-            for (var i = 0; i < m.length; i++) {
-                methods.push(String(m[i].name));
+            var m = qe.reflect.methods;
+            r.topMethodCount = m ? m.length : 0;
+            var sample = [];
+            for (var i = 0; i < (m ? Math.min(m.length, 30) : 0); i++) {
+                sample.push(String(m[i].name));
             }
-        } catch (e) {}
-        return JSON.stringify({ ok: true, methods: methods });
+            r.topMethodSample = sample;
+        } catch (e) { r.topReflectErr = e.toString(); }
+        // project reflect
+        try {
+            var pm = qe.project.reflect.methods;
+            r.projMethodCount = pm ? pm.length : 0;
+            var ps = [];
+            for (var j = 0; j < (pm ? Math.min(pm.length, 60) : 0); j++) {
+                ps.push(String(pm[j].name));
+            }
+            r.projMethodSample = ps;
+        } catch (e) { r.projReflectErr = e.toString(); }
+        // 直接试 getVideoEffectList
+        try {
+            var list = qe.project.getVideoEffectList();
+            r.effectListType = typeof list;
+            r.effectListLen = (list && list.length !== undefined) ? list.length : 'N/A';
+            if (list && list.length > 0) {
+                r.firstElemType = typeof list[0];
+                r.firstElem = (typeof list[0] === 'string') ? list[0] : '[' + qePickName(list[0]) + '|' + qePickMatchName(list[0]) + ']';
+            }
+        } catch (e) { r.effectListErr = e.toString(); }
+        r.ok = true;
     } catch (e) {
-        return JSON.stringify({ error: 'probe 失败: ' + e.toString() });
+        r.fatal = e.toString();
     }
+    return JSON.stringify(r);
 }
 
 // 判断对象是否有某个方法（用 reflect，避免直接调用不存在的方法抛错）
@@ -786,25 +813,24 @@ function qePickMatchName(obj) {
 }
 
 // ---------- 枚举视频效果 ----------
+// getVideoEffectList() 返回字符串数组（效果显示名），直接 try-catch 调用，不靠 reflect 探测
 function qeListEffects() {
     try {
         app.enableQE();
         var list = null;
-        // 方法名候选，按优先级尝试
-        var candidates = ['getVideoEffectList', 'getEffectList', 'getVideoEffects'];
-        for (var ci = 0; ci < candidates.length; ci++) {
-            if (qeHasMethod(qe.project, candidates[ci])) {
-                list = qe.project[candidates[ci]]();
-                break;
-            }
-        }
+        try { list = qe.project.getVideoEffectList(); } catch (e) {}
         if (!list) return JSON.stringify({ error: '当前 PR 版本未找到效果枚举 API' });
+        var n = list.length !== undefined ? list.length : (list.numItems || 0);
         var out = [];
-        var n = list.length !== undefined ? list.length : list.numItems;
         for (var i = 0; i < n; i++) {
             var e = list[i];
-            if (!e) continue;
-            out.push({ name: qePickName(e), matchName: qePickMatchName(e) });
+            if (e === undefined || e === null) continue;
+            // 字符串（显示名）或对象都兼容
+            if (typeof e === 'string') {
+                out.push({ name: e, matchName: e });
+            } else {
+                out.push({ name: qePickName(e), matchName: qePickMatchName(e) });
+            }
         }
         return JSON.stringify({ ok: true, items: out, count: out.length });
     } catch (e) {
@@ -817,22 +843,29 @@ function qeListTransitions() {
     try {
         app.enableQE();
         var list = null;
-        var candidates = ['getTransitionList', 'getVideoTransitionList', 'getTransitions'];
+        // 转场枚举 API 名称不稳定，依次 try
+        var candidates = ['getTransitionList', 'getVideoTransitionList', 'getTransitions', 'getVideoTransitions'];
+        var usedName = '';
         for (var ci = 0; ci < candidates.length; ci++) {
-            if (qeHasMethod(qe.project, candidates[ci])) {
+            try {
                 list = qe.project[candidates[ci]]();
+                usedName = candidates[ci];
                 break;
-            }
+            } catch (e) {}
         }
         if (!list) return JSON.stringify({ error: '当前 PR 版本未找到转场枚举 API' });
+        var n = list.length !== undefined ? list.length : (list.numItems || 0);
         var out = [];
-        var n = list.length !== undefined ? list.length : list.numItems;
         for (var i = 0; i < n; i++) {
             var t = list[i];
-            if (!t) continue;
-            out.push({ name: qePickName(t), matchName: qePickMatchName(t) });
+            if (t === undefined || t === null) continue;
+            if (typeof t === 'string') {
+                out.push({ name: t, matchName: t });
+            } else {
+                out.push({ name: qePickName(t), matchName: qePickMatchName(t) });
+            }
         }
-        return JSON.stringify({ ok: true, items: out, count: out.length });
+        return JSON.stringify({ ok: true, items: out, count: out.length, api: usedName });
     } catch (e) {
         return JSON.stringify({ error: '枚举转场失败: ' + e.toString() });
     }
@@ -879,10 +912,12 @@ function fxApplyEffectStr() {
         var qeTrack = qeSeq.getVideoTrackAt(loc.trackIndex);
         var qeClip = qeTrack.getItemAt(loc.itemIndex);
 
-        // 取效果对象：优先按名字查，拿不到就用 matchName 直接施加
+        // 取效果对象：官方签名 getVideoEffectByName(name) 单参数（显示名）
         var effect = null;
-        if (qeHasMethod(qe.project, 'getVideoEffectByName')) {
-            try { effect = qe.project.getVideoEffectByName(payload.matchName, true); } catch (e) {}
+        try { effect = qe.project.getVideoEffectByName(payload.matchName); } catch (e) {}
+        if (!effect) {
+            // 退回 matchName（若 payload 里单独给了 matchName）
+            try { effect = qe.project.getVideoEffectByName(payload.name); } catch (e2) {}
         }
         if (effect) {
             qeClip.addVideoEffect(effect);
