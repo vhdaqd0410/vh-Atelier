@@ -20,9 +20,12 @@
     var el = {
         btnPickSrt: document.getElementById('ckPickSrt'),
         srtPathLabel: document.getElementById('ckSrtPath'),
+        srtBadge: document.getElementById('ckSrtBadge'),
         btnPickSelected: document.getElementById('ckPickSelected'),
         btnPickDocx: document.getElementById('ckPickDocx'),
         docxPathLabel: document.getElementById('ckDocxPath'),
+        docxBadge: document.getElementById('ckDocxBadge'),
+        docxList: document.getElementById('ckDocxList'),
         inpEpisode: document.getElementById('ckEpisode'),
         btnCheck: document.getElementById('ckRun'),
         btnApply: document.getElementById('ckApply'),
@@ -30,8 +33,203 @@
         status: document.getElementById('ckStatus'),
         list: document.getElementById('ckList'),
         summary: document.getElementById('ckSummary'),
-        applyRow: document.getElementById('ckApplyRow')
+        applyRow: document.getElementById('ckApplyRow'),
+        dictFrom: document.getElementById('ckDictFrom'),
+        dictTo: document.getElementById('ckDictTo'),
+        dictAdd: document.getElementById('ckDictAdd'),
+        dictList: document.getElementById('ckDictList'),
+        dictOpen: document.getElementById('ckDictOpen'),
+        dictReload: document.getElementById('ckDictReload'),
+        dictPath: document.getElementById('ckDictPath'),
+        dictToggle: document.getElementById('ckDictToggle'),
+        dictCount: document.getElementById('ckDictCount'),
+        dictSearch: document.getElementById('ckDictSearch'),
+        dictAddRow: document.getElementById('ckDictAddRow')
     };
+
+    // 字典列表折叠态 + 搜索关键词
+    var dictCollapsed = false;
+    var dictSearchKey = '';
+
+    // 替换字典状态 + 持久化（全局：所有项目共用一份，存磁盘 JSON 文件）
+    var dict = [];   // [{ from, to }]
+    var dictFile = path.join(extRoot, 'collect', 'replace_dict.json');
+
+    function loadDict() {
+        // 兼容旧 localStorage 数据（迁移）
+        var legacyRaw = null;
+        try { legacyRaw = localStorage.getItem('vh_check_dict_v1'); } catch (e) {}
+        try {
+            if (fs.existsSync(dictFile)) {
+                dict = JSON.parse(fs.readFileSync(dictFile, 'utf8')) || [];
+            } else if (legacyRaw) {
+                dict = JSON.parse(legacyRaw) || [];
+                try { localStorage.removeItem('vh_check_dict_v1'); } catch (e) {}
+            } else {
+                dict = [];
+            }
+        } catch (e) { dict = []; }
+        if (!Array.isArray(dict)) dict = [];
+        dict = dict.filter(function (d) { return d && d.from; });
+    }
+    function saveDict() {
+        try {
+            var dir = path.join(extRoot, 'collect');
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(dictFile, JSON.stringify(dict, null, 2), 'utf8');
+        } catch (e) {}
+    }
+    function renderDict() {
+        el.dictList.innerHTML = '';
+        if (el.dictPath) {
+            el.dictPath.textContent = dictFile;
+            el.dictPath.title = dictFile;
+        }
+        // 折叠态：隐藏列表
+        el.dictList.style.display = dictCollapsed ? 'none' : '';
+        if (el.dictToggle) el.dictToggle.textContent = dictCollapsed ? '展开列表' : '收起列表';
+        if (el.dictAddRow) el.dictAddRow.style.display = dictCollapsed ? 'none' : '';
+
+        // 计数
+        if (el.dictCount) {
+            el.dictCount.textContent = dict.length > 0 ? '共 ' + dict.length + ' 条' : '';
+        }
+        if (dictCollapsed) return;
+
+        // 搜索过滤
+        var key = dictSearchKey.toLowerCase();
+        var filtered = dict;
+        if (key) {
+            filtered = dict.filter(function (d) {
+                return d.from.toLowerCase().indexOf(key) >= 0 || d.to.toLowerCase().indexOf(key) >= 0;
+            });
+        }
+
+        if (dict.length === 0) {
+            el.dictList.innerHTML = '<div class="hint">暂无替换规则。添加后，应用修正时字幕里的「原词」会自动替换成「替换为」。</div>';
+            return;
+        }
+        if (filtered.length === 0) {
+            el.dictList.innerHTML = '<div class="hint">没有匹配「' + escapeHtml(dictSearchKey) + '」的规则。</div>';
+            return;
+        }
+
+        filtered.forEach(function (d) {
+            // 找到该条在 dict 里的真实索引（编辑/删除用）
+            var realIdx = dict.indexOf(d);
+            var row = document.createElement('div');
+            row.className = 'ck-dict-row';
+            row.dataset.idx = realIdx;
+
+            var from = document.createElement('span');
+            from.className = 'ck-dict-from';
+            from.textContent = d.from;
+            var arrow = document.createElement('span');
+            arrow.className = 'ck-dict-arrow';
+            arrow.textContent = '→';
+            var to = document.createElement('span');
+            to.className = 'ck-dict-to';
+            to.textContent = d.to;
+
+            var editBtn = document.createElement('button');
+            editBtn.className = 'ck-dict-edit';
+            editBtn.textContent = '编辑';
+            var del = document.createElement('button');
+            del.className = 'ck-dict-del';
+            del.textContent = '删除';
+
+            // 删除
+            del.addEventListener('click', function () {
+                dict.splice(realIdx, 1);
+                saveDict();
+                renderDict();
+            });
+
+            // 编辑：把 from/to 换成输入框，编辑→保存/取消
+            editBtn.addEventListener('click', function () {
+                row.innerHTML = '';
+                var ifrom = document.createElement('input');
+                ifrom.type = 'text';
+                ifrom.className = 'ck-dict-from ck-dict-input';
+                ifrom.value = d.from;
+                var iarrow = document.createElement('span');
+                iarrow.className = 'ck-dict-arrow';
+                iarrow.textContent = '→';
+                var ito = document.createElement('input');
+                ito.type = 'text';
+                ito.className = 'ck-dict-to ck-dict-input';
+                ito.value = d.to;
+                var save = document.createElement('button');
+                save.className = 'ck-dict-save';
+                save.textContent = '保存';
+                var cancel = document.createElement('button');
+                cancel.className = 'ck-dict-del';
+                cancel.textContent = '取消';
+                row.appendChild(ifrom);
+                row.appendChild(iarrow);
+                row.appendChild(ito);
+                row.appendChild(save);
+                row.appendChild(cancel);
+                ifrom.focus();
+                ifrom.select();
+
+                save.addEventListener('click', function () {
+                    var nf = ifrom.value.trim();
+                    var nt = ito.value.trim();
+                    if (!nf) { setStatus('原词不能为空', 'warn'); return; }
+                    if (!nt) { setStatus('替换词不能为空', 'warn'); return; }
+                    dict[realIdx] = { from: nf, to: nt };
+                    saveDict();
+                    renderDict();
+                    setStatus('已更新：' + nf + ' → ' + nt, 'ok');
+                });
+                cancel.addEventListener('click', function () { renderDict(); });
+                // 回车保存
+                var onKey = function (e) {
+                    if (e.key === 'Enter') { save.click(); }
+                    if (e.key === 'Escape') { cancel.click(); }
+                };
+                ifrom.addEventListener('keydown', onKey);
+                ito.addEventListener('keydown', onKey);
+            });
+
+            row.appendChild(from);
+            row.appendChild(arrow);
+            row.appendChild(to);
+            row.appendChild(editBtn);
+            row.appendChild(del);
+            el.dictList.appendChild(row);
+        });
+    }
+    // 判断是否含中文（用于选择匹配策略）
+    function hasCJK(s) { return /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(s); }
+    // 对单条字幕文本应用字典替换：英文按词边界（大小写不敏感），中文/日韩直接子串替换
+    function applyDictToText(text) {
+        var out = text;
+        dict.forEach(function (d) {
+            if (!d.from) return;
+            if (hasCJK(d.from)) {
+                // 中文等：直接子串替换（不支持转义正则，用 indexOf 循环）
+                var idx = out.toLowerCase().indexOf(d.from.toLowerCase());
+                while (idx >= 0) {
+                    out = out.slice(0, idx) + (d.to || '') + out.slice(idx + d.from.length);
+                    idx = out.toLowerCase().indexOf(d.from.toLowerCase(), idx + (d.to ? d.to.length : 0));
+                }
+            } else {
+                var esc = d.from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                var re = new RegExp('\\b' + esc + '\\b', 'gi');
+                out = out.replace(re, d.to || '');
+            }
+        });
+        return out;
+    }
+    // 选中状态提示：SRT/剧本有了就亮徽章
+    function refreshBadges() {
+        if (el.srtBadge) el.srtBadge.classList.toggle('show', !!srtPath);
+        if (el.srtPathLabel) el.srtPathLabel.classList.toggle('has', !!srtPath);
+        if (el.docxBadge) el.docxBadge.classList.toggle('show', !!docxPath);
+        if (el.docxPathLabel) el.docxPathLabel.classList.toggle('has', !!docxPath);
+    }
 
     function setStatus(msg, type) {
         el.status.textContent = msg || '';
@@ -73,11 +271,11 @@
     }
 
     function pickFile(kind) {
-        var filter = kind === 'srt' ? ['*.srt'] : ['*.docx'];
         var title = kind === 'srt' ? '选择字幕 SRT' : '选择剧本 docx';
         var result;
         try {
-            result = window.cep.fs.showOpenDialogEx(false, false, title, '', filter, '', '选择');
+            // 文件模式；fileTypes 在 Windows CEP 上过滤不可靠，传空数组不过滤，选择后自行校验扩展名
+            result = window.cep.fs.showOpenDialogEx(false, false, title, '', [], '', '选择');
         } catch (e) {
             setStatus('打开对话框失败: ' + e.message, 'err');
             return Promise.resolve(null);
@@ -86,6 +284,57 @@
             return Promise.resolve(result.data[0]);
         }
         return Promise.resolve(null);
+    }
+
+    // 选择剧本：直接选目录（用户习惯），然后扫描目录里的 .docx，列出让用户点选
+    function pickDocxDir() {
+        var result;
+        try {
+            result = window.cep.fs.showOpenDialogEx(false, true, '选择剧本所在目录', '', [], '', '选择');
+        } catch (e) {
+            setStatus('打开目录对话框失败: ' + e.message, 'err');
+            return;
+        }
+        if (!result || result.err !== 0 || !result.data || result.data.length === 0) {
+            return;
+        }
+        var dir = result.data[0];
+        var files = [];
+        try {
+            files = fs.readdirSync(dir).filter(function (f) {
+                return f.toLowerCase().slice(-5) === '.docx' && f.charAt(0) !== '~';
+            });
+        } catch (e) {
+            setStatus('读取目录失败: ' + e.message, 'err');
+            return;
+        }
+        if (files.length === 0) {
+            setStatus('该目录里没有 .docx 文件', 'warn');
+            el.docxList.style.display = 'none';
+            el.docxList.innerHTML = '';
+            return;
+        }
+        // 渲染列表
+        el.docxList.innerHTML = '';
+        files.forEach(function (f) {
+            var btn = document.createElement('button');
+            btn.className = 'ck-docx-item';
+            btn.textContent = f;
+            btn.addEventListener('click', function () {
+                docxPath = path.join(dir, f);
+                el.docxPathLabel.textContent = f;
+                el.docxPathLabel.title = docxPath;
+                // 高亮选中项
+                var all = el.docxList.querySelectorAll('.ck-docx-item');
+                for (var i = 0; i < all.length; i++) all[i].classList.remove('sel');
+                btn.classList.add('sel');
+                refreshBadges();
+                setStatus('已选剧本：' + f, 'ok');
+            });
+            el.docxList.appendChild(btn);
+        });
+        el.docxList.style.display = 'block';
+        setStatus('目录里有 ' + files.length + ' 个 docx，请点选一个', 'warn');
     }
 
     // ---------- 读取项目面板当前选中的字幕（方案 B）----------
@@ -104,11 +353,37 @@
                 srtPath = data.mediaPath;
                 el.srtPathLabel.textContent = data.name;
                 el.srtPathLabel.title = data.mediaPath;
+                refreshBadges();
                 setStatus('已读取项目字幕：' + data.name, 'ok');
             } catch (e) {
                 setStatus('读取选中素材失败: ' + result, 'err');
             }
         });
+    }
+
+    // ---------- 从识别板块接收字幕（联动：识别完直接校对）----------
+    // 把识别板块内存里的字幕落盘成临时 srt，作为校对输入
+    function ingestFromSubtitle() {
+        var bridge = window.__subtitleBridge;
+        if (!bridge) { setStatus('未检测到字幕识别结果，请先完成识别', 'err'); return; }
+        var cur = bridge.getCurrent();
+        if (!cur || !cur.subtitles || cur.subtitles.length === 0) {
+            setStatus('识别板块当前没有可校对的字幕（请先在「字幕识别」结果区选一个序列）', 'err');
+            return;
+        }
+        var content = typeof bridge.toSRT === 'function' ? bridge.toSRT(cur.subtitles) : toSRT(cur.subtitles);
+        var tmpFile = path.join(os.tmpdir(), 'vh_link_' + (cur.seqName || cur.seqId || 'subtitle') + '_' + Date.now() + '.srt');
+        try {
+            fs.writeFileSync(tmpFile, content, 'utf8');
+        } catch (e) {
+            setStatus('临时 srt 写入失败: ' + e.message, 'err');
+            return;
+        }
+        srtPath = tmpFile;
+        el.srtPathLabel.textContent = '（联动）' + (cur.seqName || cur.seqId) + ' · ' + cur.subtitles.length + ' 条';
+        el.srtPathLabel.title = tmpFile;
+        refreshBadges();
+        setStatus('已接收识别字幕「' + (cur.seqName || cur.seqId) + '」' + cur.subtitles.length + ' 条，请选剧本并填集数', 'ok');
     }
 
     // ---------- 台词抽取/对齐（调用 Python 引擎）----------
@@ -288,7 +563,7 @@
             }
         });
 
-        // 先应用改写，再删多余（保序）
+        // 先应用改写，再删多余（保序）；最后对每条字幕统一应用替换字典
         var newSubs = [];
         subs.forEach(function (s, i) {
             if (deletes[i]) return;       // 删除
@@ -296,6 +571,10 @@
             if (edits[i] !== undefined) copy.text = edits[i];
             newSubs.push(copy);
         });
+        // 替换字典（对最终文本生效）
+        if (dict.length > 0) {
+            newSubs.forEach(function (s) { s.text = applyDictToText(s.text); });
+        }
         applied = newSubs.length;
 
         // 写回内存 bridge（识别板块）
@@ -306,7 +585,7 @@
         // 生成新 SRT 并回写激活序列（复用识别板块的 host 回写函数）
         var srtContent = toSRT(newSubs);
         var seqName = (cur && cur.seqName) ? cur.seqName : '';
-        var payloadJson = JSON.stringify({ srt: srtContent, seqName: seqName });
+        var payloadJson = JSON.stringify({ srt: srtContent, seqName: seqName, nameSuffix: '修正' });
         var setScript = 'wsWriteBackPayload = ' + payloadJson + ';';
 
         setStatus('正在回写字幕轨...', '');
@@ -386,22 +665,62 @@
                 srtPath = p;
                 el.srtPathLabel.textContent = p;
                 el.srtPathLabel.title = p;
+                refreshBadges();
             }
         });
     });
 
     el.btnPickDocx.addEventListener('click', function () {
-        pickFile('docx').then(function (p) {
-            if (p) {
-                docxPath = p;
-                el.docxPathLabel.textContent = p;
-                el.docxPathLabel.title = p;
-            }
-        });
+        pickDocxDir();
     });
 
     el.btnCheck.addEventListener('click', runCheck);
     el.btnApply.addEventListener('click', applyChecked);
+
+    // 替换字典：添加
+    el.dictAdd.addEventListener('click', function () {
+        var from = el.dictFrom.value.trim();
+        var to = el.dictTo.value.trim();
+        if (!from) { setStatus('请填写「原词」', 'warn'); return; }
+        if (!to) { setStatus('请填写「替换为」', 'warn'); return; }
+        // 去重（同 from 覆盖）
+        var existed = false;
+        dict.forEach(function (d) {
+            if (d.from.toLowerCase() === from.toLowerCase()) { d.to = to; existed = true; }
+        });
+        if (!existed) dict.push({ from: from, to: to });
+        saveDict();
+        renderDict();
+        el.dictFrom.value = '';
+        el.dictTo.value = '';
+        setStatus('已添加替换规则：' + from + ' → ' + to, 'ok');
+    });
+
+    // 打开字典文件（用系统默认程序，方便批量编辑）
+    el.dictOpen.addEventListener('click', function () {
+        try {
+            saveDict();
+            child_process.exec('start "" "' + dictFile + '"');
+        } catch (e) {
+            setStatus('打开字典文件失败: ' + e.message, 'err');
+        }
+    });
+    // 重新加载（外部编辑后重新读入）
+    el.dictReload.addEventListener('click', function () {
+        loadDict();
+        renderDict();
+        setStatus('已重新加载字典（' + dict.length + ' 条）', 'ok');
+    });
+    // 折叠/展开列表
+    el.dictToggle.addEventListener('click', function () {
+        dictCollapsed = !dictCollapsed;
+        renderDict();
+    });
+    // 搜索（实时过滤）
+    el.dictSearch.addEventListener('input', function () {
+        dictSearchKey = el.dictSearch.value.trim();
+        renderDict();
+    });
 
     el.btnSelectAll.addEventListener('click', function () {
         var all = issues.length > 0 && Object.keys(checked).length !== issues.length;
@@ -414,4 +733,13 @@
     // 初始化
     setStatus('就绪。选 SRT + 剧本 docx + 集数，点「开始校对」', '');
     el.applyRow.style.display = 'none';
+    loadDict();
+    renderDict();
+    refreshBadges();
+
+    // 暴露给「字幕识别」板块联动调用：接收识别字幕并切到校对 tab
+    window.__checkIngest = function () {
+        ingestFromSubtitle();
+        if (window.__atSwitchTab) window.__atSwitchTab('check');
+    };
 })();

@@ -23,4 +23,7 @@
             switchTab(t.dataset.tab);
         });
     });
+
+    // 暴露给其他板块调用：字幕识别 → 字幕校对 联动时切 tab
+    window.__atSwitchTab = switchTab;
 })();

@@ -42,6 +42,7 @@
         list: document.getElementById('subtitleList'),
         writeBack: document.getElementById('btnWriteBack'),
         exportSrt: document.getElementById('btnExportSrt'),
+        toCheck: document.getElementById('btnToCheck'),
         btnSeparate: document.getElementById('btnSeparate'),
         btnImportVocals: document.getElementById('btnImportVocals'),
         btnImportAccomp: document.getElementById('btnImportAccomp'),
@@ -1009,6 +1010,10 @@
     el.batch.addEventListener('click', runBatch);
     el.writeBack.addEventListener('click', writeBack);
     el.exportSrt.addEventListener('click', exportSrt);
+    el.toCheck.addEventListener('click', function () {
+        if (window.__checkIngest) window.__checkIngest();
+        else setStatus('字幕校对板块未加载', 'err');
+    });
     el.stop.addEventListener('click', function () {
         stopRequested = true;
         setStatus('正在停止...', 'warn');

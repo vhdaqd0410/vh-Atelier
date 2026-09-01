@@ -736,6 +736,28 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        #panel-check #ckDocxList {
+            margin-top: 6px;
+            max-height: 160px;
+            overflow-y: auto;
+            border: 1px solid #2f2f2f;
+            border-radius: 4px;
+        }
+        #panel-check .ck-docx-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 6px 8px;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid #2f2f2f;
+            color: var(--text);
+            font-size: 11px;
+            cursor: pointer;
+        }
+        #panel-check .ck-docx-item:last-child { border-bottom: none; }
+        #panel-check .ck-docx-item:hover { background: #2a2a2a; }
+        #panel-check .ck-docx-item.sel { background: #1e3a5b; color: #6db3ff; }
         #panel-check #ckStatus {
             margin-top: 8px;
             font-size: 12px;
@@ -815,6 +837,106 @@
             padding: 0 4px;
             vertical-align: 1px;
         }
+        #panel-check .ck-path.has {
+            color: var(--ok);
+            font-weight: 600;
+        }
+        #panel-check .ck-srt-badge {
+            display: none;
+            flex: 0 0 auto;
+            font-size: 11px;
+            font-weight: 700;
+            color: #9fe0a8;
+            background: #16241a;
+            border: 1px solid #2c4a33;
+            border-radius: 4px;
+            padding: 1px 6px;
+        }
+        #panel-check .ck-srt-badge.show { display: inline-block; }
+        #panel-check #ckDictList {
+            margin-top: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        #panel-check .ck-dict-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            padding: 4px 6px;
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+        #panel-check .ck-dict-from {
+            color: var(--text);
+            font-family: Consolas, monospace;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        #panel-check .ck-dict-arrow { color: var(--muted); }
+        #panel-check .ck-dict-to {
+            color: #9fe0a8;
+            font-family: Consolas, monospace;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        #panel-check .ck-dict-input {
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            background: var(--panel2);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 2px 5px;
+            min-width: 0;
+        }
+        #panel-check .ck-dict-from.ck-dict-input { flex: 1; }
+        #panel-check .ck-dict-to.ck-dict-input { flex: 1; }
+        #panel-check .ck-dict-btn {
+            flex: 0 0 auto;
+            font-size: 11px;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 1px 6px;
+            background: transparent;
+        }
+        #panel-check .ck-dict-del {
+            margin-left: auto;
+            flex: 0 0 auto;
+            font-size: 11px;
+            color: var(--err);
+            background: transparent;
+            border: 1px solid #3a1f1f;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 0 6px;
+        }
+        #panel-check .ck-dict-del:hover { background: #3a1f1f; }
+        #panel-check .ck-dict-edit {
+            flex: 0 0 auto;
+            font-size: 11px;
+            color: var(--accent);
+            background: transparent;
+            border: 1px solid #2c4a33;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 0 6px;
+        }
+        #panel-check .ck-dict-edit:hover { background: #1e3a5b; }
+        #panel-check .ck-dict-save {
+            flex: 0 0 auto;
+            font-size: 11px;
+            color: #9fe0a8;
+            background: transparent;
+            border: 1px solid #2c4a33;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 0 6px;
+        }
+        #panel-check .ck-dict-save:hover { background: #16241a; }
     </style>
 </head>
 <body>
@@ -891,6 +1013,7 @@
             <div class="row" style="margin-top:10px;">
                 <button id="btnWriteBack">回写当前序列</button>
                 <button id="btnExportSrt" class="secondary">导出当前 SRT</button>
+                <button id="btnToCheck" class="secondary">校对当前字幕</button>
             </div>
         </div>
 
@@ -1129,15 +1252,18 @@
             <div class="row" style="margin-top:4px;">
                 <button id="ckPickSelected" class="secondary">读取项目选中的字幕</button>
                 <span class="ck-path" id="ckSrtPath">未选择</span>
+                <span class="ck-srt-badge" id="ckSrtBadge">✓ 已选择</span>
             </div>
             <div class="row" style="margin-top:6px;">
                 <button id="ckPickSrt" class="secondary">或选择 SRT 文件…</button>
             </div>
             <label style="margin-top:10px;">剧本 docx（台词标准答案）</label>
             <div class="row">
-                <button id="ckPickDocx" class="secondary">选择剧本…</button>
+                <button id="ckPickDocx" class="secondary">选择剧本目录…</button>
                 <span class="ck-path" id="ckDocxPath">未选择</span>
+                <span class="ck-srt-badge" id="ckDocxBadge">✓ 已选择</span>
             </div>
+            <div id="ckDocxList" style="display:none;"></div>
             <label style="margin-top:10px;">校对集数</label>
             <div class="row">
                 <input type="text" id="ckEpisode" value="第一集" placeholder="例如：第一集 / 1 / 第2集" style="flex:1;">
@@ -1146,7 +1272,29 @@
         </div>
 
         <div class="card">
-            <h2>2 · 执行校对</h2>
+            <h2>2 · 全局替换字典（所有项目通用，应用修正时自动生效）</h2>
+            <div class="hint" style="margin-bottom:6px;">中英文通用：英文如 bitch → b*tch（按词边界），中文如 傻逼 → **（直接替换）。字典存成本地文件，可手动批量编辑，长期维护。</div>
+            <div class="row" style="margin-top:4px;">
+                <button id="ckDictToggle" class="secondary mini">收起列表</button>
+                <span id="ckDictCount" style="font-size:11px;color:var(--muted);flex:0 0 auto;"></span>
+                <input type="text" id="ckDictSearch" placeholder="搜索原词或替换词…" style="flex:1;">
+            </div>
+            <div class="row" id="ckDictAddRow" style="margin-top:6px;">
+                <input type="text" id="ckDictFrom" placeholder="原词，如 bitch / 傻逼" style="flex:1;">
+                <span class="ck-dict-arrow">→</span>
+                <input type="text" id="ckDictTo" placeholder="替换为，如 b*tch / **" style="flex:1;">
+                <button id="ckDictAdd" class="secondary">添加</button>
+            </div>
+            <div id="ckDictList"></div>
+            <div class="row" style="margin-top:8px;">
+                <button id="ckDictOpen" class="secondary mini">打开字典文件</button>
+                <button id="ckDictReload" class="secondary mini">重新加载</button>
+                <span class="ck-path" id="ckDictPath" title=""></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 执行校对</h2>
             <div class="row">
                 <button id="ckRun">开始校对</button>
             </div>
@@ -1154,7 +1302,7 @@
         </div>
 
         <div class="card" id="ckResultCard">
-            <h2>3 · 差异清单</h2>
+            <h2>4 · 差异清单</h2>
             <div id="ckSummary"></div>
             <div id="ckList"></div>
             <div class="row" id="ckApplyRow" style="margin-top:10px; display:none;">

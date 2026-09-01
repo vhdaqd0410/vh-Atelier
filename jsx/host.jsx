@@ -141,7 +141,17 @@ function wsWriteBack(seqId) {
         var ts = new Date();
         function pad2(n) { n = '' + n; return n.length < 2 ? '0' + n : n; }
         var stamp = ts.getFullYear() + pad2(ts.getMonth() + 1) + pad2(ts.getDate()) + '_' + pad2(ts.getHours()) + pad2(ts.getMinutes()) + pad2(ts.getSeconds());
-        var fileName = safeName + '_' + stamp + '.srt';
+        // 可选后缀（字幕校对回写时带「修正」，方便在项目面板区分校对过的 srt）
+        var suffix = payload.nameSuffix || '';
+        if (suffix) {
+            for (var si = 0; si < illegalChars.length; si++) {
+                var sch = illegalChars[si];
+                while (suffix.indexOf(sch) >= 0) {
+                    suffix = suffix.split(sch).join('_');
+                }
+            }
+        }
+        var fileName = safeName + (suffix ? '_' + suffix : '') + '_' + stamp + '.srt';
         var tmpFile = new File(Folder.temp.fsName + '/' + fileName);
         tmpFile.encoding = 'UTF-8';
         tmpFile.open('w');
