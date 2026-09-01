@@ -23,7 +23,14 @@
     var openTabFile = path.join(collectDir, 'opentab.json');
 
     var child = null;
-    var lastCloseTime = 0; // search 面板上次关闭时间（用于重开冷却）
+    var lastCloseTime = 0; // search 面板上次关闭时间（兼容旧冷却，已由 ready 状态机取代）
+
+    // search 浮窗状态机：idle（已卸载）/ loading（加载中）/ open（已就绪）
+    var searchState = 'idle';
+    var pendingOpen = false; // loading 期间是否有重开请求排队
+    var loadTimeout = null;   // loading 超时兜底
+
+    var EVENT_SEARCH_READY = 'com.vh.atelier.search.ready';
 
     // 默认命令→热键映射（无配置文件时用）
     var DEFAULT_MAP = {
@@ -52,18 +59,25 @@
 
     // 打开搜索浮窗（Spotlight 式），带初始 tab 参数
     function openSearch(tab) {
-        // 刚关闭不久：延迟重开，避免 closeExtension 异步未完成导致 requestOpenExtension 被吞
-        var now = Date.now();
-        if (now - lastCloseTime < 800) {
-            var delay = Math.max(0, 450 - (now - lastCloseTime));
-            log('cooling down, retry open in ' + delay + 'ms (tab=' + (tab || '') + ')');
-            setTimeout(function () { openSearchNow(tab); }, delay);
+        if (searchState === 'open') {
+            // 已就绪：直接激活（秒响应，无需重新加载）
+            requestOpen();
             return;
         }
-        openSearchNow(tab);
+        if (searchState === 'loading') {
+            // 加载中：排队，等 ready 后补开一次
+            pendingOpen = true;
+            log('search loading, queue reopen');
+            return;
+        }
+        // idle：首次加载，requestOpen 后进入 loading
+        pendingOpen = false;
+        requestOpen();
+        searchState = 'loading';
+        armLoadTimeout();
     }
 
-    function openSearchNow(tab) {
+    function requestOpen() {
         try {
             // 用共享文件记录（供首次加载时读，虽当前仅音效，保留结构以备扩展）
             try {
@@ -75,6 +89,16 @@
         } catch (e) {
             log('openSearch err: ' + e.message);
         }
+    }
+
+    // loading 超时兜底：浮窗未在预期时间内就绪，强制回 idle 重试一次
+    function armLoadTimeout() {
+        if (loadTimeout) clearTimeout(loadTimeout);
+        loadTimeout = setTimeout(function () {
+            log('search load timeout, reset to idle');
+            searchState = 'idle';
+            pendingOpen = false;
+        }, 4000);
     }
 
     // 从配置文件读命令→热键映射；兼容旧版 { combo } 格式
@@ -163,10 +187,25 @@
         start();
     });
 
-    // search 面板 Esc 关闭时广播 closing，这里记录时间用于重开冷却
+    // search 面板 Esc 关闭时广播 closing，这里记录时间（状态机据此回 idle）
     cs.addEventListener(EVENT_CLOSING, function () {
         lastCloseTime = Date.now();
-        log('search panel closing, cooldown set');
+        searchState = 'idle';
+        pendingOpen = false;
+        if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
+        log('search panel closing, state=idle');
+    });
+
+    // search 面板加载完广播 ready，这里转 open；若有排队请求则补开一次
+    cs.addEventListener(EVENT_SEARCH_READY, function () {
+        if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
+        searchState = 'open';
+        log('search panel ready');
+        if (pendingOpen) {
+            pendingOpen = false;
+            log('flush pending reopen');
+            setTimeout(function () { requestOpen(); }, 60);
+        }
     });
 
     // PR 应用初始化完成时加载；这里直接 start（面板随 PR 启动即加载）

@@ -8,7 +8,8 @@
 
     var extRoot = cs.getSystemPath(SystemPath.EXTENSION);
     var collectDir = path.join(extRoot, 'collect');
-    var indexFile = path.join(collectDir, 'index.json');
+    var indexFile = path.join(collectDir, 'searchIndex.json');
+    var fallbackIndexFile = path.join(collectDir, 'index.json');
     var favsFile = path.join(collectDir, 'favs.json');
 
     var el = {
@@ -70,23 +71,31 @@
     // ---------- 加载音效索引 ----------
     function loadIndex() {
         try {
-            if (!fs.existsSync(indexFile)) {
+            var src = indexFile;
+            if (!fs.existsSync(src) && fs.existsSync(fallbackIndexFile)) src = fallbackIndexFile;
+            if (!fs.existsSync(src)) {
                 renderEmpty('还没有音效索引<br>请先到主面板「音效库」扫描一次目录');
+                broadcastReady();
                 return;
             }
-            fs.readFile(indexFile, 'utf8', function (err, text) {
+            fs.readFile(src, 'utf8', function (err, text) {
                 if (err) {
                     renderEmpty('索引加载失败: ' + err.message);
+                    broadcastReady();
                     return;
                 }
                 setTimeout(function () {
                     try {
-                        var c = JSON.parse(text);
-                        if (c && Array.isArray(c.files)) {
-                            allFiles = c.files;
-                        } else {
-                            allFiles = [];
-                        }
+                        var data = JSON.parse(text);
+                        var raw = Array.isArray(data) ? data : (data && Array.isArray(data.files) ? data.files : []);
+                        allFiles = raw.map(function (f) {
+                            // 兼容轻量索引 {n,p,e} 与全量索引 {name,fullPath,ext}
+                            return {
+                                name: f.n || f.name,
+                                fullPath: f.p || f.fullPath,
+                                ext: f.e || f.ext || path.extname(f.p || f.fullPath || f.name || '').replace('.', '')
+                            };
+                        });
                         log('index loaded: ' + allFiles.length + ' files');
                         if (el.q.value.trim()) doFilter();
                         else renderEmpty('输入关键词搜索音效<br>回车或双击插入当前序列');
@@ -94,12 +103,22 @@
                         log('index parse error: ' + e2.message);
                         renderEmpty('索引解析失败: ' + e2.message);
                     }
+                    broadcastReady();
                 }, 0);
             });
         } catch (e) {
             log('index load error: ' + e.message);
             renderEmpty('索引加载失败: ' + e.message);
+            broadcastReady();
         }
+    }
+
+    // 通知 bg 面板「搜索浮窗已就绪」，bg 据此决定立即唤起还是延迟
+    function broadcastReady() {
+        try {
+            var cev = new CSEvent('com.vh.atelier.search.ready', 'APPLICATION');
+            cs.dispatchEvent(cev);
+        } catch (e) {}
     }
 
     function renderEmpty(text) {
@@ -274,11 +293,14 @@
     // ---------- 键盘交互 ----------
     function onKey(ev) {
         if (ev.key === 'Escape') {
-            // 广播「正在关闭」，bg 面板据此进入冷却，避免紧接着的重开被吞
+            // 先广播 closing 让 bg 面板进入 idle 状态（同步状态机，避免竞态）
             try {
                 var cev = new CSEvent('com.vh.atelier.search.closing', 'APPLICATION');
                 cs.dispatchEvent(cev);
             } catch (e) {}
+            // Modeless 面板在 CEP 6 没有 hideExtension，只能 closeExtension 真卸载。
+            // 但配合：① 搜身索引（7MB→3.9MB）加速重开 ② bg 的 ready 状态机防吞请求，
+            // 重开足够快且不白屏不两次拉起（对齐 Excalibur 已验证模式）。
             try { cs.closeExtension(); } catch (e) {}
             return;
         }

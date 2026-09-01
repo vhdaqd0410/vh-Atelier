@@ -1,15 +1,15 @@
-// vh_keyhook.exe 源码（多热键版）
-// 全局键盘钩子：监听多个可配置热键，每个热键带一个命令 id。
-// 命中时把 JSON 打到 stdout，由隐藏 CEP 面板 spawn 读取并广播给 vh-Atelier 面板。
+// vh_keyhook.exe 源码
+// 全局键盘钩子：监听可配置热键，但仅在 Adobe Premiere Pro（或其 CEP 面板）处于前台时才响应。
+// 命中时消息通过独立输出线程写入 stdout，钩子回调内不做任何阻塞 IO，
+// 避免拖慢系统输入链、干扰 spell_win.exe 等其他全局钩子（根治白屏 / Ex 呼不出）。
 // 用法：vh_keyhook.exe [id=combo] [id=combo] ...
-//   每个参数形如 "openSearch=ctrl+f2"；左边是命令 id，右边是组合键表达式。
-//   组合键表达式支持: ctrl / shift / alt / win 修饰 + 主键（字母/数字/F1-F12/方向键等）。
-//   若参数不含 '='（向后兼容旧版），视为 id=openSearch 的组合键。
-//   示例: vh_keyhook.exe "openSearch=ctrl+f2" "applyEffect=ctrl+f3"
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 namespace VhKeyHook
 {
@@ -31,6 +31,12 @@ namespace VhKeyHook
         [DllImport("user32.dll")]
         static extern uint GetAsyncKeyState(int vKey);
 
+        [DllImport("user32.dll")]
+        static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
         delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
         const int WH_KEYBOARD_LL = 13;
@@ -39,6 +45,19 @@ namespace VhKeyHook
 
         static LowLevelKeyboardProc _proc;
         static IntPtr _hook = IntPtr.Zero;
+
+        // ---- 输出线程：钩子回调只入队，这里才写 stdout，杜绝输入线程阻塞 ----
+        static ConcurrentQueue<string> _outQueue = new ConcurrentQueue<string>();
+        static AutoResetEvent _outSignal = new AutoResetEvent(false);
+        static volatile bool _outputRunning = true;
+
+        // ---- 前台窗口进程缓存：只在 PR（或其 CEP 面板）前台时响应 ----
+        static IntPtr _lastFg = IntPtr.Zero;
+        static bool _lastInPr = false;
+        static HashSet<string> _prProcessNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Adobe Premiere Pro", "CEPHtmlEngine"
+        };
 
         // 修饰键 / 主键映射
         static Dictionary<string, int> modifiers = new Dictionary<string, int>()
@@ -93,13 +112,18 @@ namespace VhKeyHook
                 }
             }
 
-            // 一个都没有：给默认 openSearch=alt+space
+            // 一个都没有：给默认 openSearch=ctrl+f2
             if (_hotkeys.Count == 0)
             {
-                _hotkeys.Add(ParseCombo("openSearch", "alt+space"));
+                _hotkeys.Add(ParseCombo("openSearch", "ctrl+f2"));
             }
 
             Console.OutputEncoding = Encoding.UTF8;
+
+            // 启动独立输出线程
+            Thread outThread = new Thread(OutputLoop);
+            outThread.IsBackground = true;
+            outThread.Start();
 
             _proc = HookCallback;
             using (System.Diagnostics.Process cur = System.Diagnostics.Process.GetCurrentProcess())
@@ -110,8 +134,10 @@ namespace VhKeyHook
 
             if (_hook == IntPtr.Zero)
             {
-                Console.WriteLine("{\"type\":\"error\",\"msg\":\"hook failed\"}");
-                Console.Out.Flush();
+                Enqueue("{\"type\":\"error\",\"msg\":\"hook failed\"}");
+                Thread.Sleep(200);
+                _outputRunning = false;
+                _outSignal.Set();
                 return;
             }
 
@@ -122,12 +148,38 @@ namespace VhKeyHook
                 if (readyList.Length > 0) readyList.Append(",");
                 readyList.Append("\"" + hk.Id + "\":\"" + hk.ComboText + "\"");
             }
-            Console.WriteLine("{\"type\":\"ready\",\"hotkeys\":{" + readyList.ToString() + "}}");
-            Console.Out.Flush();
+            Enqueue("{\"type\":\"ready\",\"hotkeys\":{" + readyList.ToString() + "}}");
 
             // 消息循环，保持进程存活
             System.Windows.Forms.Application.Run();
             UnhookWindowsHookEx(_hook);
+            _outputRunning = false;
+            _outSignal.Set();
+        }
+
+        // 输出线程：从队列取消息写 stdout，避免钩子回调阻塞
+        static void OutputLoop()
+        {
+            while (_outputRunning)
+            {
+                _outSignal.WaitOne(200);
+                string msg;
+                while (_outQueue.TryDequeue(out msg))
+                {
+                    try
+                    {
+                        Console.WriteLine(msg);
+                        Console.Out.Flush();
+                    }
+                    catch (Exception) { }
+                }
+            }
+        }
+
+        static void Enqueue(string msg)
+        {
+            _outQueue.Enqueue(msg);
+            _outSignal.Set();
         }
 
         static Hotkey ParseCombo(string id, string s)
@@ -177,26 +229,58 @@ namespace VhKeyHook
             return (GetAsyncKeyState(vk) & 0x8000) != 0;
         }
 
+        // 判断前台窗口是否属于 PR / CEP 面板
+        static bool ForegroundIsPremiere()
+        {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return false;
+            if (fg == _lastFg) return _lastInPr;
+
+            uint pid;
+            GetWindowThreadProcessId(fg, out pid);
+            bool inPr = false;
+            try
+            {
+                using (var p = Process.GetProcessById((int)pid))
+                {
+                    inPr = _prProcessNames.Contains(p.ProcessName);
+                }
+            }
+            catch (Exception) { inPr = false; }
+
+            _lastFg = fg;
+            _lastInPr = inPr;
+            return inPr;
+        }
+
         static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
             if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
             {
-                KBDLLHOOKSTRUCT info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
-                foreach (var hk in _hotkeys)
+                // 非 PR 前台：直接放行，不做任何处理（也不复位 Fired），让全局钩子保持轻量
+                if (ForegroundIsPremiere())
                 {
-                    if (info.vkCode == hk.MainKey && ModsDown(hk))
+                    KBDLLHOOKSTRUCT info = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
+                    foreach (var hk in _hotkeys)
                     {
-                        if (!hk.Fired)
+                        if (info.vkCode == hk.MainKey && ModsDown(hk))
                         {
-                            hk.Fired = true;
-                            Console.WriteLine("{\"type\":\"hotkey\",\"id\":\"" + hk.Id + "\",\"combo\":\"" + hk.ComboText + "\",\"key\":" + info.vkCode + ",\"time\":" + DateTimeOffset.Now.ToUnixTimeMilliseconds() + "}");
-                            Console.Out.Flush();
+                            if (!hk.Fired)
+                            {
+                                hk.Fired = true;
+                                Enqueue("{\"type\":\"hotkey\",\"id\":\"" + hk.Id + "\",\"combo\":\"" + hk.ComboText + "\",\"key\":" + info.vkCode + ",\"time\":" + DateTimeOffset.Now.ToUnixTimeMilliseconds() + "}");
+                            }
+                        }
+                        else
+                        {
+                            hk.Fired = false;
                         }
                     }
-                    else
-                    {
-                        hk.Fired = false;
-                    }
+                }
+                else
+                {
+                    // 前台切换出去时，复位所有 Fired 标记，回来才能再次触发
+                    foreach (var hk in _hotkeys) hk.Fired = false;
                 }
             }
             return CallNextHookEx(_hook, nCode, wParam, lParam);
