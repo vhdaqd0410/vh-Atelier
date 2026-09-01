@@ -8,6 +8,7 @@ Adobe Premiere Pro 本地工作台扩展，集成四大能力，全部本地运�
 | **语音克隆** | 零样本音色克隆，参考音色合成任意文字 | CosyVoice3 |
 | **音效库** | 本地音效扫描 / 搜索 / 试听 / 收藏 / 拖拽插入时间线 | 内置 ffmpeg |
 | **多版本导出** | 一键批量导出序列的多个交付版本（成片/无字幕/无音乐无字幕），静音音轨、生成交付清单 | PR 原生 `exportAsMediaDirect` |
+| **字幕校对** | SRT 与剧本 docx 全局词级对齐，定位听错/漏词/幻觉重复，打勾一键回写 | Python 标准库（difflib） |
 
 全局热键 `Ctrl+F2` 随时唤起音效搜索浮窗（Spotlight 式），Esc 关闭。
 
@@ -25,6 +26,7 @@ com.vh.atelier/
 │   ├── clone.js            语音克隆板块
 │   ├── sfx.js              音效库板块（含全局热键设置）
 │   ├── export.js           多版本导出板块（从 com.delivery.multiexport 整合而来）
+│   ├── check.js            字幕校对板块（SRT ↔ 剧本 docx 对齐）
 │   ├── wavesurfer.js       音效波形预览
 │   └── CSInterface.js      CEP 桥接（Adobe 官方）
 ├── jsx/
@@ -40,7 +42,8 @@ com.vh.atelier/
 ├── bin/ffmpeg-win32-x64.exe
 ├── py/
 │   ├── funasr_cli.py       中文识别 CLI
-│   └── cosyvoice_cli.py    语音克隆 CLI
+│   ├── cosyvoice_cli.py    语音克隆
+│   └── subtitle_check.py   字幕校对引擎（docx 解析 + 词级对齐 + 差异定位） CLI
 ├── models/                 大模型（不入 git，运行时本地回退）
 ├── stubs/torio_stub/       torchaudio 精简桩（语音克隆依赖）
 └── collect/hotkey.json     命令 → 热键映射（运行时生成）
@@ -91,6 +94,16 @@ com.vh.atelier/
 - 进度条 + 停止按钮，串行导出防竞态
 
 > 导出预设需在 Adobe Media Encoder 里预先创建（如「交片-----有字幕版本.epr」等）。
+
+### 5. 字幕校对
+
+- 选 SRT（whisper 识别导出）+ 剧本 docx（台词标准答案）+ 集数，点「开始校对」
+- 全局词级对齐（剧本台词词流 ↔ 字幕词流），不受 Whisper 断句错位影响
+- 归一化：小写、展开缩写、英文数字转阿拉伯数字，减少假阳性
+- 三类差异：听错（mutinous→mutism）、漏词（Ahem/She 等句首词）、多余（幻觉重复）
+- 差异清单带时间戳 + 当前字幕 + 应为文本，逐条打勾确认
+- 一键应用：改写听错词、补齐漏词、删除重复，生成新 SRT 并回写字幕轨
+- 复用识别板块的序列字幕（内存），也支持直接选 srt 文件独立校对
 
 ---
 
@@ -155,7 +168,8 @@ C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe ^
 
 ## 版本
 
-- **0.1.5**（当前）：新增第 4 板块「多版本导出」（从 com.delivery.multiexport 整合，并入 me* 宿主函数 + export.js + folderpicker）
+- **0.1.6**（当前）：新增第 5 板块「字幕校对」（SRT ↔ 剧本 docx 词级对齐，定位听错/漏词/幻觉重复，打勾一键回写）
+- 0.1.5：新增第 4 板块「多版本导出」（从 com.delivery.multiexport 整合，并入 me* 宿主函数 + export.js + folderpicker）
 - 0.1.4：字幕识别 + 语音克隆 + 音效库三板块；全局热键音效搜索浮窗；移除特效/转场功能（由 Excalibur 承担）
 
 ## 许可

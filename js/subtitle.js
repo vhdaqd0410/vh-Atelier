@@ -1036,4 +1036,20 @@
     setStatus('就绪。点「刷新序列列表」加载序列，勾选后批量识别', '');
     // 自动刷新一次
     refreshSequences();
+
+    // ---------- 暴露给「字幕校对」板块（跨 tab 共享）----------
+    window.__subtitleBridge = {
+        getCurrent: function () {
+            if (!currentSeqId || subtitles.length === 0) return null;
+            var name = '';
+            var hit = batchResults.filter(function (r) { return r.seqId === currentSeqId; });
+            if (hit.length > 0) name = hit[0].name || '';
+            return { seqId: currentSeqId, seqName: name, subtitles: subtitles };
+        },
+        toSRT: toSRT,
+        applySubtitles: function (newSubs) {
+            subtitles = newSubs || [];
+            return subtitles.length;
+        }
+    };
 })();

@@ -725,17 +725,105 @@
         #panel-export .log-line.success .log-body { color: #5fce6f; }
         #panel-export .log-line.warn .log-body { color: #ffb84d; }
         #panel-export .log-line.error .log-body { color: var(--err); }
+
+        /* ==================== 板块五：字幕校对 ==================== */
+        #panel-check .ck-path {
+            flex: 1;
+            min-width: 0;
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #panel-check #ckStatus {
+            margin-top: 8px;
+            font-size: 12px;
+            min-height: 16px;
+        }
+        #panel-check #ckList {
+            max-height: 420px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        #panel-check .ck-issue {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg);
+            padding: 8px 10px;
+        }
+        #panel-check .ck-issue-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #panel-check .ck-chk { width: auto; flex: 0 0 auto; margin: 0; }
+        #panel-check .ck-tag {
+            flex: 0 0 auto;
+            font-size: 11px;
+            padding: 1px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        #panel-check .ck-tag-replace { background: #5b3a1e; color: #ffb84d; }
+        #panel-check .ck-tag-insert  { background: #1e3a5b; color: #6db3ff; }
+        #panel-check .ck-tag-delete  { background: #3a1f1f; color: #ff7d7d; }
+        #panel-check .ck-time {
+            flex: 1;
+            text-align: right;
+            font-size: 11px;
+            color: var(--muted);
+            font-family: Consolas, monospace;
+        }
+        #panel-check .ck-detail {
+            margin: 6px 0;
+            font-size: 12px;
+            color: var(--accent);
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        #panel-check .ck-issue-body {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        #panel-check .ck-cur, #panel-check .ck-fix {
+            font-size: 12px;
+            line-height: 1.5;
+            padding: 5px 8px;
+            border-radius: 4px;
+            user-select: text;
+            -webkit-user-select: text;
+            word-break: break-word;
+        }
+        #panel-check .ck-cur { background: #1a1a1a; color: var(--muted); }
+        #panel-check .ck-fix { background: #16241a; color: #9fe0a8; }
+        #panel-check .ck-fix.ck-del { background: #241616; color: #ff9a9a; }
+        #panel-check .ck-lbl {
+            display: inline-block;
+            margin-right: 8px;
+            font-size: 10px;
+            color: var(--muted);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 0 4px;
+            vertical-align: 1px;
+        }
     </style>
 </head>
 <body>
     <h1>vh-Atelier</h1>
-    <div class="sub">本地字幕识别 · 语音克隆 · 音效库 · 多版本导出</div>
+    <div class="sub">本地字幕识别 · 语音克隆 · 音效库 · 多版本导出 · 字幕校对</div>
 
     <div class="tabs">
         <button class="tab active" data-tab="subtitle">字幕识别</button>
         <button class="tab" data-tab="clone">语音克隆</button>
         <button class="tab" data-tab="sfx">音效库</button>
         <button class="tab" data-tab="export">多版本导出</button>
+        <button class="tab" data-tab="check">字幕校对</button>
     </div>
 
     <!-- ==================== 板块一：字幕识别 ==================== -->
@@ -1030,6 +1118,46 @@
         <div class="log" id="log"></div>
     </div>
 
+    <!-- ==================== 板块五：字幕校对 ==================== -->
+    <div class="tab-panel" id="panel-check" style="display:none;">
+        <div class="card">
+            <h2>1 · 选字幕与剧本</h2>
+            <label>字幕 SRT（whisper 识别导出）</label>
+            <div class="row">
+                <button id="ckPickSrt" class="secondary">选择 SRT…</button>
+                <span class="ck-path" id="ckSrtPath">未选择</span>
+            </div>
+            <label style="margin-top:10px;">剧本 docx（台词标准答案）</label>
+            <div class="row">
+                <button id="ckPickDocx" class="secondary">选择剧本…</button>
+                <span class="ck-path" id="ckDocxPath">未选择</span>
+            </div>
+            <label style="margin-top:10px;">校对集数</label>
+            <div class="row">
+                <input type="text" id="ckEpisode" value="第一集" placeholder="例如：第一集 / 1 / 第2集" style="flex:1;">
+            </div>
+            <div class="hint" style="margin-top:6px;">集数写「第一集」「1」「第2集」都行；剧本台词是标准答案，字幕应逐字对齐。</div>
+        </div>
+
+        <div class="card">
+            <h2>2 · 执行校对</h2>
+            <div class="row">
+                <button id="ckRun">开始校对</button>
+            </div>
+            <div id="ckStatus"></div>
+        </div>
+
+        <div class="card" id="ckResultCard">
+            <h2>3 · 差异清单</h2>
+            <div id="ckSummary"></div>
+            <div id="ckList"></div>
+            <div class="row" id="ckApplyRow" style="margin-top:10px; display:none;">
+                <button id="ckSelectAll" class="secondary">全选</button>
+                <button id="ckApply">应用选中的修正</button>
+            </div>
+        </div>
+    </div>
+
     <audio id="sfxPlayer" style="display:none;"></audio>
 
     <audio id="player" style="display:none;"></audio>
@@ -1041,5 +1169,6 @@
     <script src="js/wavesurfer.js"></script>
     <script src="js/sfx.js"></script>
     <script src="js/export.js"></script>
+    <script src="js/check.js"></script>
 </body>
 </html>
