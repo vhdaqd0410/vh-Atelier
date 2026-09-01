@@ -14,8 +14,7 @@
     var el = {
         q: document.getElementById('q'),
         results: document.getElementById('results'),
-        count: document.getElementById('count'),
-        status: document.getElementById('status')
+        toast: document.getElementById('toast')
     };
 
     var allFiles = [];       // 音效索引
@@ -34,9 +33,15 @@
         } catch (e) {}
     }
 
+    var toastTimer = null;
     function setStatus(msg, type) {
-        el.status.textContent = msg || '';
-        el.status.className = type ? 'status-' + type : '';
+        if (!el.toast) return;
+        el.toast.textContent = msg || '';
+        el.toast.className = 'toast show' + (type ? ' ' + type : '');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+            el.toast.className = 'toast';
+        }, 2200);
     }
 
     // ---------- 收藏 ----------
@@ -66,14 +71,11 @@
     function loadIndex() {
         try {
             if (!fs.existsSync(indexFile)) {
-                el.count.textContent = '还没有音效索引，请先到主面板「音效库」扫描一次目录';
-                renderEmpty('还没有音效索引\n请先到主面板「音效库」tab 扫描一次目录');
+                renderEmpty('还没有音效索引<br>请先到主面板「音效库」扫描一次目录');
                 return;
             }
-            el.count.textContent = '正在加载索引...';
             fs.readFile(indexFile, 'utf8', function (err, text) {
                 if (err) {
-                    el.count.textContent = '索引加载失败';
                     renderEmpty('索引加载失败: ' + err.message);
                     return;
                 }
@@ -85,19 +87,16 @@
                         } else {
                             allFiles = [];
                         }
-                        el.count.textContent = '共 ' + allFiles.length + ' 个音效';
                         log('index loaded: ' + allFiles.length + ' files');
                         if (el.q.value.trim()) doFilter();
-                        else renderEmpty('输入关键词搜索音效\n回车或双击插入当前序列');
+                        else renderEmpty('输入关键词搜索音效<br>回车或双击插入当前序列');
                     } catch (e2) {
-                        el.count.textContent = '索引解析失败';
                         log('index parse error: ' + e2.message);
                         renderEmpty('索引解析失败: ' + e2.message);
                     }
                 }, 0);
             });
         } catch (e) {
-            el.count.textContent = '索引加载失败';
             log('index load error: ' + e.message);
             renderEmpty('索引加载失败: ' + e.message);
         }
@@ -107,19 +106,7 @@
         el.results.innerHTML = '';
         var d = document.createElement('div');
         d.className = 'empty';
-        var lines = text.split('\n');
-        var big = document.createElement('span');
-        big.className = 'big';
-        big.textContent = '🔎';
-        d.appendChild(big);
-        d.appendChild(document.createTextNode(lines[0]));
-        if (lines.length > 1) {
-            d.appendChild(document.createElement('br'));
-            var s = document.createElement('span');
-            s.style.fontSize = '11px';
-            s.textContent = lines.slice(1).join(' ');
-            d.appendChild(s);
-        }
+        d.innerHTML = text.replace(/\n/g, '<br>');
         el.results.appendChild(d);
     }
 
@@ -129,8 +116,7 @@
         if (!kw) {
             visible = [];
             selectedIdx = -1;
-            el.count.textContent = '共 ' + allFiles.length + ' 个音效';
-            renderEmpty('输入关键词搜索音效\n回车或双击插入当前序列');
+            renderEmpty('输入关键词搜索音效<br>回车或双击插入当前序列');
             return;
         }
         var out = [];
@@ -142,7 +128,6 @@
         }
         visible = out;
         selectedIdx = -1;
-        el.count.textContent = '找到 ' + out.length + ' 条 / 共 ' + allFiles.length + ' 个';
         renderList(out);
     }
 
