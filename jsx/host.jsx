@@ -740,7 +740,78 @@ function sfxImportToBinStr() {
 }
 
 
-// ==================== 板块四：多版本交付导出 ====================
+// ==================== 板块五：字幕校对 ====================
+// 列出项目里所有 .srt 字幕素材（供校对选择字幕）
+function ckListProjectSrt() {
+    try {
+        var root = app.project.rootItem;
+        var list = [];
+        var visited = {};
+
+        function getMediaPath(pi) {
+            try {
+                if (pi.getMediaPath) return pi.getMediaPath();
+                if (pi.mediaItem && pi.mediaItem.file) return pi.mediaItem.file.fsName;
+            } catch (e) {}
+            return '';
+        }
+
+        function walk(item, binPath) {
+            if (!item) return;
+            try {
+                var id = item.nodeId || item.name;
+                if (visited[id]) return;
+                visited[id] = true;
+            } catch (e) {}
+
+            var t = '';
+            try { t = item.type; } catch (e) {}
+
+            if (t === 'BIN' || t === 'ROOT') {
+                var children = item.children;
+                if (children && children.numItems !== undefined) {
+                    for (var i = 0; i < children.numItems; i++) {
+                        var childName = '';
+                        try { childName = children[i].name; } catch (e) {}
+                        var childBinPath = binPath ? binPath + '/' + childName : childName;
+                        walk(children[i], childBinPath);
+                    }
+                }
+            } else {
+                var mp = getMediaPath(item);
+                if (!mp) return;
+                var ext = '';
+                try { ext = mp.toLowerCase().split('.').pop(); } catch (e) {}
+                if (ext !== 'srt') return;
+                list.push({
+                    name: item.name,
+                    mediaPath: mp,
+                    binPath: binPath || ''
+                });
+            }
+        }
+
+        walk(root, '');
+        return JSON.stringify({ ok: true, items: list, count: list.length });
+    } catch (e) {
+        return JSON.stringify({ error: '遍历项目字幕失败: ' + e.toString() });
+    }
+}
+
+// 按项目面板选中的 srt 素材路径取媒体路径（供校对直接指定）
+function ckGetSrtByPath(pathStr) {
+    try {
+        var found = app.project.rootItem.findItemsMatchingMediaPath(pathStr, 1);
+        var pi = null;
+        if (found && found.length !== undefined && found.length > 0) pi = found[0];
+        else if (found && found.length === undefined) pi = found;
+        if (!pi) return JSON.stringify({ error: '未找到该字幕素材' });
+        return JSON.stringify({ ok: true, name: pi.name, mediaPath: pathStr });
+    } catch (e) {
+        return JSON.stringify({ error: '读取字幕素材失败: ' + e.toString() });
+    }
+}
+
 // 从独立插件 com.delivery.multiexport 整合而来（me 前缀）
 // 核心 API（已验证）：
 //   sequence.exportAsMediaDirect(outputPath, presetPath, exportType)

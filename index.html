@@ -1122,9 +1122,13 @@
     <div class="tab-panel" id="panel-check" style="display:none;">
         <div class="card">
             <h2>1 · 选字幕与剧本</h2>
-            <label>字幕 SRT（whisper 识别导出）</label>
-            <div class="row">
-                <button id="ckPickSrt" class="secondary">选择 SRT…</button>
+            <label>字幕 SRT（可从项目面板选，或选文件）</label>
+            <div class="row" style="margin-top:4px;">
+                <select id="ckProjectSrt" style="flex:1;"><option value="">（点「刷新」从项目面板加载 srt）</option></select>
+                <button id="ckRefreshSrt" class="secondary mini">刷新</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="ckPickSrt" class="secondary">选择 SRT 文件…</button>
                 <span class="ck-path" id="ckSrtPath">未选择</span>
             </div>
             <label style="margin-top:10px;">剧本 docx（台词标准答案）</label>
