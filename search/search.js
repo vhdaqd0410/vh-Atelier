@@ -1,42 +1,29 @@
-// vh-Atelier 搜索浮窗（Spotlight 式全局搜索）
-// 三个标签页：音效（插入时间线）、效果（施加到播放头剪辑）、转场（施加到播放头剪辑）。
+// vh-Atelier 搜索浮窗（Spotlight 式音效搜索）
 // 热键触发 → bg 面板 requestOpenExtension 打开本弹窗 → 输入关键词实时过滤 →
-//   音效：回车/双击插入时间线；效果/转场：回车/双击施加 + 记住「上次选中」供全局快捷键直接复用。
+//   回车 / 双击插入音效到时间线（播放头位置）。
 (function () {
     var cs = new CSInterface();
     var fs = require('fs');
     var path = require('path');
-    var os = require('os');
 
     var extRoot = cs.getSystemPath(SystemPath.EXTENSION);
     var collectDir = path.join(extRoot, 'collect');
     var indexFile = path.join(collectDir, 'index.json');
     var favsFile = path.join(collectDir, 'favs.json');
-    var fxCacheFile = path.join(collectDir, 'fxcache.json');
-    var lastAppliedFile = path.join(collectDir, 'lastapplied.json');
-    var openTabFile = path.join(collectDir, 'opentab.json');
-
-    var AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'aiff', 'wma'];
 
     var el = {
         q: document.getElementById('q'),
         results: document.getElementById('results'),
         count: document.getElementById('count'),
-        status: document.getElementById('status'),
-        tabs: document.querySelectorAll('.tab')
+        status: document.getElementById('status')
     };
 
-    var currentTab = 'sfx';
     var allFiles = [];       // 音效索引
-    var allEffects = [];     // 效果列表 [{name, matchName}]
-    var allTransitions = []; // 转场列表 [{name, matchName}]
-    var allPresets = [];     // 预设列表 [{name, matchName, kind}] kind: transitionPreset(可施加) / effectPreset(手动)
-    var favSet = {};         // 收藏（仅音效）
+    var favSet = {};         // 收藏
     var visible = [];        // 当前过滤结果
     var selectedIdx = -1;    // 键盘选中下标
     var busy = false;
     var playingAudio = null; // 当前播放的 HTMLAudioElement
-    var fxLoaded = { effect: false, transition: false, preset: false };
 
     // ---------- 日志 ----------
     function log(msg) {
@@ -52,7 +39,7 @@
         el.status.className = type ? 'status-' + type : '';
     }
 
-    // ---------- 收藏（仅音效）----------
+    // ---------- 收藏 ----------
     function loadFavs() {
         try {
             if (fs.existsSync(favsFile)) {
@@ -73,190 +60,6 @@
     function toggleFav(p) {
         if (favSet[p]) delete favSet[p]; else favSet[p] = true;
         saveFavs();
-    }
-
-    // ---------- 记住「上次选中」的效果/转场（供全局快捷键直接施加）----------
-    function rememberLast(kind, matchName) {
-        try {
-            var obj = {};
-            if (fs.existsSync(lastAppliedFile)) {
-                try { obj = JSON.parse(fs.readFileSync(lastAppliedFile, 'utf8')); } catch (e) {}
-            }
-            obj[kind] = matchName;
-            fs.writeFileSync(lastAppliedFile, JSON.stringify(obj, null, 2), 'utf8');
-        } catch (e) {}
-    }
-
-    // 判断缓存数组是否有效（至少有一条非空 name/matchName）
-    function cacheIsValid(arr) {
-        if (!Array.isArray(arr) || arr.length === 0) return false;
-        for (var i = 0; i < arr.length; i++) {
-            if ((arr[i] && (arr[i].name || arr[i].matchName))) return true;
-        }
-        return false;
-    }
-
-    // ---------- 加载 fx 缓存（效果/转场，来自 host.jsx 枚举，本地缓存避免每次枚举）----------
-    function loadFxCache() {
-        try {
-            if (fs.existsSync(fxCacheFile)) {
-                var c = JSON.parse(fs.readFileSync(fxCacheFile, 'utf8'));
-                if (c && Array.isArray(c.effects) && cacheIsValid(c.effects)) allEffects = c.effects;
-                if (c && Array.isArray(c.transitions) && cacheIsValid(c.transitions)) allTransitions = c.transitions;
-            }
-        } catch (e) {}
-    }
-
-    // 从 host.jsx 枚举并写缓存
-    function refreshFx(kind, callback) {
-        var fn = kind === 'effect' ? 'qeListEffects()' : 'qeListTransitions()';
-        cs.evalScript(fn, function (result) {
-            var data = null;
-            try { data = JSON.parse(result); } catch (e) {}
-            if (data && data.ok && Array.isArray(data.items)) {
-                if (kind === 'effect') allEffects = data.items;
-                else allTransitions = data.items;
-                // 写缓存
-                try {
-                    var cache = {};
-                    if (fs.existsSync(fxCacheFile)) { try { cache = JSON.parse(fs.readFileSync(fxCacheFile, 'utf8')); } catch (e) {} }
-                    cache[kind === 'effect' ? 'effects' : 'transitions'] = (kind === 'effect' ? allEffects : allTransitions);
-                    fs.writeFileSync(fxCacheFile, JSON.stringify(cache, null, 2), 'utf8');
-                } catch (e) {}
-                fxLoaded[kind] = true;
-                if (callback) callback(null, data.items);
-            } else {
-                if (callback) callback(data && data.error ? data.error : '枚举失败', null);
-            }
-        });
-    }
-
-    // ---------- 解析预设文件（.prfpset，XML）----------
-    // 只从磁盘读用户保存的预设，不做施加；转场预设带 MatchName 可施加，效果预设标注「手动应用」。
-    function parsePresetsXml(xml) {
-        var out = [];
-        // 1. 建 ObjectID -> {type, matchName} 映射
-        var refmap = {};
-        var reTransition = /<TransitionItem\b[^>]*ObjectID="(\d+)"[^>]*>[\s\S]*?<\/TransitionItem>/g;
-        var mt;
-        while ((mt = reTransition.exec(xml)) !== null) {
-            var mn = /<MatchName>([\s\S]*?)<\/MatchName>/.exec(mt[0]);
-            refmap[mt[1]] = { type: 'transitionPreset', matchName: mn ? mn[1].trim() : '' };
-        }
-        var reFilter = /<FilterPresetItem\b[^>]*ObjectID="(\d+)"[^>]*>/g;
-        var mf;
-        while ((mf = reFilter.exec(xml)) !== null) {
-            refmap[mf[1]] = { type: 'effectPreset', matchName: '' };
-        }
-        // 2. 遍历叶子 TreeItem（无子 Items），取 Name + Data ObjectRef
-        var reTree = /<TreeItem\b[^>]*ObjectID="(\d+)"[^>]*>([\s\S]*?)<\/TreeItem>/g;
-        var m;
-        var seen = {};
-        while ((m = reTree.exec(xml)) !== null) {
-            var block = m[2];
-            if (/<Items\b/.test(block)) continue; // 分组/文件夹，跳过
-            var nm = /<Name>([\s\S]*?)<\/Name>/.exec(block);
-            var name = nm ? nm[1].trim() : '';
-            if (!name) continue;
-            var dr = /<Data ObjectRef="(\d+)"/.exec(block);
-            var ref = dr ? dr[1] : '';
-            var info = refmap[ref];
-            if (!info) continue;
-            var key = name + '|' + info.type;
-            if (seen[key]) continue;
-            seen[key] = true;
-            out.push({ name: name, matchName: info.matchName || '', kind: info.type });
-        }
-        return out;
-    }
-
-    // 找预设文件（PR 版本目录下的 Effect Presets and Custom Items.prfpset）
-    function findPresetFile() {
-        try {
-            var docRoot = path.join(os.homedir(), 'Documents', 'Adobe', 'Premiere Pro');
-            if (!fs.existsSync(docRoot)) return '';
-            var vers = fs.readdirSync(docRoot).filter(function (d) {
-                return /^\d+\.\d+$/.test(d) || /^-\d+\.\d+$/.test(d);
-            });
-            // 按版本号降序，优先最新版
-            vers.sort(function (a, b) {
-                var na = parseFloat(a.replace(/^-/, ''));
-                var nb = parseFloat(b.replace(/^-/, ''));
-                return nb - na;
-            });
-            for (var i = 0; i < vers.length; i++) {
-                var pf = path.join(docRoot, vers[i], 'Profile-Admin', 'Effect Presets and Custom Items.prfpset');
-                if (fs.existsSync(pf)) return pf;
-            }
-        } catch (e) {}
-        return '';
-    }
-
-    function loadPresets(callback) {
-        try {
-            var pf = findPresetFile();
-            if (!pf) {
-                fxLoaded.preset = true;
-                if (callback) callback('未找到预设文件', null);
-                return;
-            }
-            var xml = fs.readFileSync(pf, 'utf8');
-            allPresets = parsePresetsXml(xml);
-            fxLoaded.preset = true;
-            log('presets loaded: ' + allPresets.length + ' (file=' + pf + ')');
-            if (callback) callback(null, allPresets);
-        } catch (e) {
-            fxLoaded.preset = true;
-            if (callback) callback('预设解析失败: ' + e.message, null);
-        }
-    }
-
-    // ---------- 切换标签页 ----------
-    function switchTab(tab) {
-        currentTab = tab;
-        el.tabs.forEach(function (t) {
-            t.classList.toggle('active', t.dataset.tab === tab);
-        });
-        // 更新占位符
-        var ph = { sfx: '输入音效名搜索，回车 / 双击插入时间线...', fx: '搜索效果 / 转场 / 预设，回车 / 双击施加...' };
-        el.q.placeholder = ph[tab] || ph.sfx;
-        selectedIdx = -1;
-        visible = [];
-
-        if (tab === 'sfx') {
-            renderEmpty('输入关键词搜索音效\n回车或双击插入当前序列');
-            el.count.textContent = '共 ' + allFiles.length + ' 个音效';
-            if (el.q.value.trim()) doFilter();
-        } else {
-            // fx tab：合并搜索 效果 + 转场 + 预设
-            ensureFxLoaded(function () {
-                var total = allEffects.length + allTransitions.length + allPresets.length;
-                if (total > 0) {
-                    el.count.textContent = '效果 ' + allEffects.length + ' · 转场 ' + allTransitions.length + ' · 预设 ' + allPresets.length;
-                    renderEmpty('输入关键词搜索效果 / 转场 / 预设\n回车或双击施加到播放头剪辑');
-                    if (el.q.value.trim()) doFilter();
-                } else {
-                    el.count.textContent = '正在枚举效果/转场/预设...';
-                    renderEmpty('正在从 PR 枚举...');
-                }
-            });
-        }
-    }
-
-    // 确保 fx 三数据源都加载完成（效果/转场走 QE，预设走本地文件）
-    function ensureFxLoaded(callback) {
-        var needEffect = allEffects.length === 0 && !fxLoaded.effect;
-        var needTransition = allTransitions.length === 0 && !fxLoaded.transition;
-        var needPreset = allPresets.length === 0 && !fxLoaded.preset;
-        var pending = 0;
-        function done() {
-            pending--;
-            if (pending <= 0 && callback) callback();
-        }
-        if (needEffect) { pending++; refreshFx('effect', function () { done(); }); }
-        if (needTransition) { pending++; refreshFx('transition', function () { done(); }); }
-        if (needPreset) { pending++; loadPresets(function () { done(); }); }
-        if (pending === 0) { if (callback) callback(); }
     }
 
     // ---------- 加载音效索引 ----------
@@ -326,48 +129,27 @@
         if (!kw) {
             visible = [];
             selectedIdx = -1;
-            switchTab(currentTab);
+            el.count.textContent = '共 ' + allFiles.length + ' 个音效';
+            renderEmpty('输入关键词搜索音效\n回车或双击插入当前序列');
             return;
         }
-
-        if (currentTab === 'sfx') {
-            var out = [];
-            for (var i = 0; i < allFiles.length; i++) {
-                var f = allFiles[i];
-                var base = path.basename(f.name, path.extname(f.name)).toLowerCase();
-                if (base.indexOf(kw) >= 0) out.push(f);
-                if (out.length >= 200) break;
-            }
-            visible = out;
-            selectedIdx = -1;
-            el.count.textContent = '找到 ' + out.length + ' 条 / 共 ' + allFiles.length + ' 个';
-            renderList(out);
-        } else {
-            // fx tab：合并搜索 效果 + 转场 + 预设
-            var pool = [];
-            var i, it;
-            for (i = 0; i < allEffects.length; i++) { it = allEffects[i]; it.__type = 'effect'; pool.push(it); }
-            for (i = 0; i < allTransitions.length; i++) { it = allTransitions[i]; it.__type = 'transition'; pool.push(it); }
-            for (i = 0; i < allPresets.length; i++) { it = allPresets[i]; it.__type = it.kind || 'effectPreset'; pool.push(it); }
-            var out2 = [];
-            for (var j = 0; j < pool.length; j++) {
-                var item = pool[j];
-                var name = (item.name || '').toLowerCase();
-                var mn = (item.matchName || '').toLowerCase();
-                if (name.indexOf(kw) >= 0 || mn.indexOf(kw) >= 0) out2.push(item);
-                if (out2.length >= 200) break;
-            }
-            visible = out2;
-            selectedIdx = -1;
-            el.count.textContent = '找到 ' + out2.length + ' 条（效果/转场/预设）';
-            renderList(out2);
+        var out = [];
+        for (var i = 0; i < allFiles.length; i++) {
+            var f = allFiles[i];
+            var base = path.basename(f.name, path.extname(f.name)).toLowerCase();
+            if (base.indexOf(kw) >= 0) out.push(f);
+            if (out.length >= 200) break;
         }
+        visible = out;
+        selectedIdx = -1;
+        el.count.textContent = '找到 ' + out.length + ' 条 / 共 ' + allFiles.length + ' 个';
+        renderList(out);
     }
 
     function renderList(list) {
         el.results.innerHTML = '';
         if (list.length === 0) {
-            renderEmpty('没有匹配「' + el.q.value.trim() + '」的内容');
+            renderEmpty('没有匹配「' + el.q.value.trim() + '」的音频');
             return;
         }
         list.forEach(function (f, i) {
@@ -379,84 +161,54 @@
         var item = document.createElement('div');
         item.className = 'item';
         item.dataset.idx = String(i);
+        item.dataset.path = f.fullPath;
+        item.draggable = true;
 
-        if (currentTab === 'sfx') {
-            // 音效项
-            item.dataset.path = f.fullPath;
-            item.draggable = true;
+        var playBtn = document.createElement('button');
+        playBtn.className = 'playbtn';
+        playBtn.textContent = '▶';
+        playBtn.title = '播放 / 暂停';
+        playBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            togglePlay(f, playBtn);
+        });
 
-            var playBtn = document.createElement('button');
-            playBtn.className = 'playbtn';
-            playBtn.textContent = '▶';
-            playBtn.title = '播放 / 暂停';
-            playBtn.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                togglePlay(f, playBtn);
-            });
+        var nm = document.createElement('span');
+        nm.className = 'nm';
+        nm.textContent = f.name;
+        nm.title = f.fullPath;
 
-            var nm = document.createElement('span');
-            nm.className = 'nm';
-            nm.textContent = f.name;
-            nm.title = f.fullPath;
+        var ext = document.createElement('span');
+        ext.className = 'ext';
+        ext.textContent = f.ext ? f.ext.toUpperCase() : '';
 
-            var ext = document.createElement('span');
-            ext.className = 'ext';
-            ext.textContent = f.ext ? f.ext.toUpperCase() : '';
-
-            var star = document.createElement('span');
+        var star = document.createElement('span');
+        star.className = 'star' + (isFav(f.fullPath) ? ' on' : '');
+        star.textContent = isFav(f.fullPath) ? '★' : '☆';
+        star.title = '收藏 / 取消收藏';
+        star.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            toggleFav(f.fullPath);
             star.className = 'star' + (isFav(f.fullPath) ? ' on' : '');
             star.textContent = isFav(f.fullPath) ? '★' : '☆';
-            star.title = '收藏 / 取消收藏';
-            star.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                toggleFav(f.fullPath);
-                star.className = 'star' + (isFav(f.fullPath) ? ' on' : '');
-                star.textContent = isFav(f.fullPath) ? '★' : '☆';
-            });
+        });
 
-            item.appendChild(playBtn);
-            item.appendChild(nm);
-            item.appendChild(ext);
-            item.appendChild(star);
+        item.appendChild(playBtn);
+        item.appendChild(nm);
+        item.appendChild(ext);
+        item.appendChild(star);
 
-            item.addEventListener('click', function () { selectIdx(i); });
-            item.addEventListener('dblclick', function () { insertToTimeline(f); });
-            item.addEventListener('dragstart', function (ev) {
-                if (ev.target.closest && (ev.target.closest('.playbtn') || ev.target.closest('.star'))) {
-                    ev.preventDefault();
-                    return;
-                }
-                ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', f.fullPath);
-                ev.dataTransfer.setData('text/plain', f.fullPath);
-                ev.dataTransfer.effectAllowed = 'copy';
-            });
-        } else {
-            // 特效项：effect(效果) / transition(转场) / transitionPreset(转场预设) / effectPreset(效果预设)
-            var type = f.__type || 'effect';
-            item.dataset.matchName = f.matchName || f.name || '';
-            item.dataset.fxtype = type;
-
-            var labelMap = { effect: '效果', transition: '转场', transitionPreset: '预设·转场', effectPreset: '预设·效果' };
-            var icon = document.createElement('span');
-            icon.className = 'ext';
-            icon.textContent = labelMap[type] || '效果';
-
-            var nm2 = document.createElement('span');
-            nm2.className = 'nm';
-            nm2.textContent = f.name || f.matchName || '';
-
-            var mn = document.createElement('span');
-            mn.className = 'dur';
-            mn.textContent = f.matchName || '';
-            mn.title = f.matchName || '';
-
-            item.appendChild(icon);
-            item.appendChild(nm2);
-            item.appendChild(mn);
-
-            item.addEventListener('click', function () { selectIdx(i); });
-            item.addEventListener('dblclick', function () { applyFx(f); });
-        }
+        item.addEventListener('click', function () { selectIdx(i); });
+        item.addEventListener('dblclick', function () { insertToTimeline(f); });
+        item.addEventListener('dragstart', function (ev) {
+            if (ev.target.closest && (ev.target.closest('.playbtn') || ev.target.closest('.star'))) {
+                ev.preventDefault();
+                return;
+            }
+            ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', f.fullPath);
+            ev.dataTransfer.setData('text/plain', f.fullPath);
+            ev.dataTransfer.effectAllowed = 'copy';
+        });
 
         return item;
     }
@@ -473,7 +225,7 @@
         return el.results.querySelector('.item.selected');
     }
 
-    // ---------- 播放（仅音效）----------
+    // ---------- 播放 ----------
     function togglePlay(f, btn) {
         if (playingAudio && playingAudio.__path === f.fullPath) {
             if (!playingAudio.paused) {
@@ -534,44 +286,6 @@
         });
     }
 
-    // ---------- 施加效果/转场/预设到播放头剪辑 ----------
-    function applyFx(f) {
-        if (busy) return;
-        var type = f.__type || 'effect';
-        var matchName = f.matchName || f.name || '';
-
-        // 效果预设（参数组合）无单一 matchName，QE 无法直接施加，提示手动应用
-        if (type === 'effectPreset') {
-            setStatus('「' + (f.name || '') + '」是效果预设，请到 PR 效果面板手动应用', 'warn');
-            return;
-        }
-
-        busy = true;
-        // kind 归一：转场与转场预设都走 transition 施加路径
-        var kind = (type === 'effect') ? 'effect' : 'transition';
-        var label = (kind === 'effect') ? '效果' : '转场';
-        setStatus('正在施加' + label + ': ' + (f.name || matchName) + ' ...', 'ok');
-        // 记住「上次选中」，供全局快捷键直接复用
-        rememberLast(kind, matchName);
-        var fn = kind === 'effect' ? 'fxApplyEffectStr' : 'fxApplyTransitionStr';
-        cs.evalScript('fxPayload = ' + JSON.stringify({ matchName: matchName }) + ';', function () {
-            cs.evalScript(fn + '()', function (result) {
-                busy = false;
-                try {
-                    var data = JSON.parse(result);
-                    if (data.ok) {
-                        setStatus('已施加到: ' + (data.clip || ''), 'ok');
-                        log('applied ' + kind + ': ' + matchName);
-                    } else {
-                        setStatus(data.error || '施加失败', 'err');
-                    }
-                } catch (e) {
-                    setStatus('施加结果解析失败', 'err');
-                }
-            });
-        });
-    }
-
     // ---------- 键盘交互 ----------
     function onKey(ev) {
         if (ev.key === 'Escape') {
@@ -581,15 +295,6 @@
                 cs.dispatchEvent(cev);
             } catch (e) {}
             try { cs.closeExtension(); } catch (e) {}
-            return;
-        }
-        // Tab 切换标签页
-        if (ev.key === 'Tab') {
-            ev.preventDefault();
-            var order = ['sfx', 'fx'];
-            var idx = order.indexOf(currentTab);
-            var next = order[(idx + 1) % order.length];
-            switchTab(next);
             return;
         }
         if (ev.key === 'ArrowDown') {
@@ -619,8 +324,7 @@
                 target = visible[0];
             }
             if (!target) return;
-            if (currentTab === 'sfx') insertToTimeline(target);
-            else applyFx(target);
+            insertToTimeline(target);
             return;
         }
     }
@@ -630,61 +334,12 @@
         if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
     }
 
-    // ---------- 监听 bg 传来的初始 tab ----------
-    // 两个通道：① opentab.json（面板首次加载时读） ② CSEvent EVENT_TAB（面板已加载时实时切）
-    function applyTab(tab) {
-        if (tab === 'fx' || tab === 'effect' || tab === 'transition') {
-            switchTab('fx');
-        } else if (tab === 'sfx') {
-            switchTab('sfx');
-        } else {
-            switchTab('sfx');
-        }
-    }
-
-    function initTab() {
-        // 通道 1：从 opentab.json 读（面板冷启动时，bg 已写入）
-        try {
-            if (fs.existsSync(openTabFile)) {
-                var obj = JSON.parse(fs.readFileSync(openTabFile, 'utf8'));
-                if (obj && obj.tab) {
-                    applyTab(obj.tab);
-                    return;
-                }
-            }
-        } catch (e) {}
-        // 通道 2：window.location.search（兼容旧逻辑）
-        try {
-            var params = new URLSearchParams(window.location.search);
-            var t = params.get('tab');
-            if (t) { applyTab(t); return; }
-        } catch (e) {}
-        applyTab('sfx');
-    }
-
-    // 通道 3：bg 广播 EVENT_TAB（面板已加载时实时切换）
-    try {
-        cs.addEventListener('com.vh.atelier.search.tab', function (evt) {
-            var data = evt.data;
-            if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { data = null; } }
-            if (data && data.tab) {
-                log('got tab event: ' + data.tab);
-                applyTab(data.tab);
-            }
-        });
-    } catch (e) { log('tab listener err: ' + e.message); }
-
     // ---------- 初始化 ----------
-    el.tabs.forEach(function (t) {
-        t.addEventListener('click', function () { switchTab(t.dataset.tab); });
-    });
     el.q.addEventListener('input', doFilter);
     el.q.addEventListener('keydown', onKey);
     document.addEventListener('keydown', onKey);
     loadFavs();
-    loadFxCache();
     loadIndex();
-    initTab();
     log('search panel loaded');
 
     setTimeout(function () { el.q.focus(); }, 100);

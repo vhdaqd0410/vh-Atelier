@@ -2,9 +2,7 @@
 // 职责：PR 启动时自动加载（AutoVisible=false），spawn 全局键盘钩子 vh_keyhook.exe，
 // 读它的 stdout（JSON），命中热键时广播 CSEvent 给主面板。
 // 支持多热键：每个热键绑定一个命令 id，命令分发到不同执行路径：
-//   - openSearch        → 打开搜索浮窗（音效/效果/转场）
-//   - applyEffect       → 直接施加「上次选中的效果」到播放头下方剪辑
-//   - applyTransition   → 直接施加「上次选中的转场」到播放头下方剪辑
+//   - openSearch        → 打开音效搜索浮窗
 // 命令映射存 collect/hotkey.json，主面板写入并广播 reload 事件，本面板换键重启钩子。
 // 架构参照 Knights of the Editing Table 的 Spell Book：exe 钩键 → stdout → CEP 广播。
 (function () {
@@ -15,10 +13,8 @@
 
     var EVENT_HOTKEY = 'com.vh.atelier.hotkey';
     var EVENT_RELOAD = 'com.vh.atelier.hotkey.reload';
-    var EVENT_TAB = 'com.vh.atelier.search.tab';
     var EVENT_CLOSING = 'com.vh.atelier.search.closing';
     var SEARCH_EXT_ID = 'com.vh.atelier.search';
-    var MAIN_EXT_ID = 'com.vh.atelier.panel';
 
     var extRoot = cs.getSystemPath(SystemPath.EXTENSION);
     var hookPath = path.join(extRoot, 'keyhook', 'vh_keyhook.exe');
@@ -31,10 +27,7 @@
 
     // 默认命令→热键映射（无配置文件时用）
     var DEFAULT_MAP = {
-        openSearch: 'ctrl+f2',
-        openFxSearch: 'ctrl+f3',
-        applyEffect: 'ctrl+f4',
-        applyTransition: 'ctrl+f5'
+        openSearch: 'ctrl+f2'
     };
 
     function log(msg) {
@@ -72,54 +65,15 @@
 
     function openSearchNow(tab) {
         try {
-            // 用共享文件 + CSEvent 广播把 tab 传给 search 面板（requestOpenExtension 的参数不可靠）
+            // 用共享文件记录（供首次加载时读，虽当前仅音效，保留结构以备扩展）
             try {
                 if (!fs.existsSync(collectDir)) fs.mkdirSync(collectDir, { recursive: true });
-                fs.writeFileSync(openTabFile, JSON.stringify({ tab: tab || 'sfx', ts: Date.now() }), 'utf8');
+                fs.writeFileSync(openTabFile, JSON.stringify({ tab: 'sfx', ts: Date.now() }), 'utf8');
             } catch (e) { log('write opentab err: ' + e.message); }
             cs.requestOpenExtension(SEARCH_EXT_ID, '');
-            // 请求打开后延迟广播 tab（面板已加载时靠它切 tab；未加载时靠 opentab.json）
-            setTimeout(function () {
-                try {
-                    var evt = new CSEvent(EVENT_TAB, 'APPLICATION');
-                    evt.data = JSON.stringify({ tab: tab || 'sfx' });
-                    cs.dispatchEvent(evt);
-                } catch (e) { log('broadcast tab err: ' + e.message); }
-            }, 120);
-            log('requestOpenExtension sent: ' + SEARCH_EXT_ID + ' tab=' + (tab || ''));
+            log('requestOpenExtension sent: ' + SEARCH_EXT_ID);
         } catch (e) {
             log('openSearch err: ' + e.message);
-        }
-    }
-
-    // 直接施加效果/转场（不弹窗）：写全局变量并 evalScript 主面板的 host.jsx
-    function applyDirect(kind, matchName) {
-        try {
-            if (!matchName) {
-                broadcast({ type: 'error', msg: '尚未选择要施加的' + (kind === 'effect' ? '效果' : '转场') });
-                return;
-            }
-            var payload = JSON.stringify({ matchName: matchName });
-            var fn = kind === 'effect' ? 'fxApplyEffectStr' : 'fxApplyTransitionStr';
-            // 先写全局变量，再调用施加函数
-            cs.evalScript('fxPayload = ' + payload + '; ' + fn + '();', function (result) {
-                try {
-                    var data = JSON.parse(result);
-                    if (data.ok) {
-                        broadcast({ type: 'applied', kind: kind, clip: data.clip, matchName: data.matchName });
-                        log('applied ' + kind + ': ' + JSON.stringify(data));
-                    } else {
-                        broadcast({ type: 'error', msg: data.error || '施加失败' });
-                        log('apply ' + kind + ' error: ' + (data.error || ''));
-                    }
-                } catch (e) {
-                    broadcast({ type: 'error', msg: '施加结果解析失败' });
-                    log('apply result parse err: ' + e.message);
-                }
-            });
-        } catch (e) {
-            broadcast({ type: 'error', msg: '施加失败: ' + e.message });
-            log('applyDirect err: ' + e.message);
         }
     }
 
@@ -136,14 +90,7 @@
         return DEFAULT_MAP;
     }
 
-    // 上次选中的效果/转场 matchName（由搜索浮窗写入，供全局快捷键直接施加）
-    function readLastApplied() {
-        try {
-            var f = path.join(collectDir, 'lastapplied.json');
-            if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf8'));
-        } catch (e) {}
-        return null;
-    }
+    // 上次选中的效果/转场 matchName（由搜索浮窗写入，供全局快捷键直接施加）——已废弃，仅音效搜索保留 openSearch
 
     function stop() {
         if (child) {
@@ -164,7 +111,7 @@
         for (var id in map) {
             if (map[id]) args.push(id + '=' + map[id]);
         }
-        if (args.length === 0) args.push('openSearch=ctrl+f2');
+    if (args.length === 0) args.push('openSearch=ctrl+f2');
         log('spawning ' + hookPath + ' with ' + args.join(' '));
         child = childProcess.spawn(hookPath, args);
 
@@ -204,17 +151,6 @@
     function dispatch(id, data) {
         if (id === 'openSearch') {
             openSearch('sfx');
-            return;
-        }
-        if (id === 'openFxSearch') {
-            openSearch('fx');
-            return;
-        }
-        if (id === 'applyEffect' || id === 'applyTransition') {
-            var kind = id === 'applyEffect' ? 'effect' : 'transition';
-            var last = readLastApplied();
-            var matchName = last ? last[kind] : null;
-            applyDirect(kind, matchName);
             return;
         }
         // 未知命令：广播给主面板处理

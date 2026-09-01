@@ -12,7 +12,7 @@
     var favsFile = path.join(collectDir, 'favs.json');
     var cacheFile = path.join(collectDir, 'index.json');
     var hotkeyFile = path.join(collectDir, 'hotkey.json');
-    var DEFAULT_COMBO = 'alt+f5';
+    var DEFAULT_COMBO = 'ctrl+f2';
 
     var AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'aiff', 'wma'];
     var MAX_FILES = 20000;
@@ -41,7 +41,6 @@
         subdir: document.getElementById('sfxSubdir'),
         search: document.getElementById('sfxSearch'),
         hotkey: document.getElementById('sfxHotkey'),
-        fxHotkey: document.getElementById('fxHotkey'),
         btnHotkey: document.getElementById('btnSfxHotkey'),
         hotkeyHint: document.getElementById('sfxHotkeyHint'),
         btnAll: document.getElementById('btnSfxAll'),
@@ -653,9 +652,6 @@
             if (!el.hotkey.dataset.editing && map.openSearch) {
                 el.hotkey.value = map.openSearch;
             }
-            if (el.fxHotkey && !el.fxHotkey.dataset.editing && map.openFxSearch) {
-                el.fxHotkey.value = map.openFxSearch;
-            }
         } else if (data && data.type === 'hotkey') {
             // 命中热键时 bg 面板已直接弹搜索浮窗，主面板无需再切 tab
             log('onHotkey HOTKEY received (bg 已弹窗): ' + (data.combo || ''));
@@ -699,13 +695,8 @@
 
     function saveHotkey() {
         var combo = normalizeCombo(el.hotkey.value);
-        var fxCombo = normalizeCombo(el.fxHotkey ? el.fxHotkey.value : '');
         if (!combo) {
-            setStatus('音效热键格式不对，例如 alt+f5、ctrl+shift+k', 'err');
-            return;
-        }
-        if (!fxCombo) {
-            setStatus('特效热键格式不对，例如 ctrl+f3、ctrl+shift+x', 'err');
+            setStatus('音效热键格式不对，例如 ctrl+f2、ctrl+shift+k', 'err');
             return;
         }
         try {
@@ -718,7 +709,6 @@
                 }
             } catch (e) {}
             map.openSearch = combo;
-            map.openFxSearch = fxCombo;
             fs.writeFileSync(hotkeyFile, JSON.stringify({ map: map }, null, 2), 'utf8');
         } catch (e) {
             setStatus('热键保存失败: ' + e.message, 'err');
@@ -731,13 +721,10 @@
         } catch (e) {}
         el.hotkey.value = combo;
         el.hotkey.dataset.editing = '1';
-        if (el.fxHotkey) el.fxHotkey.value = fxCombo;
-        if (el.fxHotkey) el.fxHotkey.dataset.editing = '1';
-        setStatus('热键已保存：音效 ' + combo + ' · 特效 ' + fxCombo, 'ok');
+        setStatus('热键已保存：音效搜索 ' + combo, 'ok');
         // 几秒后回显解除锁定
         setTimeout(function () {
             delete el.hotkey.dataset.editing;
-            if (el.fxHotkey) delete el.fxHotkey.dataset.editing;
         }, 3000);
     }
 
@@ -745,11 +732,6 @@
     el.hotkey.addEventListener('keydown', function (ev) {
         if (ev.key === 'Enter') { ev.preventDefault(); saveHotkey(); }
     });
-    if (el.fxHotkey) {
-        el.fxHotkey.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Enter') { ev.preventDefault(); saveHotkey(); }
-        });
-    }
 
     // 初始化：显示当前配置的热键（读共享文件）
     function loadHotkeyDisplay() {
@@ -758,14 +740,12 @@
                 var obj = JSON.parse(fs.readFileSync(hotkeyFile, 'utf8'));
                 if (obj && obj.map) {
                     if (obj.map.openSearch) el.hotkey.value = obj.map.openSearch;
-                    if (obj.map.openFxSearch && el.fxHotkey) el.fxHotkey.value = obj.map.openFxSearch;
                     return;
                 }
                 if (obj && obj.combo) { el.hotkey.value = obj.combo; return; }
             }
         } catch (e) {}
         el.hotkey.value = DEFAULT_COMBO;
-        if (el.fxHotkey) el.fxHotkey.value = 'ctrl+f3';
     }
 
     // ---------- 事件绑定 ----------
@@ -790,51 +770,6 @@
         el.btnAll.classList.remove('on');
         setVisibleFiles(currentFiltered());
     });
-
-    // ---------- QE 诊断 ----------
-    function runQeDump() {
-        var out = document.getElementById('qeDumpOut');
-        if (!out) return;
-        out.textContent = '正在探测 QE DOM...';
-        try {
-            csInterface.evalScript('qeDump()', function (result) {
-                try {
-                    var obj = JSON.parse(result);
-                    out.textContent = JSON.stringify(obj, null, 2);
-                } catch (e) {
-                    out.textContent = '原始返回: ' + result;
-                }
-            });
-        } catch (e) {
-            out.textContent = '调用失败: ' + e.message;
-        }
-    }
-    var btnQeDump = document.getElementById('btnQeDump');
-    if (btnQeDump) btnQeDump.addEventListener('click', runQeDump);
-
-    // ---------- 施加诊断（定位播放头剪辑 + 试施加 + 回读效果列表） ----------
-    function runFxDiag() {
-        var out = document.getElementById('qeDumpOut');
-        var nameInp = document.getElementById('fxDiagName');
-        if (!out) return;
-        var name = nameInp ? nameInp.value.trim() : '';
-        out.textContent = '正在定位播放头剪辑并试施加...';
-        try {
-            var script = 'fxPayload = ' + JSON.stringify({ matchName: name }) + '; fxDiagnoseApply()';
-            csInterface.evalScript(script, function (result) {
-                try {
-                    var obj = JSON.parse(result);
-                    out.textContent = JSON.stringify(obj, null, 2);
-                } catch (e) {
-                    out.textContent = '原始返回: ' + result;
-                }
-            });
-        } catch (e) {
-            out.textContent = '调用失败: ' + e.message;
-        }
-    }
-    var btnFxDiag = document.getElementById('btnFxDiag');
-    if (btnFxDiag) btnFxDiag.addEventListener('click', runFxDiag);
 
     // 面板内快捷键
     document.addEventListener('keydown', function (ev) {

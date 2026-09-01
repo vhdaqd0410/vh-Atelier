@@ -1,8 +1,5 @@
 {
     "map": {
-        "openSearch": "ctrl+f2",
-        "openFxSearch": "ctrl+f3",
-        "applyEffect": "ctrl+f4",
-        "applyTransition": "ctrl+f5"
+        "openSearch": "ctrl+f2"
     }
 }

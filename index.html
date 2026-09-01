@@ -719,10 +719,8 @@
             </div>
             <div class="tr">
                 <span style="font-size:11px;color:var(--muted);flex:0 0 auto;">全局热键</span>
-                <input type="text" id="sfxHotkey" placeholder="alt+f5" style="flex:0 0 auto;width:100px;">
-                <span style="font-size:10px;color:var(--muted);flex:0 0 auto;">音效</span>
-                <input type="text" id="fxHotkey" placeholder="ctrl+f3" style="flex:0 0 auto;width:100px;">
-                <span style="font-size:10px;color:var(--muted);flex:0 0 auto;">特效</span>
+                <input type="text" id="sfxHotkey" placeholder="ctrl+f2" style="flex:0 0 auto;width:100px;">
+                <span style="font-size:10px;color:var(--muted);flex:0 0 auto;">音效搜索</span>
                 <button id="btnSfxHotkey" class="tbtn">保存</button>
                 <span id="sfxHotkeyHint" style="font-size:10px;color:var(--muted);flex:1;">ctrl/shift/alt/win + 字母或 F1-F12</span>
             </div>
@@ -734,21 +732,7 @@
         <div id="sfxCount"></div>
         <div id="sfxStatus"></div>
 
-        <div class="sfx-toolbar" style="margin-top:8px;">
-            <div class="tr">
-                <button id="btnQeDump" class="tbtn">QE 诊断（枚举效果/转场）</button>
-                <button id="btnFxDiag" class="tbtn">施加诊断（播放头剪辑）</button>
-            </div>
-            <div class="tr">
-                <input id="fxDiagName" class="inp" placeholder="效果名（如：Gamma Correction）" style="margin-top:4px;">
-            </div>
-            <div class="tr">
-                <pre id="qeDumpOut" style="margin:6px 0 0;font-size:11px;color:var(--muted);white-space:pre-wrap;word-break:break-all;max-height:200px;overflow:auto;background:var(--panel2);border-radius:4px;padding:6px;">点按钮后这里显示 QE 探测结果</pre>
-            </div>
-        </div>
-    </div>
-
-    <div id="sfxContextMenu"></div>
+        <div id="sfxContextMenu"></div>
 
     <audio id="sfxPlayer" style="display:none;"></audio>
 
