@@ -499,16 +499,243 @@
         #sfxStatus.ok { color: var(--ok); }
         #sfxStatus.err { color: var(--err); }
         #sfxStatus.warn { color: var(--warn); }
+
+        /* ===== 板块四：多版本导出（作用域化，避免与主面板冲突） ===== */
+        #panel-export { display: flex; flex-direction: column; }
+        #panel-export .exp-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        #panel-export .exp-title { font-size: 13px; font-weight: 600; }
+        #panel-export .exp-ver { color: var(--muted); font-size: 11px; }
+        #panel-export .dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: 0 0 auto; }
+        #panel-export .dot.on { background: var(--ok); }
+        #panel-export .dot.busy { background: #ff9800; animation: expblink 0.8s infinite; }
+        @keyframes expblink { 50% { opacity: 0.3; } }
+
+        #panel-export .group {
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            background: var(--panel);
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #panel-export .group-title {
+            font-size: 11px;
+            color: var(--muted);
+            margin-bottom: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        #panel-export .seq-list { max-height: 110px; overflow-y: auto; }
+        #panel-export .seq-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 3px 4px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        #panel-export .seq-item:hover { background: #3a3a3a; }
+        #panel-export .seq-item input { width: auto; }
+        #panel-export .mini-btns { display: flex; gap: 8px; margin-top: 6px; }
+        #panel-export .mini-btns button {
+            flex: 0 0 auto;
+            font-size: 11px;
+            padding: 3px 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--panel2);
+            color: var(--muted);
+            cursor: pointer;
+        }
+        #panel-export .mini-btns button:hover { color: var(--text); background: #3c3c3c; }
+
+        #panel-export .ver-card {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg);
+            padding: 9px;
+            margin-bottom: 8px;
+        }
+        #panel-export .ver-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+        #panel-export .ver-head .v-enabled { width: auto; flex: 0 0 auto; margin: 0; }
+        #panel-export .ver-head .v-name { flex: 1; }
+        #panel-export .ver-card input[type=text],
+        #panel-export .ver-card select {
+            width: 100%;
+            padding: 5px 8px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: var(--panel2);
+            color: var(--text);
+            font-size: 12px;
+            outline: none;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        #panel-export .ver-card input:focus,
+        #panel-export .ver-card select:focus { border-color: var(--accent); }
+        #panel-export .v-del {
+            flex: 0 0 auto;
+            padding: 0 9px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: var(--panel2);
+            color: var(--err);
+            cursor: pointer;
+            font-size: 11px;
+        }
+        #panel-export .v-del:hover { background: #3a1f1f; }
+        #panel-export .ver-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+        #panel-export .ver-cols .col { min-width: 0; }
+        #panel-export .ver-cols label {
+            display: block;
+            font-size: 11px;
+            color: var(--muted);
+            margin-bottom: 2px;
+        }
+        #panel-export .dir-row { display: flex; gap: 8px; margin-top: 2px; }
+        #panel-export .dir-row input { flex: 1; }
+        #panel-export .dir-row button {
+            flex: 0 0 auto;
+            padding: 0 12px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: var(--panel2);
+            color: var(--text);
+            cursor: pointer;
+        }
+        #panel-export .dir-row button:hover { background: #3c3c3c; }
+        #panel-export .flabel { display: block; font-size: 11px; color: var(--muted); margin: 6px 0 2px; }
+        #panel-export .chk-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text);
+            cursor: pointer;
+            margin-top: 4px;
+        }
+        #panel-export .chk-line input { width: auto; margin: 0; }
+        #panel-export .keep-list {
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: var(--panel2);
+            max-height: 90px;
+            overflow-y: auto;
+            padding: 4px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 12px;
+        }
+        #panel-export .track-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 1px 4px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        #panel-export .track-item:hover { background: #3a3a3a; }
+        #panel-export .track-item input { width: auto; }
+        #panel-export .keep-empty { color: var(--muted); font-size: 11px; padding: 3px; }
+        #panel-export .btn-add {
+            width: 100%;
+            padding: 7px;
+            border: 1px dashed var(--border);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 12px;
+        }
+        #panel-export .btn-add:hover { color: var(--accent); border-color: var(--accent); }
+        #panel-export .btns { display: flex; gap: 8px; margin: 10px 0; }
+        #panel-export #btn-go {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #fff;
+            background: var(--accent);
+        }
+        #panel-export #btn-go:disabled { background: #555; cursor: not-allowed; }
+        #panel-export #btn-stop {
+            flex: 0 0 auto;
+            padding: 10px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #fff;
+            background: #b33939;
+        }
+        #panel-export #btn-stop:disabled { background: #555; cursor: not-allowed; }
+        #panel-export #btn-refresh {
+            flex: 0 0 auto;
+            padding: 10px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: #fff;
+            background: var(--panel2);
+        }
+        #panel-export #btn-refresh:hover { background: #3c3c3c; }
+        #panel-export .progress-area { margin-bottom: 10px; display: none; }
+        #panel-export .progress-bar {
+            height: 8px;
+            background: var(--panel2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #panel-export .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.3s; }
+        #panel-export .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 5px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+        #panel-export .progress-pct { color: var(--text); font-weight: 600; }
+        #panel-export .log {
+            background: #141414;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 9px;
+            height: 140px;
+            overflow-y: auto;
+            font: 12px/1.6 Consolas, monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        #panel-export .log-line { color: var(--muted); }
+        #panel-export .log-ts { color: #6a6a6a; }
+        #panel-export .log-line.info .log-body { color: var(--muted); }
+        #panel-export .log-line.success .log-body { color: #5fce6f; }
+        #panel-export .log-line.warn .log-body { color: #ffb84d; }
+        #panel-export .log-line.error .log-body { color: var(--err); }
     </style>
 </head>
 <body>
     <h1>vh-Atelier</h1>
-    <div class="sub">本地字幕识别 · 语音克隆 · 音效库</div>
+    <div class="sub">本地字幕识别 · 语音克隆 · 音效库 · 多版本导出</div>
 
     <div class="tabs">
         <button class="tab active" data-tab="subtitle">字幕识别</button>
         <button class="tab" data-tab="clone">语音克隆</button>
         <button class="tab" data-tab="sfx">音效库</button>
+        <button class="tab" data-tab="export">多版本导出</button>
     </div>
 
     <!-- ==================== 板块一：字幕识别 ==================== -->
@@ -733,6 +960,75 @@
         <div id="sfxStatus"></div>
 
         <div id="sfxContextMenu"></div>
+    </div>
+
+    <!-- ==================== 板块四：多版本导出 ==================== -->
+    <div class="tab-panel" id="panel-export" style="display:none;">
+        <div class="exp-header">
+            <span class="dot" id="status-dot"></span>
+            <span class="exp-title">多版本交付导出</span>
+            <span class="exp-ver" id="version"></span>
+        </div>
+
+        <div class="group">
+            <div class="group-title"><span>序列</span><span>勾选要导出的（支持多选）</span></div>
+            <div class="seq-list" id="seq-list"></div>
+            <div class="mini-btns">
+                <button id="btn-sel-all">全选</button>
+                <button id="btn-sel-none">全不选</button>
+            </div>
+        </div>
+
+        <div class="group">
+            <div class="group-title"><span>交付结构</span><span>选中 000交付 根目录，一键填充各版本路径</span></div>
+            <label class="flabel">交付根目录</label>
+            <div class="dir-row">
+                <input type="text" id="delivery-root" placeholder="例如 C:\Users\Admin\Desktop\000交付">
+                <button type="button" id="btn-browse-root">浏览…</button>
+            </div>
+            <div class="mini-btns">
+                <button id="btn-autofill">自动填充各版本路径</button>
+            </div>
+            <label class="chk-line" style="margin-top:8px;">
+                <input type="checkbox" id="chk-manifest"> 生成交付清单（CSV）
+            </label>
+        </div>
+
+        <div class="group">
+            <div class="group-title"><span>交付版本</span><span>勾选「启用」才参与导出</span></div>
+            <div id="versions-wrap"></div>
+            <button id="btn-add-version" class="btn-add">＋ 添加版本</button>
+        </div>
+
+        <div class="group">
+            <div class="group-title"><span>字幕</span><span>由「无字幕」版本的预设产生 sidecar 字幕</span></div>
+            <label class="chk-line">
+                <input type="checkbox" id="chk-subtitle"> 导出字幕 srt（自动改名并归位）
+            </label>
+            <label class="flabel">字幕输出目录</label>
+            <div class="dir-row">
+                <input type="text" id="subtitle-dir" placeholder="例如 C:\...\000交付\3.字幕文件">
+                <button type="button" id="btn-browse-subtitle">浏览…</button>
+            </div>
+        </div>
+
+        <div class="progress-area" id="progress-area">
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <div class="progress-meta">
+                <span id="progress-state"></span>
+                <span id="progress-time"></span>
+                <span class="progress-pct" id="progress-pct"></span>
+            </div>
+        </div>
+
+        <div class="btns">
+            <button id="btn-go">一键导出</button>
+            <button id="btn-stop" disabled>停止</button>
+            <button id="btn-refresh">刷新</button>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
 
     <audio id="sfxPlayer" style="display:none;"></audio>
 
@@ -744,5 +1040,6 @@
     <script src="js/clone.js"></script>
     <script src="js/wavesurfer.js"></script>
     <script src="js/sfx.js"></script>
+    <script src="js/export.js"></script>
 </body>
 </html>

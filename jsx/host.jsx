@@ -738,3 +738,127 @@ function sfxImportToBinStr() {
         return JSON.stringify({ error: '导入音效失败: ' + e.toString() });
     }
 }
+
+
+// ==================== 板块四：多版本交付导出 ====================
+// 从独立插件 com.delivery.multiexport 整合而来（me 前缀）
+// 核心 API（已验证）：
+//   sequence.exportAsMediaDirect(outputPath, presetPath, exportType)
+//   track.setMute(1/0)   静音 / 恢复 音频轨
+function meVersion() { return "3.3.0"; }
+
+// 列出项目里所有序列
+function meListSequences() {
+    try {
+        var seqs = [];
+        for (var i = 0; i < app.project.sequences.numSequences; i++) {
+            seqs.push({ name: app.project.sequences[i].name, id: i });
+        }
+        return "OK:" + JSON.stringify(seqs);
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 激活指定序列（按名字）
+function meActivateSequence(name) {
+    try {
+        for (var i = 0; i < app.project.sequences.numSequences; i++) {
+            if (app.project.sequences[i].name === name) {
+                app.project.activeSequence = app.project.sequences[i];
+                return "OK:" + name;
+            }
+        }
+        return "ERR:未找到序列 " + name;
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 列出活动序列的所有音频轨（含名称）
+function meListAudioTracks() {
+    try {
+        var s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+        var tracks = [];
+        for (var i = 0; i < s.audioTracks.numTracks; i++) {
+            var nm = "";
+            try { nm = s.audioTracks[i].name; } catch (_) {}
+            tracks.push({ index: i, name: nm });
+        }
+        return "OK:" + JSON.stringify(tracks);
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 静音所有「不在保留列表内」的音频轨
+// keepListStr: 逗号分隔的 0-based 索引字符串，如 "0,1"
+function meMuteExcept(keepListStr) {
+    try {
+        var s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+        var parts = String(keepListStr).split(',');
+        var keepSet = {};
+        for (var k = 0; k < parts.length; k++) {
+            var idx = parseInt(parts[k], 10);
+            if (!isNaN(idx)) keepSet[String(idx)] = true;
+        }
+        var n = s.audioTracks.numTracks;
+        var muted = [];
+        var kept = [];
+        for (var i = 0; i < n; i++) {
+            var keep = (keepSet[String(i)] === true);
+            s.audioTracks[i].setMute(keep ? 0 : 1);
+            if (keep) kept.push(i + 1); else muted.push(i + 1);
+        }
+        return "OK:" + JSON.stringify({ muted: muted, kept: kept, total: n });
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 取消所有音频轨静音（逐个处理，单个失败不中断整体）
+function meUnmuteAll() {
+    try {
+        var s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+        var n = s.audioTracks.numTracks;
+        var failed = 0;
+        for (var i = 0; i < n; i++) {
+            try { s.audioTracks[i].setMute(0); } catch (e) { failed++; }
+        }
+        if (failed > 0) return "ERR:" + failed + " 条轨道恢复失败";
+        return "OK:";
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 用指定预设导出活动序列
+// exportType: 0 = 整个序列, 1 = 入点到出点
+function meExport(outputPath, presetPath, exportType) {
+    try {
+        var s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+
+        var preset = new File(presetPath);
+        if (!preset.exists) return "ERR:找不到预设 " + presetPath;
+
+        var output = new File(outputPath);
+        var parent = output.parent;
+        if (parent && !parent.exists) parent.create();
+
+        var ok = s.exportAsMediaDirect(output.fsName, preset.fsName, exportType || 0);
+        if (!ok) return "ERR:exportAsMediaDirect 返回失败";
+        return "OK:" + output.fsName;
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 获取活动序列的时长（秒）与帧尺寸，供交付清单使用
+function meSeqInfo() {
+    try {
+        var s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+        var dur = 0, w = 0, h = 0;
+        try { w = s.frameSizeHorizontal; } catch (_) {}
+        try { h = s.frameSizeVertical; } catch (_) {}
+        try {
+            var ticksPerSec = 254016000000;
+            var endTicks = parseFloat(s.end);
+            var zeroTicks = parseFloat(s.zeroPoint);
+            if (!isNaN(endTicks) && !isNaN(zeroTicks)) dur = (endTicks - zeroTicks) / ticksPerSec;
+        } catch (_) {}
+        return "OK:" + JSON.stringify({ durationSec: Math.round(dur * 100) / 100, width: w, height: h });
+    } catch (e) { return "ERR:" + e; }
+}

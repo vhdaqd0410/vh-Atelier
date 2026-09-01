@@ -4,7 +4,8 @@
     var panels = {
         subtitle: document.getElementById('panel-subtitle'),
         clone: document.getElementById('panel-clone'),
-        sfx: document.getElementById('panel-sfx')
+        sfx: document.getElementById('panel-sfx'),
+        export: document.getElementById('panel-export')
     };
 
     function switchTab(name) {
