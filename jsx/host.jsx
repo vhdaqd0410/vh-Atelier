@@ -742,15 +742,23 @@ function sfxImportToBinStr() {
 
 // ==================== 板块五：字幕校对 ====================
 // 列出项目里所有 .srt 字幕素材（供校对选择字幕）
+// 注意：item.type 是数字（1=bin/2=clip/3=file/4=root），不能当字符串比较；
+// 改用「有无 children」判断是否容器，更健壮。
 function ckListProjectSrt() {
     try {
         var root = app.project.rootItem;
         var list = [];
         var visited = {};
+        var debug = [];
 
         function getMediaPath(pi) {
             try {
-                if (pi.getMediaPath) return pi.getMediaPath();
+                if (pi.getMediaPath) {
+                    var p = pi.getMediaPath();
+                    if (p) return p;
+                }
+            } catch (e) {}
+            try {
                 if (pi.mediaItem && pi.mediaItem.file) return pi.mediaItem.file.fsName;
             } catch (e) {}
             return '';
@@ -764,35 +772,51 @@ function ckListProjectSrt() {
                 visited[id] = true;
             } catch (e) {}
 
-            var t = '';
-            try { t = item.type; } catch (e) {}
-
-            if (t === 'BIN' || t === 'ROOT') {
-                var children = item.children;
-                if (children && children.numItems !== undefined) {
-                    for (var i = 0; i < children.numItems; i++) {
-                        var childName = '';
-                        try { childName = children[i].name; } catch (e) {}
-                        var childBinPath = binPath ? binPath + '/' + childName : childName;
-                        walk(children[i], childBinPath);
-                    }
+            // 有 children 就当容器递归（bin/root 都有 children）
+            var children = null;
+            try { children = item.children; } catch (e) {}
+            if (children && children.numItems !== undefined && children.numItems > 0) {
+                for (var i = 0; i < children.numItems; i++) {
+                    var child = null;
+                    try { child = children[i]; } catch (e) {}
+                    var childName = '';
+                    try { childName = child ? child.name : ''; } catch (e) {}
+                    var childBinPath = binPath ? binPath + '/' + childName : childName;
+                    walk(child, childBinPath);
                 }
-            } else {
-                var mp = getMediaPath(item);
-                if (!mp) return;
-                var ext = '';
-                try { ext = mp.toLowerCase().split('.').pop(); } catch (e) {}
-                if (ext !== 'srt') return;
-                list.push({
-                    name: item.name,
-                    mediaPath: mp,
-                    binPath: binPath || ''
-                });
+                return;
             }
+
+            // 叶子：收集诊断信息（最多 200 条，防爆）
+            var nm = '';
+            try { nm = item.name; } catch (e) {}
+            var mp = getMediaPath(item);
+            var t = '';
+            try { t = String(item.type); } catch (e) {}
+            if (debug.length < 200) {
+                var mpShort = mp;
+                if (mp && mp.length > 60) mpShort = '...' + mp.substring(mp.length - 57);
+                debug.push({ name: nm, type: t, ext: (mp || '').toLowerCase().split('.').pop(), hasMediaPath: mp ? 1 : 0, mediaPath: mpShort || '' });
+            }
+
+            // 只收 .srt：优先看媒体路径后缀，其次看名字后缀
+            var ext = '';
+            if (mp) { try { ext = mp.toLowerCase().split('.').pop(); } catch (e) {} }
+            if (ext !== 'srt') {
+                var nameLower = nm.toLowerCase();
+                if (nameLower.substring(nameLower.length - 4) === '.srt') ext = 'srt';
+            }
+            if (ext !== 'srt') return;
+
+            list.push({
+                name: nm,
+                mediaPath: mp,
+                binPath: binPath || ''
+            });
         }
 
         walk(root, '');
-        return JSON.stringify({ ok: true, items: list, count: list.length });
+        return JSON.stringify({ ok: true, items: list, count: list.length, debug: debug });
     } catch (e) {
         return JSON.stringify({ error: '遍历项目字幕失败: ' + e.toString() });
     }
@@ -809,6 +833,48 @@ function ckGetSrtByPath(pathStr) {
         return JSON.stringify({ ok: true, name: pi.name, mediaPath: pathStr });
     } catch (e) {
         return JSON.stringify({ error: '读取字幕素材失败: ' + e.toString() });
+    }
+}
+
+// 读取项目面板当前选中的素材（方案 B：用户选中哪个 srt，就读哪个）
+// 返回尽可能多的诊断字段，方便确认 caption 素材是否能拿到磁盘路径
+function ckGetSelectedSrt() {
+    try {
+        var sel = null;
+        try { sel = app.getCurrentProjectViewSelection(); } catch (e) {}
+        if (!sel) return JSON.stringify({ error: '没有选中的素材（请在项目面板点选一个字幕素材）' });
+        var arr = sel;
+        // 可能返回单个对象或数组
+        var item = null;
+        if (sel.length !== undefined) {
+            if (sel.length === 0) return JSON.stringify({ error: '没有选中的素材' });
+            item = sel[0];
+        } else {
+            item = sel;
+        }
+        if (!item) return JSON.stringify({ error: '选中项为空' });
+
+        var name = '';
+        try { name = item.name; } catch (e) {}
+        var type = '';
+        try { type = String(item.type); } catch (e) {}
+        var mp = '';
+        try { if (item.getMediaPath) mp = item.getMediaPath(); } catch (e) {}
+        if (!mp) {
+            try { if (item.mediaItem && item.mediaItem.file) mp = item.mediaItem.file.fsName; } catch (e) {}
+        }
+        var treePath = '';
+        try { treePath = item.treePath || ''; } catch (e) {}
+
+        return JSON.stringify({
+            ok: true,
+            name: name,
+            type: type,
+            mediaPath: mp,
+            treePath: treePath
+        });
+    } catch (e) {
+        return JSON.stringify({ error: '读取选中素材失败: ' + e.toString() });
     }
 }
 

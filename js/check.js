@@ -15,14 +15,12 @@
     var issues = [];          // 差异清单
     var checked = {};         // { idx: true } 打勾集合
     var resultJsonPath = null;
-    var projectSrts = [];     // 项目面板里的 srt 素材 [{ name, mediaPath, binPath }]
 
     // DOM
     var el = {
         btnPickSrt: document.getElementById('ckPickSrt'),
         srtPathLabel: document.getElementById('ckSrtPath'),
-        projectSrtSel: document.getElementById('ckProjectSrt'),
-        btnRefreshSrt: document.getElementById('ckRefreshSrt'),
+        btnPickSelected: document.getElementById('ckPickSelected'),
         btnPickDocx: document.getElementById('ckPickDocx'),
         docxPathLabel: document.getElementById('ckDocxPath'),
         inpEpisode: document.getElementById('ckEpisode'),
@@ -90,52 +88,27 @@
         return Promise.resolve(null);
     }
 
-    // ---------- 从项目面板加载 srt 列表 ----------
-    function refreshProjectSrt() {
-        setStatus('正在遍历项目面板里的 srt...', '');
-        csInterface.evalScript('ckListProjectSrt()', function (result) {
+    // ---------- 读取项目面板当前选中的字幕（方案 B）----------
+    function pickSelectedSrt() {
+        setStatus('正在读取项目选中的素材...', '');
+        csInterface.evalScript('ckGetSelectedSrt()', function (result) {
             try {
                 var data = JSON.parse(result);
                 if (data.error) { setStatus(data.error, 'err'); return; }
-                projectSrts = data.items || [];
-                el.projectSrtSel.innerHTML = '';
-                if (projectSrts.length === 0) {
-                    var opt0 = document.createElement('option');
-                    opt0.value = '';
-                    opt0.textContent = '（项目里没有 srt 字幕素材）';
-                    el.projectSrtSel.appendChild(opt0);
-                    setStatus('项目里没有 srt 字幕素材，可点「选择 SRT 文件…」直接选', '');
-                } else {
-                    var opt0 = document.createElement('option');
-                    opt0.value = '';
-                    opt0.textContent = '（从项目面板选择一个 srt）';
-                    el.projectSrtSel.appendChild(opt0);
-                    projectSrts.forEach(function (m, idx) {
-                        var opt = document.createElement('option');
-                        opt.value = String(idx);
-                        var binStr = m.binPath ? '[' + m.binPath + '] ' : '';
-                        opt.textContent = binStr + m.name;
-                        el.projectSrtSel.appendChild(opt);
-                    });
-                    setStatus('已加载 ' + projectSrts.length + ' 个 srt，选择一个即可', 'ok');
+                if (!data.mediaPath) {
+                    var msg = '选中素材「' + data.name + '」拿不到磁盘路径（type=' + data.type + '）。';
+                    if (data.treePath) msg += ' treePath=' + data.treePath;
+                    setStatus(msg, 'warn');
+                    return;
                 }
+                srtPath = data.mediaPath;
+                el.srtPathLabel.textContent = data.name;
+                el.srtPathLabel.title = data.mediaPath;
+                setStatus('已读取项目字幕：' + data.name, 'ok');
             } catch (e) {
-                setStatus('项目字幕解析失败: ' + result, 'err');
+                setStatus('读取选中素材失败: ' + result, 'err');
             }
         });
-    }
-
-    // 下拉选择 srt：同步到 srtPath
-    function onProjectSrtChange() {
-        var idx = parseInt(el.projectSrtSel.value, 10);
-        if (isNaN(idx) || !projectSrts[idx]) {
-            // 清空选择（回到未选状态）
-            return;
-        }
-        srtPath = projectSrts[idx].mediaPath;
-        el.srtPathLabel.textContent = projectSrts[idx].name;
-        el.srtPathLabel.title = srtPath;
-        setStatus('已选项目字幕：' + projectSrts[idx].name, '');
     }
 
     // ---------- 台词抽取/对齐（调用 Python 引擎）----------
@@ -405,14 +378,14 @@
     }
 
     // ---------- 事件 ----------
+    el.btnPickSelected.addEventListener('click', pickSelectedSrt);
+
     el.btnPickSrt.addEventListener('click', function () {
         pickFile('srt').then(function (p) {
             if (p) {
                 srtPath = p;
                 el.srtPathLabel.textContent = p;
                 el.srtPathLabel.title = p;
-                // 文件选择后清空项目下拉（避免两边不一致）
-                el.projectSrtSel.value = '';
             }
         });
     });
@@ -426,9 +399,6 @@
             }
         });
     });
-
-    el.btnRefreshSrt.addEventListener('click', refreshProjectSrt);
-    el.projectSrtSel.addEventListener('change', onProjectSrtChange);
 
     el.btnCheck.addEventListener('click', runCheck);
     el.btnApply.addEventListener('click', applyChecked);
