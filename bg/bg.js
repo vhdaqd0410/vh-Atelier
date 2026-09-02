@@ -25,6 +25,12 @@
     var child = null;
     var lastCloseTime = 0; // search 面板上次关闭时间（兼容旧冷却，已由 ready 状态机取代）
 
+    // 网易云音乐本地服务管理（bg 常驻负责拉起）
+    var ncmChild = null;
+    var ncmDir = path.join(extRoot, 'ncm');
+    var ncmIndex = path.join(ncmDir, 'index.js');
+    var nodeExe = null; // 系统 node 绝对路径，运行时探测
+
     // search 浮窗状态机：idle（已卸载）/ loading（加载中）/ open（已就绪）
     var searchState = 'idle';
     var pendingOpen = false; // loading 期间是否有重开请求排队
@@ -212,4 +218,74 @@
     log('bg.js loaded, extRoot=' + extRoot);
     log('hookPath=' + hookPath + ' exists=' + fs.existsSync(hookPath));
     start();
+
+    // ---------- 网易云音乐本地服务 ----------
+    function findNode() {
+        var candidates = [
+            'C:\\Program Files\\nodejs\\node.exe',
+            'C:\\Program Files (x86)\\nodejs\\node.exe'
+        ];
+        for (var i = 0; i < candidates.length; i++) {
+            if (fs.existsSync(candidates[i])) return candidates[i];
+        }
+        // 尝试 PATH 探测
+        try {
+            var which = childProcess.spawnSync('where', ['node'], { encoding: 'utf8' });
+            if (which.status === 0 && which.stdout) {
+                var first = which.stdout.split('\n')[0].trim();
+                if (first) return first;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function ncmStart() {
+        try {
+            if (!fs.existsSync(ncmIndex)) {
+                log('ncm service missing: ' + ncmIndex);
+                return;
+            }
+            if (!nodeExe) nodeExe = findNode();
+            if (!nodeExe) {
+                log('node.exe not found');
+                return;
+            }
+            // 已存在则不再拉起（用端口探活代替）
+            if (ncmChild) {
+                log('ncm service already spawned, skip');
+                return;
+            }
+            log('starting ncm service: ' + nodeExe + ' ' + ncmIndex);
+            ncmChild = childProcess.spawn(nodeExe, [ncmIndex], {
+                cwd: ncmDir,
+                windowsHide: true
+            });
+            ncmChild.stdout.on('data', function (c) { log('ncm: ' + c.toString().trim()); });
+            ncmChild.stderr.on('data', function (c) { log('ncm err: ' + c.toString().trim()); });
+            ncmChild.on('error', function (e) { log('ncm spawn error: ' + e.message); ncmChild = null; });
+            ncmChild.on('close', function (code) { log('ncm exited code ' + code); ncmChild = null; });
+        } catch (e) {
+            log('ncmStart err: ' + e.message);
+        }
+    }
+
+    // 探测服务是否已在跑（避免重复拉起）
+    function ncmProbeThenStart() {
+        try {
+            var httpMod = require('http');
+            var req = httpMod.get('http://127.0.0.1:17890/health', function (res) {
+                res.resume();
+                log('ncm already running, no need to spawn');
+            });
+            req.on('error', function () {
+                ncmStart();
+            });
+            req.setTimeout(2000, function () { req.abort(); ncmStart(); });
+        } catch (e) {
+            ncmStart();
+        }
+    }
+
+    // PR 启动即拉起（音乐面板首次使用前服务已就绪）
+    ncmProbeThenStart();
 })();

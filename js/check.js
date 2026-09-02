@@ -35,6 +35,10 @@
         btnSelectAll: document.getElementById('ckSelectAll'),
         btnDictOnly: document.getElementById('ckDictOnly'),
         btnExportFixed: document.getElementById('ckExportFixed'),
+        typeRow: document.getElementById('ckTypeRow'),
+        btnSelReplace: document.getElementById('ckSelReplace'),
+        btnSelInsert: document.getElementById('ckSelInsert'),
+        btnSelDelete: document.getElementById('ckSelDelete'),
         status: document.getElementById('ckStatus'),
         list: document.getElementById('ckList'),
         summary: document.getElementById('ckSummary'),
@@ -266,6 +270,47 @@
                 out = out.replace(re, d.to || '');
             }
         });
+        return out;
+    }
+    // 高亮命中字典的词（供识别板块列表预览屏蔽词，不改文本）
+    function highlightDict(text) {
+        var dictWords = [];
+        dict.forEach(function (d) { if (d && d.from) dictWords.push(d.from); });
+        if (dictWords.length === 0) return escapeHtml(text);
+        dictWords.sort(function (a, b) { return b.length - a.length; });
+        // 在原文上标记所有命中区间，避免先转义再匹配导致实体错位
+        var spans = [];
+        dictWords.forEach(function (w) {
+            var wEsc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var re = hasCJK(w)
+                ? new RegExp(wEsc, 'gi')
+                : new RegExp('\\b' + wEsc + '\\b', 'gi');
+            var m;
+            while ((m = re.exec(text)) !== null) {
+                spans.push({ s: m.index, e: m.index + m[0].length, w: m[0] });
+                if (m.index === re.lastIndex) re.lastIndex++;
+            }
+        });
+        if (spans.length === 0) return escapeHtml(text);
+        // 合并重叠区间
+        spans.sort(function (a, b) { return a.s - b.s || b.e - a.e; });
+        var merged = [];
+        spans.forEach(function (sp) {
+            var last = merged[merged.length - 1];
+            if (last && sp.s <= last.e) {
+                if (sp.e > last.e) last.e = sp.e;
+            } else {
+                merged.push({ s: sp.s, e: sp.e });
+            }
+        });
+        var out = '';
+        var pos = 0;
+        merged.forEach(function (sp) {
+            out += escapeHtml(text.slice(pos, sp.s));
+            out += '<span class="dict-hit">' + escapeHtml(text.slice(sp.s, sp.e)) + '</span>';
+            pos = sp.e;
+        });
+        out += escapeHtml(text.slice(pos));
         return out;
     }
     // 选中状态提示：SRT/剧本有了就亮徽章
@@ -553,6 +598,18 @@
             head.appendChild(chk);
             head.appendChild(tag);
             head.appendChild(time);
+            // 定位按钮：跳到 PR 时间轴对应位置（仅从识别板块联动时有 seqId）
+            if (it.subStart) {
+                var seekBtn = document.createElement('button');
+                seekBtn.className = 'ck-seek';
+                seekBtn.textContent = '▶ 定位';
+                seekBtn.title = '跳到时间轴该句位置';
+                seekBtn.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    seekToIssue(i);
+                });
+                head.appendChild(seekBtn);
+            }
 
             var detail = document.createElement('div');
             detail.className = 'ck-detail';
@@ -584,7 +641,51 @@
             row.appendChild(body);
             el.list.appendChild(row);
         });
+        // 分类全选按钮：只对存在对应类型的差异显示
+        var hasType = { replace: false, insert: false, delete: false };
+        issues.forEach(function (it) { if (hasType[it.type] !== undefined) hasType[it.type] = true; });
+        el.typeRow.style.display = (hasType.replace || hasType.insert || hasType.delete) ? '' : 'none';
+        if (el.btnSelReplace) el.btnSelReplace.style.display = hasType.replace ? '' : 'none';
+        if (el.btnSelInsert) el.btnSelInsert.style.display = hasType.insert ? '' : 'none';
+        if (el.btnSelDelete) el.btnSelDelete.style.display = hasType.delete ? '' : 'none';
         updateApplyBtn();
+    }
+
+    // 分类全选：勾选某一类型的所有差异
+    function selectByType(type) {
+        issues.forEach(function (it, i) {
+            if (it.type === type) checked[i] = true;
+        });
+        renderIssues();
+    }
+
+    // 定位到 PR 时间轴：把播放头跳到该差异项对应字幕的开头
+    function seekToIssue(idx) {
+        var it = issues[idx];
+        if (!it || !it.subStart) return;
+        // 拿序列 ID：优先从识别板块联动；否则从记忆/项目面板选中的 srt 无法定位到时间轴
+        var seqId = '';
+        var bridge = window.__subtitleBridge;
+        var cur = bridge ? bridge.getCurrent() : null;
+        if (cur && cur.seqId) seqId = cur.seqId;
+        if (!seqId) {
+            setStatus('无法定位：请先从「字幕识别」板块联动带入字幕（项目面板选中的 srt 不在时间轴上）', 'warn');
+            return;
+        }
+        var sec = parseTime(it.subStart);
+        if (isNaN(sec)) { setStatus('时间解析失败: ' + it.subStart, 'err'); return; }
+        csInterface.evalScript('ckSeekToStr("' + seqId + '", ' + sec + ')', function (result) {
+            try {
+                var data = JSON.parse(result);
+                if (data.ok) {
+                    setStatus('已跳到时间轴 ' + it.subStart + '（' + sec.toFixed(2) + ' 秒）', 'ok');
+                } else {
+                    setStatus('定位失败: ' + (data.error || result), 'err');
+                }
+            } catch (e) {
+                setStatus('定位失败: ' + result, 'err');
+            }
+        });
     }
 
     function updateApplyBtn() {
@@ -691,6 +792,7 @@
         el.list.innerHTML = '';
         el.summary.textContent = '';
         el.applyRow.style.display = 'none';
+        el.typeRow.style.display = 'none';
         el.btnApply.textContent = '应用选中的修正';
         el.btnApply.disabled = true;
         el.btnSelectAll.textContent = '全选';
@@ -711,16 +813,22 @@
         }
         var content = toSRT(subs);
         var base = (currentEpisode || '字幕') + '_修正';
-        cep.fs.showSaveDialog('导出修正后的字幕', base, ['.srt'], function (p) {
-            if (p) {
-                try {
-                    fs.writeFileSync(p, content, 'utf8');
-                    setStatus('已导出修正 SRT：' + p + (deletedCount || editCount ? '（删 ' + deletedCount + ' / 改 ' + editCount + '）' : ''), 'ok');
-                } catch (e) {
-                    setStatus('导出失败: ' + e.message, 'err');
-                }
+        var result;
+        try {
+            result = window.cep.fs.showSaveDialogEx('导出修正后的字幕', '', ['.srt'], base, '', '保存', '文件名');
+        } catch (e) {
+            setStatus('打开保存对话框失败: ' + e.message, 'err');
+            return;
+        }
+        var p = result && result.data;
+        if (p) {
+            try {
+                fs.writeFileSync(p, content, 'utf8');
+                setStatus('已导出修正 SRT：' + p + (deletedCount || editCount ? '（删 ' + deletedCount + ' / 改 ' + editCount + '）' : ''), 'ok');
+            } catch (e) {
+                setStatus('导出失败: ' + e.message, 'err');
             }
-        });
+        }
     }
 
     // ---------- 只套用字典（不校对，仅敏感词替换）----------
@@ -836,6 +944,9 @@
     el.btnApply.addEventListener('click', applyChecked);
     el.btnDictOnly.addEventListener('click', applyDictOnly);
     el.btnExportFixed.addEventListener('click', exportFixedSrt);
+    el.btnSelReplace.addEventListener('click', function () { selectByType('replace'); });
+    el.btnSelInsert.addEventListener('click', function () { selectByType('insert'); });
+    el.btnSelDelete.addEventListener('click', function () { selectByType('delete'); });
 
     // 替换字典：添加
     el.dictAdd.addEventListener('click', function () {
@@ -893,6 +1004,7 @@
     // 初始化
     setStatus('就绪。选 SRT + 剧本 docx + 集数，点「开始校对」', '');
     el.applyRow.style.display = 'none';
+    if (el.typeRow) el.typeRow.style.display = 'none';
     loadDict();
     renderDict();
     loadMemory();
@@ -904,5 +1016,9 @@
     window.__checkIngest = function () {
         ingestFromSubtitle();
         if (window.__atSwitchTab) window.__atSwitchTab('check');
+    };
+    // 暴露给「字幕识别」板块：字典高亮预览（屏蔽词命中标红）
+    window.__dictBridge = {
+        highlight: highlightDict
     };
 })();

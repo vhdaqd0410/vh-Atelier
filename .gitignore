@@ -17,3 +17,6 @@ Desktop.ini
 
 # 编译产物（源码 keyhook/Program.cs 入仓，exe 不入仓）
 keyhook/*.exe
+
+# 网易云音乐服务依赖（ncm/node_modules 不入仓，部署时 npm install）
+ncm/node_modules/

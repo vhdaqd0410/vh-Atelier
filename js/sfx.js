@@ -639,6 +639,8 @@
 
     // ---------- 全局热键（隐藏面板广播）----------
     function switchToSfxTab() {
+        // 统一委托 main.js 的切换，避免面板列表（含 music/export/check）不一致
+        if (window.__atSwitchTab) { window.__atSwitchTab('sfx'); return; }
         var tabs = document.querySelectorAll('.tab');
         var panels = { subtitle: document.getElementById('panel-subtitle'), clone: document.getElementById('panel-clone'), sfx: document.getElementById('panel-sfx') };
         tabs.forEach(function (t) {

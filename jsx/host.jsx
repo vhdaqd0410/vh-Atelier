@@ -749,6 +749,39 @@ function sfxImportToBinStr() {
     }
 }
 
+// 导入音乐文件到「音乐」素材箱（从全局变量 musicImportPayload 读文件列表）
+// 与 sfxImportToBinStr 同构，仅目标素材箱不同；供「音乐」板块下载后一键导入 PR 用
+function musicImportToBinStr() {
+    try {
+        var files = musicImportPayload;
+        if (!files || files.length === 0) return JSON.stringify({ error: '没有要导入的文件' });
+        var root = app.project.rootItem;
+        var bin = null;
+        for (var i = 0; i < root.children.numItems; i++) {
+            var c = root.children[i];
+            try {
+                if (c.name === '音乐') { bin = c; break; }
+            } catch (e) {}
+        }
+        if (!bin) {
+            try { bin = root.createBin('音乐'); } catch (e) {
+                return JSON.stringify({ error: '创建素材箱失败: ' + e.toString() });
+            }
+        }
+        var imported = [];
+        for (var j = 0; j < files.length; j++) {
+            var f = new File(files[j]);
+            if (!f.exists) { imported.push(f.name + '(不存在)'); continue; }
+            var ok = app.project.importFiles([f.fsName], true, bin, false);
+            if (ok) imported.push(f.name);
+            else imported.push(f.name + '(失败)');
+        }
+        return JSON.stringify({ ok: true, bin: '音乐', imported: imported });
+    } catch (e) {
+        return JSON.stringify({ error: '导入音乐失败: ' + e.toString() });
+    }
+}
+
 
 // ==================== 板块五：字幕校对 ====================
 // 列出项目里所有 .srt 字幕素材（供校对选择字幕）
@@ -885,6 +918,26 @@ function ckGetSelectedSrt() {
         });
     } catch (e) {
         return JSON.stringify({ error: '读取选中素材失败: ' + e.toString() });
+    }
+}
+
+// 定位播放头：把指定序列的播放头跳到指定秒数（供字幕校对差异项点击定位）
+// 参数：seqId（序列 ID）、seconds（秒，浮点）。PR 播放头是 ticks 字符串，254016000000 ticks = 1 秒。
+function ckSeekToStr(seqId, seconds) {
+    try {
+        var seq = wsFindSequence(seqId);
+        if (!seq) return JSON.stringify({ error: '找不到序列' });
+        var sec = parseFloat(seconds);
+        if (isNaN(sec)) return JSON.stringify({ error: '时间无效' });
+        // 激活序列，让 PR 界面跟着跳
+        try { app.project.activeSequence = seq; } catch (e) {}
+        var ticks = Math.round(sec * 254016000000);
+        try { seq.setPlayerPosition(String(ticks)); } catch (e) {
+            return JSON.stringify({ error: '定位失败: ' + e.toString() });
+        }
+        return JSON.stringify({ ok: true, positionSec: sec });
+    } catch (e) {
+        return JSON.stringify({ error: '定位失败: ' + e.toString() });
     }
 }
 

@@ -255,6 +255,26 @@
         .subtitle-item:hover { background: #3a3a3a; }
         .subtitle-item .t { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
         .subtitle-item .x { flex: 1; }
+        .subtitle-item .del {
+            flex: 0 0 18px;
+            width: 18px;
+            height: 18px;
+            line-height: 16px;
+            text-align: center;
+            border-radius: 50%;
+            color: var(--muted);
+            font-size: 14px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .subtitle-item .del:hover { color: #ff6b6b; background: rgba(255,107,107,0.15); }
+        .subtitle-item .dict-hit {
+            color: #ffd166;
+            background: rgba(255,209,102,0.15);
+            border-radius: 3px;
+            padding: 0 2px;
+            font-weight: 600;
+        }
 
         /* ===== 语音克隆板块专用 ===== */
         .ref-box {
@@ -326,10 +346,17 @@
         }
 
         /* ===== 音效库板块专用 ===== */
-        #panel-sfx {
+        #panel-sfx, #panel-music {
             display: flex;
             flex-direction: column;
             height: calc(100vh - 130px);
+            overflow: hidden;
+        }
+        #sfx-local {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
         }
         .sfx-toolbar {
@@ -362,6 +389,335 @@
             background: var(--accent);
             color: #fff;
             border-color: var(--accent);
+        }
+        /* 音乐/下载列表（LX 联动） */
+        .aigei-downloads {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            background: var(--panel2);
+            border-radius: 6px;
+        }
+        .aigei-dl-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 8px;
+            font-size: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .aigei-dl-item:last-child { border-bottom: none; }
+        .aigei-dl-item .nm {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text);
+        }
+        .aigei-dl-item .importbtn {
+            flex: 0 0 auto;
+            padding: 3px 10px;
+            font-size: 11px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .aigei-dl-item .importbtn:hover { background: var(--accent-hover); }
+        /* ===== 音乐板块（网易云） ===== */
+        #panel-music {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 130px);
+            overflow: hidden;
+        }
+        #musicLogin { flex: 0 0 auto; }
+        .music-login-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .music-login-title { font-size: 13px; font-weight: 600; }
+        .music-server {
+            font-size: 11px;
+            color: var(--muted);
+        }
+        .music-server.ok { color: var(--ok); }
+        .music-server.err { color: var(--err); }
+        .music-qr-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            margin-bottom: 10px;
+            background: #fff;
+            border-radius: 8px;
+        }
+        .music-qr-wrap img { width: 180px; height: 180px; }
+        .music-qr-hint { color: #666; font-size: 12px; }
+        .music-tip { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+        #musicHome {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .music-userbar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+        .music-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            flex: 0 0 auto;
+            background: var(--panel2);
+        }
+        .music-nick { flex: 1; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #btnMusicLogout { flex: 0 0 auto; }
+        .music-list {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            background: var(--panel2);
+            border-radius: 6px;
+        }
+        .music-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+        .music-item:last-child { border-bottom: none; }
+        .music-item:hover { background: #3a3a3a; }
+        .music-item .cover {
+            flex: 0 0 auto;
+            width: 36px;
+            height: 36px;
+            border-radius: 4px;
+            background: var(--panel);
+            object-fit: cover;
+        }
+        .music-item .info { flex: 1; min-width: 0; }
+        .music-item .title { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .music-item .sub { color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .music-item .mbtn {
+            flex: 0 0 auto;
+            padding: 3px 8px;
+            font-size: 11px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--text);
+        }
+        .music-item .mbtn:hover { border-color: var(--accent); color: var(--accent); }
+        .music-item .mbtn.playing { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .music-item .mbtn.dl { color: var(--accent); border-color: var(--accent); }
+        .music-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 12px; }
+        .music-loading { padding: 16px; text-align: center; color: var(--muted); font-size: 12px; }
+        /* 音乐播放条（网易云三段式：封面/歌名 | 控制/进度 | 播放模式） */
+        .music-player {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            /* 毛玻璃效果：支持则真模糊，不支持则半透明渐变兑底 */
+            background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 12px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+        }
+        .mp-now {
+            flex: 0 0 30%;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .mp-cover {
+            flex: 0 0 auto;
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            background: var(--panel2);
+            object-fit: cover;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+        .mp-meta { flex: 1; min-width: 0; }
+        .mp-title {
+            font-size: 12px;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 600;
+        }
+        .mp-sub {
+            font-size: 10px;
+            color: var(--muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mp-ctrl {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .mp-btn {
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            transition: color .15s, transform .1s;
+        }
+        .mp-btn:hover { color: var(--accent); }
+        .mp-btn:active { transform: scale(0.92); }
+        .mp-btn.mp-main {
+            width: 36px;
+            height: 36px;
+            background: var(--accent);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(139,92,246,0.5);
+            transition: background .15s, transform .1s;
+        }
+        .mp-btn.mp-main:hover { background: var(--accent-hover); color: #fff; }
+        .mp-btn.mp-main:active { transform: scale(0.94); }
+        .mp-bar {
+            flex: 1;
+            min-width: 60px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mp-bar .seek { flex: 1; min-width: 40px; height: 4px; background: rgba(255,255,255,0.10); border-radius: 2px; }
+        .mp-bar .seek-fill { background: var(--accent); }
+        .mp-side {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .mp-mode {
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border-radius: 50%;
+            transition: color .15s;
+        }
+        .mp-mode:hover { color: var(--accent); }
+        .mp-mode.active { color: var(--accent); }
+        .mp-mode svg { display: block; }
+        /* 音量控制 */
+        .mp-vol {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .mp-vol-slider {
+            width: 64px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        .mp-vol-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+        .mp-vol-slider::-moz-range-thumb {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            border: none;
+        }
+        /* 歌词面板 */
+        .music-lyric {
+            flex: 0 0 auto;
+            height: 180px;
+            overflow: hidden;
+            position: relative;
+            background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            margin-top: 8px;
+            -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 25%, #000 75%, transparent 100%);
+            mask-image: linear-gradient(180deg, transparent 0%, #000 25%, #000 75%, transparent 100%);
+        }
+        .lyric-body {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            transform: translateY(0);
+            transition: transform .3s ease;
+        }
+        .lyric-line {
+            text-align: center;
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 2.2;
+            padding: 0 16px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            transition: color .2s, font-size .2s;
+        }
+        .lyric-line.active {
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 600;
         }
         .sfx-list {
             flex: 1;
@@ -803,6 +1159,20 @@
             color: var(--muted);
             font-family: Consolas, monospace;
         }
+        #panel-check .ck-seek {
+            flex: 0 0 auto;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: var(--panel2);
+            color: var(--accent);
+            cursor: pointer;
+        }
+        #panel-check .ck-seek:hover {
+            background: rgba(0,162,255,0.15);
+            border-color: var(--accent);
+        }
         #panel-check .ck-detail {
             margin: 6px 0;
             font-size: 12px;
@@ -941,12 +1311,13 @@
 </head>
 <body>
     <h1>vh-Atelier</h1>
-    <div class="sub">本地字幕识别 · 语音克隆 · 音效库 · 多版本导出 · 字幕校对</div>
+    <div class="sub">本地字幕识别 · 语音克隆 · 音效库 · 音乐 · 多版本导出 · 字幕校对</div>
 
     <div class="tabs">
         <button class="tab active" data-tab="subtitle">字幕识别</button>
         <button class="tab" data-tab="clone">语音克隆</button>
         <button class="tab" data-tab="sfx">音效库</button>
+        <button class="tab" data-tab="music">音乐</button>
         <button class="tab" data-tab="export">多版本导出</button>
         <button class="tab" data-tab="check">字幕校对</button>
     </div>
@@ -1146,34 +1517,131 @@
 
     <!-- ==================== 板块三：音效库 ==================== -->
     <div class="tab-panel" id="panel-sfx" style="display:none;">
-        <div class="sfx-toolbar">
-            <div class="tr">
-                <input type="text" id="sfxDir" placeholder="音效文件夹路径">
-                <button id="btnSfxBrowse" class="tbtn">浏览</button>
-                <button id="btnSfxScan" class="tbtn">扫描</button>
+        <!-- 本地音效库视图 -->
+        <div id="sfx-local">
+            <div class="sfx-toolbar">
+                <div class="tr">
+                    <input type="text" id="sfxDir" placeholder="音效文件夹路径">
+                    <button id="btnSfxBrowse" class="tbtn">浏览</button>
+                    <button id="btnSfxScan" class="tbtn">扫描</button>
+                </div>
+                <div class="tr">
+                    <input type="text" id="sfxSearch" placeholder="搜索音效名...">
+                    <select id="sfxSubdir"><option value="">全部</option></select>
+                    <button id="btnSfxAll" class="tbtn on">全部</button>
+                    <button id="btnSfxFav" class="tbtn">★ 收藏</button>
+                </div>
+                <div class="tr">
+                    <span style="font-size:11px;color:var(--muted);flex:0 0 auto;">全局热键</span>
+                    <input type="text" id="sfxHotkey" placeholder="ctrl+f2" style="flex:0 0 auto;width:100px;">
+                    <span style="font-size:10px;color:var(--muted);flex:0 0 auto;">音效搜索</span>
+                    <button id="btnSfxHotkey" class="tbtn">保存</button>
+                    <span id="sfxHotkeyHint" style="font-size:10px;color:var(--muted);flex:1;">ctrl/shift/alt/win + 字母或 F1-F12</span>
+                </div>
             </div>
-            <div class="tr">
-                <input type="text" id="sfxSearch" placeholder="搜索音效名...">
-                <select id="sfxSubdir"><option value="">全部</option></select>
-                <button id="btnSfxAll" class="tbtn on">全部</button>
-                <button id="btnSfxFav" class="tbtn">★ 收藏</button>
+            <div class="sfx-list" id="sfxList">
+                <div class="sfx-spacer" id="sfxSpacer"></div>
+                <div class="sfx-empty" id="sfxEmpty" style="display:none;">先选择音效库目录并「扫描目录」</div>
             </div>
-            <div class="tr">
-                <span style="font-size:11px;color:var(--muted);flex:0 0 auto;">全局热键</span>
-                <input type="text" id="sfxHotkey" placeholder="ctrl+f2" style="flex:0 0 auto;width:100px;">
-                <span style="font-size:10px;color:var(--muted);flex:0 0 auto;">音效搜索</span>
-                <button id="btnSfxHotkey" class="tbtn">保存</button>
-                <span id="sfxHotkeyHint" style="font-size:10px;color:var(--muted);flex:1;">ctrl/shift/alt/win + 字母或 F1-F12</span>
-            </div>
+            <div id="sfxCount"></div>
+            <div id="sfxStatus"></div>
         </div>
-        <div class="sfx-list" id="sfxList">
-            <div class="sfx-spacer" id="sfxSpacer"></div>
-            <div class="sfx-empty" id="sfxEmpty" style="display:none;">先选择音效库目录并「扫描目录」</div>
-        </div>
-        <div id="sfxCount"></div>
-        <div id="sfxStatus"></div>
 
         <div id="sfxContextMenu"></div>
+    </div>
+
+    <!-- ==================== 板块三.五：音乐（LX Music 联动） ==================== -->
+    <div class="tab-panel" id="panel-music" style="display:none;">
+        <!-- 登录视图 -->
+        <div id="musicLogin" class="card" style="display:none;">
+            <div class="music-login-head">
+                <span class="music-login-title">扫码登录网易云音乐</span>
+                <span id="musicServerState" class="music-server">服务启动中...</span>
+            </div>
+            <div class="music-qr-wrap">
+                <img id="musicQr" alt="登录二维码" style="display:none;">
+                <div id="musicQrHint" class="music-qr-hint">正在获取二维码...</div>
+            </div>
+            <div class="row">
+                <button id="btnMusicRefreshQr" class="secondary" disabled>刷新二维码</button>
+            </div>
+            <div class="music-tip">用网易云音乐 App 扫上方二维码登录。登录态会保存在本地，重启无需重扫。</div>
+        </div>
+
+        <!-- 主视图 -->
+        <div id="musicHome" style="display:none;">
+            <div class="music-userbar">
+                <img id="musicAvatar" class="music-avatar" alt="">
+                <span id="musicNick" class="music-nick"></span>
+                <button id="btnMusicLogout" class="mini danger">退出</button>
+            </div>
+            <div class="sfx-toolbar">
+                <div class="tr">
+                    <input type="text" id="musicQuery" placeholder="输入歌名 / 歌手 / 歌单名">
+                    <select id="musicType" style="flex:0 0 auto;width:64px;">
+                        <option value="1">歌曲</option>
+                        <option value="1000">歌单</option>
+                    </select>
+                    <button id="btnMusicSearch" class="tbtn">搜索</button>
+                </div>
+                <div class="tr">
+                    <button id="btnMusicMyPlaylist" class="tbtn">我的歌单</button>
+                    <button id="btnMusicBack" class="tbtn" style="display:none;">← 返回</button>
+                </div>
+            </div>
+            <div id="musicList" class="music-list"></div>
+            <!-- 歌词面板 -->
+            <div class="music-lyric" id="musicLyric" style="display:none;">
+                <div class="lyric-body" id="lyricBody"></div>
+            </div>
+            <!-- 播放控件 -->
+            <div class="music-player" id="musicPlayer">
+                <div class="mp-ctrl">
+                    <button id="btnMusicPrev" class="mp-btn" title="上一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                    </button>
+                    <button id="btnMusicPlayPause" class="mp-btn mp-main" title="播放/暂停">
+                        <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                    </button>
+                    <button id="btnMusicNext" class="mp-btn" title="下一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                    </button>
+                </div>
+                <div class="mp-now">
+                    <img id="mpCover" class="mp-cover" alt="">
+                    <div class="mp-meta">
+                        <div class="mp-title" id="mpTitle">未在播放</div>
+                        <div class="mp-sub" id="mpSub"></div>
+                    </div>
+                </div>
+                <div class="mp-bar">
+                    <span class="ptime" id="mpCur">0:00</span>
+                    <div class="seek" id="mpSeek"><div class="seek-fill" id="mpSeekFill"></div></div>
+                    <span class="ptime" id="mpDur">0:00</span>
+                </div>
+                <div class="mp-side">
+                    <div class="mp-vol">
+                        <button id="btnMusicVol" class="mp-mode" title="静音/取消静音">
+                            <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                            <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                        </button>
+                        <input type="range" id="musicVol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                    </div>
+                    <button id="btnMusicMode" class="mp-mode" title="列表循环"></button>
+                    <button id="btnMusicLyric" class="mp-mode" title="歌词">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h10"/></svg>
+                    </button>
+                    <button id="btnMusicDownload" class="mp-mode" title="下载当前歌曲">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="musicStatus"></div>
+        </div>
+
+        <!-- 试听 -->
+        <audio id="musicAudio" style="display:none;"></audio>
     </div>
 
     <!-- ==================== 板块四：多版本导出 ==================== -->
@@ -1305,6 +1773,11 @@
         <div class="card" id="ckResultCard">
             <h2>4 · 差异清单</h2>
             <div id="ckSummary"></div>
+            <div class="row" id="ckTypeRow" style="margin-top:6px; display:none;">
+                <button id="ckSelReplace" class="secondary mini">全选听错</button>
+                <button id="ckSelInsert" class="secondary mini">全选漏词</button>
+                <button id="ckSelDelete" class="secondary mini">全选多余</button>
+            </div>
             <div id="ckList"></div>
             <div class="row" id="ckApplyRow" style="margin-top:10px; display:none;">
                 <button id="ckSelectAll" class="secondary">全选</button>
@@ -1324,6 +1797,7 @@
     <script src="js/clone.js"></script>
     <script src="js/wavesurfer.js"></script>
     <script src="js/sfx.js"></script>
+    <script src="js/music.js"></script>
     <script src="js/export.js"></script>
     <script src="js/check.js"></script>
 </body>

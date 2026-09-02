@@ -5,6 +5,7 @@
         subtitle: document.getElementById('panel-subtitle'),
         clone: document.getElementById('panel-clone'),
         sfx: document.getElementById('panel-sfx'),
+        music: document.getElementById('panel-music'),
         export: document.getElementById('panel-export'),
         check: document.getElementById('panel-check')
     };
@@ -16,6 +17,10 @@
         Object.keys(panels).forEach(function (key) {
             panels[key].style.display = (key === name) ? '' : 'none';
         });
+        // 音乐板块懒启动：切到 music 时开始监控下载目录
+        if (name === 'music' && window.__musicOnShow) {
+            try { window.__musicOnShow(); } catch (e) {}
+        }
     }
 
     tabs.forEach(function (t) {

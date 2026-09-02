@@ -753,12 +753,31 @@
             var div = document.createElement('div');
             div.className = 'subtitle-item';
             div.dataset.index = i;
+            var textHtml;
+            if (window.__dictBridge && window.__dictBridge.highlight) {
+                textHtml = window.__dictBridge.highlight(s.text);
+            } else {
+                textHtml = escapeHtml(s.text);
+            }
             div.innerHTML =
                 '<span class="t">' + formatTime(s.start) + ' → ' + formatTime(s.end) + '</span>' +
-                '<span class="x">' + escapeHtml(s.text) + '</span>';
+                '<span class="x">' + textHtml + '</span>' +
+                '<span class="del" title="删除此条">×</span>';
             div.onclick = function () { editSubtitle(i, div); };
+            var delBtn = div.querySelector('.del');
+            delBtn.onclick = function (e) {
+                e.stopPropagation();
+                removeSubtitle(i);
+            };
             el.list.appendChild(div);
         });
+    }
+
+    function removeSubtitle(i) {
+        if (i < 0 || i >= subtitles.length) return;
+        subtitles.splice(i, 1);
+        syncSubtitles(subtitles);
+        setStatus('已删除第 ' + (i + 1) + ' 条字幕', 'ok');
     }
 
     function editSubtitle(i, div) {
@@ -816,12 +835,23 @@
         if (!currentSeqId) { setStatus('请先在结果区选择一个序列', 'err'); return; }
         if (subtitles.length === 0) { setStatus('当前序列没有字幕可导出', 'err'); return; }
         var content = toSRT(subtitles);
-        cep.fs.showSaveDialog('导出字幕', '', ['.srt'], function (path) {
-            if (path) {
-                fs.writeFileSync(path, content, 'utf8');
-                setStatus('已导出: ' + path, 'ok');
+        var result;
+        try {
+            // showSaveDialogEx：同步返回 { err, data }，路径在 data 字段
+            result = window.cep.fs.showSaveDialogEx('导出字幕', '', ['.srt'], '', '', '保存', '文件名');
+        } catch (e) {
+            setStatus('打开保存对话框失败: ' + e.message, 'err');
+            return;
+        }
+        var p = result && result.data;
+        if (p) {
+            try {
+                fs.writeFileSync(p, content, 'utf8');
+                setStatus('已导出: ' + p, 'ok');
+            } catch (e) {
+                setStatus('导出失败: ' + e.message, 'err');
             }
-        });
+        }
     }
 
     // ---------- 人声分离（Spleeter 2-stem，本地引擎）----------
