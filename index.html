@@ -1307,6 +1307,91 @@
             padding: 0 6px;
         }
         #panel-check .ck-dict-save:hover { background: #16241a; }
+        /* 视频下载板块 */
+        #panel-video {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #panel-video .v-cookiebar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 8px;
+            margin-bottom: 8px;
+        }
+        #panel-video .v-cookiebar .dot {
+            width: 8px; height: 8px; border-radius: 50%; background: #555; flex: 0 0 auto;
+        }
+        #panel-video .v-cookiebar .dot.on { background: var(--ok); }
+        #panel-video .v-cookiebar .txt { flex: 1; font-size: 11px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #panel-video .v-cookiebar .vbtn {
+            flex: 0 0 auto;
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--panel2);
+            color: var(--text);
+        }
+        #panel-video .v-cookiebar .vbtn:hover { border-color: var(--accent); color: var(--accent); }
+        #panel-video .v-result {
+            flex: 0 0 auto;
+            display: none;
+            gap: 10px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        #panel-video .v-result.show { display: flex; }
+        #panel-video .v-thumb {
+            flex: 0 0 auto;
+            width: 96px; height: 54px;
+            border-radius: 4px;
+            object-fit: cover;
+            background: var(--panel2);
+        }
+        #panel-video .v-meta { flex: 1; min-width: 0; }
+        #panel-video .v-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #panel-video .v-sub { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #panel-video .v-formats { flex: 0 0 auto; min-width: 120px; }
+        #panel-video .v-formats select { width: 100%; }
+        #panel-video .v-actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+        #panel-video .v-actions button { flex: 0 0 auto; padding: 6px 10px; font-size: 12px; }
+        #panel-video .v-log {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            background: var(--panel2);
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+        #panel-video .v-log .l { padding: 2px 0; border-bottom: 1px solid #2a2a2a; word-break: break-all; }
+        #panel-video .v-log .l.ok { color: var(--ok); }
+        #panel-video .v-log .l.err { color: var(--err); }
+        #panel-video .v-status { flex: 0 0 auto; font-size: 11px; color: var(--muted); min-height: 16px; margin-top: 6px; }
+        #panel-video .v-status.ok { color: var(--ok); }
+        #panel-video .v-status.err { color: var(--err); }
+        #panel-video .v-progress {
+            flex: 0 0 auto;
+            height: 6px;
+            background: var(--panel2);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 6px;
+            display: none;
+        }
+        #panel-video .v-progress.show { display: block; }
+        #panel-video .v-progress .fill { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
     </style>
 </head>
 <body>
@@ -1320,6 +1405,7 @@
         <button class="tab" data-tab="music">音乐</button>
         <button class="tab" data-tab="export">多版本导出</button>
         <button class="tab" data-tab="check">字幕校对</button>
+        <button class="tab" data-tab="video">视频下载</button>
     </div>
 
     <!-- ==================== 板块一：字幕识别 ==================== -->
@@ -1791,6 +1877,38 @@
 
     <audio id="player" style="display:none;"></audio>
 
+    <!-- ==================== 板块六：视频下载 ==================== -->
+    <div class="tab-panel" id="panel-video" style="display:none;">
+        <div class="v-cookiebar">
+            <span class="dot" id="vCookieDot"></span>
+            <span class="txt" id="vCookieTxt">未配置浏览器 Cookie（抖音 / B 站高清需登录态）</span>
+            <button id="btnVCookie" class="vbtn">粘贴 Cookie</button>
+        </div>
+        <div class="sfx-toolbar">
+            <div class="tr">
+                <input type="text" id="vUrl" placeholder="粘贴视频链接（抖音/B站/YouTube/小红书...）">
+                <button id="btnVParse" class="tbtn">解析</button>
+            </div>
+        </div>
+        <div class="v-result" id="vResult">
+            <img class="v-thumb" id="vThumb" alt="">
+            <div class="v-meta">
+                <div class="v-title" id="vTitle"></div>
+                <div class="v-sub" id="vSub"></div>
+            </div>
+            <div class="v-formats">
+                <select id="vFormat"></select>
+            </div>
+            <div class="v-actions">
+                <button id="btnVDownload" class="primary">下载</button>
+                <button id="btnVImport" class="secondary" disabled>导入 PR</button>
+            </div>
+        </div>
+        <div class="v-progress" id="vProgress"><div class="fill" id="vProgressFill"></div></div>
+        <div class="v-log" id="vLog"></div>
+        <div class="v-status" id="vStatus"></div>
+    </div>
+
     <script src="js/CSInterface.js"></script>
     <script src="js/main.js"></script>
     <script src="js/subtitle.js"></script>
@@ -1800,5 +1918,6 @@
     <script src="js/music.js"></script>
     <script src="js/export.js"></script>
     <script src="js/check.js"></script>
+    <script src="js/video.js"></script>
 </body>
 </html>

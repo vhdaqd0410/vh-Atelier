@@ -7,7 +7,8 @@
         sfx: document.getElementById('panel-sfx'),
         music: document.getElementById('panel-music'),
         export: document.getElementById('panel-export'),
-        check: document.getElementById('panel-check')
+        check: document.getElementById('panel-check'),
+        video: document.getElementById('panel-video')
     };
 
     function switchTab(name) {
@@ -20,6 +21,10 @@
         // 音乐板块懒启动：切到 music 时开始监控下载目录
         if (name === 'music' && window.__musicOnShow) {
             try { window.__musicOnShow(); } catch (e) {}
+        }
+        // 视频板块懒启动：切到 video 时确保服务 + 刷新 cookie 状态
+        if (name === 'video' && window.__videoOnShow) {
+            try { window.__videoOnShow(); } catch (e) {}
         }
     }
 

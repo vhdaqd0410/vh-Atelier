@@ -20,3 +20,7 @@ keyhook/*.exe
 
 # 网易云音乐服务依赖（ncm/node_modules 不入仓，部署时 npm install）
 ncm/node_modules/
+
+# 视频下载服务（cookie 凭证 + 下载产物不入仓）
+video/.video_cookie
+collect/video/

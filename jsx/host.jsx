@@ -782,6 +782,39 @@ function musicImportToBinStr() {
     }
 }
 
+// 导入视频文件到「视频」素材箱（从全局变量 videoImportPayload 读文件列表）
+// 与 musicImportToBinStr 同构，仅目标素材箱不同；供「视频下载」板块下载后一键导入 PR 用
+function videoImportToBinStr() {
+    try {
+        var files = videoImportPayload;
+        if (!files || files.length === 0) return JSON.stringify({ error: '没有要导入的文件' });
+        var root = app.project.rootItem;
+        var bin = null;
+        for (var i = 0; i < root.children.numItems; i++) {
+            var c = root.children[i];
+            try {
+                if (c.name === '视频') { bin = c; break; }
+            } catch (e) {}
+        }
+        if (!bin) {
+            try { bin = root.createBin('视频'); } catch (e) {
+                return JSON.stringify({ error: '创建素材箱失败: ' + e.toString() });
+            }
+        }
+        var imported = [];
+        for (var j = 0; j < files.length; j++) {
+            var f = new File(files[j]);
+            if (!f.exists) { imported.push(f.name + '(不存在)'); continue; }
+            var ok = app.project.importFiles([f.fsName], true, bin, false);
+            if (ok) imported.push(f.name);
+            else imported.push(f.name + '(失败)');
+        }
+        return JSON.stringify({ ok: true, bin: '视频', imported: imported });
+    } catch (e) {
+        return JSON.stringify({ error: '导入视频失败: ' + e.toString() });
+    }
+}
+
 
 // ==================== 板块五：字幕校对 ====================
 // 列出项目里所有 .srt 字幕素材（供校对选择字幕）
