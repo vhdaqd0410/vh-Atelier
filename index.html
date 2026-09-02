@@ -1392,6 +1392,61 @@
         }
         #panel-video .v-progress.show { display: block; }
         #panel-video .v-progress .fill { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+        #panel-video .v-history {
+            flex: 0 0 auto;
+            margin-top: 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--panel);
+            padding: 8px;
+            display: none;
+        }
+        #panel-video .v-history.show { display: block; }
+        #panel-video .v-history-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 11px;
+            color: var(--muted);
+        }
+        #panel-video .v-history-list {
+            max-height: 130px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        #panel-video .v-hist-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            padding: 4px 6px;
+            background: var(--panel2);
+            border-radius: 4px;
+        }
+        #panel-video .v-hist-item .nm {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text);
+            cursor: pointer;
+        }
+        #panel-video .v-hist-item .nm:hover { color: var(--accent); }
+        #panel-video .v-hist-item .imp {
+            flex: 0 0 auto;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid var(--accent);
+            background: transparent;
+            color: var(--accent);
+        }
+        #panel-video .v-hist-item .imp:hover { background: var(--accent); color: #fff; }
     </style>
 </head>
 <body>
@@ -1886,8 +1941,12 @@
         </div>
         <div class="sfx-toolbar">
             <div class="tr">
-                <input type="text" id="vUrl" placeholder="粘贴视频链接（抖音/B站/YouTube/小红书...）">
-                <button id="btnVParse" class="tbtn">解析</button>
+                <textarea id="vUrl" rows="3" placeholder="粘贴视频链接，可一次粘多个（每行一个，或直接粘抖音/B站分享文案，自动提取链接）"></textarea>
+            </div>
+            <div class="tr">
+                <button id="btnVParse" class="tbtn">解析（第一个链接）</button>
+                <button id="btnVDownloadAll" class="tbtn">批量下载全部</button>
+                <button id="btnVOpenDir" class="tbtn">打开下载目录</button>
             </div>
         </div>
         <div class="v-result" id="vResult">
@@ -1901,10 +1960,18 @@
             </div>
             <div class="v-actions">
                 <button id="btnVDownload" class="primary">下载</button>
-                <button id="btnVImport" class="secondary" disabled>导入 PR</button>
+                <button id="btnVImport" class="secondary">下载并导入 PR</button>
             </div>
         </div>
         <div class="v-progress" id="vProgress"><div class="fill" id="vProgressFill"></div></div>
+        <div class="v-progress-meta" id="vProgressMeta" style="font-size:11px;color:var(--muted);margin-top:4px;display:none;"></div>
+        <div class="v-history" id="vHistoryWrap">
+            <div class="v-history-head">
+                <span>历史记录（最近 10 条，点击文件名或「导入」重新导入 PR）</span>
+                <button id="btnVClearHistory" class="vbtn">清空</button>
+            </div>
+            <div class="v-history-list" id="vHistoryList"></div>
+        </div>
         <div class="v-log" id="vLog"></div>
         <div class="v-status" id="vStatus"></div>
     </div>

@@ -15,16 +15,51 @@ const HOST = '127.0.0.1'
 const YTDLP = path.join(__dirname, '..', 'bin', 'yt-dlp.exe')
 const FFMPEG = path.join(__dirname, '..', 'bin', 'ffmpeg-win32-x64.exe')
 const COOKIE_FILE = path.join(__dirname, '.video_cookie')
+const COOKIE_TXT = path.join(__dirname, '.video_cookies.txt')
 const OUT_DIR = path.join(__dirname, '..', 'collect', 'video')
 
+// cookie 形态：'netscape' = Cookie-Editor 导出的 Netscape 多行文本（存 .video_cookies.txt，用 --cookies 喂）
+//            'header'   = 单串浏览器 Cookie 头（存 .video_cookie，用 --add-header 喂）
+let cookieMode = 'none'
 let cookie = ''
 try { cookie = fs.readFileSync(COOKIE_FILE, 'utf8').trim() } catch (e) { cookie = '' }
+if (cookie && /^(# Netscape HTTP Cookie File|\.douyin\.com|\tbilibili\.com)/m.test(cookie)) {
+  cookieMode = 'netscape'
+} else if (cookie) {
+  cookieMode = 'header'
+}
+
+// 判断一段文本是不是 Netscape 格式（以 # Netscape 开头，或有 tab 分隔的 7 列记录）
+function isNetscape(text) {
+  const t = (text || '').trim()
+  if (!t) return false
+  if (t.indexOf('# Netscape HTTP Cookie File') >= 0) return true
+  // 单行 7 列 tab 分隔：domain \t flag \t path \t secure \t expiry \t name \t value
+  const lines = t.split('\n').filter(function (l) { return l.trim() && l.trim().charAt(0) !== '#' })
+  if (!lines.length) return false
+  var tabCount = 0
+  for (var i = 0; i < lines.length; i++) {
+    var parts = lines[i].split('\t')
+    if (parts.length >= 7) tabCount++
+  }
+  return tabCount > 0 && tabCount === lines.length
+}
 
 function saveCookie(c) {
+  c = (c || '').trim()
   cookie = c
   try {
-    if (c) fs.writeFileSync(COOKIE_FILE, c, 'utf8')
-    else if (fs.existsSync(COOKIE_FILE)) fs.unlinkSync(COOKIE_FILE)
+    // 清空两个旧文件
+    if (fs.existsSync(COOKIE_FILE)) fs.unlinkSync(COOKIE_FILE)
+    if (fs.existsSync(COOKIE_TXT)) fs.unlinkSync(COOKIE_TXT)
+    if (!c) { cookieMode = 'none'; return }
+    if (isNetscape(c)) {
+      cookieMode = 'netscape'
+      fs.writeFileSync(COOKIE_TXT, c + '\n', 'utf8')
+    } else {
+      cookieMode = 'header'
+      fs.writeFileSync(COOKIE_FILE, c, 'utf8')
+    }
   } catch (e) {}
 }
 
@@ -52,9 +87,13 @@ function safeName(s) {
 
 // ---------- 构建 yt-dlp 通用参数 ----------
 function baseArgs() {
-  const args = ['--no-playlist', '--no-warnings', '--newline']
+  const args = ['--no-playlist', '--no-warnings', '--newline', '--encoding', 'utf-8']
   if (fs.existsSync(FFMPEG)) args.push('--ffmpeg-location', FFMPEG)
-  if (cookie) args.push('--add-header', 'Cookie: ' + cookie)
+  if (cookieMode === 'netscape' && fs.existsSync(COOKIE_TXT)) {
+    args.push('--cookies', COOKIE_TXT)
+  } else if (cookieMode === 'header' && cookie) {
+    args.push('--add-header', 'Cookie: ' + cookie)
+  }
   return args
 }
 
@@ -74,7 +113,7 @@ const server = http.createServer(function (req, res) {
       if (!fs.existsSync(YTDLP)) return json(res, fail('yt-dlp.exe 缺失'))
       let ver = ''
       try { ver = childProcess.execFileSync(YTDLP, ['--version'], { encoding: 'utf8', timeout: 15000 }).trim() } catch (e) { ver = '' }
-      return json(res, ok({ alive: true, version: ver, hasCookie: !!cookie, hasFfmpeg: fs.existsSync(FFMPEG) }))
+      return json(res, ok({ alive: true, version: ver, hasCookie: cookieMode !== 'none', cookieMode: cookieMode, hasFfmpeg: fs.existsSync(FFMPEG) }))
     }
 
     if (p === '/parse') {
@@ -114,13 +153,13 @@ const server = http.createServer(function (req, res) {
             const o = JSON.parse(body || '{}')
             const c = (o.cookie || '').trim()
             saveCookie(c)
-            json(res, ok({ hasCookie: !!cookie, len: cookie.length }))
+            json(res, ok({ hasCookie: cookieMode !== 'none', mode: cookieMode, len: cookie.length }))
           } catch (e) { json(res, fail('解析失败')) }
         })
         return
       }
       // GET：返回是否已配置（不返回明文，保护隐私）
-      return json(res, ok({ hasCookie: !!cookie, len: cookie.length }))
+      return json(res, ok({ hasCookie: cookieMode !== 'none', mode: cookieMode, len: cookie.length }))
     }
 
     if (p === '/update') {

@@ -23,4 +23,5 @@ ncm/node_modules/
 
 # 视频下载服务（cookie 凭证 + 下载产物不入仓）
 video/.video_cookie
+video/.video_cookies.txt
 collect/video/
