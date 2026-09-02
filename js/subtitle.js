@@ -682,6 +682,19 @@
         setStatus('当前查看：' + r.name + '（' + subtitles.length + ' 条）', 'ok');
     }
 
+    // 统一数据同步点：任何改动（手动改字/校对回写）都同步 batchResults + 重渲染
+    function syncSubtitles(newSubs) {
+        subtitles = newSubs || [];
+        // 同步回 batchResults 缓存，避免重选序列后改动丢失
+        batchResults.forEach(function (r) {
+            if (r.seqId === currentSeqId) {
+                r.subtitles = subtitles;
+                r.count = subtitles.length;
+            }
+        });
+        renderList();
+    }
+
     // ---------- SRT 解析（秒）----------
     function parseSRT(content) {
         var subs = [];
@@ -761,7 +774,7 @@
         input.select();
         var done = function () {
             s.text = input.value;
-            renderList();
+            syncSubtitles(subtitles);
         };
         input.onblur = done;
         input.onkeydown = function (e) {
@@ -1053,7 +1066,7 @@
         },
         toSRT: toSRT,
         applySubtitles: function (newSubs) {
-            subtitles = newSubs || [];
+            syncSubtitles(newSubs || []);
             return subtitles.length;
         }
     };

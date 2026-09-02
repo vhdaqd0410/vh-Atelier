@@ -12,9 +12,12 @@
     // 状态
     var srtPath = null;       // 选中的 srt 文件（文件对话框或项目面板）
     var docxPath = null;      // 选中的剧本 docx
+    var docxDir = null;       // 剧本目录（记忆用）
     var issues = [];          // 差异清单
     var checked = {};         // { idx: true } 打勾集合
     var resultJsonPath = null;
+    var currentEpisode = '';  // 当前集数（推断或手填，供修正导出命名）
+    var fixedSubs = null;     // 最近一次应用/导出用的修正后字幕（导出修正 SRT 用）
 
     // DOM
     var el = {
@@ -30,6 +33,8 @@
         btnCheck: document.getElementById('ckRun'),
         btnApply: document.getElementById('ckApply'),
         btnSelectAll: document.getElementById('ckSelectAll'),
+        btnDictOnly: document.getElementById('ckDictOnly'),
+        btnExportFixed: document.getElementById('ckExportFixed'),
         status: document.getElementById('ckStatus'),
         list: document.getElementById('ckList'),
         summary: document.getElementById('ckSummary'),
@@ -50,6 +55,46 @@
     // 字典列表折叠态 + 搜索关键词
     var dictCollapsed = false;
     var dictSearchKey = '';
+
+    // ---------- 记忆（剧本目录/docx/集数，跨会话记住，减少重复选择）----------
+    var CK_MEM_KEY = 'vh_check_memory_v1';
+    function loadMemory() {
+        try {
+            var raw = localStorage.getItem(CK_MEM_KEY);
+            if (raw) {
+                var m = JSON.parse(raw) || {};
+                docxDir = m.docxDir || null;
+                if (m.docxName) {
+                    docxPath = m.docxPath || null;
+                    el.docxPathLabel.textContent = m.docxName;
+                    el.docxPathLabel.title = docxPath || '';
+                }
+                if (m.episode) el.inpEpisode.value = m.episode;
+            }
+        } catch (e) {}
+    }
+    function saveMemory() {
+        try {
+            localStorage.setItem(CK_MEM_KEY, JSON.stringify({
+                docxDir: docxDir || null,
+                docxName: docxPath ? path.basename(docxPath) : null,
+                docxPath: docxPath || null,
+                episode: el.inpEpisode.value || ''
+            }));
+        } catch (e) {}
+    }
+
+    // ---------- 集数推断：从序列名里提取「第X集」等，识别完直接校对时自动填入 ----------
+    function inferEpisodeFromName(name) {
+        if (!name) return '';
+        var s = String(name).trim();
+        var m = s.match(/第\s*[一二两三四五六七八九十百零0-9]+\s*集/);
+        if (m) return m[0];
+        var m2 = s.match(/ep(?:isode)?\.?\s*(\d+)/i);
+        if (m2) return '第' + parseInt(m2[1], 10) + '集';
+        if (/^\d{1,3}$/.test(s)) return '第' + parseInt(s, 10) + '集';
+        return '';
+    }
 
     // 替换字典状态 + 持久化（全局：所有项目共用一份，存磁盘 JSON 文件）
     var dict = [];   // [{ from, to }]
@@ -299,6 +344,8 @@
             return;
         }
         var dir = result.data[0];
+        docxDir = dir;
+        saveMemory();
         var files = [];
         try {
             files = fs.readdirSync(dir).filter(function (f) {
@@ -329,6 +376,7 @@
                 for (var i = 0; i < all.length; i++) all[i].classList.remove('sel');
                 btn.classList.add('sel');
                 refreshBadges();
+                saveMemory();
                 setStatus('已选剧本：' + f, 'ok');
             });
             el.docxList.appendChild(btn);
@@ -354,7 +402,15 @@
                 el.srtPathLabel.textContent = data.name;
                 el.srtPathLabel.title = data.mediaPath;
                 refreshBadges();
-                setStatus('已读取项目字幕：' + data.name, 'ok');
+                // 从字幕素材名推断集数（如「第3集.srt」）
+                var inferred = inferEpisodeFromName(data.name || '');
+                if (inferred) {
+                    el.inpEpisode.value = inferred;
+                    setStatus('已读取项目字幕：' + data.name + '，集数推断为「' + inferred + '」', 'ok');
+                } else {
+                    setStatus('已读取项目字幕：' + data.name, 'ok');
+                }
+                saveMemory();
             } catch (e) {
                 setStatus('读取选中素材失败: ' + result, 'err');
             }
@@ -383,7 +439,15 @@
         el.srtPathLabel.textContent = '（联动）' + (cur.seqName || cur.seqId) + ' · ' + cur.subtitles.length + ' 条';
         el.srtPathLabel.title = tmpFile;
         refreshBadges();
-        setStatus('已接收识别字幕「' + (cur.seqName || cur.seqId) + '」' + cur.subtitles.length + ' 条，请选剧本并填集数', 'ok');
+        // 识别完直接校对：从序列名推断集数并自动填入（不对再手动改）
+        var inferred = inferEpisodeFromName(cur.seqName || '');
+        if (inferred) {
+            el.inpEpisode.value = inferred;
+            setStatus('已接收识别字幕「' + (cur.seqName || cur.seqId) + '」' + cur.subtitles.length + ' 条，集数推断为「' + inferred + '」', 'ok');
+        } else {
+            setStatus('已接收识别字幕「' + (cur.seqName || cur.seqId) + '」' + cur.subtitles.length + ' 条，请选剧本并填集数', 'ok');
+        }
+        saveMemory();
     }
 
     // ---------- 台词抽取/对齐（调用 Python 引擎）----------
@@ -437,6 +501,8 @@
         checked = {};
         // 默认全不勾（用户先看再打勾）
         resultJsonPath = outPath;
+        currentEpisode = data.episode || el.inpEpisode.value.trim() || '';
+        saveMemory();
         renderIssues();
         el.applyRow.style.display = issues.length > 0 ? '' : 'none';
 
@@ -528,13 +594,14 @@
         el.btnApply.disabled = n === 0;
     }
 
-    // ---------- 应用修正：修改内存字幕 + 生成新 SRT + 回写 ----------
-    function applyChecked() {
+    // ---------- 计算修正后的字幕（纯函数：不改状态、不写回）----------
+    // 返回 { subs: 修正后字幕数组, deletedCount, editCount, baseName }
+    function computeFixedSubs() {
         var picked = [];
         Object.keys(checked).forEach(function (k) {
             if (checked[k]) picked.push(parseInt(k, 10));
         });
-        if (picked.length === 0) { setStatus('请先勾选要应用的差异', 'err'); return; }
+        if (picked.length === 0) return null;
 
         // 从识别板块拿当前序列的字幕（内存），若没有则从 srt 文件读
         var bridge = window.__subtitleBridge;
@@ -543,16 +610,12 @@
         if (cur && cur.subtitles && cur.subtitles.length > 0) {
             subs = cur.subtitles.map(function (s) { return { start: s.start, end: s.end, text: s.text }; });
         } else {
-            // 从 srt 文件重新解析
             subs = parseSRT(fs.readFileSync(srtPath, 'utf8'));
         }
-        if (!subs || subs.length === 0) { setStatus('没有可用的字幕数据', 'err'); return; }
+        if (!subs || subs.length === 0) return { error: '没有可用的字幕数据' };
 
-        // 按类型应用
-        var deletes = {};   // subIdx -> true 待删除
-        var edits = {};     // subIdx -> fixedText 待改写
-        var applied = 0;
-
+        var deletes = {};
+        var edits = {};
         picked.forEach(function (idx) {
             var it = issues[idx];
             if (!it) return;
@@ -563,41 +626,136 @@
             }
         });
 
-        // 先应用改写，再删多余（保序）；最后对每条字幕统一应用替换字典
         var newSubs = [];
         subs.forEach(function (s, i) {
-            if (deletes[i]) return;       // 删除
+            if (deletes[i]) return;
             var copy = { start: s.start, end: s.end, text: s.text };
             if (edits[i] !== undefined) copy.text = edits[i];
             newSubs.push(copy);
         });
-        // 替换字典（对最终文本生效）
         if (dict.length > 0) {
             newSubs.forEach(function (s) { s.text = applyDictToText(s.text); });
         }
-        applied = newSubs.length;
+        var seqName = (cur && cur.seqName) ? cur.seqName : '';
+        return {
+            subs: newSubs,
+            deletedCount: subs.length - newSubs.length,
+            editCount: Object.keys(edits).length,
+            seqName: seqName,
+            seqId: cur ? cur.seqId : ''
+        };
+    }
+
+    // ---------- 应用修正：修改内存字幕 + 生成新 SRT + 回写 ----------
+    function applyChecked() {
+        var r = computeFixedSubs();
+        if (!r) { setStatus('请先勾选要应用的差异', 'err'); return; }
+        if (r.error) { setStatus(r.error, 'err'); return; }
+        var newSubs = r.subs;
 
         // 写回内存 bridge（识别板块）
+        var bridge = window.__subtitleBridge;
         if (bridge && bridge.applySubtitles) {
             bridge.applySubtitles(newSubs);
         }
+        fixedSubs = newSubs;
 
-        // 生成新 SRT 并回写激活序列（复用识别板块的 host 回写函数）
+        // 生成新 SRT 并回写激活序列（传正确的 seqId，避免写到别的序列）
         var srtContent = toSRT(newSubs);
-        var seqName = (cur && cur.seqName) ? cur.seqName : '';
-        var payloadJson = JSON.stringify({ srt: srtContent, seqName: seqName, nameSuffix: '修正' });
+        var payloadJson = JSON.stringify({ srt: srtContent, seqName: r.seqName, nameSuffix: '修正' });
         var setScript = 'wsWriteBackPayload = ' + payloadJson + ';';
 
         setStatus('正在回写字幕轨...', '');
         csInterface.evalScript(setScript, function () {
-            csInterface.evalScript('wsWriteBackStr("")', function (result) {
+            csInterface.evalScript('wsWriteBackStr("' + r.seqId + '")', function (result) {
                 try {
                     var data = JSON.parse(result);
                     if (data.ok) {
-                        setStatus('已应用 ' + (subs.length - newSubs.length) + ' 处删除 + ' +
-                            Object.keys(edits).length + ' 处改写，回写完成（' + data.fileName + '）', 'ok');
+                        setStatus('已应用 ' + r.deletedCount + ' 处删除 + ' + r.editCount + ' 处改写，回写完成（' + data.fileName + '）', 'ok');
+                        clearAfterApply();
                     } else {
                         setStatus('修正已应用但回写失败: ' + (data.error || result), 'err');
+                    }
+                } catch (e) {
+                    setStatus('回写解析失败: ' + result, 'err');
+                }
+            });
+        });
+    }
+
+    // 应用/导出后清理：清差异清单、复位按钮，方便进下一集
+    function clearAfterApply() {
+        issues = [];
+        checked = {};
+        fixedSubs = null;
+        el.list.innerHTML = '';
+        el.summary.textContent = '';
+        el.applyRow.style.display = 'none';
+        el.btnApply.textContent = '应用选中的修正';
+        el.btnApply.disabled = true;
+        el.btnSelectAll.textContent = '全选';
+    }
+
+    // ---------- 导出修正后的 SRT（不写回 PR，只出文件）----------
+    function exportFixedSrt() {
+        // 优先用最近一次应用修正后的结果；否则按当前勾选计算
+        var subs = fixedSubs;
+        var deletedCount = 0, editCount = 0;
+        if (!subs) {
+            var r = computeFixedSubs();
+            if (!r) { setStatus('请先勾选要导出的差异', 'err'); return; }
+            if (r.error) { setStatus(r.error, 'err'); return; }
+            subs = r.subs;
+            deletedCount = r.deletedCount;
+            editCount = r.editCount;
+        }
+        var content = toSRT(subs);
+        var base = (currentEpisode || '字幕') + '_修正';
+        cep.fs.showSaveDialog('导出修正后的字幕', base, ['.srt'], function (p) {
+            if (p) {
+                try {
+                    fs.writeFileSync(p, content, 'utf8');
+                    setStatus('已导出修正 SRT：' + p + (deletedCount || editCount ? '（删 ' + deletedCount + ' / 改 ' + editCount + '）' : ''), 'ok');
+                } catch (e) {
+                    setStatus('导出失败: ' + e.message, 'err');
+                }
+            }
+        });
+    }
+
+    // ---------- 只套用字典（不校对，仅敏感词替换）----------
+    function applyDictOnly() {
+        if (dict.length === 0) { setStatus('字典为空，请先添加替换规则', 'err'); return; }
+        var bridge = window.__subtitleBridge;
+        var cur = bridge ? bridge.getCurrent() : null;
+        var subs = null;
+        var seqName = '';
+        var seqId = '';
+        if (cur && cur.subtitles && cur.subtitles.length > 0) {
+            subs = cur.subtitles.map(function (s) { return { start: s.start, end: s.end, text: s.text }; });
+            seqName = cur.seqName || '';
+            seqId = cur.seqId || '';
+        } else if (srtPath) {
+            subs = parseSRT(fs.readFileSync(srtPath, 'utf8'));
+        }
+        if (!subs || subs.length === 0) { setStatus('没有可用的字幕数据', 'err'); return; }
+        var newSubs = subs.map(function (s) { return { start: s.start, end: s.end, text: applyDictToText(s.text) }; });
+        // 写回内存
+        if (bridge && bridge.applySubtitles) bridge.applySubtitles(newSubs);
+        fixedSubs = newSubs;
+        // 回写 PR
+        var srtContent = toSRT(newSubs);
+        var payloadJson = JSON.stringify({ srt: srtContent, seqName: seqName, nameSuffix: '字典' });
+        var setScript = 'wsWriteBackPayload = ' + payloadJson + ';';
+        setStatus('正在套用字典并回写...', '');
+        csInterface.evalScript(setScript, function () {
+            csInterface.evalScript('wsWriteBackStr("' + seqId + '")', function (result) {
+                try {
+                    var data = JSON.parse(result);
+                    if (data.ok) {
+                        setStatus('已套用 ' + dict.length + ' 条替换规则并回写（' + data.fileName + '）', 'ok');
+                    } else {
+                        setStatus('字典已套用但回写失败: ' + (data.error || result), 'err');
                     }
                 } catch (e) {
                     setStatus('回写解析失败: ' + result, 'err');
@@ -676,6 +834,8 @@
 
     el.btnCheck.addEventListener('click', runCheck);
     el.btnApply.addEventListener('click', applyChecked);
+    el.btnDictOnly.addEventListener('click', applyDictOnly);
+    el.btnExportFixed.addEventListener('click', exportFixedSrt);
 
     // 替换字典：添加
     el.dictAdd.addEventListener('click', function () {
@@ -735,7 +895,10 @@
     el.applyRow.style.display = 'none';
     loadDict();
     renderDict();
+    loadMemory();
     refreshBadges();
+    // 集数输入时记忆
+    el.inpEpisode.addEventListener('input', saveMemory);
 
     // 暴露给「字幕识别」板块联动调用：接收识别字幕并切到校对 tab
     window.__checkIngest = function () {
