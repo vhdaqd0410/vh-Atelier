@@ -832,17 +832,13 @@
     function separateVocals() {
         if (sepBusy) { setSepStatus('分离进行中...', 'warn'); return; }
 
-        // 找到当前活动序列
-        var active = null;
-        allSequences.forEach(function (s) { if (s.active) active = s; });
-        if (!active) { setSepStatus('请先刷新序列列表，确认当前活动序列', 'err'); return; }
-
         setSepBusy(true);
-        setSepStatus('正在读取选中的片段...', '');
+        setSepStatus('正在读取当前活动序列的选中片段...', '');
         var ffmpegPath = path.join(extRoot, 'bin', 'ffmpeg-win32-x64.exe');
         if (!fs.existsSync(ffmpegPath)) { setSepBusy(false); setSepStatus('FFmpeg 缺失', 'err'); return; }
 
-        csInterface.evalScript('wsGetSequenceClipsRangeStr("' + active.sequenceID + '", "selection")', function (result) {
+        // 传空 seqId → host 端 wsFindSequence('') 实时取当前活动序列，不依赖字幕板块的缓存
+        csInterface.evalScript('wsGetSequenceClipsRangeStr("", "selection")', function (result) {
             var data;
             try { data = JSON.parse(result); } catch (e) {
                 setSepBusy(false); setSepStatus('解析失败: ' + result, 'err'); return;
