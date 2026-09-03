@@ -43,6 +43,8 @@
         writeBack: document.getElementById('btnWriteBack'),
         exportSrt: document.getElementById('btnExportSrt'),
         toCheck: document.getElementById('btnToCheck'),
+        translate: document.getElementById('btnTranslate'),
+        bilingual: document.getElementById('btnBilingual'),
         btnSeparate: document.getElementById('btnSeparate'),
         btnImportVocals: document.getElementById('btnImportVocals'),
         btnImportAccomp: document.getElementById('btnImportAccomp'),
@@ -56,6 +58,15 @@
         el.status.textContent = msg || '';
         el.status.className = type || '';
     }
+
+    // ---------- 共享工具（来自 utils.js，避免重复实现）----------
+    var U = window.__vhUtils;
+    var parseSRT = U.parseSRT;
+    var parseTime = U.parseTime;
+    var formatTime = U.formatTime;
+    var toSRT = U.toSRT;
+    var escapeHtml = U.escapeHtml;
+    var detectPython = function () { return U.detectPython(extRoot); };
 
     // ---------- 进度条计时 ----------
     var progressStartMs = null;   // 本次批量开始时刻
@@ -593,37 +604,6 @@
         }
     }
 
-    // 探测 Python 可执行文件：优先便携版（runtime/python.exe，随插件携带），系统 Python 兑底
-    function detectPython() {
-        var candidates = [
-            path.join(extRoot, 'runtime', 'python.exe'),          // 便携 Python（分发版自带）
-            path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
-            path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe'),
-            'python',
-            'py'
-        ];
-        for (var i = 0; i < candidates.length; i++) {
-            var c = candidates[i];
-            if (c === 'python' || c === 'py') {
-                // 用 where 探测，避免 spawn 到 WindowsApps 的假 python
-                try {
-                    var r = child_process.spawnSync('where', [c], { encoding: 'utf8' });
-                    if (r.status === 0 && r.stdout) {
-                        var lines = r.stdout.split(/\r?\n/).filter(function (l) { return l.trim(); });
-                        for (var j = 0; j < lines.length; j++) {
-                            var p = lines[j].trim();
-                            // 排除 WindowsApps 商店占位符
-                            if (p.indexOf('WindowsApps') < 0) return p;
-                        }
-                    }
-                } catch (e) {}
-            } else if (fs.existsSync(c)) {
-                return c;
-            }
-        }
-        return null;
-    }
-
     function finishBatch() {
         // 先冻结总耗时（计时器还没停），再收尾
         var totalElapsed = (progressStartMs !== null) ? (Date.now() - progressStartMs) : 0;
@@ -693,57 +673,6 @@
             }
         });
         renderList();
-    }
-
-    // ---------- SRT 解析（秒）----------
-    function parseSRT(content) {
-        var subs = [];
-        var lines = content.replace(/\r\n/g, '\n').split('\n');
-        var i = 0;
-        while (i < lines.length) {
-            while (i < lines.length && lines[i].trim() === '') i++;
-            if (i >= lines.length) break;
-            if (/^\d+$/.test(lines[i].trim())) i++;
-            if (i >= lines.length) break;
-            var timeMatch = lines[i].match(/(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/);
-            if (!timeMatch) { i++; continue; }
-            var start = parseTime(timeMatch[1]);
-            var end = parseTime(timeMatch[2]);
-            i++;
-            var text = [];
-            while (i < lines.length && lines[i].trim() !== '') {
-                text.push(lines[i].trim());
-                i++;
-            }
-            subs.push({ start: start, end: end, text: text.join('\n') });
-        }
-        return subs;
-    }
-
-    function parseTime(t) {
-        var m = t.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
-        var h = parseInt(m[1]), mi = parseInt(m[2]), s = parseInt(m[3]), ms = parseInt(m[4]);
-        return h * 3600 + mi * 60 + s + ms / 1000;
-    }
-
-    function formatTime(sec) {
-        var ms = Math.round(sec * 1000);
-        var h = Math.floor(ms / 3600000);
-        var m = Math.floor((ms % 3600000) / 60000);
-        var s = Math.floor((ms % 60000) / 1000);
-        var millis = ms % 1000;
-        function pad(n, w) { n = '' + n; while (n.length < w) n = '0' + n; return n; }
-        return pad(h, 2) + ':' + pad(m, 2) + ':' + pad(s, 2) + ',' + pad(millis, 3);
-    }
-
-    function toSRT(subs) {
-        var out = '';
-        subs.forEach(function (s, i) {
-            out += (i + 1) + '\n';
-            out += formatTime(s.start) + ' --> ' + formatTime(s.end) + '\n';
-            out += s.text + '\n\n';
-        });
-        return out;
     }
 
     // ---------- 渲染字幕列表 ----------
@@ -1040,13 +969,6 @@
         }
     }
 
-    // ---------- 工具 ----------
-    function escapeHtml(s) {
-        return String(s).replace(/[&<>"']/g, function (c) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
-    }
-
     // ---------- 事件绑定 ----------
     el.refreshSeq.addEventListener('click', refreshSequences);
     el.toggleAll.addEventListener('click', toggleAll);
@@ -1079,6 +1001,80 @@
     }
     el.selLang.addEventListener('change', syncModelByLang);
     syncModelByLang();
+
+    // ---------- 英译中（剧情参考）：调共享翻译引擎 translate.js（MyMemory 免费接口）----------
+    var transBusy = false;
+
+    function translateToChinese() {
+        runTranslate('zh');
+    }
+
+    function importBilingual() {
+        runTranslate('bilingual');
+    }
+
+    // mode: 'zh' 只中文 | 'bilingual' 中英双语（同一字幕条，英文在上中文在下）
+    function runTranslate(mode) {
+        if (transBusy) { setStatus('翻译进行中，请稍候…', 'warn'); return; }
+        if (!currentSeqId) { setStatus('请先在结果区选择一个序列', 'err'); return; }
+        if (subtitles.length === 0) { setStatus('当前序列没有字幕可翻译', 'err'); return; }
+        var bridge = window.__translateBridge;
+        if (!bridge) { setStatus('翻译引擎未加载（translate.js）', 'err'); return; }
+
+        var seqName = '';
+        var hit = batchResults.filter(function (r) { return r.seqId === currentSeqId; });
+        if (hit.length > 0) seqName = hit[0].name || '';
+
+        var targetBtn = mode === 'bilingual' ? el.bilingual : el.translate;
+        var suffix = mode === 'bilingual' ? '双语' : '中文';
+        var label = mode === 'bilingual' ? '导入双语字幕' : '翻译成中文（剧情参考）';
+
+        transBusy = true;
+        targetBtn.disabled = true;
+        targetBtn.textContent = '翻译中 0/' + subtitles.length + '…';
+
+        var t = bridge.runTranslate(subtitles, mode, function (done, total) {
+            targetBtn.textContent = '翻译中 ' + done + '/' + total + '…';
+        }, function (err, res) {
+            if (err) {
+                transBusy = false;
+                targetBtn.disabled = false;
+                targetBtn.textContent = label;
+                setStatus('翻译失败: ' + err.message, 'err');
+                return;
+            }
+            var outSubs = res.outSubs;
+            var failCount = res.failCount;
+
+            var srtContent = toSRT(outSubs);
+            var payloadJson = JSON.stringify({ srt: srtContent, seqName: seqName, nameSuffix: suffix });
+            var setScript = 'wsWriteBackPayload = ' + payloadJson + ';';
+            setStatus('正在回写' + suffix + '轨...', '');
+            csInterface.evalScript(setScript, function () {
+                csInterface.evalScript('wsWriteBackStr("' + currentSeqId + '")', function (result) {
+                    try {
+                        var data = JSON.parse(result);
+                        if (data.ok) {
+                            var note = failCount > 0 ? '（' + failCount + ' 条失败保留英文）' : '';
+                            setStatus('已翻译 ' + outSubs.length + ' 条并回写' + suffix + '轨（' + data.fileName + '）' + note, 'ok');
+                        } else {
+                            setStatus('翻译完成但回写失败: ' + (data.error || result), 'err');
+                        }
+                    } catch (e) {
+                        setStatus('回写解析失败: ' + result, 'err');
+                    }
+                    transBusy = false;
+                    targetBtn.disabled = false;
+                    targetBtn.textContent = label;
+                });
+            });
+        });
+        // 记录当前任务（未来可扩展取消）
+        window.__activeTransTask = t;
+    }
+
+    el.translate.addEventListener('click', translateToChinese);
+    el.bilingual.addEventListener('click', importBilingual);
 
     // 初始化
     setStatus('就绪。点「刷新序列列表」加载序列，勾选后批量识别', '');

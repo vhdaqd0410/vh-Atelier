@@ -840,6 +840,7 @@ function ckListProjectSrt() {
             return '';
         }
 
+        // 注意：与 vcListProjectMedia 内的同名 walk 是不同用途（本版遍历 srt + 收集诊断），勿合并
         function walk(item, binPath) {
             if (!item) return;
             try {

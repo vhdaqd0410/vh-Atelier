@@ -34,6 +34,8 @@
         btnApply: document.getElementById('ckApply'),
         btnSelectAll: document.getElementById('ckSelectAll'),
         btnDictOnly: document.getElementById('ckDictOnly'),
+        btnTranslate: document.getElementById('ckTranslate'),
+        btnBilingual: document.getElementById('ckBilingual'),
         btnExportFixed: document.getElementById('ckExportFixed'),
         typeRow: document.getElementById('ckTypeRow'),
         btnSelReplace: document.getElementById('ckSelReplace'),
@@ -250,8 +252,6 @@
             el.dictList.appendChild(row);
         });
     }
-    // 判断是否含中文（用于选择匹配策略）
-    function hasCJK(s) { return /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(s); }
     // 对单条字幕文本应用字典替换：英文按词边界（大小写不敏感），中文/日韩直接子串替换
     function applyDictToText(text) {
         var out = text;
@@ -326,39 +326,15 @@
         el.status.className = type || '';
     }
 
-    function escapeHtml(s) {
-        return String(s).replace(/[&<>"']/g, function (c) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
-    }
-
-    function detectPython() {
-        var candidates = [
-            path.join(extRoot, 'runtime', 'python.exe'),
-            path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
-            path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe'),
-            'python',
-            'py'
-        ];
-        for (var i = 0; i < candidates.length; i++) {
-            var c = candidates[i];
-            if (c === 'python' || c === 'py') {
-                try {
-                    var r = child_process.spawnSync('where', [c], { encoding: 'utf8' });
-                    if (r.status === 0 && r.stdout) {
-                        var lines = r.stdout.split(/\r?\n/).filter(function (l) { return l.trim(); });
-                        for (var j = 0; j < lines.length; j++) {
-                            var p = lines[j].trim();
-                            if (p.indexOf('WindowsApps') < 0) return p;
-                        }
-                    }
-                } catch (e) {}
-            } else if (fs.existsSync(c)) {
-                return c;
-            }
-        }
-        return null;
-    }
+    // ---------- 共享工具（来自 utils.js，避免重复实现）----------
+    var U = window.__vhUtils;
+    var parseSRT = U.parseSRT;
+    var parseTime = U.parseTime;
+    var formatTime = U.formatTime;
+    var toSRT = U.toSRT;
+    var escapeHtml = U.escapeHtml;
+    var hasCJK = U.hasCJK;
+    var detectPython = function () { return U.detectPython(extRoot); };
 
     function pickFile(kind) {
         var title = kind === 'srt' ? '选择字幕 SRT' : '选择剧本 docx';
@@ -872,54 +848,92 @@
         });
     }
 
-    // ---------- SRT 工具（秒，与识别板块一致）----------
-    function parseSRT(content) {
-        var subs = [];
-        var lines = content.replace(/\r\n/g, '\n').split('\n');
-        var i = 0;
-        while (i < lines.length) {
-            while (i < lines.length && lines[i].trim() === '') i++;
-            if (i >= lines.length) break;
-            if (/^\d+$/.test(lines[i].trim())) i++;
-            if (i >= lines.length) break;
-            var timeMatch = lines[i].match(/(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/);
-            if (!timeMatch) { i++; continue; }
-            var start = parseTime(timeMatch[1]);
-            var end = parseTime(timeMatch[2]);
-            i++;
-            var text = [];
-            while (i < lines.length && lines[i].trim() !== '') {
-                text.push(lines[i].trim());
-                i++;
+    // ---------- 英译中（剧情参考）：调共享翻译引擎 translate.js（MyMemory 免费接口）----------
+    var transBusy = false;
+
+    function translateToChinese() {
+        runTranslate('zh');
+    }
+
+    function importBilingual() {
+        runTranslate('bilingual');
+    }
+
+    // mode: 'zh' 只中文 | 'bilingual' 中英双语（同一字幕条，英文在上中文在下）
+    function runTranslate(mode) {
+        if (transBusy) { setStatus('翻译进行中，请稍候…', 'warn'); return; }
+        var trans = window.__translateBridge;
+        if (!trans) { setStatus('翻译引擎未加载（translate.js）', 'err'); return; }
+
+        // 取字幕源：优先识别板块内存（已含应用修正），其次最近一次修正结果，再其次 srt 文件
+        var bridge = window.__subtitleBridge;
+        var cur = bridge ? bridge.getCurrent() : null;
+        var subs = null;
+        var seqId = '';
+        var seqName = '';
+        if (cur && cur.subtitles && cur.subtitles.length > 0) {
+            subs = cur.subtitles.map(function (s) { return { start: s.start, end: s.end, text: s.text }; });
+            seqId = cur.seqId || '';
+            seqName = cur.seqName || '';
+        } else if (fixedSubs && fixedSubs.length > 0) {
+            subs = fixedSubs.map(function (s) { return { start: s.start, end: s.end, text: s.text }; });
+            seqName = currentEpisode || '';
+        } else if (srtPath) {
+            try {
+                subs = parseSRT(fs.readFileSync(srtPath, 'utf8'));
+            } catch (e) {
+                setStatus('读取 srt 失败: ' + e.message, 'err');
+                return;
             }
-            subs.push({ start: start, end: end, text: text.join('\n') });
+            seqName = currentEpisode || '';
         }
-        return subs;
-    }
+        if (!subs || subs.length === 0) { setStatus('没有可翻译的字幕（先选字幕或完成校对）', 'err'); return; }
+        if (!seqName) seqName = '字幕';
 
-    function parseTime(t) {
-        var m = t.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
-        return parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseInt(m[3]) + parseInt(m[4]) / 1000;
-    }
+        var targetBtn = mode === 'bilingual' ? el.btnBilingual : el.btnTranslate;
+        var suffix = mode === 'bilingual' ? '双语' : '中文';
+        var label = mode === 'bilingual' ? '导入双语字幕' : '翻译成中文（剧情参考）';
 
-    function formatTime(sec) {
-        var ms = Math.round(sec * 1000);
-        var h = Math.floor(ms / 3600000);
-        var m = Math.floor((ms % 3600000) / 60000);
-        var s = Math.floor((ms % 60000) / 1000);
-        var millis = ms % 1000;
-        function pad(n, w) { n = '' + n; while (n.length < w) n = '0' + n; return n; }
-        return pad(h, 2) + ':' + pad(m, 2) + ':' + pad(s, 2) + ',' + pad(millis, 3);
-    }
+        transBusy = true;
+        targetBtn.disabled = true;
+        targetBtn.textContent = '翻译中 0/' + subs.length + '…';
 
-    function toSRT(subs) {
-        var out = '';
-        subs.forEach(function (s, i) {
-            out += (i + 1) + '\n';
-            out += formatTime(s.start) + ' --> ' + formatTime(s.end) + '\n';
-            out += s.text + '\n\n';
+        trans.runTranslate(subs, mode, function (done, total) {
+            targetBtn.textContent = '翻译中 ' + done + '/' + total + '…';
+        }, function (err, res) {
+            if (err) {
+                transBusy = false;
+                targetBtn.disabled = false;
+                targetBtn.textContent = label;
+                setStatus('翻译失败: ' + err.message, 'err');
+                return;
+            }
+            var outSubs = res.outSubs;
+            var failCount = res.failCount;
+
+            var srtContent = toSRT(outSubs);
+            var payloadJson = JSON.stringify({ srt: srtContent, seqName: seqName, nameSuffix: suffix });
+            var setScript = 'wsWriteBackPayload = ' + payloadJson + ';';
+            setStatus('正在回写' + suffix + '轨...', '');
+            csInterface.evalScript(setScript, function () {
+                csInterface.evalScript('wsWriteBackStr("' + seqId + '")', function (result) {
+                    try {
+                        var data = JSON.parse(result);
+                        if (data.ok) {
+                            var note = failCount > 0 ? '（' + failCount + ' 条失败保留英文）' : '';
+                            setStatus('已翻译 ' + outSubs.length + ' 条并回写' + suffix + '轨（' + data.fileName + '）' + note, 'ok');
+                        } else {
+                            setStatus('翻译完成但回写失败: ' + (data.error || result), 'err');
+                        }
+                    } catch (e) {
+                        setStatus('回写解析失败: ' + result, 'err');
+                    }
+                    transBusy = false;
+                    targetBtn.disabled = false;
+                    targetBtn.textContent = label;
+                });
+            });
         });
-        return out;
     }
 
     // ---------- 事件 ----------
@@ -944,6 +958,8 @@
     el.btnApply.addEventListener('click', applyChecked);
     el.btnDictOnly.addEventListener('click', applyDictOnly);
     el.btnExportFixed.addEventListener('click', exportFixedSrt);
+    el.btnTranslate.addEventListener('click', translateToChinese);
+    el.btnBilingual.addEventListener('click', importBilingual);
     el.btnSelReplace.addEventListener('click', function () { selectByType('replace'); });
     el.btnSelInsert.addEventListener('click', function () { selectByType('insert'); });
     el.btnSelDelete.addEventListener('click', function () { selectByType('delete'); });

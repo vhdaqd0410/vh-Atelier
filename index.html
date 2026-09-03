@@ -1527,6 +1527,10 @@
                 <button id="btnExportSrt" class="secondary">导出当前 SRT</button>
                 <button id="btnToCheck" class="secondary">校对当前字幕</button>
             </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="btnTranslate" class="secondary">翻译成中文（剧情参考）</button>
+                <button id="btnBilingual" class="secondary">导入双语字幕</button>
+            </div>
         </div>
 
         <div class="card">
@@ -1908,6 +1912,10 @@
                 <button id="ckRun">开始校对</button>
                 <button id="ckDictOnly" class="secondary">只套用字典（敏感词替换）</button>
             </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="ckTranslate" class="secondary">翻译成中文（剧情参考）</button>
+                <button id="ckBilingual" class="secondary">导入双语字幕</button>
+            </div>
             <div id="ckStatus"></div>
         </div>
 
@@ -1978,6 +1986,8 @@
 
     <script src="js/CSInterface.js"></script>
     <script src="js/main.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/translate.js"></script>
     <script src="js/subtitle.js"></script>
     <script src="js/clone.js"></script>
     <script src="js/wavesurfer.js"></script>
