@@ -9,14 +9,16 @@
         sfx: document.getElementById('panel-sfx'),
         music: document.getElementById('panel-music'),
         export: document.getElementById('panel-export'),
-        video: document.getElementById('panel-video')
+        video: document.getElementById('panel-video'),
+        progress: document.getElementById('panel-progress')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['separate', 'clone', 'sfx', 'music'], default: 'separate' },
-        deliver: { members: ['export', 'video'], default: 'export' }
+        deliver: { members: ['export', 'video'], default: 'export' },
+        progress: { members: ['progress'], default: 'progress' }
     };
     // tab 归属映射
     var groupOf = {};
@@ -67,6 +69,9 @@
         }
         if (name === 'video' && window.__videoOnShow) {
             try { window.__videoOnShow(); } catch (e) {}
+        }
+        if (name === 'progress' && window.__progressOnShow) {
+            try { window.__progressOnShow(); } catch (e) {}
         }
     }
 

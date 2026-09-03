@@ -1490,16 +1490,76 @@
             color: var(--accent);
         }
         #panel-video .v-hist-item .imp:hover { background: var(--accent); color: #fff; }
+
+        /* ===== 项目进度（视频工作台联动） ===== */
+        #panel-progress .prg-statusbar {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+            padding: 8px 10px; margin-bottom: 8px;
+        }
+        #panel-progress .prg-dot { width: 9px; height: 9px; border-radius: 50%; background: #555; flex: 0 0 auto; }
+        #panel-progress .prg-dot.on { background: var(--ok); }
+        #panel-progress .prg-dot.off { background: var(--err); }
+        #panel-progress .prg-status { flex: 1; font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #panel-progress .prg-overview {
+            display: flex; gap: 8px; margin-bottom: 8px;
+        }
+        #panel-progress .prg-metric {
+            flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+            padding: 8px 10px; text-align: center;
+        }
+        #panel-progress .prg-mv { font-size: 18px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+        #panel-progress .prg-ml { font-size: 10px; color: var(--muted); margin-top: 2px; }
+        #panel-progress .prg-offline {
+            background: var(--panel); border: 1px solid var(--err); border-radius: 8px;
+            padding: 12px; margin-bottom: 8px; font-size: 12px; color: var(--text);
+        }
+        #panel-progress .prg-sec { margin-bottom: 8px; }
+        #panel-progress .prg-sec-head {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 12px; font-weight: 600; color: var(--muted);
+            padding: 4px 2px; margin-bottom: 4px;
+        }
+        #panel-progress .prg-count { font-weight: 400; font-size: 11px; }
+        #panel-progress .prg-list { display: flex; flex-direction: column; gap: 6px; }
+        #panel-progress .prg-item {
+            background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+            padding: 8px 10px;
+        }
+        #panel-progress .prg-item-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+        #panel-progress .prg-item-name {
+            flex: 1; font-size: 12px; color: var(--text); min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #panel-progress .prg-state {
+            flex: 0 0 auto; font-size: 10px; padding: 1px 7px; border-radius: 4px; font-weight: 600;
+        }
+        #panel-progress .prg-state.st-review { background: #5b3a1e; color: #ffb84d; }
+        #panel-progress .prg-state.st-modify { background: #1e3a5b; color: #6db3ff; }
+        #panel-progress .prg-state.st-deliver { background: #3a1f1f; color: #ff9a9a; }
+        #panel-progress .prg-state.st-edit { background: #234a2a; color: #7fd68b; }
+        #panel-progress .prg-state.st-other { background: #3a3a3a; color: #ccc; }
+        #panel-progress .prg-bar { height: 5px; background: #1a1a1a; border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+        #panel-progress .prg-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
+        #panel-progress .prg-item-foot {
+            display: flex; justify-content: space-between; font-size: 10px; color: var(--muted);
+        }
+        #panel-progress .prg-item-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+        #panel-progress .prg-empty {
+            background: var(--panel); border: 1px dashed var(--border); border-radius: 8px;
+            padding: 14px; text-align: center; font-size: 12px; color: var(--muted);
+        }
     </style>
 </head>
 <body>
     <h1>vh-Atelier</h1>
-    <div class="sub">字幕 · 声音 · 交付 三工作台</div>
+    <div class="sub">字幕 · 声音 · 交付 · 进度 四工作台</div>
 
     <div class="ws-groups">
         <button class="ws-group active" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="deliver">交付</button>
+        <button class="ws-group" data-group="progress">进度</button>
     </div>
 
     <div class="tabs ws-subtabs" data-group="sub">
@@ -1515,6 +1575,9 @@
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
         <button class="tab" data-tab="export">多版本导出</button>
         <button class="tab" data-tab="video">视频下载</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="progress" style="display:none;">
+        <button class="tab" data-tab="progress">项目进度</button>
     </div>
 
     <!-- ==================== 板块一：字幕识别 ==================== -->
@@ -2080,6 +2143,44 @@
         <div class="v-status" id="vStatus"></div>
     </div>
 
+    <!-- ==================== 板块八：项目进度（视频工作台联动） ==================== -->
+    <div class="tab-panel" id="panel-progress" style="display:none;">
+        <div class="guide">
+            <b>什么时候用：</b>剪辑时想瞄一眼各项目进行到哪了，不用切到视频工作台。
+            数据来自视频工作台（<span style="font-family:monospace">127.0.0.1:8089</span>），需先启动视频工作台。
+        </div>
+
+        <!-- 服务状态条 -->
+        <div class="prg-statusbar" id="prgStatusBar">
+            <span class="prg-dot" id="prgDot"></span>
+            <span class="prg-status" id="prgStatusText">检测视频工作台服务…</span>
+            <button id="prgRefresh" class="secondary mini" style="flex:0 0 auto;">刷新</button>
+        </div>
+
+        <!-- 概览 -->
+        <div class="prg-overview" id="prgOverview" style="display:none;">
+            <div class="prg-metric"><div class="prg-mv" id="prgMProducing">-</div><div class="prg-ml">本月制作中</div></div>
+            <div class="prg-metric"><div class="prg-mv" id="prgMDone">-</div><div class="prg-ml">本月已完成</div></div>
+            <div class="prg-metric"><div class="prg-mv" id="prgMToday">-</div><div class="prg-ml">今日新增</div></div>
+        </div>
+
+        <!-- 离线引导 -->
+        <div class="prg-offline" id="prgOffline" style="display:none;">
+            <div style="margin-bottom:8px;">视频工作台未运行，无法读取项目进度。</div>
+            <div class="row">
+                <button id="prgLaunch">启动视频工作台</button>
+                <button id="prgRetry" class="secondary">重试检测</button>
+            </div>
+            <div class="hint">启动后约需几秒服务就绪，点「重试检测」即可。</div>
+        </div>
+
+        <!-- 进行中项目列表 -->
+        <div class="prg-sec" id="prgActiveWrap" style="display:none;">
+            <div class="prg-sec-head"><span>组内进行中</span><span class="prg-count" id="prgActiveCount"></span></div>
+            <div class="prg-list" id="prgActiveList"></div>
+        </div>
+    </div>
+
     <script src="js/CSInterface.js"></script>
     <script src="js/main.js"></script>
     <script src="js/utils.js"></script>
@@ -2092,5 +2193,6 @@
     <script src="js/export.js"></script>
     <script src="js/check.js"></script>
     <script src="js/video.js"></script>
+    <script src="js/progress.js"></script>
 </body>
 </html>
