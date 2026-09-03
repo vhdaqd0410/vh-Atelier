@@ -39,6 +39,12 @@
   var chkSubtitle = document.getElementById('chk-subtitle');
   var subtitleDir = document.getElementById('subtitle-dir');
   var btnBrowseSubtitle = document.getElementById('btn-browse-subtitle');
+  var tplSelect = document.getElementById('tpl-select');
+  var btnTplSave = document.getElementById('btn-tpl-save');
+  var btnTplRename = document.getElementById('btn-tpl-rename');
+  var btnTplDelete = document.getElementById('btn-tpl-delete');
+  var tplTip = document.getElementById('tpl-tip');
+  var tplGroup = document.getElementById('tpl-group');
 
   // ── 全局状态 ──────────────────────────────────
   var stopRequested = false;
@@ -47,7 +53,12 @@
   var allPresets = [];
   var versions = [];     // 交付版本列表（每个版本独立配置）
   var uidSeq = 0;
-  var manifest = [];    // 交付清单（运行期收集，导出完生成 CSV）  // ── 基础 UI 工具 ──────────────────────────────
+  var manifest = [];    // 交付清单（运行期收集，导出完生成 CSV）  
+  // ── 交付模板状态 ──
+  var templates = [];        // [{ id, name, updatedAt, snapshot }]  snapshot = { deliveryRoot, manifest, subtitleEnabled, subtitleDir, versions }
+  var activeTplId = '';      // 当前套用的模板 id；'' = 自由配置
+  var tplDirty = false;      // 当前配置相对模板是否有改动
+  var lastSnapshot = null;   // 套用模板时的快照，用于 dirty 对比// ── 基础 UI 工具 ──────────────────────────────
   function setLog(msg, level) {
     // level: 'info'(默认) | 'success' | 'warn' | 'error' | true(兼容旧代码=error)
     var lv = 'info';
@@ -296,6 +307,234 @@
     return null;
   }
 
+  // ── 交付模板（多套命名配置，方案 A）─────────────────
+  // 每套模板 = 完整「交付配置」快照：版本列表 + 交付根目录 + 字幕目录/开关 + 清单开关。
+  // 序列勾选属运行时状态（每项目不同），不入模板。
+  function snapshotCurrent() {
+    return {
+      deliveryRoot: deliveryRoot.value.trim() || '',
+      manifest: chkManifest.checked,
+      subtitleEnabled: chkSubtitle.checked !== false,
+      subtitleDir: subtitleDir.value.trim() || '',
+      versions: JSON.parse(JSON.stringify(versions))  // 深拷贝
+    };
+  }
+
+  function applySnapshot(snap) {
+    if (!snap) return;
+    versions = JSON.parse(JSON.stringify(snap.versions || []));
+    deliveryRoot.value = snap.deliveryRoot || '';
+    chkManifest.checked = !!snap.manifest;
+    chkSubtitle.checked = snap.subtitleEnabled !== false;
+    subtitleDir.value = snap.subtitleDir || '';
+    saveVersions();
+    setDeliveryRoot(deliveryRoot.value);
+    setManifestCfg(chkManifest.checked);
+    var sc = getSubtitleCfg(); sc.enabled = chkSubtitle.checked; sc.dir = subtitleDir.value; setSubtitleCfg(sc);
+    renderVersions();
+  }
+
+  var TPL_KEY = 'pr_me_templates_v1';
+  function loadTemplates() {
+    try {
+      var raw = localStorage.getItem(TPL_KEY);
+      if (raw) {
+        var d = JSON.parse(raw);
+        if (d && Array.isArray(d.list)) {
+          templates = d.list;
+          activeTplId = d.activeId || '';
+          return;
+        }
+      }
+    } catch (_) {}
+    templates = [];
+    activeTplId = '';
+  }
+  function saveTemplates() {
+    try {
+      localStorage.setItem(TPL_KEY, JSON.stringify({ list: templates, activeId: activeTplId }));
+    } catch (_) {}
+  }
+  function findTemplate(id) {
+    for (var i = 0; i < templates.length; i++) if (templates[i].id === id) return templates[i];
+    return null;
+  }
+  function activeTemplate() {
+    return activeTplId ? findTemplate(activeTplId) : null;
+  }
+
+  function renderTplSelect() {
+    // 保留下拉当前选中
+    var prev = tplSelect.value;
+    tplSelect.innerHTML = '';
+    var optFree = document.createElement('option');
+    optFree.value = '';
+    optFree.textContent = '（自由配置 · 不套模板）';
+    tplSelect.appendChild(optFree);
+    templates.forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = t.id;
+      o.textContent = t.name;
+      tplSelect.appendChild(o);
+    });
+    if (activeTplId && findTemplate(activeTplId)) {
+      tplSelect.value = activeTplId;
+    } else {
+      tplSelect.value = '';
+    }
+    updateTplTip();
+  }
+
+  function updateTplTip() {
+    if (!tplTip) return;
+    var at = activeTemplate();
+    if (!at) {
+      tplTip.textContent = '当前为自由配置。改好整套交付参数后，点「另存为模板…」存成命名模板。';
+      tplTip.className = 'tpl-tip';
+      btnTplRename.disabled = true;
+      btnTplDelete.disabled = true;
+      return;
+    }
+    btnTplRename.disabled = false;
+    btnTplDelete.disabled = false;
+    if (tplDirty) {
+      tplTip.textContent = '正在使用模板「' + at.name + '」，配置已改动（未保存到模板）。';
+      tplTip.className = 'tpl-tip dirty';
+    } else {
+      tplTip.textContent = '正在使用模板「' + at.name + '」。改动配置后可点「另存为模板…」更新或另存。';
+      tplTip.className = 'tpl-tip on';
+    }
+  }
+
+  // 采集当前配置快照并对比模板，标记 dirty
+  function captureBaseline() {
+    var at = activeTemplate();
+    if (!at) { tplDirty = false; lastSnapshot = null; updateTplTip(); return; }
+    var cur = snapshotCurrent();
+    var snap = at.snapshot || {};
+    tplDirty = !snapEqual(cur, snap);
+    lastSnapshot = cur;
+    updateTplTip();
+  }
+
+  function snapEqual(a, b) {
+    if (!a || !b) return false;
+    if (a.deliveryRoot !== b.deliveryRoot) return false;
+    if (!!a.manifest !== !!b.manifest) return false;
+    if (a.subtitleEnabled !== b.subtitleEnabled) return false;
+    if ((a.subtitleDir || '') !== (b.subtitleDir || '')) return false;
+    var va = a.versions || [], vb = b.versions || [];
+    if (va.length !== vb.length) return false;
+    for (var i = 0; i < va.length; i++) {
+      if (va[i].name !== vb[i].name) return false;
+      if (va[i].preset !== vb[i].preset) return false;
+      if (va[i].muteMode !== vb[i].muteMode) return false;
+      if (!!va[i].enabled !== !!vb[i].enabled) return false;
+      if ((va[i].outDir || '') !== (vb[i].outDir || '')) return false;
+      var ka = (va[i].keepList || []).join(','), kb = (vb[i].keepList || []).join(',');
+      if (ka !== kb) return false;
+    }
+    return true;
+  }
+
+  // 套用模板：把模板快照刷到 UI
+  function applyTemplate(id) {
+    var t = findTemplate(id);
+    if (!t) return;
+    activeTplId = id;
+    lastSnapshot = JSON.parse(JSON.stringify(t.snapshot || {}));
+    tplDirty = false;
+    applySnapshot(lastSnapshot);
+    saveTemplates();
+    renderTplSelect();
+    setLog('已套用交付模板「' + t.name + '」', 'success');
+  }
+
+  // 存当前全套配置为模板；若 sameId 提供则覆盖该模板，否则新建
+  function saveAsTemplate(name, sameId) {
+    var snap = snapshotCurrent();
+    if (sameId) {
+      var t = findTemplate(sameId);
+      if (!t) return null;
+      t.name = name;
+      t.snapshot = snap;
+      t.updatedAt = Date.now();
+    } else {
+      var nt = { id: 'tpl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6), name: name, updatedAt: Date.now(), snapshot: snap };
+      templates.push(nt);
+    }
+    activeTplId = sameId || (templates.length ? templates[templates.length - 1].id : '');
+    lastSnapshot = JSON.parse(JSON.stringify(snap));
+    tplDirty = false;
+    saveTemplates();
+    renderTplSelect();
+    return findTemplate(activeTplId);
+  }
+
+  function deleteTemplate(id) {
+    for (var i = 0; i < templates.length; i++) {
+      if (templates[i].id === id) { templates.splice(i, 1); break; }
+    }
+    if (activeTplId === id) {
+      activeTplId = '';
+      lastSnapshot = null;
+      tplDirty = false;
+    }
+    saveTemplates();
+    renderTplSelect();
+    setLog('已删除模板', 'warn');
+  }
+
+  // 简易命名对话框（CEP 无 prompt，用覆盖层）
+  function askName(title, defVal, cb) {
+    var old = document.getElementById('tpl-modal');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var modal = document.createElement('div');
+    modal.id = 'tpl-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:center;justify-content:center;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#1e1e1e;border:1px solid #3a3a3a;border-radius:8px;padding:16px;width:300px;';
+    var h = document.createElement('div');
+    h.textContent = title;
+    h.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:10px;color:#eee;';
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = defVal || '';
+    inp.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #3a3a3a;border-radius:4px;background:#2a2a2a;color:#eee;font-size:13px;margin-bottom:12px;';
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+    var ok = document.createElement('button');
+    ok.textContent = '确定';
+    ok.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 14px;font-size:13px;cursor:pointer;';
+    var cancel = document.createElement('button');
+    cancel.textContent = '取消';
+    cancel.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:5px 14px;font-size:13px;cursor:pointer;';
+    row.appendChild(cancel);
+    row.appendChild(ok);
+    box.appendChild(h);
+    box.appendChild(inp);
+    box.appendChild(row);
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+    function close() {
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { close(); }
+      if (e.key === 'Enter') { ok.click(); }
+    }
+    ok.addEventListener('click', function () {
+      var v = inp.value.trim();
+      close();
+      cb(v);
+    });
+    cancel.addEventListener('click', function () { close(); cb(''); });
+    document.addEventListener('keydown', onKey);
+    inp.focus();
+    inp.select();
+  }
+
   // ── 渲染版本卡片 ──────────────────────────────
   function toggleKeep(card) {
     var m = card.querySelector('.v-mute').value;
@@ -446,6 +685,7 @@
     versions.push({ id: genId(), name: '新版本', preset: '', muteMode: 'none', keepList: [0, 1], outDir: '', enabled: true, folderKey: '' });
     saveVersions();
     renderVersions();
+    captureBaseline();
     setLog('已添加新版本，请配置名称/预设/目录', 'success');
   }
 
@@ -454,6 +694,7 @@
     versions = versions.filter(function (v) { return v.id !== id; });
     saveVersions();
     renderVersions();
+    captureBaseline();
     setLog('已删除版本', 'success');
   }
   // 本次参与导出的版本（勾选了启用复选框的）
@@ -860,10 +1101,64 @@
     saveVersions();
     renderVersions();
     setDeliveryRoot(root);
+    captureBaseline();
     setLog('已从 ' + root + ' 填充 ' + matched + ' 个版本路径' + (srtHit ? ' + 字幕目录' : ''), matched > 0 ? 'success' : 'warn');
   }
 
   // ── 事件绑定 ──────────────────────────────────
+  // 交付模板：下拉切换 / 另存为 / 重命名 / 删除
+  tplSelect.addEventListener('change', function () {
+    var id = tplSelect.value;
+    if (!id) {
+      // 切回自由配置：不销毁当前配置，仅解除模板关联
+      activeTplId = '';
+      lastSnapshot = null;
+      tplDirty = false;
+      saveTemplates();
+      renderTplSelect();
+      setLog('已切回自由配置（当前参数保留）');
+      return;
+    }
+    applyTemplate(id);
+  });
+  btnTplSave.addEventListener('click', function () {
+    var at = activeTemplate();
+    var defName = at ? (at.name + ' 副本') : (deliveryRoot.value.trim() ? path.basename(deliveryRoot.value.trim()) : '默认交付');
+    askName('另存为交付模板', defName, function (name) {
+      if (!name) return;
+      var t = saveAsTemplate(name, null);
+      setLog('已保存模板「' + t.name + '」并套用', 'success');
+    });
+  });
+  btnTplRename.addEventListener('click', function () {
+    var at = activeTemplate();
+    if (!at) return;
+    askName('重命名模板', at.name, function (name) {
+      if (!name) return;
+      var t = findTemplate(at.id);
+      if (t) { t.name = name; saveTemplates(); renderTplSelect(); setLog('已重命名为「' + name + '」', 'success'); }
+    });
+  });
+  btnTplDelete.addEventListener('click', function () {
+    var at = activeTemplate();
+    if (!at) return;
+    askName('确认删除模板「' + at.name + '」？输入模板名确认', '', function (v) {
+      if (v === at.name) {
+        deleteTemplate(at.id);
+        setLog('已删除模板「' + at.name + '」', 'warn');
+      } else if (v !== '') {
+        setLog('输入的名字不匹配，未删除', 'warn');
+      }
+    });
+  });
+  // 统一 dirty 监听：panel-export 内任何 input/change 都刷新「相对模板是否改动」提示
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#panel-export')) captureBaseline();
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#panel-export')) captureBaseline();
+  });
+
   btnGo.addEventListener('click', runExport);
   btnStop.addEventListener('click', function () {
     if (!btnStop.disabled) {
@@ -953,6 +1248,19 @@
     chkSubtitle.checked = (scfg.enabled !== false);
     subtitleDir.value = scfg.dir || '';
     chkManifest.checked = getManifestCfg();
+    // 加载交付模板：若有上次套用的模板则套用之，否则维持自由配置
+    loadTemplates();
+    var at = activeTemplate();
+    if (at) {
+      lastSnapshot = JSON.parse(JSON.stringify(at.snapshot || {}));
+      tplDirty = false;
+      applySnapshot(lastSnapshot);
+    } else {
+      activeTplId = '';
+      lastSnapshot = null;
+      tplDirty = false;
+    }
+    renderTplSelect();
     try { await refreshSequences(); } catch (_) {}
     try { await refreshAudioTracks(); } catch (_) { renderVersions(); }
     var v = await evalHost('meVersion()');

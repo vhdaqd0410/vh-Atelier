@@ -182,6 +182,20 @@
         #wsStatus.warn, #vcStatus.warn { color: var(--warn); }
 
         .hint { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.5; }
+        .guide {
+            background: rgba(83,125,150,0.07);
+            border: 1px solid rgba(83,125,150,0.25);
+            border-left: 3px solid var(--accent);
+            border-radius: 6px;
+            padding: 7px 10px;
+            margin-bottom: 10px;
+            font-size: 11px;
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+        .guide b { font-weight: 500; color: var(--accent-hover); }
+        .guide .gstep { color: var(--text); font-weight: 500; }
+        .guide .garrow { color: var(--muted); margin: 0 3px; }
 
         /* ===== 字幕板块专用 ===== */
         #seqList {
@@ -899,6 +913,10 @@
         #panel-export .seq-item:hover { background: #3a3a3a; }
         #panel-export .seq-item input { width: auto; }
         #panel-export .mini-btns { display: flex; gap: 8px; margin-top: 6px; }
+        #panel-export .tpl-row { display: flex; gap: 8px; align-items: center; }
+        #panel-export .tpl-tip { font-size: 11px; color: var(--muted); margin-top: 4px; min-height: 14px; }
+        #panel-export .tpl-tip.on { color: var(--ok); }
+        #panel-export .tpl-tip.dirty { color: #ffb84d; }
         #panel-export .mini-btns button {
             flex: 0 0 auto;
             font-size: 11px;
@@ -1664,6 +1682,11 @@
     <div class="tab-panel" id="panel-sfx" style="display:none;">
         <!-- 本地音效库视图 -->
         <div id="sfx-local">
+            <div class="guide">
+                <b>什么时候用：</b>要找某个音效拖进时间轴时。
+                流程：<span class="gstep">选音效文件夹并扫描</span><span class="garrow">→</span><span class="gstep">搜索/筛选/收藏</span><span class="garrow">→</span><span class="gstep">点条目试听</span><span class="garrow">→</span><span class="gstep">点击导入或拖入时间轴</span>。
+                任意界面按 <span class="gstep">Ctrl+F2</span> 随时唤起搜索浮窗。
+            </div>
             <div class="sfx-toolbar">
                 <div class="tr">
                     <input type="text" id="sfxDir" placeholder="音效文件夹路径">
@@ -1697,6 +1720,11 @@
 
     <!-- ==================== 板块三.五：音乐（LX Music 联动） ==================== -->
     <div class="tab-panel" id="panel-music" style="display:none;">
+        <div class="guide">
+            <b>什么时候用：</b>要给片子找配乐/下载歌曲素材时。
+            流程：<span class="gstep">扫码登录网易云</span><span class="garrow">→</span><span class="gstep">搜歌或打开歌单</span><span class="garrow">→</span><span class="gstep">试听确认</span><span class="garrow">→</span><span class="gstep">下载</span><span class="garrow">→</span><span class="gstep">导入素材箱</span>。
+            需要联网。
+        </div>
         <!-- 登录视图 -->
         <div id="musicLogin" class="card" style="display:none;">
             <div class="music-login-head">
@@ -1796,6 +1824,11 @@
             <span class="exp-title">多版本交付导出</span>
             <span class="exp-ver" id="version"></span>
         </div>
+        <div class="guide">
+            <b>什么时候用：</b>片子剪完、要交片时，一次导出多个交付版本。
+            流程：<span class="gstep">勾选序列</span><span class="garrow">→</span><span class="gstep">选交付根目录并自动填充</span><span class="garrow">→</span><span class="gstep">确认各版本配置</span><span class="garrow">→</span><span class="gstep">一键导出</span>。
+            同一甲方/项目可把整套配置<span class="gstep">另存为模板</span>，下次下拉即用。
+        </div>
 
         <div class="group">
             <div class="group-title"><span>序列</span><span>勾选要导出的（支持多选）</span></div>
@@ -1804,6 +1837,21 @@
                 <button id="btn-sel-all">全选</button>
                 <button id="btn-sel-none">全不选</button>
             </div>
+        </div>
+
+        <div class="group" id="tpl-group">
+            <div class="group-title"><span>交付模板</span><span>整套配置存为模板，多甲方/多项目一键切换</span></div>
+            <div class="tpl-row">
+                <select id="tpl-select" style="flex:1;">
+                    <option value="">（自由配置 · 不套模板）</option>
+                </select>
+                <button type="button" id="btn-tpl-save">另存为模板…</button>
+            </div>
+            <div class="mini-btns" style="margin-top:6px;">
+                <button id="btn-tpl-rename">重命名当前模板</button>
+                <button id="btn-tpl-delete" style="color:#ff9a9a;">删除当前模板</button>
+            </div>
+            <div class="tpl-tip" id="tpl-tip"></div>
         </div>
 
         <div class="group">
@@ -1942,6 +1990,11 @@
 
     <!-- ==================== 板块六：视频下载 ==================== -->
     <div class="tab-panel" id="panel-video" style="display:none;">
+        <div class="guide">
+            <b>什么时候用：</b>从抖音/B站/YouTube 下素材片进时间轴时。
+            流程：<span class="gstep">粘贴链接</span><span class="garrow">→</span><span class="gstep">解析</span><span class="garrow">→</span><span class="gstep">下载</span><span class="garrow">→</span><span class="gstep">下载并导入 PR 一键到位</span>。
+            抖音/B站高清需先粘贴登录 Cookie；需要联网。
+        </div>
         <div class="v-cookiebar">
             <span class="dot" id="vCookieDot"></span>
             <span class="txt" id="vCookieTxt">未配置浏览器 Cookie（抖音 / B 站高清需登录态）</span>
