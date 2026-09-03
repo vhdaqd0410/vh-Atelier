@@ -15,10 +15,10 @@
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
+        progress: { members: ['progress'], default: 'progress' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['separate', 'clone', 'sfx', 'music'], default: 'separate' },
-        deliver: { members: ['export', 'video'], default: 'export' },
-        progress: { members: ['progress'], default: 'progress' }
+        deliver: { members: ['export', 'video'], default: 'export' }
     };
     // tab 归属映射
     var groupOf = {};

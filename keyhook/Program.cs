@@ -51,12 +51,14 @@ namespace VhKeyHook
         static AutoResetEvent _outSignal = new AutoResetEvent(false);
         static volatile bool _outputRunning = true;
 
-        // ---- 前台窗口进程缓存：只在 PR（或其 CEP 面板）前台时响应 ----
+        // ---- 前台窗口进程缓存：只在 PR 主窗口前台时响应（CEP 面板不算，避免干扰其他钩子） ----
         static IntPtr _lastFg = IntPtr.Zero;
         static bool _lastInPr = false;
         static HashSet<string> _prProcessNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Adobe Premiere Pro", "CEPHtmlEngine"
+            "Adobe Premiere Pro"
+            // 注意：CEPHtmlEngine（CEP 面板）不在此列，这样搜索浮窗打开时全局钩子不响应，
+            // 避免与 Excalibur/Spellbook 等其他全局键盘钩子冲突。
         };
 
         // 修饰键 / 主键映射
@@ -118,7 +120,7 @@ namespace VhKeyHook
                 _hotkeys.Add(ParseCombo("openSearch", "ctrl+f2"));
             }
 
-            Console.OutputEncoding = Encoding.UTF8;
+            try { Console.OutputEncoding = Encoding.UTF8; } catch (Exception) { }
 
             // 启动独立输出线程
             Thread outThread = new Thread(OutputLoop);

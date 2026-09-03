@@ -30,11 +30,32 @@
         retry: document.getElementById('prgRetry'),
         activeWrap: document.getElementById('prgActiveWrap'),
         activeCount: document.getElementById('prgActiveCount'),
-        activeList: document.getElementById('prgActiveList')
+        activeList: document.getElementById('prgActiveList'),
+        filterState: document.getElementById('prgFilterState'),
+        filterProgress: document.getElementById('prgFilterProgress')
     };
 
     var busy = false;
     var lastData = null;
+    var allActiveProjects = [];   // 最近一次拉到的 group_active 全量（供筛选/排序）
+
+    // 工作流状态排序权重（越小越靠前 = 越接近交付越优先展示）
+    var STATE_ORDER = ['剪辑中', '分集中', '制作中', '审核中', '修改中', '交付中', '质检中', '已完成'];
+    function stateWeight(st) {
+        st = st || '';
+        for (var i = 0; i < STATE_ORDER.length; i++) {
+            if (st.indexOf(STATE_ORDER[i]) >= 0) return i;
+        }
+        return 99;
+    }
+    // 工作流步骤数（用于筛选下拉的有序去重）
+    function stateGroup(st) {
+        st = st || '';
+        for (var i = 0; i < STATE_ORDER.length; i++) {
+            if (st.indexOf(STATE_ORDER[i]) >= 0) return STATE_ORDER[i];
+        }
+        return '其他';
+    }
 
     function setOnline(on, msg) {
         el.dot.className = 'prg-dot ' + (on ? 'on' : 'off');
@@ -116,17 +137,79 @@
 
     // 渲染组内进行中项目
     function renderActive(sections) {
+        // 保存全量 group_active（供筛选/排序）
         var sec = null;
         (sections || []).forEach(function (s) { if (s && s.key === 'group_active') sec = s; });
-        var projects = sec ? (sec.projects || []) : [];
-        el.activeWrap.style.display = projects.length ? '' : 'none';
-        el.activeCount.textContent = projects.length ? '共 ' + projects.length + ' 个' : '';
+        allActiveProjects = sec ? (sec.projects || []) : [];
+        el.activeWrap.style.display = allActiveProjects.length ? '' : 'none';
+        el.activeCount.textContent = allActiveProjects.length ? '共 ' + allActiveProjects.length + ' 个' : '';
+        fillStateFilter();
+        renderFilteredList();
+    }
+
+    // 填充状态筛选下拉（按工作流顺序去重）
+    function fillStateFilter() {
+        var seen = [];
+        var cur = el.filterState.value;
+        allActiveProjects.forEach(function (p) {
+            var g = stateGroup(p.custom_status || '');
+            if (seen.indexOf(g) < 0) seen.push(g);
+        });
+        seen.sort(function (a, b) {
+            var ia = STATE_ORDER.indexOf(a), ib = STATE_ORDER.indexOf(b);
+            if (a === '其他') return 1;
+            if (b === '其他') return -1;
+            return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        });
+        // 仅在选项集合变化时重建（避免打断用户选择）
+        var needRebuild = false;
+        var opts = el.filterState.querySelectorAll('option');
+        var names = [];
+        for (var i = 1; i < opts.length; i++) names.push(opts[i].value);
+        if (names.length !== seen.length) needRebuild = true;
+        else for (var j = 0; j < seen.length; j++) if (names[j] !== seen[j]) { needRebuild = true; break; }
+        if (!needRebuild) return;
+        el.filterState.innerHTML = '<option value="">全部状态</option>';
+        seen.forEach(function (s) {
+            var o = document.createElement('option');
+            o.value = s;
+            o.textContent = s;
+            el.filterState.appendChild(o);
+        });
+        if (cur && seen.indexOf(cur) >= 0) el.filterState.value = cur;
+    }
+
+    // 应用筛选 + 排序后渲染
+    function renderFilteredList() {
+        var fState = el.filterState.value;
+        var fProgress = el.filterProgress.checked;
+        var list = allActiveProjects.filter(function (p) {
+            if (fState && stateGroup(p.custom_status || '') !== fState) return false;
+            if (fProgress) {
+                var cur = parseInt(p.current_episodes, 10) || 0;
+                if (cur <= 0) return false;
+            }
+            return true;
+        });
+        // 排序：状态工作流权重 + 同状态集数进度降序（进度高=更接近完成=靠前）
+        list.sort(function (a, b) {
+            var wa = stateWeight(a.custom_status || ''), wb = stateWeight(b.custom_status || '');
+            if (wa !== wb) return wa - wb;
+            var ca = parseInt(a.current_episodes, 10) || 0;
+            var cb = parseInt(b.current_episodes, 10) || 0;
+            var ta = parseInt(a.total_episodes, 10) || 0;
+            var tb = parseInt(b.total_episodes, 10) || 0;
+            var pa = ta > 0 ? ca / ta : 0;
+            var pb = tb > 0 ? cb / tb : 0;
+            return pb - pa;
+        });
+        el.activeCount.textContent = '共 ' + list.length + ' 个' + (list.length !== allActiveProjects.length ? '（筛选中）' : '');
         el.activeList.innerHTML = '';
-        if (projects.length === 0) {
-            el.activeList.innerHTML = '<div class="prg-empty">组内没有进行中的项目</div>';
+        if (list.length === 0) {
+            el.activeList.innerHTML = '<div class="prg-empty">没有符合条件的项目</div>';
             return;
         }
-        projects.forEach(function (p) {
+        list.forEach(function (p) {
             var cur = parseInt(p.current_episodes, 10) || 0;
             var total = parseInt(p.total_episodes, 10) || 0;
             var pct = total > 0 ? Math.min(100, Math.round(cur / total * 100)) : 0;
@@ -166,8 +249,94 @@
             foot.appendChild(meta);
             item.appendChild(foot);
 
+            // 「打开」按钮：跳转视频工作台并高亮定位该项目
+            var openRow = document.createElement('div');
+            openRow.className = 'prg-open-row';
+            var openBtn = document.createElement('button');
+            openBtn.type = 'button';
+            openBtn.className = 'prg-open-btn';
+            openBtn.textContent = '在工作台打开 ↗';
+            openBtn.title = '跳转视频工作台并定位到该项目';
+            openBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openInWorkbench(p.name || '');
+            });
+            openRow.appendChild(openBtn);
+            item.appendChild(openRow);
+
             el.activeList.appendChild(item);
         });
+    }
+
+    // 请求视频工作台跳转定位（通过 SSE jump 事件）；服务离线则先启动再跳
+    function openInWorkbench(projectName) {
+        var secret = readSecret();
+        if (!secret) {
+            setOnline(false, '读不到视频工作台配置（api_secret）');
+            return;
+        }
+        var url = WB_BASE + '/api/_self/jump?project=' + encodeURIComponent(projectName);
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.timeout = 6000;
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status === 200) {
+                el.statusText.textContent = '已通知工作台定位：' + projectName;
+            } else {
+                // 服务没起来 → 一键启动后重试
+                el.statusText.textContent = '工作台未响应，正在启动…';
+                launchWBThenJump(projectName);
+            }
+        };
+        xhr.onerror = function () { launchWBThenJump(projectName); };
+        xhr.ontimeout = function () { launchWBThenJump(projectName); };
+        xhr.send();
+    }
+
+    function launchWBThenJump(projectName) {
+        var started = false;
+        try {
+            if (fs.existsSync(WB_START)) {
+                child_process.exec('wscript "' + WB_START + '"');
+                started = true;
+            } else if (fs.existsSync(WB_PY)) {
+                child_process.exec('pythonw "' + WB_PY + '"');
+                started = true;
+            }
+        } catch (e) {}
+        if (!started) {
+            setOnline(false, '找不到视频工作台启动脚本，请手动启动');
+            return;
+        }
+        el.statusText.textContent = '正在启动视频工作台…';
+        // 等服务就绪后广播跳转
+        var tries = 0;
+        var timer = setInterval(function () {
+            tries++;
+            var xhr = new XMLHttpRequest();
+            var url = WB_BASE + '/api/_self/jump?project=' + encodeURIComponent(projectName);
+            xhr.open('GET', url, true);
+            xhr.timeout = 4000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                if (xhr.status === 200) {
+                    clearInterval(timer);
+                    el.statusText.textContent = '已启动并定位：' + projectName;
+                    setTimeout(function () { refresh(true); }, 1200);
+                } else if (tries > 15) {
+                    clearInterval(timer);
+                    setOnline(false, '启动超时，请确认视频工作台能正常运行');
+                }
+            };
+            xhr.onerror = function () {
+                if (tries > 15) { clearInterval(timer); setOnline(false, '启动超时'); }
+            };
+            xhr.ontimeout = function () {
+                if (tries > 15) { clearInterval(timer); setOnline(false, '启动超时'); }
+            };
+            xhr.send();
+        }, 1500);
     }
 
     // 主刷新
@@ -237,6 +406,9 @@
     el.refresh.addEventListener('click', function () { refresh(true); });
     el.launch.addEventListener('click', launchWB);
     el.retry.addEventListener('click', function () { refresh(true); });
+    // 筛选：状态 / 只看有进度 → 重渲染当前列表
+    el.filterState.addEventListener('change', function () { renderFilteredList(); });
+    el.filterProgress.addEventListener('change', function () { renderFilteredList(); });
 
     // 暴露给 main.js：切到 progress tab 时自动刷新一次
     window.__progressOnShow = function () {
