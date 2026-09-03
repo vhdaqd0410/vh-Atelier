@@ -12,8 +12,6 @@
     var favsFile = path.join(collectDir, 'favs.json');
     var cacheFile = path.join(collectDir, 'index.json');
     var searchIndexFile = path.join(collectDir, 'searchIndex.json');
-    var hotkeyFile = path.join(collectDir, 'hotkey.json');
-    var DEFAULT_COMBO = 'ctrl+f2';
 
     var AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'aiff', 'wma'];
     var MAX_FILES = 20000;
@@ -41,9 +39,6 @@
         scan: document.getElementById('btnSfxScan'),
         subdir: document.getElementById('sfxSubdir'),
         search: document.getElementById('sfxSearch'),
-        hotkey: document.getElementById('sfxHotkey'),
-        btnHotkey: document.getElementById('btnSfxHotkey'),
-        hotkeyHint: document.getElementById('sfxHotkeyHint'),
         btnAll: document.getElementById('btnSfxAll'),
         btnFav: document.getElementById('btnSfxFav'),
         count: document.getElementById('sfxCount'),
@@ -637,124 +632,6 @@
         try { el.search.select(); } catch (e) {}
     }
 
-    // ---------- 全局热键（隐藏面板广播）----------
-    function switchToSfxTab() {
-        // 统一委托 main.js 的切换，避免面板列表（含 music/export/check）不一致
-        if (window.__atSwitchTab) { window.__atSwitchTab('sfx'); return; }
-        var tabs = document.querySelectorAll('.tab');
-        var panels = { subtitle: document.getElementById('panel-subtitle'), clone: document.getElementById('panel-clone'), sfx: document.getElementById('panel-sfx') };
-        tabs.forEach(function (t) {
-            t.classList.toggle('active', t.dataset.tab === 'sfx');
-        });
-        Object.keys(panels).forEach(function (k) {
-            panels[k].style.display = (k === 'sfx') ? '' : 'none';
-        });
-    }
-
-    function onHotkey(data) {
-        if (data && data.type === 'ready') {
-            log('onHotkey READY received: ' + (data.combo || ''));
-            // 回显实际生效的键到输入框（若未手动编辑）
-            var map = data.hotkeys || {};
-            if (!el.hotkey.dataset.editing && map.openSearch) {
-                el.hotkey.value = map.openSearch;
-            }
-        } else if (data && data.type === 'hotkey') {
-            // 命中热键时 bg 面板已直接弹搜索浮窗，主面板无需再切 tab
-            log('onHotkey HOTKEY received (bg 已弹窗): ' + (data.combo || ''));
-        }
-    }
-
-    csInterface.addEventListener('com.vh.atelier.hotkey', function (evt) {
-        var data = evt.data;
-        // CEP 跨扩展广播时，data 可能是字符串（自己 stringify 的）或已反序列化的对象，做兼容处理
-        if (typeof data === 'string') {
-            try { data = JSON.parse(data); } catch (e) { log('JSON.parse fail: ' + e.message); return; }
-        }
-        if (data && data.type) {
-            log('listener got type=' + data.type + ' combo=' + (data.combo || ''));
-        }
-        onHotkey(data);
-    });
-
-    // ---------- 热键自定义 ----------
-    function normalizeCombo(raw) {
-        var s = (raw || '').trim().toLowerCase();
-        if (!s) return '';
-        var parts = s.split('+').map(function (p) { return p.trim(); }).filter(Boolean);
-        if (parts.length === 0) return '';
-        var mods = [];
-        var main = '';
-        parts.forEach(function (p) {
-            if (p === 'ctrl' || p === 'control') mods.push('ctrl');
-            else if (p === 'shift') mods.push('shift');
-            else if (p === 'alt') mods.push('alt');
-            else if (p === 'win' || p === 'cmd' || p === 'meta') mods.push('win');
-            else main = p;
-        });
-        if (!main) return '';
-        // 去重修饰键
-        var seen = {};
-        var uniq = [];
-        mods.forEach(function (m) { if (!seen[m]) { seen[m] = 1; uniq.push(m); } });
-        return uniq.join('+') + '+' + main;
-    }
-
-    function saveHotkey() {
-        var combo = normalizeCombo(el.hotkey.value);
-        if (!combo) {
-            setStatus('音效热键格式不对，例如 ctrl+f2、ctrl+shift+k', 'err');
-            return;
-        }
-        try {
-            if (!fs.existsSync(collectDir)) fs.mkdirSync(collectDir, { recursive: true });
-            var map = {};
-            try {
-                if (fs.existsSync(hotkeyFile)) {
-                    var old = JSON.parse(fs.readFileSync(hotkeyFile, 'utf8'));
-                    if (old && old.map) map = old.map;
-                }
-            } catch (e) {}
-            map.openSearch = combo;
-            fs.writeFileSync(hotkeyFile, JSON.stringify({ map: map }, null, 2), 'utf8');
-        } catch (e) {
-            setStatus('热键保存失败: ' + e.message, 'err');
-            return;
-        }
-        // 通知隐藏面板换键重启钩子
-        try {
-            var evt = new CSEvent('com.vh.atelier.hotkey.reload', 'APPLICATION');
-            csInterface.dispatchEvent(evt);
-        } catch (e) {}
-        el.hotkey.value = combo;
-        el.hotkey.dataset.editing = '1';
-        setStatus('热键已保存：音效搜索 ' + combo, 'ok');
-        // 几秒后回显解除锁定
-        setTimeout(function () {
-            delete el.hotkey.dataset.editing;
-        }, 3000);
-    }
-
-    el.btnHotkey.addEventListener('click', saveHotkey);
-    el.hotkey.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Enter') { ev.preventDefault(); saveHotkey(); }
-    });
-
-    // 初始化：显示当前配置的热键（读共享文件）
-    function loadHotkeyDisplay() {
-        try {
-            if (fs.existsSync(hotkeyFile)) {
-                var obj = JSON.parse(fs.readFileSync(hotkeyFile, 'utf8'));
-                if (obj && obj.map) {
-                    if (obj.map.openSearch) el.hotkey.value = obj.map.openSearch;
-                    return;
-                }
-                if (obj && obj.combo) { el.hotkey.value = obj.combo; return; }
-            }
-        } catch (e) {}
-        el.hotkey.value = DEFAULT_COMBO;
-    }
-
     // ---------- 事件绑定 ----------
     el.browse.addEventListener('click', browseDir);
     el.scan.addEventListener('click', function () { doScan(false); });
@@ -816,7 +693,6 @@
     // ---------- 初始化 ----------
     loadFavs();
     registerShortcutInterest();
-    loadHotkeyDisplay();
     try { savedSubdir = localStorage.getItem('sfxSubdir') || ''; } catch (e) {}
     try {
         var savedDir = localStorage.getItem('sfxDir');

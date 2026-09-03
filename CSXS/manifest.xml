@@ -7,7 +7,6 @@
     <ExtensionList>
         <Extension Id="com.vh.atelier.panel" Version="0.2.1"/>
         <Extension Id="com.vh.atelier.bg" Version="0.2.1"/>
-        <Extension Id="com.vh.atelier.search" Version="0.2.1"/>
     </ExtensionList>
 
     <ExecutionEnvironment>
@@ -78,51 +77,6 @@
                             <Height>100</Height>
                             <Width>100</Width>
                         </Size>
-                    </Geometry>
-                </UI>
-            </DispatchInfo>
-        </Extension>
-
-        <!-- 音效搜索浮窗：Spotlight 式全局搜索，热键弹出 -->
-        <Extension Id="com.vh.atelier.search">
-            <DispatchInfo>
-                <Resources>
-                    <MainPath>./search/search.html</MainPath>
-                    <ScriptPath>./jsx/host.jsx</ScriptPath>
-                    <CEFCommandLine>
-                        <Parameter>--enable-nodejs</Parameter>
-                        <Parameter>--allow-file-access</Parameter>
-                        <Parameter>--allow-file-access-from-files</Parameter>
-                        <Parameter>--allow-running-insecure-content</Parameter>
-                    </CEFCommandLine>
-                </Resources>
-                <Lifecycle>
-                    <!-- AutoVisible=false + StartOn：PR 启动时预加载（JS 执行、DOM 就绪）
-                         但不显示窗口；热键 requestOpenExtension 时一次到位直接弹出。
-                         用 AutoVisible=true 反而会让 ModalDialog 启动时自动弹出。 -->
-                    <AutoVisible>false</AutoVisible>
-                    <StartOn>
-                        <Event>com.adobe.csxs.events.ApplicationInitialized</Event>
-                    </StartOn>
-                </Lifecycle>
-                <UI>
-                    <!-- Modeless：非模态浮窗，不锁宿主，因此支持拖拽到 PR 时间轴。
-                         ModalDialog 会锁死宿主，拖拽时显示禁止图标。 -->
-                    <Type>Modeless</Type>
-                    <Menu>音效搜索</Menu>
-                    <Geometry>
-                        <Size>
-                            <Height>420</Height>
-                            <Width>480</Width>
-                        </Size>
-                        <MinSize>
-                            <Height>320</Height>
-                            <Width>360</Width>
-                        </MinSize>
-                        <MaxSize>
-                            <Height>720</Height>
-                            <Width>720</Width>
-                        </MaxSize>
                     </Geometry>
                 </UI>
             </DispatchInfo>
