@@ -15,6 +15,16 @@
     var WB_START = 'C:/Users/Admin/Desktop/视频工作台/start_desktop.vbs';
     // 兜底：找不到 start_desktop.vbs 时用 main_desktop.py + pythonw
     var WB_PY = 'C:/Users/Admin/Desktop/视频工作台/main_desktop.py';
+    // 插件根目录（js/ 的上一级），供定位 py/ 等资源
+    var extRoot = (function () {
+        try {
+            if (typeof __dirname !== 'undefined') {
+                var d = __dirname;
+                return path.basename(d).toLowerCase() === 'js' ? path.dirname(d) : d;
+            }
+        } catch (e) {}
+        return '';
+    })();
 
     // DOM
     var el = {
@@ -249,7 +259,7 @@
             foot.appendChild(meta);
             item.appendChild(foot);
 
-            // 「打开」按钮：跳转视频工作台并高亮定位该项目
+            // 操作行：打开工作台 + 剧本阅读
             var openRow = document.createElement('div');
             openRow.className = 'prg-open-row';
             var openBtn = document.createElement('button');
@@ -262,6 +272,16 @@
                 openInWorkbench(p.name || '');
             });
             openRow.appendChild(openBtn);
+            var scriptBtn = document.createElement('button');
+            scriptBtn.type = 'button';
+            scriptBtn.className = 'prg-open-btn';
+            scriptBtn.textContent = '📖 剧本';
+            scriptBtn.title = '在本地项目里找剧本并阅读';
+            scriptBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openScriptForProject(p.name || '');
+            });
+            openRow.appendChild(scriptBtn);
             item.appendChild(openRow);
 
             el.activeList.appendChild(item);
@@ -337,6 +357,237 @@
             };
             xhr.send();
         }, 1500);
+    }
+
+    // ==================== 剧本阅读（本地项目找 docx → 内嵌阅读） ====================
+    var SCRIPT_ROOT = 'F:/001AI漫剧';  // 本地项目盘根目录（固定）
+
+    // 从项目名提取用于匹配目录的特征：去掉序号前缀，保留下划线分隔的核心段
+    function normName(n) {
+        return String(n || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    // 在本地项目盘里找匹配的目录
+    function findLocalProjectDir(projectName) {
+        try {
+            if (!fs.existsSync(SCRIPT_ROOT)) return null;
+            var name = normName(projectName);
+            var dirs = fs.readdirSync(SCRIPT_ROOT);
+            // 候选匹配键：全名、去掉前导序号、取《》内剧名、下划线末段
+            var candidates = [];
+            candidates.push(name);
+            var m0 = name.match(/^\d+[-_\s]*/);
+            if (m0) candidates.push(name.slice(m0[0].length));
+            var m1 = name.match(/《([^》]+)》/);
+            if (m1) candidates.push(m1[1]);
+            var segs = name.split('_');
+            if (segs.length > 1) candidates.push(segs[segs.length - 1].trim());
+            if (segs.length > 1) candidates.push(segs.slice(1).join('_'));
+            var m2 = name.match(/\((.*)\)/);
+            if (m2) candidates.push(m2[1]);
+
+            // 去掉候选里的空格小写化，做包含匹配
+            function squash(s) { return s.toLowerCase().replace(/\s+/g, ''); }
+            var sqName = squash(name);
+            var best = null, bestScore = 0;
+            dirs.forEach(function (d) {
+                if (d.charAt(0) === '.') return;
+                var sqDir = squash(d);
+                // 目录名包含项目全名（squash 后）得分最高
+                var score = 0;
+                if (sqDir === sqName) score = 100;
+                else if (sqDir.indexOf(sqName) >= 0) score = 80;
+                else if (sqName.indexOf(sqDir) >= 0) score = 60;
+                else {
+                    // 试各候选键包含
+                    for (var ci = 0; ci < candidates.length; ci++) {
+                        var c = squash(candidates[ci]);
+                        if (c.length >= 2 && sqDir.indexOf(c) >= 0) { score = Math.max(score, 70 - ci); }
+                    }
+                }
+                if (score > bestScore) { bestScore = score; best = d; }
+            });
+            return best ? path.join(SCRIPT_ROOT, best) : null;
+        } catch (e) { return null; }
+    }
+
+    // 在项目目录递归找剧本 docx（优先「剧本/脚本」文件夹，再全目录递归）
+    function findScriptDocx(projDir) {
+        var found = null;
+        var limit = 400;  // 防失控
+        function walk(dir, depth) {
+            if (found || depth > 5) return;
+            try {
+                var entries = fs.readdirSync(dir);
+                entries.forEach(function (en) {
+                    if (found || limit-- <= 0) return;
+                    if (en.charAt(0) === '.') return;
+                    var full = path.join(dir, en);
+                    var st = null;
+                    try { st = fs.statSync(full); } catch (e) { return; }
+                    if (st.isDirectory()) {
+                        walk(full, depth + 1);
+                    } else if (en.toLowerCase().endsWith('.docx')) {
+                        found = full;
+                    }
+                });
+            } catch (e) {}
+        }
+        // 先找「剧本/脚本」目录
+        ['剧本', '脚本', 'Script'].forEach(function (k) {
+            if (found) return;
+            var p = path.join(projDir, k);
+            if (fs.existsSync(p)) walk(p, 1);
+        });
+        if (!found) walk(projDir, 0);
+        return found;
+    }
+
+    function findPython() {
+        var c = [
+            path.join(extRoot, 'runtime', 'python.exe'),
+            path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
+            path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe')
+        ];
+        for (var i = 0; i < c.length; i++) {
+            if (fs.existsSync(c[i])) return c[i];
+        }
+        return 'python';
+    }
+
+    // 主入口：项目卡片点「剧本」→ 定位目录 → 找 docx → 解析 → 打开阅读浮层
+    function openScriptForProject(projectName) {
+        el.statusText.textContent = '找剧本：' + projectName + '…';
+        var projDir = findLocalProjectDir(projectName);
+        if (!projDir) {
+            showScriptMsg('没在本地项目盘（' + SCRIPT_ROOT + '）找到「' + projectName + '」对应目录。\n\n可能还没建本地项目，或项目名对不上。');
+            return;
+        }
+        var docx = findScriptDocx(projDir);
+        if (!docx) {
+            showScriptMsg('找到了项目目录：' + projDir + '\n\n但里面没找到剧本 docx。请先把剧本拷贝进这个项目（放「剧本」文件夹或任意位置）。');
+            return;
+        }
+        el.statusText.textContent = '解析剧本：' + path.basename(docx) + '…';
+        var py = findPython();
+        var scriptPath = path.join(extRoot, 'py', 'docx_read.py');
+        if (!fs.existsSync(scriptPath)) {
+            showScriptMsg('找不到 py/docx_read.py');
+            return;
+        }
+        try {
+            var r = child_process.spawnSync(py, [scriptPath, '--docx', docx], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+            var data = null;
+            var out = (r.stdout || '').trim();
+            try { data = JSON.parse(out); } catch (e) {
+                // stdout 编码问题回退 stderr
+                try { data = JSON.parse((r.stderr || '').trim()); } catch (e2) {}
+            }
+            if (!data || !data.ok) {
+                showScriptMsg('解析剧本失败：' + ((data && data.error) || (r.stderr || '').slice(0, 300) || '未知错误'));
+                return;
+            }
+            openScriptReader(data, docx, projectName);
+        } catch (e) {
+            showScriptMsg('调用解析器失败：' + e.message);
+        }
+    }
+
+    // 简易消息弹层
+    function showScriptMsg(text) {
+        var modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:998;display:flex;align-items:center;justify-content:center;';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:18px;max-width:480px;font-size:12px;color:#ddd;line-height:1.7;white-space:pre-wrap;';
+        box.textContent = text;
+        var ok = document.createElement('button');
+        ok.textContent = '知道了';
+        ok.style.cssText = 'margin-top:12px;background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;display:block;margin-left:auto;';
+        ok.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
+        box.appendChild(ok);
+        modal.appendChild(box);
+        document.body.appendChild(modal);
+    }
+
+    // 剧本阅读浮层
+    function openScriptReader(data, docxPath, projectName) {
+        var old = document.getElementById('scriptReaderModal');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var modal = document.createElement('div');
+        modal.id = 'scriptReaderModal';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;display:flex;align-items:center;justify-content:center;';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;width:92%;max-width:780px;height:86%;display:flex;flex-direction:column;overflow:hidden;';
+        // 头部
+        var head = document.createElement('div');
+        head.style.cssText = 'padding:10px 14px;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+        var title = document.createElement('span');
+        title.style.cssText = 'font-size:13px;font-weight:600;color:#eee;flex:1;min-width:120px;';
+        title.textContent = '📖 ' + projectName;
+        title.title = docxPath;
+        head.appendChild(title);
+        // 集数跳转
+        var eps = data.episodes || [];
+        var epSel = document.createElement('select');
+        epSel.style.cssText = 'background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;padding:3px 6px;font-size:12px;';
+        epSel.innerHTML = '<option value="">全部</option>';
+        eps.forEach(function (e) {
+            var o = document.createElement('option');
+            o.value = e;
+            o.textContent = '第' + e + '集';
+            epSel.appendChild(o);
+        });
+        head.appendChild(epSel);
+        var close = document.createElement('button');
+        close.textContent = '✕ 关闭';
+        close.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px;';
+        close.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
+        head.appendChild(close);
+        box.appendChild(head);
+        // 内容区
+        var body = document.createElement('div');
+        body.style.cssText = 'flex:1;overflow-y:auto;padding:14px 18px;font-size:13px;line-height:1.9;color:#ddd;white-space:pre-wrap;word-break:break-word;';
+        box.appendChild(body);
+        modal.appendChild(box);
+        document.body.appendChild(modal);
+
+        function render() {
+            var fep = epSel.value ? parseInt(epSel.value, 10) : null;
+            var html = '';
+            var inEp = false;
+            (data.lines || []).forEach(function (x) {
+                var t = x.text;
+                // 集标题行高亮
+                var isEpTitle = /^第\s*[0-9一二两三四五六七八九十百千]+\s*集/.test(t);
+                if (isEpTitle) {
+                    if (fep && x.episode !== fep) { inEp = false; return; }
+                    if (!fep) inEp = true;
+                    html += '<div style="margin:14px 0 6px;padding:4px 10px;background:#2a3a4a;border-left:3px solid #537d96;font-weight:600;color:#7fb3d9;">' + escHtml(t) + '</div>';
+                    return;
+                }
+                if (fep && x.episode !== fep) return;
+                if (fep && !inEp && x.episode === fep) inEp = true;
+                if (!fep && x.episode !== null && x.episode !== (data.episodes[0])) {
+                    // 全览模式：非第一集前是正常段落，正常展示
+                }
+                html += '<div>' + escHtml(t) + '</div>';
+            });
+            body.innerHTML = html || '<div style="color:#888;">该集暂无内容</div>';
+            body.scrollTop = 0;
+        }
+        epSel.addEventListener('change', render);
+        render();
+        // Esc 关闭
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal.parentNode) modal.parentNode.removeChild(modal);
+        }, { once: true });
+    }
+
+    // 转义（progress.js 里没有就用内置小函数）
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
     }
 
     // 主刷新
