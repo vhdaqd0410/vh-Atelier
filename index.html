@@ -903,6 +903,164 @@
         #sfxStatus.err { color: var(--err); }
         #sfxStatus.warn { color: var(--warn); }
 
+        /* ===== 板块三.4：音乐库（本地整轨，波形优先） ===== */
+        #panel-musiclib {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 130px);
+            overflow: hidden;
+        }
+        #musiclib-local {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .mllib-toolbar {
+            flex: 0 0 auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+        .mllib-toolbar .tr { display: flex; gap: 6px; align-items: center; }
+        .mllib-toolbar .tr + .tr { margin-top: 6px; }
+        .mllib-list {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            background: var(--panel2);
+            border-radius: 6px;
+            position: relative;
+        }
+        .mllib-spacer { position: relative; width: 100%; }
+        #mllibCount {
+            flex: 0 0 auto;
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 6px;
+            font-variant-numeric: tabular-nums;
+        }
+        .mllib-item {
+            position: absolute;
+            left: 4px;
+            right: 4px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .mllib-item:hover { background: #3a3a3a; }
+        .mllib-item.playing { background: #1e3a33; }
+        .mllib-item .playbtn {
+            flex: 0 0 auto;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--ok);
+            cursor: pointer;
+            font-size: 11px;
+            line-height: 24px;
+            text-align: center;
+            padding: 0;
+        }
+        .mllib-item .playbtn:hover { border-color: var(--ok); }
+        .mllib-item .wave {
+            flex: 1;
+            min-width: 60px;
+            height: 46px;
+            cursor: pointer;
+        }
+        .mllib-item .nm {
+            flex: 0 0 auto;
+            width: 160px;
+            min-width: 0;
+            background: transparent;
+            border: none;
+            color: var(--ok);
+            text-align: left;
+            font-size: 12px;
+            padding: 0;
+            cursor: pointer;
+            word-break: break-all;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mllib-item .nm:hover { text-decoration: underline; }
+        .mllib-item .dur {
+            flex: 0 0 auto;
+            font-variant-numeric: tabular-nums;
+            color: var(--muted);
+            font-size: 11px;
+        }
+        .mllib-item .ext {
+            flex: 0 0 auto;
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            background: #1e3a33;
+            color: #7fd68b;
+        }
+        .mllib-item .star {
+            flex: 0 0 auto;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--muted);
+            padding: 0 2px;
+        }
+        .mllib-item .star.on { color: var(--warn); }
+        .mllib-empty {
+            padding: 16px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 12px;
+        }
+        #mllibStatus {
+            margin-top: 8px;
+            font-size: 12px;
+            min-height: 16px;
+            line-height: 1.5;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+        #mllibStatus.ok { color: var(--ok); }
+        #mllibStatus.err { color: var(--err); }
+        #mllibStatus.warn { color: var(--warn); }
+        #mllibContextMenu {
+            position: fixed;
+            z-index: 9999;
+            min-width: 180px;
+            background: #2b2b2b;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+            display: none;
+        }
+        #mllibContextMenu .ctx-item {
+            padding: 7px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--text);
+            white-space: nowrap;
+        }
+        #mllibContextMenu .ctx-item:hover { background: #1e3a33; }
+        #mllibContextMenu .ctx-sep {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 6px;
+        }
+
         /* ===== 板块四：多版本导出（作用域化，避免与主面板冲突） ===== */
         #panel-export { display: flex; flex-direction: column; }
         #panel-export .exp-header {
@@ -1591,11 +1749,11 @@
     <div class="sub">字幕 · 声音 · 交付 · 进度 四工作台</div>
 
     <div class="ws-groups">
+        <button class="ws-group" data-group="script" style="display:none;">📖 剧本</button>
         <button class="ws-group active" data-group="progress">进度</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="deliver">交付</button>
-        <button class="ws-group" data-group="script" style="display:none;">📖 剧本</button>
     </div>
 
     <div class="tabs ws-subtabs" data-group="progress">
@@ -1609,7 +1767,8 @@
         <button class="tab" data-tab="separate">人声分离</button>
         <button class="tab" data-tab="clone">语音克隆</button>
         <button class="tab" data-tab="sfx">音效库</button>
-        <button class="tab" data-tab="music">音乐</button>
+        <button class="tab" data-tab="musiclib">音乐库</button>
+        <button class="tab" data-tab="music">网易云</button>
     </div>
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
         <button class="tab" data-tab="export">多版本导出</button>
@@ -1851,7 +2010,33 @@
         <div id="sfxContextMenu"></div>
     </div>
 
-    <!-- ==================== 板块三.五：音乐（网易云） ==================== -->
+    <!-- ==================== 板块三.4：音乐库（本地整轨） ==================== -->
+    <div class="tab-panel" id="panel-musiclib" style="display:none;">
+        <div id="musiclib-local">
+            <div class="mllib-toolbar">
+                <div class="tr">
+                    <input type="text" id="mllibDir" placeholder="音乐文件夹路径">
+                    <button id="btnMllibBrowse" class="tbtn">浏览</button>
+                    <button id="btnMllibScan" class="tbtn">扫描</button>
+                </div>
+                <div class="tr">
+                    <input type="text" id="mllibSearch" placeholder="搜索音乐名...">
+                    <select id="mllibSubdir"><option value="">全部</option></select>
+                    <button id="btnMllibAll" class="tbtn on">全部</button>
+                    <button id="btnMllibFav" class="tbtn">★ 收藏</button>
+                </div>
+            </div>
+            <div class="mllib-list" id="mllibList">
+                <div class="mllib-spacer" id="mllibSpacer"></div>
+                <div class="mllib-empty" id="mllibEmpty" style="display:none;">先选择音乐目录并「扫描」</div>
+            </div>
+            <div id="mllibCount"></div>
+            <div id="mllibStatus"></div>
+        </div>
+        <div id="mllibContextMenu"></div>
+    </div>
+
+    <!-- ==================== 板块三.5：音乐（网易云） ==================== -->
     <div class="tab-panel" id="panel-music" style="display:none;">
         
 
@@ -2211,6 +2396,7 @@
     <script src="js/clone.js"></script>
     <script src="js/wavesurfer.js"></script>
     <script src="js/sfx.js"></script>
+    <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
     <script src="js/export.js"></script>
     <script src="js/check.js"></script>

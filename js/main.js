@@ -7,6 +7,7 @@
         separate: document.getElementById('panel-sep'),
         clone: document.getElementById('panel-clone'),
         sfx: document.getElementById('panel-sfx'),
+        musiclib: document.getElementById('panel-musiclib'),
         music: document.getElementById('panel-music'),
         export: document.getElementById('panel-export'),
         video: document.getElementById('panel-video'),
@@ -18,7 +19,7 @@
     var groups = {
         progress: { members: ['progress'], default: 'progress' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
-        audio: { members: ['separate', 'clone', 'sfx', 'music'], default: 'separate' },
+        audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' }
     };
