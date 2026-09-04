@@ -611,6 +611,7 @@
         var translating = false;      // 正在翻译
         var transMap = {};            // 台词原文 → 译文（按集缓存）
         var curEpKey = 'all';         // 当前翻译的集
+        var lineTransMap = {};        // 单句翻译缓存：台词原文 → 译文
 
         function epLines(ep) {
             return (data.lines || []).filter(function (x) {
@@ -728,11 +729,17 @@
             }
             var zhHtml = '';
             if (withTrans && transMap['__' + curEpKey] && transMap['__' + curEpKey][text]) {
-                zhHtml = '<div class="scr-zh">' + escHtml(transMap['__' + curEpKey][text]) + '</div>';
+                zhHtml = '<div class="scr-zh" data-src="batch">' + escHtml(transMap['__' + curEpKey][text]) + '</div>';
             }
-            // 复制按钮：放到台词末尾（cpBtn 在 speech 之后），行内小图标
             var spColor = isZhMain ? '#ff9090' : '#ff6b6b';
-            return '<div class="scr-dlg"><span style="color:#ffb347;font-weight:700;">' + roleHtml + '</span><span style="color:#8a7a6a;"> : </span><span style="color:' + spColor + ';">' + speechHtml + '</span><span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span>' + zhHtml + '</div>';
+            // 单句翻译：data-line 存整行原文，data-en 存纯英文；若已有缓存译文直接显示
+            var en = extractEnglish(text);
+            var cachedZh = lineTransMap[text];
+            var trBtn = '<span class="scr-trn" data-line="' + escHtml(text) + '" data-en="' + escHtml(en) + '" title="翻译本句">译</span>';
+            if (cachedZh && cachedZh !== '') {
+                zhHtml = '<div class="scr-zh">' + escHtml(cachedZh) + '</div>';
+            }
+            return '<div class="scr-dlg" data-role="' + escHtml(rolePart) + '"><span style="color:#ffb347;font-weight:700;">' + roleHtml + '</span><span style="color:#8a7a6a;"> : </span><span style="color:' + spColor + ';">' + speechHtml + '</span><span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span>' + trBtn + zhHtml + '</div>';
         }
 
         // 主渲染
@@ -767,7 +774,7 @@
         }
         // 注入台词样式（红色调 + 复制按钮）
         var st = document.createElement('style');
-        st.textContent = '.scr-dlg{margin:4px 0;padding:2px 6px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:6px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;}';
+        st.textContent = '.scr-dlg{margin:4px 0;padding:2px 6px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;}';
         document.head.appendChild(st);
         // 复制按钮：body 事件委托（从 data-copy 取值）
         if (!window.__copyDelegateBound) {
@@ -789,6 +796,50 @@
             document.body.appendChild(tip);
             setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 1400);
         };
+
+        // 单句翻译：body 局部委托（能访问闭包内 lineTransMap/translateLine）
+        body.addEventListener('click', function (e) {
+            var t2 = e.target;
+            var trn = t2.closest ? t2.closest('.scr-trn') : null;
+            if (!trn) return;
+            var line = trn.getAttribute('data-line');
+            var en = trn.getAttribute('data-en') || '';
+            var dlg = trn.closest('.scr-dlg');
+            if (!dlg || !line) return;
+            // 已有译文 → 直接显示
+            if (lineTransMap[line]) {
+                ensureZh(dlg, lineTransMap[line]);
+                return;
+            }
+            if (!en || !isEnglish(en)) {
+                trn.textContent = '本句非英文';
+                return;
+            }
+            trn.textContent = '译中…';
+            translateLine(en, function (err, zh) {
+                if (err || !zh) {
+                    trn.textContent = '译';
+                    window.__copyFlash && window.__copyFlash('翻译失败');
+                    return;
+                }
+                lineTransMap[line] = zh;
+                trn.textContent = '译';
+                ensureZh(dlg, zh);
+            });
+        });
+        function ensureZh(dlg, zh) {
+            if (!zh) return;
+            // 移除该行已有译文（含整集批量译文），只显示本句单句译文
+            var olds = dlg.querySelectorAll('.scr-zh');
+            for (var oi = 0; oi < olds.length; oi++) {
+                var od = olds[oi];
+                od.parentNode.removeChild(od);
+            }
+            var zhDiv = document.createElement('div');
+            zhDiv.className = 'scr-zh';
+            zhDiv.textContent = zh;
+            dlg.appendChild(zhDiv);
+        }
 
         epSel.addEventListener('change', render);
         transBtn.addEventListener('click', doTranslate);
