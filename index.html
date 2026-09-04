@@ -567,6 +567,35 @@
         .music-item .mbtn.playing { background: var(--accent); color: #fff; border-color: var(--accent); }
         .music-item .mbtn.dl { color: var(--accent); border-color: var(--accent); }
         .music-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 12px; }
+        /* ===== 音乐·聚合源 ===== */
+        #musicAggrView .music-aggr-card { flex: 0 0 auto; }
+        .aggr-badge {
+            flex: 0 0 auto;
+            font-size: 10px;
+            color: #fff;
+            border-radius: 3px;
+            padding: 1px 5px;
+            line-height: 1.5;
+            cursor: default;
+        }
+        .aggr-badge.netease { background: #d43c33; }
+        .aggr-badge.tencent { background: #31c27c; }
+        .aggr-badge.kugou { background: #1e9ad4; }
+        .aggr-badge.kuwo { background: #ff7d00; }
+        .aggr-badge.fail { background: #666; }
+        #aggrServer, #aggrQuery {
+            background: var(--panel2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            padding: 6px 10px;
+            font-size: 12px;
+            outline: none;
+            box-sizing: border-box;
+        }
+        #aggrServer:focus, #aggrQuery:focus { border-color: var(--accent); }
+        .music-src-tabs { margin-bottom: 8px; }
+        .music-src-tabs .tab { flex: 0 0 auto; padding: 5px 18px; font-size: 12px; }
         .music-loading { padding: 16px; text-align: center; color: var(--muted); font-size: 12px; }
         /* 音乐播放条（网易云三段式：封面/歌名 | 控制/进度 | 播放模式） */
         .music-player {
@@ -1839,8 +1868,15 @@
         <div id="sfxContextMenu"></div>
     </div>
 
-    <!-- ==================== 板块三.五：音乐（LX Music 联动） ==================== -->
+    <!-- ==================== 板块三.五：音乐（网易云 / 聚合源） ==================== -->
     <div class="tab-panel" id="panel-music" style="display:none;">
+        <div class="tabs music-src-tabs" id="musicSrcTabs">
+            <button class="tab active" data-srcview="netease">网易云</button>
+            <button class="tab" data-srcview="aggr">聚合源</button>
+        </div>
+
+        <!-- ===== 网易云视图（原登录+主视图） ===== -->
+        <div id="musicNeteaseView" style="display:flex;flex:1;min-height:0;flex-direction:column;">
         <!-- 登录视图 -->
         <div id="musicLogin" class="card" style="display:none;">
             <div class="music-login-head">
@@ -1928,9 +1964,31 @@
             </div>
             <div id="musicStatus"></div>
         </div>
+        </div><!-- /musicNeteaseView -->
 
-        <!-- 试听 -->
+        <!-- ===== 聚合源视图 ===== -->
+        <div id="musicAggrView" style="display:none;flex:1;min-height:0;flex-direction:column;">
+            <div class="card music-aggr-card">
+                <div class="row">
+                    <label style="flex:0 0 auto;font-size:12px;color:var(--muted);">服务器</label>
+                    <input type="text" id="aggrServer" placeholder="http://127.0.0.1:17891" style="flex:1;">
+                    <button id="btnAggrTest" class="secondary" style="flex:0 0 auto;">测试</button>
+                    <span id="aggrServerState" class="music-server"></span>
+                </div>
+                <div class="row" style="margin-top:8px;">
+                    <input type="text" id="aggrQuery" placeholder="搜歌：歌名 / 歌手" style="flex:1;">
+                    <button id="btnAggrSearch" class="tbtn">搜索</button>
+                </div>
+                <div class="music-tip">一次搜 网易云/QQ/酷狗/酷我 四个平台，标色块区分来源。搜索与下载不依赖网易云登录。</div>
+            </div>
+            <div id="aggrList" class="music-list" style="margin-top:8px;"></div>
+            <div id="aggrStatus" class="music-empty" style="padding:6px 8px;"></div>
+        </div>
+
+        <!-- 试听（网易云） -->
         <audio id="musicAudio" style="display:none;"></audio>
+        <!-- 试听（聚合源） -->
+        <audio id="aggrAudio" style="display:none;"></audio>
     </div>
 
     <!-- ==================== 板块四：多版本导出 ==================== -->

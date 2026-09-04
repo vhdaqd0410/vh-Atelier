@@ -870,7 +870,380 @@
         });
     }
 
-    // ---------- 事件绑定 ----------
+    // ==================== 聚合源（Meting API：网易云/QQ/酷狗/酷我） ====================
+    var AGGR_KEY = 'vh_aggr_server';
+    var AGGR_DEFAULT = 'http://127.0.0.1:17891';
+    var PLATFORMS = [
+        { id: 'netease', name: '网易云', cls: 'netease' },
+        { id: 'tencent', name: 'QQ音乐', cls: 'tencent' },
+        { id: 'kugou', name: '酷狗', cls: 'kugou' },
+        { id: 'kuwo', name: '酷我', cls: 'kuwo' }
+    ];
+    var SRC_META = {};
+    PLATFORMS.forEach(function (p) { SRC_META[p.id] = p; });
+    var aggrListCache = [];
+    var aggrSrcView = 'netease'; // 当前音乐子视图
+
+    function aggrGetServer() {
+        try { return localStorage.getItem(AGGR_KEY) || AGGR_DEFAULT; } catch (e) { return AGGR_DEFAULT; }
+    }
+    function aggrSetServer(v) {
+        try { localStorage.setItem(AGGR_KEY, v); } catch (e) {}
+    }
+    // 规范化：去尾部空格/斜杠，保留协议
+    function aggrNormBase(v) {
+        v = String(v || '').trim();
+        if (!v) return '';
+        v = v.replace(/\/$/, '');
+        if (v.indexOf('http') !== 0) v = 'http://' + v;
+        return v;
+    }
+    // 请求工具（GET 文本，Meting 搜索返回 JSON）
+    function aggrFetch(url) {
+        return new Promise(function (resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.timeout = 15000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try { resolve(JSON.parse(xhr.responseText)); }
+                        catch (e) { reject(new Error('响应解析失败')); }
+                    } else {
+                        reject(new Error('HTTP ' + xhr.status));
+                    }
+                }
+            };
+            xhr.onerror = function () { reject(new Error('无法连接服务器')); };
+            xhr.ontimeout = function () { reject(new Error('请求超时')); };
+            xhr.send();
+        });
+    }
+
+    function aggrSetStatus(msg, type) {
+        var s = $('aggrStatus');
+        if (!s) return;
+        s.textContent = msg || '';
+        s.className = 'music-empty' + (type === 'err' ? ' aggr-err' : type === 'ok' ? ' aggr-ok' : '');
+        if (type === 'err') s.style.color = 'var(--err)';
+        else if (type === 'ok') s.style.color = 'var(--ok)';
+        else s.style.color = '';
+    }
+    function aggrSetServerState(msg, type) {
+        var s = $('aggrServerState');
+        if (!s) return;
+        s.textContent = msg || '';
+        s.className = 'music-server' + (type ? ' ' + type : '');
+    }
+
+    // 切换音乐子视图
+    function switchMusicSrcView(view) {
+        aggrSrcView = view;
+        var tabs = document.querySelectorAll('#musicSrcTabs .tab');
+        for (var i = 0; i < tabs.length; i++) {
+            tabs[i].classList.toggle('active', tabs[i].dataset.srcview === view);
+        }
+        $('musicNeteaseView').style.display = view === 'netease' ? 'flex' : 'none';
+        $('musicAggrView').style.display = view === 'aggr' ? 'flex' : 'none';
+    }
+
+    // 测试服务器连通
+    function aggrTestServer() {
+        var base = aggrNormBase($('aggrServer').value);
+        if (!base) { aggrSetServerState('地址为空', 'err'); return; }
+        aggrSetServerState('测试中...', '');
+        aggrFetch(base + '/api?server=netease&type=search&id=' + enc('测试')).then(function (data) {
+            var ok = Array.isArray(data);
+            aggrSetServerState(ok ? '连接成功 (' + base + ')' : '返回异常', ok ? 'ok' : 'err');
+        }).catch(function (e) {
+            aggrSetServerState('连接失败: ' + e.message, 'err');
+        });
+    }
+
+    // 多平台搜索：Promise.all 各平台，合并结果带 source
+    async function aggrSearch() {
+        var q = $('aggrQuery').value.trim();
+        if (!q) { aggrSetStatus('请输入搜索词', 'err'); return; }
+        var base = aggrNormBase($('aggrServer').value);
+        if (!base) { aggrSetStatus('请先填服务器地址', 'err'); return; }
+        aggrSetServer(base);
+        aggrSetStatus('搜索中：' + q + '（四平台）...', '');
+        var box = $('aggrList');
+        box.innerHTML = '<div class="music-empty">搜索中...</div>';
+        var results = [];
+        var done = 0;
+        var tasks = PLATFORMS.map(function (p) {
+            return aggrFetch(base + '/api?server=' + p.id + '&type=search&id=' + enc(q)).then(function (data) {
+                if (Array.isArray(data)) {
+                    data.forEach(function (s) {
+                        if (s && s.title) results.push({ src: p.id, song: s });
+                    });
+                }
+            }).catch(function (e) {
+                results.push({ src: p.id, song: null, err: e.message });
+            }).then(function () { done++; });
+        });
+        await Promise.all(tasks);
+        aggrListCache = results;
+        aggrRender(results);
+        var okN = results.filter(function (r) { return r.song; }).length;
+        var failN = results.filter(function (r) { return !r.song; }).length;
+        aggrSetStatus('找到 ' + okN + ' 首（' + PLATFORMS.length + ' 平台，' + (PLATFORMS.length - failN) + ' 个平台可用）', okN ? 'ok' : 'err');
+    }
+
+    // 渲染混合列表
+    function aggrRender(results) {
+        var box = $('aggrList');
+        box.innerHTML = '';
+        if (!results.length) {
+            box.innerHTML = '<div class="music-empty">没有结果</div>';
+            return;
+        }
+        results.forEach(function (r, idx) {
+            var meta = SRC_META[r.src];
+            var row = document.createElement('div');
+            row.className = 'music-item';
+            row.dataset.aggr = String(idx);
+
+            var badge = document.createElement('span');
+            badge.className = 'aggr-badge ' + (meta ? meta.cls : 'fail');
+            badge.textContent = meta ? meta.name : '未知';
+            badge.title = r.err ? ('平台请求失败：' + r.err) : (meta ? meta.name : '');
+            row.appendChild(badge);
+
+            if (!r.song) {
+                var info0 = document.createElement('div');
+                info0.className = 'info';
+                var t0 = document.createElement('div');
+                t0.className = 'title';
+                t0.textContent = '— 平台无响应：' + (r.err || '未知错误');
+                t0.style.color = 'var(--muted)';
+                info0.appendChild(t0);
+                row.appendChild(info0);
+                box.appendChild(row);
+                return;
+            }
+
+            var s = r.song;
+            var cover = document.createElement('img');
+            cover.className = 'cover';
+            var picUrl = s.pic && s.pic.indexOf('http') === 0 ? s.pic : (s.pic ? '' : '');
+            cover.src = picUrl || '';
+            cover.onerror = function () { this.style.visibility = 'hidden'; };
+            row.appendChild(cover);
+
+            var info = document.createElement('div');
+            info.className = 'info';
+            var t = document.createElement('div');
+            t.className = 'title';
+            t.textContent = s.title;
+            var st = document.createElement('div');
+            st.className = 'sub';
+            st.textContent = s.author || '';
+            info.appendChild(t); info.appendChild(st);
+            row.appendChild(info);
+
+            // 试听：Meting 的 url 是相对路径（含已签名的 auth），直接给 audio 播（可跟随 302）
+            var playBtn = document.createElement('button');
+            playBtn.className = 'mbtn';
+            playBtn.textContent = '试听';
+            playBtn.addEventListener('click', function () {
+                aggrPlay(r);
+            });
+            row.appendChild(playBtn);
+
+            // 下载：弹目录选择 → 落盘
+            var dlBtn = document.createElement('button');
+            dlBtn.className = 'mbtn dl';
+            dlBtn.textContent = '下载';
+            dlBtn.addEventListener('click', function () {
+                aggrDownload(r);
+            });
+            row.appendChild(dlBtn);
+
+            box.appendChild(row);
+        });
+    }
+
+    // 试听（聚合源）
+    var aggrAudioObj = null;
+    function aggrAudio() {
+        if (!aggrAudioObj) aggrAudioObj = $('aggrAudio');
+        return aggrAudioObj;
+    }
+    function aggrPlay(r) {
+        if (!r || !r.song || !r.song.url) { aggrSetStatus('该歌曲无播放源', 'err'); return; }
+        var base = aggrNormBase($('aggrServer').value);
+        var a = aggrAudio();
+        a.src = base + r.song.url;
+        a.play().catch(function () { aggrSetStatus('试听失败（可能服务器不可达或链接过期）', 'err'); });
+        aggrSetStatus('试听：' + r.song.title + ' - ' + (r.song.author || ''), '');
+    }
+
+    // 下载：弹目录选择 → Node 下载 → 提示导入 PR
+    function aggrDownload(r) {
+        if (!r || !r.song || !r.song.url) { aggrSetStatus('该歌曲无下载源', 'err'); return; }
+        var name = r.song.title || '';
+        var artist = r.song.author || '';
+        var meta = SRC_META[r.src];
+        var srcTag = meta ? meta.name : '';
+        // 弹目录选择框（CEP：chooseDirectory = true）
+        var res = null;
+        try {
+            res = window.cep.fs.showOpenDialogEx(false, true, '选择保存目录', '', [], '', '保存到');
+        } catch (e) {
+            aggrSetStatus('打开目录选择失败: ' + e.message, 'err');
+            return;
+        }
+        var dir = res && res.data && res.data[0];
+        if (!dir) return; // 用户取消
+        var base = aggrNormBase($('aggrServer').value);
+        var safe = (srcTag ? srcTag + ' - ' : '') + safeName(artist + ' - ' + name);
+        aggrSetStatus('正在获取下载地址...', '');
+        // 先请求一次拿 302 目标（也可让 Node 直接跟随，但这里先取到真实地址展示用）
+        aggrFetchUrl(base + r.song.url).then(function (realUrl) {
+            aggrSaveViaNode(realUrl, dir, safe, name);
+        }).catch(function (e) {
+            // 拿不到就退化为让 Node 跟随重定向下载
+            aggrSaveViaNode(base + r.song.url, dir, safe, name, true);
+        });
+    }
+    // 跟随 302 拿真实地址（XHR 不能拿 Location，改用 Node 侧做 HEAD/GET）
+    function aggrFetchUrl(url) {
+        return new Promise(function (resolve, reject) {
+            var http = require('http');
+            var https = require('https');
+            var mod = url.indexOf('https://') === 0 ? https : http;
+            var req = mod.get(url, function (res) {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    var loc = res.headers.location;
+                    if (loc.indexOf('http') === 0) resolve(loc);
+                    else resolve(new URL(loc, url).href);
+                } else if (res.statusCode === 200) {
+                    resolve(url); // 无重定向，直接可下
+                } else {
+                    reject(new Error('HTTP ' + res.statusCode));
+                }
+                res.resume();
+            });
+            req.on('error', reject);
+            req.setTimeout(15000, function () { req.destroy(new Error('连接超时')); });
+        });
+    }
+    function aggrSaveViaNode(url, dir, safeName2, title, followRedirects) {
+        var dest = path.join(dir, safeName2 + '.mp3');
+        try {
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        } catch (e) { aggrSetStatus('创建目录失败: ' + e.message, 'err'); return; }
+        var https = require('https');
+        var http = require('http');
+        aggrSetStatus('正在下载: ' + title + ' ...', '');
+        var mod = url.indexOf('https://') === 0 ? https : http;
+        var req = mod.get(url, function (res) {
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                if (followRedirects) {
+                    var loc = res.headers.location;
+                    var next = loc.indexOf('http') === 0 ? loc : new URL(loc, url).href;
+                    res.resume();
+                    aggrSaveViaNode(next, dir, safeName2, title, true);
+                    return;
+                }
+                res.resume();
+                aggrSetStatus('重定向未跟随', 'err');
+                return;
+            }
+            if (res.statusCode !== 200) {
+                res.resume();
+                aggrSetStatus('下载失败，状态码 ' + res.statusCode, 'err');
+                return;
+            }
+            var ws = fs.createWriteStream(dest);
+            var total = parseInt(res.headers['content-length'] || '0', 10);
+            var received = 0;
+            res.on('data', function (chunk) {
+                received += chunk.length;
+                if (total > 0) aggrSetStatus('下载中: ' + Math.round(received / total * 100) + '%', '');
+            });
+            res.pipe(ws);
+            ws.on('finish', function () {
+                ws.close(function () {
+                    aggrSetStatus('已下载到: ' + dest, 'ok');
+                    aggrConfirmImport(dest, safeName2);
+                });
+            });
+        });
+        req.on('error', function (e) { aggrSetStatus('下载出错: ' + e.message, 'err'); });
+        req.setTimeout(120000, function () { req.destroy(new Error('下载超时')); });
+    }
+    function aggrConfirmImport(dest, safe) {
+        var box = $('aggrList');
+        var banner = document.createElement('div');
+        banner.className = 'music-item';
+        banner.style.background = '#2a3a2a';
+        var info = document.createElement('div');
+        info.className = 'info';
+        var t = document.createElement('div');
+        t.className = 'title';
+        t.textContent = '已下载: ' + path.basename(dest);
+        info.appendChild(t);
+        var btn = document.createElement('button');
+        btn.className = 'mbtn dl';
+        btn.textContent = '导入 PR';
+        btn.addEventListener('click', function () {
+            aggrImportFiles([dest]);
+            banner.remove();
+        });
+        var close = document.createElement('button');
+        close.className = 'mbtn';
+        close.textContent = '忽略';
+        close.addEventListener('click', function () { banner.remove(); });
+        banner.appendChild(info); banner.appendChild(btn); banner.appendChild(close);
+        box.insertBefore(banner, box.firstChild);
+    }
+    function aggrImportFiles(files) {
+        aggrSetStatus('导入 PR...', '');
+        csInterface.evalScript('musicImportPayload = ' + JSON.stringify(files) + ';', function () {
+            csInterface.evalScript('musicImportToBinStr()', function (result) {
+                try {
+                    var data = JSON.parse(result);
+                    if (data.ok) aggrSetStatus('已导入「音乐」素材箱：' + data.imported.join('、'), 'ok');
+                    else aggrSetStatus(data.error || '导入失败', 'err');
+                } catch (e) {
+                    aggrSetStatus('导入解析失败: ' + result, 'err');
+                }
+            });
+        });
+    }
+
+    // 聚合源事件
+    function bindAggrEvents() {
+        // 子视图切换
+        var tabs = document.querySelectorAll('#musicSrcTabs .tab');
+        for (var i = 0; i < tabs.length; i++) {
+            tabs[i].addEventListener('click', function () {
+                switchMusicSrcView(this.dataset.srcview);
+                if (this.dataset.srcview === 'netease') {
+                    if (!loggedIn) {
+                        showLogin();
+                        startLogin();
+                    } else {
+                        showHome();
+                    }
+                }
+            });
+        }
+        $('btnAggrSearch').addEventListener('click', aggrSearch);
+        $('aggrQuery').addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') { ev.preventDefault(); aggrSearch(); }
+        });
+        $('btnAggrTest').addEventListener('click', aggrTestServer);
+        // 初始填地址
+        $('aggrServer').value = aggrGetServer();
+        $('aggrServer').addEventListener('change', function () {
+            aggrSetServer(this.value.trim());
+        });
+    }
+
     function bindEvents() {
         $('btnMusicSearch').addEventListener('click', doSearch);
         $('musicQuery').addEventListener('keydown', function (ev) {
@@ -914,7 +1287,8 @@
 
     // 切到本 tab 时触发（由 main.js switchTab 调用）
     function onTabVisible() {
-        if (!loggedIn) {
+        // 聚合源视图不依赖网易云登录，不触发扫码；仅网易云子视图未登录时拉起
+        if (aggrSrcView === 'netease' && !loggedIn) {
             showLogin();
             startLogin();
         }
@@ -927,6 +1301,8 @@
         type: $('musicType')
     };
     bindEvents();
-    // 初始默认显示登录视图（不主动发起，等切到 tab 或手动触发）
+    bindAggrEvents();
+    // 初始默认网易云子视图（登录视图，不主动发起，等切到 tab 或手动触发）
+    switchMusicSrcView('netease');
     showLogin();
 })();
