@@ -709,19 +709,37 @@
             if (!m) return '<div class="scr-dlg">' + escHtml(text) + '</div>';
             var rolePart = m[1];
             var speech = m[2];
+            // 判断台词主体语言：中文字符占比高 → 中文剧本；否则按英文剧本处理
+            var zhCount = (speech.match(/[\u4e00-\u9fff]/g) || []).length;
+            var enCount = (speech.match(/[A-Za-z]/g) || []).length;
+            var isZhMain = zhCount > enCount && zhCount > 2;
+
             var roleHtml = escHtml(rolePart);
-            // 角色名里的中文动作标注 灰色
-            roleHtml = roleHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#8a8a8a;font-weight:400;">$1</span>');
-            var speechHtml = escHtml(speech);
-            // 中文括号标注灰
-            speechHtml = speechHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#9a9a9a;font-size:12px;">$1</span>');
+            if (isZhMain) {
+                // 中文剧本：角色名里的括号动作弱化，名字本身醒目
+                roleHtml = roleHtml.replace(/([（(][^）)]*[）)])/g, '<span style="color:#9a8a8a;font-weight:400;">$1</span>');
+            } else {
+                roleHtml = roleHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#8a8a8a;font-weight:400;">$1</span>');
+            }
+
+            var speechHtml;
+            if (isZhMain) {
+                // 中文台词：整段醒目红，括号动作弱化灰
+                speechHtml = escHtml(speech);
+                speechHtml = speechHtml.replace(/([（(][^）)]*[）)])/g, '<span style="color:#9a8a8a;font-size:12px;">$1</span>');
+            } else {
+                // 英文台词：英文保持红，夹带的中文注释灰化
+                speechHtml = escHtml(speech);
+                speechHtml = speechHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#9a9a9a;font-size:12px;">$1</span>');
+            }
             var zhHtml = '';
             if (withTrans && transMap['__' + curEpKey] && transMap['__' + curEpKey][text]) {
                 zhHtml = '<div class="scr-zh">' + escHtml(transMap['__' + curEpKey][text]) + '</div>';
             }
-            // 复制内容 = 纯台词（存 data-copy，事件委托处理，避免引号转义问题）
             var cpBtn = '<span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span>';
-            return '<div class="scr-dlg">' + cpBtn + '<span style="color:#ff8a8a;font-weight:600;">' + roleHtml + '</span><span style="color:#666;">: </span><span style="color:#ff6b6b;">' + speechHtml + '</span>' + zhHtml + '</div>';
+            // 中文台词用暖红（中文渲染更醒目），英文用亮红
+            var spColor = isZhMain ? '#ff9090' : '#ff6b6b';
+            return '<div class="scr-dlg">' + cpBtn + '<span style="color:#ff8a8a;font-weight:600;">' + roleHtml + '</span><span style="color:#666;">: </span><span style="color:' + spColor + ';">' + speechHtml + '</span>' + zhHtml + '</div>';
         }
 
         // 主渲染
@@ -766,17 +784,18 @@
                 var el2 = t.closest ? t.closest('.scr-copy') : null;
                 if (el2 && el2.getAttribute('data-copy')) {
                     window.__copyText(el2.getAttribute('data-copy'));
-                    flashCopyTip();
                 }
             });
         }
-        function flashCopyTip() {
+        // 提示气泡（全局，供 __copyText 内部调用）
+        window.__copyFlash = function (msg) {
             var tip = document.createElement('span');
-            tip.textContent = '✓ 已复制';
-            tip.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:#2a3a2a;color:#7fd68b;padding:6px 14px;border-radius:6px;font-size:12px;z-index:1001;pointer-events:none;';
+            tip.textContent = msg || '✓ 已复制';
+            var okStyle = (msg || '').indexOf('失败') >= 0;
+            tip.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:' + (okStyle ? '#3a2a2a' : '#2a3a2a') + ';color:' + (okStyle ? '#ff9090' : '#7fd68b') + ';padding:6px 14px;border-radius:6px;font-size:12px;z-index:1001;pointer-events:none;';
             document.body.appendChild(tip);
-            setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 1200);
-        }
+            setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 1400);
+        };
 
         epSel.addEventListener('change', render);
         transBtn.addEventListener('click', doTranslate);
@@ -794,28 +813,29 @@
     }
 
     // 复制文本到剪贴板（供阅读器台词复制按钮用）
+    // CEP 的 Chromium 对 navigator.clipboard 支持不稳定，优先用 execCommand('copy')
     window.__copyText = function (text) {
+        var done = false;
         try {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(function () {
-                    window.__copyFlash && window.__copyFlash('已复制');
-                }, function () {
-                    window.__copyFlash && window.__copyFlash('复制失败');
-                });
-            } else {
-                // fallback：临时 textarea
-                var ta = document.createElement('textarea');
-                ta.value = text;
-                ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                window.__copyFlash && window.__copyFlash('已复制');
-            }
-        } catch (e) {
-            window.__copyFlash && window.__copyFlash('复制失败');
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            ta.setSelectionRange(0, text.length);
+            done = document.execCommand('copy');
+            document.body.removeChild(ta);
+        } catch (e) { done = false; }
+        if (!done) {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text);
+                    done = true;
+                }
+            } catch (e2) { done = false; }
         }
+        window.__copyFlash && window.__copyFlash(done ? '已复制' : '复制失败，请手动选中复制');
     };
 
     // 主刷新
