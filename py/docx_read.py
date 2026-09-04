@@ -72,54 +72,73 @@ def docx_to_lines(path):
 
 def parse(lines):
     """给每段标注所属集数 + 行类型（供前端易读排版）
+    两遍扫描：先收集角色名（cast 行），再用角色名识别台词行，中英文剧都适用。
     类型：ep_title 集标题 / scene 场次 / cast 人物表 / action 动作(△) /
-          dialogue 台词(角色名: 英文) / caption 字幕标注 / plain 其他
+          dialogue 台词 / caption 字幕标注 / plain 其他
     """
     out = []
     cur = None
+    # 第一遍：集数 + 基础类型，同时收集角色名
+    roles = []
     for l in lines:
         m = re.match(r'^第\s*([0-9一二两三四五六七八九十百千]+)\s*集', l)
         if m:
             cur = cn_to_int(m.group(1))
-        out.append({'text': l, 'episode': cur, 'type': classify_line(l)})
+        tp = classify_basic(l)
+        if tp == 'ep_title':
+            cur = cn_to_int(re.match(r'^第\s*([0-9一二两三四五六七八九十百千]+)\s*集', l).group(1))
+        # 从 cast 行收集角色
+        if tp == 'cast':
+            names = re.findall(r'[\u4e00-\u9fff]{2,6}|[A-Z][A-Za-z \'.-]{2,30}', l)
+            for nm in names:
+                nm = nm.strip()
+                if len(nm) >= 2 and nm not in roles:
+                    roles.append(nm)
+        out.append({'text': l, 'episode': cur, 'type': tp})
+    # 第二遍：用角色名把台词行标出来
+    for item in out:
+        if item['type'] != 'plain':
+            continue
+        if is_dialogue(item['text'], roles):
+            item['type'] = 'dialogue'
     return out
 
 
-def classify_line(l):
-    """判断一行属于哪种类型"""
+def classify_basic(l):
+    """基础分类（不含台词识别，台词由角色名二次判定）"""
     t = l.strip()
     if not t:
         return 'plain'
-    # 集标题
     if re.match(r'^第\s*[0-9一二两三四五六七八九十百千]+\s*集', t):
         return 'ep_title'
-    # 场景标题：数字-数字 开头（场次）
     if re.match(r'^\d+[-_]\d+', t):
         return 'scene'
-    # 人物表
     if t.startswith('人物') or t.startswith('人物：') or t.startswith('演员'):
         return 'cast'
-    # 动作/旁白：△ 开头
-    if t.startswith('△') or t.startswith('▲') or t.startswith('【') or t.startswith('（旁白）') or t.startswith('(旁白)'):
+    if t.startswith('△') or t.startswith('▲') or t.startswith('【') or t.startswith('（旁白）') or t.startswith('(旁白)') or t.startswith('字幕：') or t.startswith('【字幕'):
+        if t.startswith('字幕') or t.startswith('【字幕'):
+            return 'caption'
         return 'action'
-    # 字幕标注：字幕：xxx
-    if t.startswith('字幕') or t.startswith('字幕：') or t.startswith('【字幕'):
-        return 'caption'
-    # 台词：角色名(:中文动作)：英文台词 或 角色名: 台词
-    # 特征：行首是角色名（大写字母/中文名/含括号标注），后跟冒号，冒号后有大写英文
-    dlg = re.match(r'^([^:：]{1,40}?)[（(][^）)]{0,50}[）)]?\s*[:：]\s*(.+)$', t)
-    if dlg:
-        role = dlg.group(1).strip()
-        speech = dlg.group(2).strip()
-        # 角色名特征：全大写英文 / 首字母大写英文词 / 中文名
-        role_ok = re.match(r'^[A-Z][A-Za-z \'.\-]{0,30}$', role) or re.match(r'^[\u4e00-\u9fff]{1,6}$', role) or 'VO' in role or 'OS' in role
-        if role_ok and speech:
-            return 'dialogue'
-    # 行首直接英文冒号（如 LORIEL: xxx）
-    dlg2 = re.match(r'^([A-Z][A-Za-z \'.]{1,30})\s*[:：]\s*(.+)$', t)
-    if dlg2:
-        return 'dialogue'
     return 'plain'
+
+
+def is_dialogue(t, roles):
+    """判断一行是否台词：行首附近出现已知角色名，且其后有冒号+内容"""
+    # 英文/中文剧本：角色名（可能带 (VO)/(OS)/（动作）标注）后跟冒号 + 内容
+    # 角色名 = 英文大写名 或 纯中文名，后可选 半角/全角括号 动作标注
+    if re.match(r'^[A-Z][A-Za-z \'\.]{1,40}?(?:\([^)]*\)|（[^）]*）)?\s*[:：]\s*.+', t):
+        return True
+    # 纯中文名 + 可选动作括号 + 冒号
+    if re.match(r'^[\u4e00-\u9fff]{1,8}(?:\([^)]*\)|（[^）]*）)?\s*[:：]\s*.+', t):
+        return True
+    # 角色名 + 中文动作描述 + ：台词（如「何飞惊恐连忙挂断电话：你疯了？」）
+    for r in roles:
+        if len(r) < 2:
+            continue
+        head = t[:24]
+        if r in head and '：' in t[:60]:
+            return True
+    return False
 
 
 def main():

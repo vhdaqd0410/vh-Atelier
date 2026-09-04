@@ -712,15 +712,16 @@
             var roleHtml = escHtml(rolePart);
             // 角色名里的中文动作标注 灰色
             roleHtml = roleHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#8a8a8a;font-weight:400;">$1</span>');
-            // 英文台词红色高亮（台词部分里英文用亮红，中文注释保持灰色小字）
             var speechHtml = escHtml(speech);
-            // 高亮英文词（连读/带标点），中文括号标注灰
+            // 中文括号标注灰
             speechHtml = speechHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#9a9a9a;font-size:12px;">$1</span>');
             var zhHtml = '';
             if (withTrans && transMap['__' + curEpKey] && transMap['__' + curEpKey][text]) {
                 zhHtml = '<div class="scr-zh">' + escHtml(transMap['__' + curEpKey][text]) + '</div>';
             }
-            return '<div class="scr-dlg"><span style="color:#ff8a8a;font-weight:600;">' + roleHtml + '</span><span style="color:#666;">: </span><span style="color:#ff6b6b;">' + speechHtml + '</span>' + zhHtml + '</div>';
+            // 复制内容 = 纯台词（存 data-copy，事件委托处理，避免引号转义问题）
+            var cpBtn = '<span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span>';
+            return '<div class="scr-dlg">' + cpBtn + '<span style="color:#ff8a8a;font-weight:600;">' + roleHtml + '</span><span style="color:#666;">: </span><span style="color:#ff6b6b;">' + speechHtml + '</span>' + zhHtml + '</div>';
         }
 
         // 主渲染
@@ -753,10 +754,29 @@
             body.innerHTML = html || '<div style="color:#888;padding:20px;text-align:center;">该集暂无内容</div>';
             body.scrollTop = 0;
         }
-        // 注入台词样式（红色调）
+        // 注入台词样式（红色调 + 复制按钮）
         var st = document.createElement('style');
-        st.textContent = '.scr-dlg{margin:4px 0;padding:2px 10px;} .scr-dlg:hover{background:#242020;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;}';
+        st.textContent = '.scr-dlg{margin:4px 0;padding:2px 10px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy{display:none;position:absolute;left:2px;top:50%;transform:translateY(-50%);color:#888;cursor:pointer;font-size:11px;padding:1px 4px;border-radius:3px;z-index:2;} .scr-dlg:hover .scr-copy{display:inline;} .scr-dlg .scr-copy:hover{color:#ff8a8a;background:#2a2a2a;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;}';
         document.head.appendChild(st);
+        // 复制按钮：body 事件委托（从 data-copy 取值）
+        if (!window.__copyDelegateBound) {
+            window.__copyDelegateBound = true;
+            document.body.addEventListener('click', function (e) {
+                var t = e.target;
+                var el2 = t.closest ? t.closest('.scr-copy') : null;
+                if (el2 && el2.getAttribute('data-copy')) {
+                    window.__copyText(el2.getAttribute('data-copy'));
+                    flashCopyTip();
+                }
+            });
+        }
+        function flashCopyTip() {
+            var tip = document.createElement('span');
+            tip.textContent = '✓ 已复制';
+            tip.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:#2a3a2a;color:#7fd68b;padding:6px 14px;border-radius:6px;font-size:12px;z-index:1001;pointer-events:none;';
+            document.body.appendChild(tip);
+            setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 1200);
+        }
 
         epSel.addEventListener('change', render);
         transBtn.addEventListener('click', doTranslate);
@@ -772,6 +792,31 @@
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
+
+    // 复制文本到剪贴板（供阅读器台词复制按钮用）
+    window.__copyText = function (text) {
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    window.__copyFlash && window.__copyFlash('已复制');
+                }, function () {
+                    window.__copyFlash && window.__copyFlash('复制失败');
+                });
+            } else {
+                // fallback：临时 textarea
+                var ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                window.__copyFlash && window.__copyFlash('已复制');
+            }
+        } catch (e) {
+            window.__copyFlash && window.__copyFlash('复制失败');
+        }
+    };
 
     // 主刷新
     function refresh(showBusy) {
