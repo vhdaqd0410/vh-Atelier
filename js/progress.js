@@ -709,37 +709,30 @@
             if (!m) return '<div class="scr-dlg">' + escHtml(text) + '</div>';
             var rolePart = m[1];
             var speech = m[2];
-            // 判断台词主体语言：中文字符占比高 → 中文剧本；否则按英文剧本处理
+            // 判断台词主体语言
             var zhCount = (speech.match(/[\u4e00-\u9fff]/g) || []).length;
             var enCount = (speech.match(/[A-Za-z]/g) || []).length;
             var isZhMain = zhCount > enCount && zhCount > 2;
 
+            // 角色名：名字部分橙金加粗，括号动作弱化灰
             var roleHtml = escHtml(rolePart);
-            if (isZhMain) {
-                // 中文剧本：角色名里的括号动作弱化，名字本身醒目
-                roleHtml = roleHtml.replace(/([（(][^）)]*[）)])/g, '<span style="color:#9a8a8a;font-weight:400;">$1</span>');
-            } else {
-                roleHtml = roleHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#8a8a8a;font-weight:400;">$1</span>');
-            }
+            roleHtml = roleHtml.replace(/([（(][^）)]*[）)])/g, '<span style="color:#9a8a8a;font-weight:400;">$1</span>');
 
             var speechHtml;
             if (isZhMain) {
-                // 中文台词：整段醒目红，括号动作弱化灰
                 speechHtml = escHtml(speech);
                 speechHtml = speechHtml.replace(/([（(][^）)]*[）)])/g, '<span style="color:#9a8a8a;font-size:12px;">$1</span>');
             } else {
-                // 英文台词：英文保持红，夹带的中文注释灰化
                 speechHtml = escHtml(speech);
-                speechHtml = speechHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#9a9a9a;font-size:12px;">$1</span>');
+                speechHtml = speechHtml.replace(/([\u4e00-\u9fff]+)/g, '<span style="color:#9a9a9a;font-size:12px;">$1</span>');
             }
             var zhHtml = '';
             if (withTrans && transMap['__' + curEpKey] && transMap['__' + curEpKey][text]) {
                 zhHtml = '<div class="scr-zh">' + escHtml(transMap['__' + curEpKey][text]) + '</div>';
             }
-            var cpBtn = '<span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span>';
-            // 中文台词用暖红（中文渲染更醒目），英文用亮红
+            // 复制按钮：放到台词末尾（cpBtn 在 speech 之后），行内小图标
             var spColor = isZhMain ? '#ff9090' : '#ff6b6b';
-            return '<div class="scr-dlg">' + cpBtn + '<span style="color:#ff8a8a;font-weight:600;">' + roleHtml + '</span><span style="color:#666;">: </span><span style="color:' + spColor + ';">' + speechHtml + '</span>' + zhHtml + '</div>';
+            return '<div class="scr-dlg"><span style="color:#ffb347;font-weight:700;">' + roleHtml + '</span><span style="color:#8a7a6a;"> : </span><span style="color:' + spColor + ';">' + speechHtml + '</span><span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span>' + zhHtml + '</div>';
         }
 
         // 主渲染
@@ -774,7 +767,7 @@
         }
         // 注入台词样式（红色调 + 复制按钮）
         var st = document.createElement('style');
-        st.textContent = '.scr-dlg{margin:4px 0;padding:2px 10px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy{display:none;position:absolute;left:2px;top:50%;transform:translateY(-50%);color:#888;cursor:pointer;font-size:11px;padding:1px 4px;border-radius:3px;z-index:2;} .scr-dlg:hover .scr-copy{display:inline;} .scr-dlg .scr-copy:hover{color:#ff8a8a;background:#2a2a2a;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;}';
+        st.textContent = '.scr-dlg{margin:4px 0;padding:2px 6px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:6px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;}';
         document.head.appendChild(st);
         // 复制按钮：body 事件委托（从 data-copy 取值）
         if (!window.__copyDelegateBound) {
