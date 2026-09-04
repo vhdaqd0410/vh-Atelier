@@ -903,7 +903,7 @@
         #sfxStatus.err { color: var(--err); }
         #sfxStatus.warn { color: var(--warn); }
 
-        /* ===== 板块三.4：音乐库（本地整轨，波形优先） ===== */
+        /* ===== 板块三.4：音乐库（本地整轨，Resonic 式：左树右列表 + 底部播放条） ===== */
         #panel-musiclib {
             display: flex;
             flex-direction: column;
@@ -926,7 +926,67 @@
             margin-bottom: 8px;
         }
         .mllib-toolbar .tr { display: flex; gap: 6px; align-items: center; }
-        .mllib-toolbar .tr + .tr { margin-top: 6px; }
+        .mllib-body {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            gap: 8px;
+            overflow: hidden;
+        }
+        .mllib-tree {
+            flex: 0 0 190px;
+            width: 190px;
+            min-height: 0;
+            overflow-y: auto;
+            background: var(--panel2);
+            border-radius: 6px;
+            padding: 6px 4px;
+            font-size: 12px;
+        }
+        .mllib-tree .tnode {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .mllib-tree .tnode:hover { background: #3a3a3a; }
+        .mllib-tree .tnode.sel { background: #1e3a33; color: var(--ok); }
+        .mllib-tree .tnode .caret {
+            flex: 0 0 auto;
+            width: 14px;
+            font-size: 10px;
+            color: var(--muted);
+            text-align: center;
+            transition: transform .12s;
+        }
+        .mllib-tree .tnode.open .caret { transform: rotate(90deg); }
+        .mllib-tree .tnode .tico {
+            flex: 0 0 auto;
+            font-size: 12px;
+        }
+        .mllib-tree .tnode .tlabel {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mllib-tree .tnode .tcnt {
+            flex: 0 0 auto;
+            font-size: 10px;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .mllib-main {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
         .mllib-list {
             flex: 1;
             min-height: 0;
@@ -936,18 +996,26 @@
             position: relative;
         }
         .mllib-spacer { position: relative; width: 100%; }
-        #mllibCount {
+        .mllib-foot {
             flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
             font-size: 11px;
             color: var(--muted);
             margin-top: 6px;
-            font-variant-numeric: tabular-nums;
+            min-height: 16px;
         }
+        #mllibCount { font-variant-numeric: tabular-nums; }
+        #mllibStatus { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #mllibStatus.ok { color: var(--ok); }
+        #mllibStatus.err { color: var(--err); }
+        #mllibStatus.warn { color: var(--warn); }
         .mllib-item {
             position: absolute;
             left: 4px;
             right: 4px;
-            height: 64px;
+            height: 56px;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -959,28 +1027,27 @@
         .mllib-item.playing { background: #1e3a33; }
         .mllib-item .playbtn {
             flex: 0 0 auto;
-            width: 26px;
-            height: 26px;
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
             border: 1px solid var(--border);
             background: var(--panel);
             color: var(--ok);
             cursor: pointer;
             font-size: 11px;
-            line-height: 24px;
+            line-height: 22px;
             text-align: center;
             padding: 0;
         }
         .mllib-item .playbtn:hover { border-color: var(--ok); }
         .mllib-item .wave {
-            flex: 1;
-            min-width: 60px;
-            height: 46px;
+            flex: 0 0 46%;
+            min-width: 120px;
+            height: 40px;
             cursor: pointer;
         }
         .mllib-item .nm {
-            flex: 0 0 auto;
-            width: 160px;
+            flex: 1;
             min-width: 0;
             background: transparent;
             border: none;
@@ -1024,17 +1091,108 @@
             color: var(--muted);
             font-size: 12px;
         }
-        #mllibStatus {
+        /* ===== 底部播放条（参照网易云 mp-*） ===== */
+        .mllib-player {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 12px;
+            padding: 8px 12px;
             margin-top: 8px;
-            font-size: 12px;
-            min-height: 16px;
-            line-height: 1.5;
-            word-break: break-all;
-            white-space: pre-wrap;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
         }
-        #mllibStatus.ok { color: var(--ok); }
-        #mllibStatus.err { color: var(--err); }
-        #mllibStatus.warn { color: var(--warn); }
+        .mlp-ctrl {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .mlp-btn {
+            flex: 0 0 auto;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .mlp-btn:hover { color: var(--ok); background: rgba(255,255,255,0.06); }
+        .mlp-main {
+            width: 34px;
+            height: 34px;
+            background: var(--ok);
+            color: #06130c;
+        }
+        .mlp-main:hover { background: #7fd68b; color: #06130c; }
+        .mlp-now {
+            flex: 0 1 26%;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+        .mlp-title {
+            font-size: 12px;
+            color: var(--text);
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mlp-sub {
+            font-size: 10px;
+            color: var(--muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .mlp-bar {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+        .mlp-bar .ptime {
+            flex: 0 0 auto;
+            font-size: 11px;
+            color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .mlp-bar .seek {
+            flex: 1;
+            min-width: 40px;
+            height: 4px;
+            background: rgba(255,255,255,0.10);
+            border-radius: 2px;
+            cursor: pointer;
+            position: relative;
+        }
+        .mlp-bar .seek-fill {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            background: var(--ok);
+            border-radius: 2px;
+            width: 0;
+            pointer-events: none;
+        }
+        .mlp-vol {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .mlp-vol-slider {
+            width: 70px;
+            accent-color: var(--ok);
+        }
         #mllibContextMenu {
             position: fixed;
             z-index: 9999;
@@ -2018,20 +2176,52 @@
                     <input type="text" id="mllibDir" placeholder="音乐文件夹路径">
                     <button id="btnMllibBrowse" class="tbtn">浏览</button>
                     <button id="btnMllibScan" class="tbtn">扫描</button>
-                </div>
-                <div class="tr">
-                    <input type="text" id="mllibSearch" placeholder="搜索音乐名...">
-                    <select id="mllibSubdir"><option value="">全部</option></select>
-                    <button id="btnMllibAll" class="tbtn on">全部</button>
-                    <button id="btnMllibFav" class="tbtn">★ 收藏</button>
+                    <input type="text" id="mllibSearch" placeholder="搜索当前目录...">
                 </div>
             </div>
-            <div class="mllib-list" id="mllibList">
-                <div class="mllib-spacer" id="mllibSpacer"></div>
-                <div class="mllib-empty" id="mllibEmpty" style="display:none;">先选择音乐目录并「扫描」</div>
+            <div class="mllib-body">
+                <div class="mllib-tree" id="mllibTree"></div>
+                <div class="mllib-main">
+                    <div class="mllib-list" id="mllibList">
+                        <div class="mllib-spacer" id="mllibSpacer"></div>
+                        <div class="mllib-empty" id="mllibEmpty" style="display:none;">选择左侧目录查看音乐，或点「扫描」构建库</div>
+                    </div>
+                    <div class="mllib-foot">
+                        <span id="mllibCount"></span>
+                        <span id="mllibStatus"></span>
+                    </div>
+                </div>
             </div>
-            <div id="mllibCount"></div>
-            <div id="mllibStatus"></div>
+            <div class="mllib-player" id="mllibPlayer" style="display:none;">
+                <div class="mlp-ctrl">
+                    <button id="btnMlPrev" class="mlp-btn" title="上一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                    </button>
+                    <button id="btnMlPlay" class="mlp-btn mlp-main" title="播放/暂停">
+                        <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                    </button>
+                    <button id="btnMlNext" class="mlp-btn" title="下一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                    </button>
+                </div>
+                <div class="mlp-now">
+                    <div class="mlp-title" id="mlpTitle">未在播放</div>
+                    <div class="mlp-sub" id="mlpSub"></div>
+                </div>
+                <div class="mlp-bar">
+                    <span class="ptime" id="mlpCur">0:00</span>
+                    <div class="seek" id="mlpSeek"><div class="seek-fill" id="mlpSeekFill"></div></div>
+                    <span class="ptime" id="mlpDur">0:00</span>
+                </div>
+                <div class="mlp-vol">
+                    <button id="btnMlVol" class="mlp-btn" title="静音/取消静音">
+                        <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                        <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                    </button>
+                    <input type="range" id="mlpVol" class="mlp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                </div>
+            </div>
         </div>
         <div id="mllibContextMenu"></div>
     </div>
