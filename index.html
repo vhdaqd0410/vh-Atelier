@@ -391,6 +391,13 @@
             height: calc(100vh - 130px);
             overflow: hidden;
         }
+        /* ===== 剧本阅读面板（由 progress.js 填充，占满整高；默认隐藏，切到 script tab 时由 main.js 显示） ===== */
+        #panel-script {
+            display: none;
+            flex-direction: column;
+            height: calc(100vh - 130px);
+            overflow: hidden;
+        }
         #sfx-local {
             flex: 1;
             min-height: 0;
@@ -1588,6 +1595,7 @@
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="deliver">交付</button>
+        <button class="ws-group" data-group="script" style="display:none;">📖 剧本</button>
     </div>
 
     <div class="tabs ws-subtabs" data-group="progress">
@@ -1606,6 +1614,9 @@
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
         <button class="tab" data-tab="export">多版本导出</button>
         <button class="tab" data-tab="video">视频下载</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="script" style="display:none;">
+        <button class="tab" data-tab="script">剧本阅读</button>
     </div>
 
     <!-- ==================== 板块一：字幕识别 ==================== -->
@@ -2188,6 +2199,9 @@
             <div class="prg-list" id="prgActiveList"></div>
         </div>
     </div>
+
+    <!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
+    <div class="tab-panel" id="panel-script"></div>
 
     <script src="js/CSInterface.js"></script>
     <script src="js/main.js"></script>

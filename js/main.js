@@ -10,7 +10,8 @@
         music: document.getElementById('panel-music'),
         export: document.getElementById('panel-export'),
         video: document.getElementById('panel-video'),
-        progress: document.getElementById('panel-progress')
+        progress: document.getElementById('panel-progress'),
+        script: document.getElementById('panel-script')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
@@ -18,7 +19,8 @@
         progress: { members: ['progress'], default: 'progress' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['separate', 'clone', 'sfx', 'music'], default: 'separate' },
-        deliver: { members: ['export', 'video'], default: 'export' }
+        deliver: { members: ['export', 'video'], default: 'export' },
+        script: { members: ['script'], default: 'script' }
     };
     // tab 归属映射
     var groupOf = {};
@@ -110,4 +112,26 @@
 
     // 暴露给其他板块调用：字幕识别 → 字幕校对 联动时切 tab
     window.__atSwitchTab = switchTab;
+    // 剧本阅读：打开时显示「剧本」组并切过去；关闭时隐藏组，若正处在剧本组则切回进度
+    window.__atShowScriptGroup = function () {
+        var btn = document.querySelector('.ws-group[data-group="script"]');
+        if (btn) btn.style.display = '';
+        switchGroup('script');
+    };
+    window.__atHideScriptGroup = function () {
+        var btn = document.querySelector('.ws-group[data-group="script"]');
+        if (btn) btn.style.display = 'none';
+        if (currentInGroup['script'] && groupBtns.length) {
+            // 若当前正显示剧本组，退回进度组
+            var active = null;
+            groupBtns.forEach(function (b) { if (b.classList.contains('active')) active = b.dataset.group; });
+            if (active === 'script') switchGroup('progress');
+        }
+        delete currentInGroup['script'];
+    };
+    window.__atIsScriptGroupActive = function () {
+        var active = null;
+        groupBtns.forEach(function (b) { if (b.classList.contains('active')) active = b.dataset.group; });
+        return active === 'script';
+    };
 })();
