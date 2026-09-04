@@ -512,24 +512,25 @@
         saveScriptMarks(marks);
     }
 
-    // 打开某项目的剧本（优先固定列表，其次自动检测，可手动添加/固定）
+    // 打开某项目的剧本
     function openScriptForProject(projectName) {
         var fixed = getProjectMarks(projectName);
         var projDir = findLocalProjectDir(projectName);
         var auto = [];
         if (projDir) auto = findScriptDocxList(projDir);
-        if (fixed.length > 0) {
-            // 有固定剧本 → 弹面板（固定优先展示，可加检测的）
-            showScriptPanel(projectName, fixed, auto, projDir);
-        } else if (auto.length === 1) {
-            // 无固定且只检测到一份（常见中文剧）→ 直接打开
-            loadScriptDocx(auto[0], projectName);
-        } else if (auto.length > 1) {
-            // 无固定但有多份（中英并存）→ 弹面板选
-            showScriptPanel(projectName, fixed, auto, projDir);
-        } else {
+        // 合并候选：固定优先，再加检测到的（去重）；最终只有一份就直接打开
+        var cands = fixed.slice();
+        auto.forEach(function (p) { if (cands.indexOf(p) < 0) cands.push(p); });
+        if (cands.length === 0) {
+            // 没找到剧本（或项目目录对不上）→ 手动选择
             showScriptMsg('没找到「' + projectName + '」的剧本。\n\n可手动选择剧本文件并固定，下次点开直接可用。',
                 [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName, true); } }]);
+        } else if (cands.length === 1) {
+            // 只有一份 → 直接打开
+            loadScriptDocx(cands[0], projectName);
+        } else {
+            // 多份（固定多份或中英并存）→ 弹面板选
+            showScriptPanel(projectName, fixed, auto, projDir);
         }
     }
 
