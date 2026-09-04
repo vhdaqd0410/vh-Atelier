@@ -7,10 +7,10 @@
 //   onProgress(done, total): 进度回调（每条翻完触发）
 //   onDone(null, { outSubs, failCount }) 成功 | onDone(err)
 (function () {
+    var U = window.__vhUtils;
     // 单条英译中
     function translateEnZh(text, cb) {
-        var url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) +
-            '&langpair=en%7Czh-CN';
+        var url = U.myMemoryUrl(text);
         var xhr = new XMLHttpRequest();
         xhr.open('GET', url, true);
         xhr.timeout = 15000;

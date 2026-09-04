@@ -72,6 +72,26 @@
         return /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(s);
     }
 
+    // ---------- MyMemory 翻译邮箱（带 de 参数提额 5000→50000 字/天）----------
+    var MM_EMAIL_KEY = 'vh_mymemory_email';
+    function getTranslateEmail() {
+        try { return localStorage.getItem(MM_EMAIL_KEY) || ''; } catch (e) { return ''; }
+    }
+    function setTranslateEmail(email) {
+        try {
+            if (email) localStorage.setItem(MM_EMAIL_KEY, email.trim());
+            else localStorage.removeItem(MM_EMAIL_KEY);
+        } catch (e) {}
+    }
+    // 构造 MyMemory 请求 URL（带 email 提额）
+    function myMemoryUrl(text) {
+        var url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) +
+            '&langpair=en%7Czh-CN';
+        var email = getTranslateEmail();
+        if (email) url += '&de=' + encodeURIComponent(email);
+        return url;
+    }
+
     // ---------- Python 探测 ----------
     // 返回可用的 python 可执行路径；找不到返回 null。
     // extRoot 由调用方传入（各模块的 SystemPath.EXTENSION），runtime/python.exe 是可选便携候选。
@@ -118,6 +138,9 @@
         toSRT: toSRT,
         escapeHtml: escapeHtml,
         hasCJK: hasCJK,
-        detectPython: detectPython
+        detectPython: detectPython,
+        getTranslateEmail: getTranslateEmail,
+        setTranslateEmail: setTranslateEmail,
+        myMemoryUrl: myMemoryUrl
     };
 })();

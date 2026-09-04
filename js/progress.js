@@ -594,6 +594,15 @@
         var transState = document.createElement('span');
         transState.style.cssText = 'font-size:11px;color:#888;';
         head.appendChild(transState);
+        // 翻译邮箱设置（提额用）
+        var mailBtn = document.createElement('button');
+        mailBtn.textContent = '📮';
+        mailBtn.title = '设置翻译邮箱（MyMemory 提额 10 倍）';
+        mailBtn.style.cssText = 'background:#2a2a2a;color:#c9a86a;border:1px solid #4a4a2a;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;';
+        mailBtn.addEventListener('click', function () {
+            showMailInput();
+        });
+        head.appendChild(mailBtn);
         var close = document.createElement('button');
         close.textContent = '✕ 关闭';
         close.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px;';
@@ -637,7 +646,9 @@
 
         // 翻译一段台词（MyMemory 单条接口，串行）
         function translateLine(text, cb) {
-            var url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=en%7Czh-CN';
+            var U = window.__vhUtils || {};
+            var url = (U.myMemoryUrl ? U.myMemoryUrl(text) :
+                'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=en%7Czh-CN');
             var xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
             xhr.timeout = 15000;
@@ -839,6 +850,60 @@
             zhDiv.className = 'scr-zh';
             zhDiv.textContent = zh;
             dlg.appendChild(zhDiv);
+        }
+
+        // 翻译邮箱输入弹层（MyMemory 提额：带 de=邮箱，5000→50000 字/天）
+        function showMailInput() {
+            var U = window.__vhUtils || {};
+            var cur = U.getTranslateEmail ? U.getTranslateEmail() : '';
+            var overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1002;display:flex;align-items:center;justify-content:center;';
+            var box2 = document.createElement('div');
+            box2.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;max-width:420px;width:90%;';
+            var h = document.createElement('div');
+            h.textContent = '翻译邮箱（MyMemory 提额）';
+            h.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:6px;';
+            var tip = document.createElement('div');
+            tip.textContent = '填一个邮箱后，翻译额度从每天约 5000 字提升到 50000 字（官方支持）。填一次全局生效（字幕翻译也适用）。';
+            tip.style.cssText = 'font-size:11px;color:#9a9a9a;line-height:1.6;margin-bottom:8px;';
+            var inp = document.createElement('input');
+            inp.type = 'email';
+            inp.placeholder = 'your@email.com';
+            inp.value = cur;
+            inp.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #444;border-radius:4px;background:#2a2a2a;color:#ddd;font-size:13px;margin-bottom:10px;';
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+            var save = document.createElement('button');
+            save.textContent = '保存';
+            save.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;font-size:12px;';
+            var clearB = document.createElement('button');
+            clearB.textContent = '清除';
+            clearB.style.cssText = 'background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;';
+            var cancel = document.createElement('button');
+            cancel.textContent = '取消';
+            cancel.style.cssText = 'background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;';
+            row.appendChild(clearB);
+            row.appendChild(cancel);
+            row.appendChild(save);
+            box2.appendChild(h);
+            box2.appendChild(tip);
+            box2.appendChild(inp);
+            box2.appendChild(row);
+            overlay.appendChild(box2);
+            document.body.appendChild(overlay);
+            function close2() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+            save.addEventListener('click', function () {
+                var v = inp.value.trim();
+                if (v && U.setTranslateEmail) U.setTranslateEmail(v);
+                close2();
+                window.__copyFlash && window.__copyFlash(v ? '已保存邮箱（提额生效）' : '已清除邮箱');
+            });
+            clearB.addEventListener('click', function () {
+                if (U.setTranslateEmail) U.setTranslateEmail('');
+                inp.value = '';
+            });
+            cancel.addEventListener('click', close2);
+            inp.focus();
         }
 
         epSel.addEventListener('change', render);
