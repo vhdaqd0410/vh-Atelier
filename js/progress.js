@@ -469,56 +469,177 @@
     }
 
     // 主入口：项目卡片点「剧本」→ 定位目录 → 找 docx（可能多个）→ 选择后打开阅读浮层
+    // ==================== 剧本书签（固定剧本：手动选的记住，多剧本可固定） ====================
+    var SCRIPT_MARKS_KEY = 'vh_script_marks';
+    // { 项目名: [剧本绝对路径, ...] }  跨会话持久
+    function loadScriptMarks() {
+        try {
+            var raw = localStorage.getItem(SCRIPT_MARKS_KEY);
+            if (raw) {
+                var o = JSON.parse(raw);
+                if (o && typeof o === 'object') return o;
+            }
+        } catch (e) {}
+        return {};
+    }
+    function saveScriptMarks(marks) {
+        try { localStorage.setItem(SCRIPT_MARKS_KEY, JSON.stringify(marks)); } catch (e) {}
+    }
+    // 取某项目固定的剧本列表
+    function getProjectMarks(projectName) {
+        var marks = loadScriptMarks();
+        var key = normName(projectName);
+        var arr = marks[key] || [];
+        // 过滤不存在的路径
+        return arr.filter(function (p) { try { return fs.existsSync(p); } catch (e) { return false; } });
+    }
+    // 给项目添加/移除固定剧本
+    function addProjectMark(projectName, docxPath) {
+        var marks = loadScriptMarks();
+        var key = normName(projectName);
+        var arr = marks[key] || [];
+        if (arr.indexOf(docxPath) < 0) {
+            arr.push(docxPath);
+            marks[key] = arr;
+            saveScriptMarks(marks);
+        }
+    }
+    function removeProjectMark(projectName, docxPath) {
+        var marks = loadScriptMarks();
+        var key = normName(projectName);
+        marks[key] = (marks[key] || []).filter(function (p) { return p !== docxPath; });
+        if (marks[key].length === 0) delete marks[key];
+        saveScriptMarks(marks);
+    }
+
+    // 打开某项目的剧本（优先固定列表，其次自动检测，可手动添加/固定）
     function openScriptForProject(projectName) {
-        el.statusText.textContent = '找剧本：' + projectName + '…';
+        var fixed = getProjectMarks(projectName);
         var projDir = findLocalProjectDir(projectName);
-        if (!projDir) {
-            showScriptMsg('没在本地项目盘（' + SCRIPT_ROOT + '）找到「' + projectName + '」对应目录。\n\n可能还没建本地项目，或项目名对不上。',
-                [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName); } }]);
-            return;
-        }
-        var docxList = findScriptDocxList(projDir);
-        if (docxList.length === 0) {
-            showScriptMsg('找到了项目目录：' + projDir + '\n\n但里面没找到剧本 docx。请先把剧本拷进这个项目，或直接手动选择剧本文件。',
-                [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName); } }]);
-            return;
-        }
-        if (docxList.length === 1) {
-            loadScriptDocx(docxList[0], projectName);
+        var auto = [];
+        if (projDir) auto = findScriptDocxList(projDir);
+        // 有固定剧本 或 检测到剧本 → 弹「剧本面板」（固定优先展示）
+        if (fixed.length > 0 || auto.length > 0) {
+            showScriptPanel(projectName, fixed, auto, projDir);
         } else {
-            // 多个剧本 → 弹选择器
-            showScriptPick(docxList, projectName);
+            showScriptMsg('没找到「' + projectName + '」的剧本。\n\n可手动选择剧本文件并固定，下次点开直接可用。',
+                [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName, true); } }]);
         }
     }
 
-    // 选剧本弹层（多个 docx 时）
-    function showScriptPick(docxList, projectName) {
+    // 剧本面板：固定列表（常驻）+ 自动检测 + 添加按钮
+    function showScriptPanel(projectName, fixed, auto, projDir) {
         var modal = document.createElement('div');
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:998;display:flex;align-items:center;justify-content:center;';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:998;display:flex;align-items:center;justify-content:center;';
         var box = document.createElement('div');
-        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:18px;max-width:520px;width:90%;box-sizing:border-box;';
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;max-width:560px;width:92%;box-sizing:border-box;max-height:80%;overflow-y:auto;';
         var title = document.createElement('div');
-        title.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:10px;';
-        title.textContent = '选一个剧本打开（' + projectName + '）';
+        title.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:4px;';
+        title.textContent = '📖 ' + projectName;
         box.appendChild(title);
-        docxList.forEach(function (p) {
-            var btn = document.createElement('button');
-            btn.style.cssText = 'display:block;width:100%;text-align:left;background:#2a2a2a;color:#ddd;border:1px solid #3a3a3a;border-radius:6px;padding:8px 12px;margin-bottom:6px;cursor:pointer;font-size:12px;';
-            btn.textContent = path.basename(p);
-            btn.title = p;
-            btn.addEventListener('click', function () {
+        var sub = document.createElement('div');
+        sub.style.cssText = 'font-size:11px;color:#9a9a9a;margin-bottom:10px;';
+        sub.textContent = (projDir ? projDir : '未匹配到本地目录') + (fixed.length ? ' · 已固定 ' + fixed.length + ' 份' : '');
+        box.appendChild(sub);
+
+        function itemRow(p, isFixed) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;background:#242424;border:1px solid #333;border-radius:6px;padding:7px 10px;margin-bottom:6px;';
+            var nm = document.createElement('span');
+            nm.style.cssText = 'flex:1;font-size:12px;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;';
+            nm.textContent = path.basename(p);
+            nm.title = p;
+            nm.addEventListener('click', function () {
                 if (modal.parentNode) modal.parentNode.removeChild(modal);
                 loadScriptDocx(p, projectName);
             });
-            box.appendChild(btn);
+            row.appendChild(nm);
+            if (isFixed) {
+                var pin = document.createElement('span');
+                pin.textContent = '📌 固定';
+                pin.style.cssText = 'font-size:10px;color:#7fb3d9;flex:0 0 auto;';
+                row.appendChild(pin);
+                var rm = document.createElement('button');
+                rm.textContent = '移除';
+                rm.style.cssText = 'flex:0 0 auto;background:#3a1f1f;color:#ff9a9a;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;';
+                rm.addEventListener('click', function () {
+                    removeProjectMark(projectName, p);
+                    // 刷新面板
+                    var f2 = getProjectMarks(projectName);
+                    var a2 = projDir ? findScriptDocxList(projDir) : [];
+                    if (modal.parentNode) modal.parentNode.removeChild(modal);
+                    if (f2.length > 0 || a2.length > 0) showScriptPanel(projectName, f2, a2, projDir);
+                    else showScriptMsg('已移除。项目没有固定的剧本了。', [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName, true); } }]);
+                });
+                row.appendChild(rm);
+            } else {
+                var pinBtn = document.createElement('button');
+                pinBtn.textContent = '📌 固定';
+                pinBtn.style.cssText = 'flex:0 0 auto;background:#1e3a5b;color:#6db3ff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;';
+                pinBtn.addEventListener('click', function () {
+                    addProjectMark(projectName, p);
+                    var f3 = getProjectMarks(projectName);
+                    var a3 = projDir ? findScriptDocxList(projDir) : [];
+                    if (modal.parentNode) modal.parentNode.removeChild(modal);
+                    showScriptPanel(projectName, f3, a3, projDir);
+                });
+                row.appendChild(pinBtn);
+            }
+            return row;
+        }
+
+        // 固定列表
+        if (fixed.length > 0) {
+            var fh = document.createElement('div');
+            fh.style.cssText = 'font-size:11px;color:#7fb3d9;font-weight:600;margin:4px 0 6px;';
+            fh.textContent = '已固定（点击打开）';
+            box.appendChild(fh);
+            fixed.forEach(function (p) { box.appendChild(itemRow(p, true)); });
+        }
+        // 自动检测但未固定的
+        var autoNew = auto.filter(function (p) { return fixed.indexOf(p) < 0; });
+        if (autoNew.length > 0) {
+            var ah = document.createElement('div');
+            ah.style.cssText = 'font-size:11px;color:#9a9a9a;font-weight:600;margin:8px 0 6px;';
+            ah.textContent = '在项目里检测到的（可固定）';
+            box.appendChild(ah);
+            autoNew.forEach(function (p) { box.appendChild(itemRow(p, false)); });
+        }
+        // 底部按钮：添加文件 / 关闭
+        var rowBtn = document.createElement('div');
+        rowBtn.style.cssText = 'display:flex;gap:8px;margin-top:10px;justify-content:flex-end;';
+        var addB = document.createElement('button');
+        addB.textContent = '📂 添加剧本文件…';
+        addB.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;';
+        addB.addEventListener('click', function () {
+            if (modal.parentNode) modal.parentNode.removeChild(modal);
+            browseScriptFile(projectName, true);
         });
-        var cancel = document.createElement('button');
-        cancel.textContent = '取消';
-        cancel.style.cssText = 'margin-top:8px;background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:12px;';
-        cancel.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
-        box.appendChild(cancel);
+        rowBtn.appendChild(addB);
+        var ok = document.createElement('button');
+        ok.textContent = '关闭';
+        ok.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;';
+        ok.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
+        rowBtn.appendChild(ok);
+        box.appendChild(rowBtn);
         modal.appendChild(box);
         document.body.appendChild(modal);
+    }
+
+    // 手动选剧本 docx（addToMark=true 时固定）
+    function browseScriptFile(projectName, addToMark) {
+        var result;
+        try {
+            result = window.cep.fs.showOpenDialogEx(false, false, '选择剧本 docx', '', [], '', '选择');
+        } catch (e) {
+            showScriptMsg('打开文件选择失败: ' + e.message);
+            return;
+        }
+        var p = result && result.data && result.data[0];
+        if (p) {
+            if (addToMark) addProjectMark(projectName || '', p);
+            loadScriptDocx(p, projectName || '');
+        }
     }
 
     // 解析指定 docx 并打开阅读浮层
@@ -575,21 +696,6 @@
         box.appendChild(row);
         modal.appendChild(box);
         document.body.appendChild(modal);
-    }
-
-    // 手动选剧本 docx（浏览按钮）
-    function browseScriptFile(projectName) {
-        var result;
-        try {
-            result = window.cep.fs.showOpenDialogEx(false, false, '选择剧本 docx', '', [], '', '选择');
-        } catch (e) {
-            showScriptMsg('打开文件选择失败: ' + e.message);
-            return;
-        }
-        var p = result && result.data && result.data[0];
-        if (p) {
-            loadScriptDocx(p, projectName || '');
-        }
     }
 
     // 剧本阅读浮层：左集数列表 + 右内容 + 搜索（集号跳转/关键词高亮）+ 翻译/复制
