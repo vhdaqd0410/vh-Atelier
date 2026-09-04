@@ -255,7 +255,7 @@
             cnt.textContent = n.files > 0 ? String(n.files) : '';
             row.appendChild(caret); row.appendChild(ico); row.appendChild(lbl); row.appendChild(cnt);
             row.__node = n;
-            // 行点击：切目录；若点在 caret 上则只展开/收起
+            // 行点击：选中目录并自动展开其子层；若点在 caret 上则只切换展开/收起
             row.addEventListener('click', function (ev) {
                 ev.stopPropagation();
                 if (ev.target && ev.target.classList && ev.target.classList.contains('caret')) {
@@ -263,6 +263,9 @@
                     collapseRender();
                     return;
                 }
+                // 选中 + 若含子目录且未展开则展开一层
+                if (n.children.length && !n.__open) n.__open = true;
+                collapseRender();
                 selectDir(n.abs);
             });
             el.tree.appendChild(row);
@@ -354,12 +357,18 @@
         }
     }
     function mountItem(f, idx) {
-        var item = buildItem(f);
+        var item;
+        try {
+            item = buildItem(f);
+        } catch (e) {
+            log('buildItem 失败 ' + f.fullPath + ': ' + e.message);
+            return;
+        }
         item.style.top = (idx * ITEM_H) + 'px';
         el.list.appendChild(item);
         renderedMap[f.fullPath] = item;
         item.__idx = idx;
-        ensureWave(item);
+        try { ensureWave(item); } catch (e) { log('ensureWave 失败: ' + e.message); }
     }
     function unmountItem(p) {
         // 正在播放的行保持挂载（播放不中断，行 pin 在视口内）
@@ -571,6 +580,21 @@
                 ws.loadBlob(blob, null, false, PEAKS_SAMPLES);
             } catch (e) {}
         });
+    }
+
+    // 以 blob 方式读取本地音频文件（file:// XHR）
+    function readAsBlob(filePath, cb) {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'file:///' + filePath.replace(/\\/g, '/'), true);
+            xhr.responseType = 'blob';
+            xhr.onload = function () {
+                if (xhr.status === 0 || xhr.status === 200) cb(null, xhr.response);
+                else cb(new Error('读取失败 HTTP ' + xhr.status), null);
+            };
+            xhr.onerror = function () { cb(new Error('无法读取文件'), null); };
+            xhr.send();
+        } catch (e) { cb(e, null); }
     }
 
     // ================= 波形 peaks 本地缓存 =================
