@@ -259,9 +259,19 @@
             foot.appendChild(meta);
             item.appendChild(foot);
 
-            // 操作行：打开工作台 + 剧本阅读
+            // 操作行：剧本（最左）+ 打开工作台
             var openRow = document.createElement('div');
             openRow.className = 'prg-open-row';
+            var scriptBtn = document.createElement('button');
+            scriptBtn.type = 'button';
+            scriptBtn.className = 'prg-open-btn prg-open-main';
+            scriptBtn.textContent = '📖 剧本';
+            scriptBtn.title = '在本地项目里找剧本并阅读';
+            scriptBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openScriptForProject(p.name || '');
+            });
+            openRow.appendChild(scriptBtn);
             var openBtn = document.createElement('button');
             openBtn.type = 'button';
             openBtn.className = 'prg-open-btn';
@@ -272,16 +282,6 @@
                 openInWorkbench(p.name || '');
             });
             openRow.appendChild(openBtn);
-            var scriptBtn = document.createElement('button');
-            scriptBtn.type = 'button';
-            scriptBtn.className = 'prg-open-btn';
-            scriptBtn.textContent = '📖 剧本';
-            scriptBtn.title = '在本地项目里找剧本并阅读';
-            scriptBtn.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                openScriptForProject(p.name || '');
-            });
-            openRow.appendChild(scriptBtn);
             item.appendChild(openRow);
 
             el.activeList.appendChild(item);
@@ -558,23 +558,23 @@
     }
 
     // 剧本阅读浮层
+    // 剧本阅读浮层（分类排版 + 翻译）
     function openScriptReader(data, docxPath, projectName) {
         var old = document.getElementById('scriptReaderModal');
         if (old && old.parentNode) old.parentNode.removeChild(old);
         var modal = document.createElement('div');
         modal.id = 'scriptReaderModal';
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;display:flex;align-items:center;justify-content:center;';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999;display:flex;align-items:center;justify-content:center;';
         var box = document.createElement('div');
-        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;width:92%;max-width:780px;height:86%;display:flex;flex-direction:column;overflow:hidden;';
-        // 头部
+        box.style.cssText = 'background:#181818;border:1px solid #3a3a3a;border-radius:8px;width:94%;max-width:860px;height:88%;display:flex;flex-direction:column;overflow:hidden;';
+        // ---- 头部 ----
         var head = document.createElement('div');
-        head.style.cssText = 'padding:10px 14px;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+        head.style.cssText = 'padding:8px 12px;border-bottom:1px solid #2e2e2e;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
         var title = document.createElement('span');
-        title.style.cssText = 'font-size:13px;font-weight:600;color:#eee;flex:1;min-width:120px;';
-        title.textContent = '📖 ' + projectName + (docxPath ? ' · ' + path.basename(docxPath) : '');
+        title.style.cssText = 'font-size:13px;font-weight:600;color:#e8e8e8;flex:1;min-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        title.textContent = '📖 ' + (projectName || '') + (docxPath ? ' · ' + path.basename(docxPath) : '');
         title.title = docxPath;
         head.appendChild(title);
-        // 集数跳转
         var eps = data.episodes || [];
         var epSel = document.createElement('select');
         epSel.style.cssText = 'background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;padding:3px 6px;font-size:12px;';
@@ -586,46 +586,181 @@
             epSel.appendChild(o);
         });
         head.appendChild(epSel);
+        // 翻译按钮
+        var transBtn = document.createElement('button');
+        transBtn.textContent = '🌐 翻译台词';
+        transBtn.style.cssText = 'background:#1e3a2a;color:#7fd68b;border:1px solid #2a5a3a;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;';
+        head.appendChild(transBtn);
+        var transState = document.createElement('span');
+        transState.style.cssText = 'font-size:11px;color:#888;';
+        head.appendChild(transState);
         var close = document.createElement('button');
         close.textContent = '✕ 关闭';
         close.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px;';
         close.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
         head.appendChild(close);
         box.appendChild(head);
-        // 内容区
+        // ---- 内容区 ----
         var body = document.createElement('div');
-        body.style.cssText = 'flex:1;overflow-y:auto;padding:14px 18px;font-size:13px;line-height:1.9;color:#ddd;white-space:pre-wrap;word-break:break-word;';
+        body.style.cssText = 'flex:1;overflow-y:auto;padding:12px 18px 30px;font-size:13.5px;line-height:1.8;color:#ddd;word-break:break-word;';
         box.appendChild(body);
         modal.appendChild(box);
         document.body.appendChild(modal);
 
-        function render() {
+        // ---- 翻译状态 ----
+        var translating = false;      // 正在翻译
+        var transMap = {};            // 台词原文 → 译文（按集缓存）
+        var curEpKey = 'all';         // 当前翻译的集
+
+        function epLines(ep) {
+            return (data.lines || []).filter(function (x) {
+                if (!ep) return true;
+                return x.episode === ep;
+            });
+        }
+
+        // 从台词行提取纯英文（去掉角色名/动作标注/中文部分）
+        function extractEnglish(line) {
+            var t = line || '';
+            // 去掉 "角色名（动作）:" 前缀
+            var m = t.match(/^[^:：]*[:：]\s*(.*)$/);
+            if (m) t = m[1];
+            // 去掉中文（保留英文 + 标点）
+            t = t.replace(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+/g, ' ').replace(/\s+/g, ' ').trim();
+            return t;
+        }
+
+        function isEnglish(s) {
+            return /[A-Za-z]{3,}/.test(s);
+        }
+
+        // 翻译一段台词（MyMemory 单条接口，串行）
+        function translateLine(text, cb) {
+            var url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=en%7Czh-CN';
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.timeout = 15000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                try {
+                    var j = JSON.parse(xhr.responseText);
+                    var out = j && j.responseData && j.responseData.translatedText;
+                    cb(null, out || '');
+                } catch (e) { cb(e); }
+            };
+            xhr.onerror = function () { cb(new Error('网络错误')); };
+            xhr.ontimeout = function () { cb(new Error('超时')); };
+            xhr.send();
+        }
+
+        // 翻译当前显示范围的台词（按集）
+        function doTranslate() {
+            if (translating) return;
             var fep = epSel.value ? parseInt(epSel.value, 10) : null;
-            var html = '';
-            var inEp = false;
-            (data.lines || []).forEach(function (x) {
-                var t = x.text;
-                // 集标题行高亮
-                var isEpTitle = /^第\s*[0-9一二两三四五六七八九十百千]+\s*集/.test(t);
-                if (isEpTitle) {
-                    if (fep && x.episode !== fep) { inEp = false; return; }
-                    if (!fep) inEp = true;
-                    html += '<div style="margin:14px 0 6px;padding:4px 10px;background:#2a3a4a;border-left:3px solid #537d96;font-weight:600;color:#7fb3d9;">' + escHtml(t) + '</div>';
+            var key = fep ? String(fep) : 'all';
+            // 已有该集翻译缓存 → 直接切显示
+            if (transMap['__' + key]) {
+                curEpKey = key;
+                render();
+                transState.textContent = '（已翻译）';
+                return;
+            }
+            // 收集该范围英文台词
+            var targets = [];
+            epLines(fep).forEach(function (x) {
+                if (x.type !== 'dialogue') return;
+                var en = extractEnglish(x.text);
+                if (en && isEnglish(en)) targets.push({ idx: targets.length, line: x.text, en: en });
+            });
+            if (targets.length === 0) {
+                transState.textContent = '该范围没有可翻译的英文台词';
+                return;
+            }
+            translating = true;
+            transBtn.disabled = true;
+            transState.textContent = '翻译中 0/' + targets.length + '…';
+            var results = {};
+            var i = 0;
+            function next() {
+                if (i >= targets.length) {
+                    transMap['__' + key] = results;
+                    translating = false;
+                    transBtn.disabled = false;
+                    curEpKey = key;
+                    transState.textContent = '已翻译 ' + targets.length + ' 条';
+                    render();
                     return;
                 }
-                if (fep && x.episode !== fep) return;
-                if (fep && !inEp && x.episode === fep) inEp = true;
-                if (!fep && x.episode !== null && x.episode !== (data.episodes[0])) {
-                    // 全览模式：非第一集前是正常段落，正常展示
+                var tg = targets[i];
+                i++;
+                transState.textContent = '翻译中 ' + i + '/' + targets.length + '…';
+                translateLine(tg.en, function (err, zh) {
+                    results[tg.line] = (err || !zh) ? '' : zh;
+                    setTimeout(next, 250);
+                });
+            }
+            next();
+        }
+
+        // 台词行渲染（高亮英文 + 可选中文译文）
+        function renderDialogue(text, withTrans) {
+            // 拆 角色名(含动作标注) : 台词
+            var m = text.match(/^([^:：]{1,50}?)[：:]\s*(.*)$/);
+            if (!m) return '<div class="scr-dlg">' + escHtml(text) + '</div>';
+            var rolePart = m[1];
+            var speech = m[2];
+            var roleHtml = escHtml(rolePart);
+            // 角色名里的中文动作标注 灰色
+            roleHtml = roleHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#8a8a8a;font-weight:400;">$1</span>');
+            // 英文台词红色高亮（台词部分里英文用亮红，中文注释保持灰色小字）
+            var speechHtml = escHtml(speech);
+            // 高亮英文词（连读/带标点），中文括号标注灰
+            speechHtml = speechHtml.replace(/([\u4e00-\u9fff（）()]+)/g, '<span style="color:#9a9a9a;font-size:12px;">$1</span>');
+            var zhHtml = '';
+            if (withTrans && transMap['__' + curEpKey] && transMap['__' + curEpKey][text]) {
+                zhHtml = '<div class="scr-zh">' + escHtml(transMap['__' + curEpKey][text]) + '</div>';
+            }
+            return '<div class="scr-dlg"><span style="color:#ff8a8a;font-weight:600;">' + roleHtml + '</span><span style="color:#666;">: </span><span style="color:#ff6b6b;">' + speechHtml + '</span>' + zhHtml + '</div>';
+        }
+
+        // 主渲染
+        function render() {
+            var fep = epSel.value ? parseInt(epSel.value, 10) : null;
+            var showTrans = curEpKey === (fep ? String(fep) : 'all');
+            var html = '';
+            var lines = data.lines || [];
+            for (var li = 0; li < lines.length; li++) {
+                var x = lines[li];
+                if (fep && x.episode !== fep) continue;
+                var t = x.text || '';
+                var tp = x.type || 'plain';
+                if (tp === 'ep_title') {
+                    html += '<div style="margin:18px 0 8px;padding:6px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;">' + escHtml(t) + '</div>';
+                } else if (tp === 'scene') {
+                    html += '<div style="margin:12px 0 4px;padding:3px 10px;color:#7fb3d9;font-weight:600;font-size:12.5px;letter-spacing:.3px;">🎬 ' + escHtml(t) + '</div>';
+                } else if (tp === 'cast') {
+                    html += '<div style="color:#999;font-size:12px;padding:2px 10px;margin-bottom:6px;">' + escHtml(t) + '</div>';
+                } else if (tp === 'action') {
+                    html += '<div style="color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 10px;border-left:2px solid #3a3a3a;margin:2px 0;">' + escHtml(t) + '</div>';
+                } else if (tp === 'caption') {
+                    html += '<div style="color:#c9a86a;font-size:12px;padding:1px 10px;">' + escHtml(t) + '</div>';
+                } else if (tp === 'dialogue') {
+                    html += renderDialogue(t, showTrans);
+                } else {
+                    html += '<div style="padding:1px 10px;">' + escHtml(t) + '</div>';
                 }
-                html += '<div>' + escHtml(t) + '</div>';
-            });
-            body.innerHTML = html || '<div style="color:#888;">该集暂无内容</div>';
+            }
+            body.innerHTML = html || '<div style="color:#888;padding:20px;text-align:center;">该集暂无内容</div>';
             body.scrollTop = 0;
         }
+        // 注入台词样式（红色调）
+        var st = document.createElement('style');
+        st.textContent = '.scr-dlg{margin:4px 0;padding:2px 10px;} .scr-dlg:hover{background:#242020;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;}';
+        document.head.appendChild(st);
+
         epSel.addEventListener('change', render);
+        transBtn.addEventListener('click', doTranslate);
         render();
-        // Esc 关闭
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && modal.parentNode) modal.parentNode.removeChild(modal);
         }, { once: true });

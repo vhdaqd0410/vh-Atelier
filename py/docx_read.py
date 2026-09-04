@@ -71,15 +71,55 @@ def docx_to_lines(path):
 
 
 def parse(lines):
-    """给每段标注所属集数"""
+    """给每段标注所属集数 + 行类型（供前端易读排版）
+    类型：ep_title 集标题 / scene 场次 / cast 人物表 / action 动作(△) /
+          dialogue 台词(角色名: 英文) / caption 字幕标注 / plain 其他
+    """
     out = []
     cur = None
     for l in lines:
         m = re.match(r'^第\s*([0-9一二两三四五六七八九十百千]+)\s*集', l)
         if m:
             cur = cn_to_int(m.group(1))
-        out.append({'text': l, 'episode': cur})
+        out.append({'text': l, 'episode': cur, 'type': classify_line(l)})
     return out
+
+
+def classify_line(l):
+    """判断一行属于哪种类型"""
+    t = l.strip()
+    if not t:
+        return 'plain'
+    # 集标题
+    if re.match(r'^第\s*[0-9一二两三四五六七八九十百千]+\s*集', t):
+        return 'ep_title'
+    # 场景标题：数字-数字 开头（场次）
+    if re.match(r'^\d+[-_]\d+', t):
+        return 'scene'
+    # 人物表
+    if t.startswith('人物') or t.startswith('人物：') or t.startswith('演员'):
+        return 'cast'
+    # 动作/旁白：△ 开头
+    if t.startswith('△') or t.startswith('▲') or t.startswith('【') or t.startswith('（旁白）') or t.startswith('(旁白)'):
+        return 'action'
+    # 字幕标注：字幕：xxx
+    if t.startswith('字幕') or t.startswith('字幕：') or t.startswith('【字幕'):
+        return 'caption'
+    # 台词：角色名(:中文动作)：英文台词 或 角色名: 台词
+    # 特征：行首是角色名（大写字母/中文名/含括号标注），后跟冒号，冒号后有大写英文
+    dlg = re.match(r'^([^:：]{1,40}?)[（(][^）)]{0,50}[）)]?\s*[:：]\s*(.+)$', t)
+    if dlg:
+        role = dlg.group(1).strip()
+        speech = dlg.group(2).strip()
+        # 角色名特征：全大写英文 / 首字母大写英文词 / 中文名
+        role_ok = re.match(r'^[A-Z][A-Za-z \'.\-]{0,30}$', role) or re.match(r'^[\u4e00-\u9fff]{1,6}$', role) or 'VO' in role or 'OS' in role
+        if role_ok and speech:
+            return 'dialogue'
+    # 行首直接英文冒号（如 LORIEL: xxx）
+    dlg2 = re.match(r'^([A-Z][A-Za-z \'.]{1,30})\s*[:：]\s*(.+)$', t)
+    if dlg2:
+        return 'dialogue'
+    return 'plain'
 
 
 def main():
