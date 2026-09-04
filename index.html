@@ -391,9 +391,9 @@
             height: calc(100vh - 130px);
             overflow: hidden;
         }
-        /* ===== 剧本阅读面板（由 progress.js 填充，占满整高；默认隐藏，切到 script tab 时由 main.js 显示） ===== */
+        /* ===== 剧本阅读面板（由 progress.js 填充，占满整高；显隐由 main.js 的 showPanel 通过内联 style 控制） ===== */
         #panel-script {
-            display: none;
+            display: flex;
             flex-direction: column;
             height: calc(100vh - 130px);
             overflow: hidden;
@@ -2201,7 +2201,7 @@
     </div>
 
     <!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
-    <div class="tab-panel" id="panel-script"></div>
+    <div class="tab-panel" id="panel-script" style="display:none;"></div>
 
     <script src="js/CSInterface.js"></script>
     <script src="js/main.js"></script>
