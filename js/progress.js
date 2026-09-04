@@ -412,35 +412,44 @@
     }
 
     // 在项目目录递归找剧本 docx（优先「剧本/脚本」文件夹，再全目录递归）
-    function findScriptDocx(projDir) {
-        var found = null;
+    // 在项目目录递归找所有剧本 docx（过滤 ~$ 临时文件；优先「剧本/脚本」目录）
+    function findScriptDocxList(projDir) {
+        var found = [];
         var limit = 400;  // 防失控
         function walk(dir, depth) {
-            if (found || depth > 5) return;
+            if (depth > 5) return;
             try {
                 var entries = fs.readdirSync(dir);
                 entries.forEach(function (en) {
-                    if (found || limit-- <= 0) return;
+                    if (limit-- <= 0) return;
                     if (en.charAt(0) === '.') return;
+                    // 跳过 Word 临时锁文件（~$开头）
+                    if (en.charAt(0) === '~' && en.charAt(1) === '$') return;
                     var full = path.join(dir, en);
                     var st = null;
                     try { st = fs.statSync(full); } catch (e) { return; }
                     if (st.isDirectory()) {
                         walk(full, depth + 1);
                     } else if (en.toLowerCase().endsWith('.docx')) {
-                        found = full;
+                        found.push(full);
                     }
                 });
             } catch (e) {}
         }
+        var scriptDirs = [];
         // 先找「剧本/脚本」目录
         ['剧本', '脚本', 'Script'].forEach(function (k) {
-            if (found) return;
             var p = path.join(projDir, k);
-            if (fs.existsSync(p)) walk(p, 1);
+            if (fs.existsSync(p)) scriptDirs.push(p);
         });
-        if (!found) walk(projDir, 0);
-        return found;
+        if (scriptDirs.length > 0) {
+            scriptDirs.forEach(function (p) { walk(p, 1); });
+        }
+        if (found.length === 0) walk(projDir, 0);
+        // 去重
+        var uniq = [];
+        found.forEach(function (f) { if (uniq.indexOf(f) < 0) uniq.push(f); });
+        return uniq;
     }
 
     function findPython() {
@@ -455,7 +464,7 @@
         return 'python';
     }
 
-    // 主入口：项目卡片点「剧本」→ 定位目录 → 找 docx → 解析 → 打开阅读浮层
+    // 主入口：项目卡片点「剧本」→ 定位目录 → 找 docx（可能多个）→ 选择后打开阅读浮层
     function openScriptForProject(projectName) {
         el.statusText.textContent = '找剧本：' + projectName + '…';
         var projDir = findLocalProjectDir(projectName);
@@ -463,11 +472,51 @@
             showScriptMsg('没在本地项目盘（' + SCRIPT_ROOT + '）找到「' + projectName + '」对应目录。\n\n可能还没建本地项目，或项目名对不上。');
             return;
         }
-        var docx = findScriptDocx(projDir);
-        if (!docx) {
+        var docxList = findScriptDocxList(projDir);
+        if (docxList.length === 0) {
             showScriptMsg('找到了项目目录：' + projDir + '\n\n但里面没找到剧本 docx。请先把剧本拷贝进这个项目（放「剧本」文件夹或任意位置）。');
             return;
         }
+        if (docxList.length === 1) {
+            loadScriptDocx(docxList[0], projectName);
+        } else {
+            // 多个剧本 → 弹选择器
+            showScriptPick(docxList, projectName);
+        }
+    }
+
+    // 选剧本弹层（多个 docx 时）
+    function showScriptPick(docxList, projectName) {
+        var modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:998;display:flex;align-items:center;justify-content:center;';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:18px;max-width:520px;width:90%;box-sizing:border-box;';
+        var title = document.createElement('div');
+        title.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:10px;';
+        title.textContent = '选一个剧本打开（' + projectName + '）';
+        box.appendChild(title);
+        docxList.forEach(function (p) {
+            var btn = document.createElement('button');
+            btn.style.cssText = 'display:block;width:100%;text-align:left;background:#2a2a2a;color:#ddd;border:1px solid #3a3a3a;border-radius:6px;padding:8px 12px;margin-bottom:6px;cursor:pointer;font-size:12px;';
+            btn.textContent = path.basename(p);
+            btn.title = p;
+            btn.addEventListener('click', function () {
+                if (modal.parentNode) modal.parentNode.removeChild(modal);
+                loadScriptDocx(p, projectName);
+            });
+            box.appendChild(btn);
+        });
+        var cancel = document.createElement('button');
+        cancel.textContent = '取消';
+        cancel.style.cssText = 'margin-top:8px;background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:12px;';
+        cancel.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
+        box.appendChild(cancel);
+        modal.appendChild(box);
+        document.body.appendChild(modal);
+    }
+
+    // 解析指定 docx 并打开阅读浮层
+    function loadScriptDocx(docx, projectName) {
         el.statusText.textContent = '解析剧本：' + path.basename(docx) + '…';
         var py = findPython();
         var scriptPath = path.join(extRoot, 'py', 'docx_read.py');
@@ -480,11 +529,10 @@
             var data = null;
             var out = (r.stdout || '').trim();
             try { data = JSON.parse(out); } catch (e) {
-                // stdout 编码问题回退 stderr
                 try { data = JSON.parse((r.stderr || '').trim()); } catch (e2) {}
             }
             if (!data || !data.ok) {
-                showScriptMsg('解析剧本失败：' + ((data && data.error) || (r.stderr || '').slice(0, 300) || '未知错误'));
+                showScriptMsg('解析剧本失败：' + ((data && data.error) || (r.stderr || '').slice(0, 300) || '未知错误') + '\n\n文件：' + docx);
                 return;
             }
             openScriptReader(data, docx, projectName);
@@ -523,7 +571,7 @@
         head.style.cssText = 'padding:10px 14px;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
         var title = document.createElement('span');
         title.style.cssText = 'font-size:13px;font-weight:600;color:#eee;flex:1;min-width:120px;';
-        title.textContent = '📖 ' + projectName;
+        title.textContent = '📖 ' + projectName + (docxPath ? ' · ' + path.basename(docxPath) : '');
         title.title = docxPath;
         head.appendChild(title);
         // 集数跳转
