@@ -518,8 +518,14 @@
         var projDir = findLocalProjectDir(projectName);
         var auto = [];
         if (projDir) auto = findScriptDocxList(projDir);
-        // 有固定剧本 或 检测到剧本 → 弹「剧本面板」（固定优先展示）
-        if (fixed.length > 0 || auto.length > 0) {
+        if (fixed.length > 0) {
+            // 有固定剧本 → 弹面板（固定优先展示，可加检测的）
+            showScriptPanel(projectName, fixed, auto, projDir);
+        } else if (auto.length === 1) {
+            // 无固定且只检测到一份（常见中文剧）→ 直接打开
+            loadScriptDocx(auto[0], projectName);
+        } else if (auto.length > 1) {
+            // 无固定但有多份（中英并存）→ 弹面板选
             showScriptPanel(projectName, fixed, auto, projDir);
         } else {
             showScriptMsg('没找到「' + projectName + '」的剧本。\n\n可手动选择剧本文件并固定，下次点开直接可用。',
