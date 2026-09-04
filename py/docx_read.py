@@ -52,7 +52,7 @@ def docx_to_lines(path):
         parts = []
         buf = ''
         # 按 br 或 t 顺序扫描
-        for m in re.finditer(r'<w:br\s*/?>|<w:t[^>]*>(.*?)</w:t>', para, re.S):
+        for m in re.finditer(r'<w:br[ \t\r\n]*/>|<w:t(?=[ >])[^>]*>(.*?)</w:t>', para, re.S):
             if m.group(0).startswith('<w:br'):
                 parts.append(buf)
                 buf = ''
