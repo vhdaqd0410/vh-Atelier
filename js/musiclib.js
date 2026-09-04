@@ -39,12 +39,16 @@
     var rootDir = '';
     var treeRoot = null;
     var favFilter = false;
+    var sortKey = 'ctime';     // ctime/name/mtime/size/type
+    var sortAsc = false;       // 默认降序（ctime 降序 = 新创建的在前）
 
     var el = {
         dir: document.getElementById('mllibDir'),
         browse: document.getElementById('btnMllibBrowse'),
         scan: document.getElementById('btnMllibScan'),
         search: document.getElementById('mllibSearch'),
+        sort: document.getElementById('mllibSort'),
+        sortDir: document.getElementById('btnMllibSortDir'),
         tree: document.getElementById('mllibTree'),
         list: document.getElementById('mllibList'),
         spacer: document.getElementById('mllibSpacer'),
@@ -129,11 +133,17 @@
                     node.children.push(child);
                     stack.push(child);
                 } else if (it.isFile() && isMusicFile(it.name)) {
+                    var fp = path.join(node.abs, it.name);
+                    var st = null;
+                    try { st = fs.statSync(fp); } catch (e) {}
                     music.push({
                         name: it.name,
-                        fullPath: path.join(node.abs, it.name),
+                        fullPath: fp,
                         ext: path.extname(it.name).replace('.', '').toLowerCase(),
-                        dir: node.abs
+                        dir: node.abs,
+                        ctime: st ? (st.birthtimeMs || st.ctimeMs || 0) : 0,
+                        mtime: st ? (st.mtimeMs || 0) : 0,
+                        size: st ? (st.size || 0) : 0
                     });
                 }
             }
@@ -157,10 +167,10 @@
                 rootDir = dirPath;
                 treeRoot = root;
                 flattenTree(root);
-                // 写缓存（不含波形）
-                var slim = { root: dirPath, dirs: [], music: [] };
+                // 写缓存（不含波形），带版本号：字段变更时旧缓存自动失效重扫
+                var slim = { v: 2, root: dirPath, dirs: [], music: [] };
                 allDirs.forEach(function (d) { slim.dirs.push({ a: d.abs, n: d.name, d: d.depth, p: d.parent ? d.parent.abs : null }); });
-                allDirs.forEach(function (d) { (d.music || []).forEach(function (m) { slim.music.push({ p: m.fullPath, n: m.name, e: m.ext }); }); });
+                allDirs.forEach(function (d) { (d.music || []).forEach(function (m) { slim.music.push({ p: m.fullPath, n: m.name, e: m.ext, c: m.ctime || 0, t: m.mtime || 0, s: m.size || 0 }); }); });
                 try {
                     if (!fs.existsSync(collectDir)) fs.mkdirSync(collectDir, { recursive: true });
                     fs.writeFileSync(treeCacheFile, JSON.stringify(slim), 'utf8');
@@ -182,7 +192,7 @@
         try {
             if (!fs.existsSync(treeCacheFile)) return false;
             var c = JSON.parse(fs.readFileSync(treeCacheFile, 'utf8'));
-            if (!c || c.root !== dirPath || !Array.isArray(c.dirs)) return false;
+            if (!c || c.v !== 2 || c.root !== dirPath || !Array.isArray(c.dirs)) return false;
             // 重建树节点
             var nodeByAbs = {};
             var rootNode = null;
@@ -202,7 +212,7 @@
             c.music.forEach(function (m) {
                 var n = nodeByAbs[path.dirname(m.p)];
                 if (!n) return;
-                var f = { name: m.n, fullPath: m.p, ext: m.e, dir: n.abs };
+                var f = { name: m.n, fullPath: m.p, ext: m.e, dir: n.abs, ctime: m.c || 0, mtime: m.t || 0, size: m.s || 0 };
                 if (!n.music) n.music = [];
                 n.music.push(f);
                 byPath[m.p] = f;
@@ -319,6 +329,27 @@
     }
 
     // ================= 列表过滤 =================
+    function sortFiles(files) {
+        var key = sortKey;
+        var dirMul = sortAsc ? 1 : -1;
+        files = files.slice().sort(function (a, b) {
+            var r = 0;
+            if (key === 'name') {
+                r = a.name.toLowerCase() < b.name.toLowerCase() ? -1 : (a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0);
+            } else if (key === 'type') {
+                r = (a.ext < b.ext ? -1 : (a.ext > b.ext ? 1 : 0)) || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
+            } else {
+                var va = key === 'size' ? (a.size || 0) : (a.ctime || a.mtime || 0);
+                var vb = key === 'size' ? (b.size || 0) : (b.ctime || b.mtime || 0);
+                if (key === 'mtime') { va = a.mtime || 0; vb = b.mtime || 0; }
+                r = (va < vb) ? -1 : (va > vb ? 1 : 0);
+                if (r === 0) r = a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
+            }
+            return r * dirMul;
+        });
+        return files;
+    }
+
     function currentFiltered(files) {
         var kw = el.search.value.trim().toLowerCase();
         if (favFilter) files = files.filter(function (f) { return isFav(f.fullPath); });
@@ -326,7 +357,16 @@
             var base = path.basename(f.name, path.extname(f.name)).toLowerCase();
             return base.indexOf(kw) >= 0;
         });
-        return files;
+        return sortFiles(files);
+    }
+
+    function syncSortUI() {
+        if (el.sort) el.sort.value = sortKey;
+        if (el.sortDir) {
+            var labels = { ctime: '新→旧', mtime: '新→旧', size: '大→小', name: 'A→Z', type: 'A→Z' };
+            var ascLabels = { ctime: '旧→新', mtime: '旧→新', size: '小→大', name: 'Z→A', type: 'Z→A' };
+            el.sortDir.textContent = (sortAsc ? '↑ ' : '↓ ') + (sortAsc ? (ascLabels[sortKey] || '升序') : (labels[sortKey] || '降序'));
+        }
     }
 
     // ================= 虚拟列表 =================
@@ -907,6 +947,20 @@
         });
         el.list.addEventListener('scroll', renderWindow);
 
+        // 排序控件
+        if (el.sort) el.sort.addEventListener('change', function () {
+            sortKey = el.sort.value;
+            try { localStorage.setItem('mllibSort', sortKey); } catch (e) {}
+            syncSortUI();
+            setVisibleFiles(currentFiltered(visibleDirFiles));
+        });
+        if (el.sortDir) el.sortDir.addEventListener('click', function () {
+            sortAsc = !sortAsc;
+            try { localStorage.setItem('mllibSortAsc', sortAsc ? '1' : '0'); } catch (e) {}
+            syncSortUI();
+            setVisibleFiles(currentFiltered(visibleDirFiles));
+        });
+
         // 播放条按钮
         el.playBtn.addEventListener('click', function () {
             if (curPlaying()) pausePlayback();
@@ -959,6 +1013,14 @@
     loadFavs();
     bindEvents();
     startProgressTick();
+    // 恢复排序偏好（默认：创建时间 新→旧）
+    try {
+        var sk = localStorage.getItem('mllibSort');
+        if (sk && ['ctime', 'name', 'mtime', 'size', 'type'].indexOf(sk) >= 0) sortKey = sk;
+        var sa = localStorage.getItem('mllibSortAsc');
+        sortAsc = sa === '1';
+        syncSortUI();
+    } catch (e) {}
     try {
         var savedDir = localStorage.getItem('mllibDir');
         if (savedDir && fs.existsSync(savedDir)) {

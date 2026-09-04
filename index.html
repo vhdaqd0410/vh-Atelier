@@ -2176,7 +2176,18 @@
                     <input type="text" id="mllibDir" placeholder="音乐文件夹路径">
                     <button id="btnMllibBrowse" class="tbtn">浏览</button>
                     <button id="btnMllibScan" class="tbtn">扫描</button>
+                </div>
+                <div class="tr">
                     <input type="text" id="mllibSearch" placeholder="搜索当前目录...">
+                    <span style="font-size:11px;color:var(--muted);">排序</span>
+                    <select id="mllibSort" style="flex:0 0 auto;max-width:110px;">
+                        <option value="ctime">创建时间</option>
+                        <option value="name">名称</option>
+                        <option value="mtime">修改时间</option>
+                        <option value="size">大小</option>
+                        <option value="type">类型</option>
+                    </select>
+                    <button id="btnMllibSortDir" class="tbtn" title="切换升降序" style="padding:6px 8px;font-size:11px;">↓ 新→旧</button>
                 </div>
             </div>
             <div class="mllib-body">
