@@ -985,6 +985,7 @@
         });
         await Promise.all(tasks);
         aggrListCache = results;
+        aggrBuildQueue();
         aggrRender(results);
         var okN = results.filter(function (r) { return r.song; }).length;
         var failN = results.filter(function (r) { return !r.song; }).length;
@@ -1004,6 +1005,8 @@
             var row = document.createElement('div');
             row.className = 'music-item';
             row.dataset.aggr = String(idx);
+            // 该行在可播队列中的位置（-1 = 平台无响应不可播）
+            var qPos = aggrQueue.indexOf(r);
 
             var badge = document.createElement('span');
             badge.className = 'aggr-badge ' + (meta ? meta.cls : 'fail');
@@ -1044,11 +1047,16 @@
             row.appendChild(info);
 
             // 试听：Meting 的 url 是相对路径（含已签名的 auth），直接给 audio 播（可跟随 302）
+            if (qPos >= 0) {
+                // 整行双击播放
+                row.addEventListener('dblclick', function () { aggrPlayAt(qPos, null); });
+            }
             var playBtn = document.createElement('button');
-            playBtn.className = 'mbtn';
+            playBtn.className = 'mbtn' + (qPos >= 0 ? ' play-aggr' : '');
             playBtn.textContent = '试听';
+            playBtn.disabled = qPos < 0;
             playBtn.addEventListener('click', function () {
-                aggrPlay(r);
+                if (qPos >= 0) aggrPlayAt(qPos, playBtn);
             });
             row.appendChild(playBtn);
 
@@ -1065,19 +1073,244 @@
         });
     }
 
-    // 试听（聚合源）
+    // ==================== 聚合源播放器（队列/进度/音量/模式/下载） ====================
+    var aggrQueue = [];      // 可播放队列 [{src, song}]
+    var aggrQIdx = -1;       // 当前播放索引
+    var aggrNow = null;      // 当前播放 {src, song}
+    var aggrMode = 'list';   // 播放模式：list/order/one/random
     var aggrAudioObj = null;
     function aggrAudio() {
         if (!aggrAudioObj) aggrAudioObj = $('aggrAudio');
         return aggrAudioObj;
     }
-    function aggrPlay(r) {
-        if (!r || !r.song || !r.song.url) { aggrSetStatus('该歌曲无播放源', 'err'); return; }
-        var base = aggrNormBase($('aggrServer').value);
+    function aggrBase() { return aggrNormBase($('aggrServer').value); }
+    function aggrRealUrl(r) { return aggrBase() + r.song.url; }
+
+    // 渲染后：从 aggrListCache 建立可播队列并绑定行交互
+    function aggrBuildQueue() {
+        aggrQueue = aggrListCache.filter(function (r) { return r.song && r.song.url; });
+        aggrQIdx = -1;
+        aggrNow = null;
+    }
+
+    // 播放队列里第 qi 首；同曲切换播/停
+    function aggrPlayAt(qi, btn) {
+        if (qi < 0 || qi >= aggrQueue.length) return;
         var a = aggrAudio();
-        a.src = base + r.song.url;
-        a.play().catch(function () { aggrSetStatus('试听失败（可能服务器不可达或链接过期）', 'err'); });
-        aggrSetStatus('试听：' + r.song.title + ' - ' + (r.song.author || ''), '');
+        var r = aggrQueue[qi];
+        // 同一首：toggle
+        if (aggrQIdx === qi && a.src && !a.paused) { a.pause(); aggrSyncBtns(); return; }
+        if (aggrQIdx === qi && a.src && a.paused) { a.play().catch(function () {}); aggrSyncBtns(); return; }
+        if (!r.song.url) { aggrSetStatus('该歌曲无播放源', 'err'); return; }
+        var src = aggrRealUrl(r);
+        a.src = src;
+        aggrQIdx = qi;
+        aggrNow = r;
+        aggrUpdateInfo();
+        var p = a.play();
+        if (p && p.catch) p.catch(function () { aggrSetStatus('播放失败（服务器不可达或链接过期）', 'err'); });
+        aggrSyncBtns();
+        aggrSetStatus('正在播放：' + r.song.title + (r.src ? ' · ' + (SRC_META[r.src] ? SRC_META[r.src].name : r.src) : ''), 'ok');
+    }
+
+    function aggrNext(manual) {
+        if (!aggrQueue.length) return;
+        if (aggrMode === 'one' && manual !== false) {
+            aggrPlayAt(aggrQIdx >= 0 ? aggrQIdx : 0, null);
+            return;
+        }
+        var n;
+        if (aggrMode === 'random') {
+            if (aggrQueue.length === 1) n = 0;
+            else { do { n = Math.floor(Math.random() * aggrQueue.length); } while (n === aggrQIdx); }
+        } else {
+            n = aggrQIdx + 1;
+            if (n >= aggrQueue.length) n = 0;
+        }
+        if (manual === false && aggrMode === 'order' && aggrQIdx >= aggrQueue.length - 1) {
+            // 自动播完最后一首（顺序模式）→ 停
+            aggrQIdx = -1; aggrNow = null;
+            var a2 = aggrAudio(); a2.pause(); a2.src = '';
+            aggrUpdateInfo(); aggrSyncBtns();
+            aggrSetStatus('已播放完列表', '');
+            return;
+        }
+        aggrPlayAt(n, null);
+    }
+    function aggrPrev() {
+        if (!aggrQueue.length) return;
+        var n;
+        if (aggrMode === 'random') {
+            if (aggrQueue.length === 1) n = 0;
+            else { do { n = Math.floor(Math.random() * aggrQueue.length); } while (n === aggrQIdx); }
+        } else {
+            n = aggrQIdx - 1;
+            if (n < 0) n = aggrQueue.length - 1;
+        }
+        aggrPlayAt(n, null);
+    }
+    function aggrTogglePlay() {
+        var a = aggrAudio();
+        if (!a.src) {
+            if (aggrQueue.length) aggrPlayAt(0, null);
+            return;
+        }
+        if (a.paused) a.play().catch(function () {});
+        else a.pause();
+        aggrSyncBtns();
+    }
+    function aggrUpdateInfo() {
+        var r = aggrNow;
+        var titleEl = $('aggrMpTitle');
+        var subEl = $('aggrMpSub');
+        var coverEl = $('aggrMpCover');
+        if (!r) {
+            if (titleEl) titleEl.textContent = '未在播放';
+            if (subEl) subEl.textContent = '';
+            if (coverEl) { coverEl.src = ''; coverEl.style.visibility = 'hidden'; }
+            return;
+        }
+        if (titleEl) titleEl.textContent = r.song.title || '';
+        if (subEl) subEl.textContent = (r.song.author || '') + (r.src && SRC_META[r.src] ? ' · ' + SRC_META[r.src].name : '');
+        if (coverEl) {
+            var pic = r.song.pic;
+            if (pic && pic.indexOf('http') === 0) { coverEl.src = pic; coverEl.style.visibility = 'visible'; }
+            else { coverEl.src = ''; coverEl.style.visibility = 'hidden'; }
+        }
+    }
+    // 同步列表「试听」按钮 + 播放条按钮状态
+    function aggrSyncBtns() {
+        // 列表按钮：找到当前播放的（aggrListCache 里与 aggrNow 同对象的索引）
+        var curCacheIdx = -1;
+        if (aggrNow) {
+            for (var i = 0; i < aggrListCache.length; i++) {
+                if (aggrListCache[i] === aggrNow) { curCacheIdx = i; break; }
+            }
+        }
+        var rows = document.querySelectorAll('#aggrList .music-item');
+        for (var i2 = 0; i2 < rows.length; i2++) {
+            var pb = rows[i2].querySelector('.mbtn.play-aggr');
+            if (!pb) continue;
+            var ci = parseInt(rows[i2].dataset.aggr, 10);
+            if (ci === curCacheIdx) {
+                pb.classList.add('playing');
+                pb.textContent = aggrAudio() && !aggrAudio().paused && aggrAudio().src ? '暂停' : '继续';
+            } else {
+                pb.classList.remove('playing');
+                pb.textContent = '试听';
+            }
+        }
+        // 播放条主按钮
+        var a = aggrAudio();
+        var playing = a.src && !a.paused;
+        var pp = $('aggrBtnPlayPause');
+        if (pp) {
+            var pI = pp.querySelector('.ic-play');
+            var pP = pp.querySelector('.ic-pause');
+            if (pI && pP) {
+                pI.style.display = playing ? 'none' : 'block';
+                pP.style.display = playing ? 'block' : 'none';
+            }
+            pp.title = playing ? '暂停' : '播放';
+        }
+        aggrUpdateModeBtn();
+    }
+    // 播放模式按钮
+    function aggrUpdateModeBtn() {
+        var btn = $('aggrBtnMode');
+        if (!btn) return;
+        btn.innerHTML = MODE_SVG[aggrMode] || MODE_SVG.list;
+        btn.title = MODE_TITLES[aggrMode] || MODE_TITLES.list;
+        if (aggrMode !== 'order') btn.classList.add('active');
+        else btn.classList.remove('active');
+    }
+    function aggrCycleMode() {
+        if (aggrMode === 'list') aggrMode = 'order';
+        else if (aggrMode === 'order') aggrMode = 'one';
+        else if (aggrMode === 'one') aggrMode = 'random';
+        else aggrMode = 'list';
+        aggrUpdateModeBtn();
+        aggrSetStatus(MODE_TITLES[aggrMode], '');
+    }
+    // 绑定播放条事件 + audio 事件
+    function bindAggrPlayer() {
+        $('aggrBtnPrev').addEventListener('click', function () { aggrPrev(); });
+        $('aggrBtnPlayPause').addEventListener('click', function () { aggrTogglePlay(); });
+        $('aggrBtnNext').addEventListener('click', function () { aggrNext(true); });
+        $('aggrBtnMode').addEventListener('click', function () { aggrCycleMode(); });
+        $('aggrBtnVol').addEventListener('click', function () { aggrToggleMute(); });
+        $('aggrVol').addEventListener('input', function () {
+            var v = parseFloat(this.value); if (isNaN(v)) v = 0.8;
+            aggrSetVolume(v);
+        });
+        $('aggrBtnDownload').addEventListener('click', function () {
+            if (!aggrNow) { aggrSetStatus('当前没有在播放的歌曲', 'err'); return; }
+            aggrDownload(aggrNow);
+        });
+        // seek
+        var bar = $('aggrMpSeek');
+        bar.addEventListener('click', function (ev) {
+            var a = aggrAudio();
+            if (!a.duration) return;
+            var rect = bar.getBoundingClientRect();
+            var pct = (ev.clientX - rect.left) / rect.width;
+            if (pct < 0) pct = 0; if (pct > 1) pct = 1;
+            a.currentTime = pct * a.duration;
+        });
+        // audio 事件
+        var a = aggrAudio();
+        a.addEventListener('timeupdate', function () {
+            if (a.duration) {
+                $('aggrMpCur').textContent = fmtTime(a.currentTime);
+                $('aggrMpDur').textContent = fmtTime(a.duration);
+                $('aggrMpSeekFill').style.width = (a.currentTime / a.duration * 100) + '%';
+            }
+        });
+        a.addEventListener('loadedmetadata', function () {
+            $('aggrMpDur').textContent = fmtTime(a.duration);
+        });
+        a.addEventListener('play', function () { aggrSyncBtns(); });
+        a.addEventListener('pause', function () { aggrSyncBtns(); });
+        a.addEventListener('ended', function () { aggrNext(false); });
+        a.addEventListener('error', function () {
+            // 播放出错：尝试自动下一首（除非顺序播完）
+            aggrSetStatus('播放出错，尝试下一首', 'err');
+            if (aggrMode === 'order' && aggrQIdx >= aggrQueue.length - 1) { return; }
+            aggrNext(true);
+        });
+        aggrSetVolume(0.8);
+    }
+    var aggrLastVol = 0.8;
+    function aggrSetVolume(v) {
+        var a = aggrAudio();
+        a.volume = v;
+        var slider = $('aggrVol');
+        if (slider) slider.value = String(v);
+        aggrUpdateVolIcon();
+    }
+    function aggrUpdateVolIcon() {
+        var a = aggrAudio();
+        var muted = (a.volume === 0 || a.muted);
+        var onIcon = document.querySelector('#aggrBtnVol .ic-vol-on');
+        var offIcon = document.querySelector('#aggrBtnVol .ic-vol-off');
+        if (onIcon && offIcon) {
+            onIcon.style.display = muted ? 'none' : 'block';
+            offIcon.style.display = muted ? 'block' : 'none';
+        }
+        var b = $('aggrBtnVol');
+        if (b) b.title = muted ? '取消静音' : '静音';
+    }
+    function aggrToggleMute() {
+        var a = aggrAudio();
+        if (a.volume > 0 && !a.muted) {
+            aggrLastVol = a.volume;
+            a.volume = 0;
+        } else {
+            a.volume = aggrLastVol > 0 ? aggrLastVol : 0.8;
+        }
+        var slider = $('aggrVol');
+        if (slider) slider.value = String(a.volume);
+        aggrUpdateVolIcon();
     }
 
     // 下载：弹目录选择 → Node 下载 → 提示导入 PR
@@ -1237,6 +1470,7 @@
             if (ev.key === 'Enter') { ev.preventDefault(); aggrSearch(); }
         });
         $('btnAggrTest').addEventListener('click', aggrTestServer);
+        bindAggrPlayer();
         // 初始填地址
         $('aggrServer').value = aggrGetServer();
         $('aggrServer').addEventListener('change', function () {

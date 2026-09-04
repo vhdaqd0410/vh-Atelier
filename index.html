@@ -564,6 +564,7 @@
             color: var(--text);
         }
         .music-item .mbtn:hover { border-color: var(--accent); color: var(--accent); }
+        .music-item .mbtn:disabled { opacity: 0.4; cursor: not-allowed; border-color: var(--border); color: var(--muted); }
         .music-item .mbtn.playing { background: var(--accent); color: #fff; border-color: var(--accent); }
         .music-item .mbtn.dl { color: var(--accent); border-color: var(--accent); }
         .music-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 12px; }
@@ -1982,6 +1983,46 @@
                 <div class="music-tip">一次搜 网易云/QQ/酷狗/酷我 四个平台，标色块区分来源。搜索与下载不依赖网易云登录。</div>
             </div>
             <div id="aggrList" class="music-list" style="margin-top:8px;"></div>
+            <!-- 播放条（聚合源） -->
+            <div class="music-player" id="aggrPlayer">
+                <div class="mp-ctrl">
+                    <button id="aggrBtnPrev" class="mp-btn" title="上一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                    </button>
+                    <button id="aggrBtnPlayPause" class="mp-btn mp-main" title="播放/暂停">
+                        <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                    </button>
+                    <button id="aggrBtnNext" class="mp-btn" title="下一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                    </button>
+                </div>
+                <div class="mp-now">
+                    <img id="aggrMpCover" class="mp-cover" alt="">
+                    <div class="mp-meta">
+                        <div class="mp-title" id="aggrMpTitle">未在播放</div>
+                        <div class="mp-sub" id="aggrMpSub"></div>
+                    </div>
+                </div>
+                <div class="mp-bar">
+                    <span class="ptime" id="aggrMpCur">0:00</span>
+                    <div class="seek" id="aggrMpSeek"><div class="seek-fill" id="aggrMpSeekFill"></div></div>
+                    <span class="ptime" id="aggrMpDur">0:00</span>
+                </div>
+                <div class="mp-side">
+                    <div class="mp-vol">
+                        <button id="aggrBtnVol" class="mp-mode" title="静音/取消静音">
+                            <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                            <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                        </button>
+                        <input type="range" id="aggrVol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                    </div>
+                    <button id="aggrBtnMode" class="mp-mode" title="列表循环"></button>
+                    <button id="aggrBtnDownload" class="mp-mode" title="下载当前歌曲">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+                    </button>
+                </div>
+            </div>
             <div id="aggrStatus" class="music-empty" style="padding:6px 8px;"></div>
         </div>
 
