@@ -711,15 +711,42 @@
         if (old && old.parentNode) old.parentNode.removeChild(old);
         var modal = document.createElement('div');
         modal.id = 'scriptReaderModal';
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999;display:flex;align-items:center;justify-content:center;';
+        // 可拖拽浮窗：无遮罩，不阻挡面板其它区域交互
+        modal.style.cssText = 'position:fixed;top:8px;right:8px;width:min(760px,calc(100% - 16px));z-index:9000;display:block;pointer-events:none;';
         var box = document.createElement('div');
-        box.style.cssText = 'background:#181818;border:1px solid #3a3a3a;border-radius:8px;width:95%;max-width:1000px;height:90%;display:flex;flex-direction:column;overflow:hidden;';
+        box.style.cssText = 'background:#1a1a1a;border:1px solid #3a3a3a;border-radius:8px;height:min(72vh,720px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.55);pointer-events:auto;';
 
         // ---------- 头部 ----------
         var head = document.createElement('div');
-        head.style.cssText = 'padding:8px 12px;border-bottom:1px solid #2e2e2e;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+        head.style.cssText = 'padding:6px 10px;border-bottom:1px solid #2e2e2e;display:flex;align-items:center;gap:6px;flex-wrap:wrap;cursor:move;user-select:none;background:#222;border-radius:8px 8px 0 0;';
+        head.title = '拖动移动位置';
+        // 拖拽：按头部移动浮窗
+        (function () {
+            var dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+            head.addEventListener('mousedown', function (ev) {
+                if (ev.target.tagName === 'BUTTON' || ev.target.tagName === 'INPUT' || ev.target.tagName === 'A') return;
+                dragging = true;
+                var r = modal.getBoundingClientRect();
+                startX = ev.clientX; startY = ev.clientY;
+                origLeft = r.left; origTop = r.top;
+                modal.style.left = origLeft + 'px';
+                modal.style.top = origTop + 'px';
+                modal.style.right = 'auto';
+                ev.preventDefault();
+            });
+            document.addEventListener('mousemove', function (ev) {
+                if (!dragging) return;
+                var nx = origLeft + (ev.clientX - startX);
+                var ny = origTop + (ev.clientY - startY);
+                nx = Math.max(0, Math.min(nx, (window.innerWidth || document.documentElement.clientWidth) - 60));
+                ny = Math.max(0, Math.min(ny, (window.innerHeight || document.documentElement.clientHeight) - 40));
+                modal.style.left = nx + 'px';
+                modal.style.top = ny + 'px';
+            });
+            document.addEventListener('mouseup', function () { dragging = false; });
+        })();
         var title = document.createElement('span');
-        title.style.cssText = 'font-size:13px;font-weight:600;color:#e8e8e8;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        title.style.cssText = 'font-size:12.5px;font-weight:600;color:#e8e8e8;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;';
         title.textContent = '📖 ' + (projectName || '') + (docxPath ? ' · ' + path.basename(docxPath) : '');
         title.title = docxPath;
         head.appendChild(title);
@@ -745,16 +772,37 @@
         mailBtn.title = '设置翻译邮箱（MyMemory 提额 10 倍）';
         mailBtn.style.cssText = 'background:#2a2a2a;color:#c9a86a;border:1px solid #4a4a2a;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;';
         head.appendChild(mailBtn);
+        var collapseBtn = document.createElement('button');
+        collapseBtn.textContent = '—';
+        collapseBtn.title = '折叠/展开';
+        collapseBtn.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;flex:0 0 auto;';
+        var collapsed = false;
+        collapseBtn.addEventListener('click', function () {
+            var m = document.getElementById('scrReaderMain');
+            if (!m) return;
+            collapsed = !collapsed;
+            if (collapsed) {
+                m.style.display = 'none';
+                box.style.height = 'auto';
+                collapseBtn.textContent = '▢';
+            } else {
+                m.style.display = 'flex';
+                box.style.height = '';
+                collapseBtn.textContent = '—';
+            }
+        });
+        head.appendChild(collapseBtn);
         var close = document.createElement('button');
-        close.textContent = '✕ 关闭';
-        close.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px;';
-        close.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
+        close.textContent = '✕';
+        close.title = '关闭剧本';
+        close.style.cssText = 'background:#4a2a2a;color:#ff9a9a;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:12px;flex:0 0 auto;';
         head.appendChild(close);
         box.appendChild(head);
 
         // ---------- 主体：左列表 + 右内容 ----------
         var main = document.createElement('div');
-        main.style.cssText = 'flex:1;display:flex;overflow:hidden;';
+        main.id = 'scrReaderMain';
+        main.style.cssText = 'flex:1;display:flex;overflow:hidden;min-height:0;';
         // 左栏：集数列表
         var sidebar = document.createElement('div');
         sidebar.style.cssText = 'width:130px;flex:0 0 130px;border-right:1px solid #2a2a2a;overflow-y:auto;background:#141414;padding:6px 0;';
@@ -1063,7 +1111,7 @@
         });
         // Enter：清空搜索回全部
         searchInp.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') { searchInp.value = ''; searchKeyword = ''; curEp = null; curEpKey = 'all'; searchState.textContent = ''; renderSidebar(); render(); }
+            if (e.key === 'Escape') { searchInp.value = ''; searchKeyword = ''; curEp = null; curEpKey = 'all'; searchState.textContent = ''; renderSidebar(); render(); e.stopPropagation(); }
         });
 
         // 整集翻译
@@ -1141,9 +1189,38 @@
 
         renderSidebar();
         render();
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && modal.parentNode) modal.parentNode.removeChild(modal);
-        }, { once: true });
+        function escHandler(e) {
+            if (e.key !== 'Escape') return;
+            if (!modal.parentNode) return;
+            // Esc = 折叠/展开，不关闭（避免误触丢掉阅读进度）
+            var m = document.getElementById('scrReaderMain');
+            if (m) {
+                collapsed = !collapsed;
+                if (collapsed) {
+                    m.style.display = 'none';
+                    box.style.height = 'auto';
+                    collapseBtn.textContent = '▢';
+                } else {
+                    m.style.display = 'flex';
+                    box.style.height = '';
+                    collapseBtn.textContent = '—';
+                }
+            }
+        }
+        document.addEventListener('keydown', escHandler);
+        // 点 ✕ 关闭时一并移除键盘监听
+        close.addEventListener('click', function () {
+            document.removeEventListener('keydown', escHandler);
+            if (modal.parentNode) modal.parentNode.removeChild(modal);
+        });
+        // 其它路径移除浮窗（如重开新剧本时 old.removeChild）也清理监听：用 MutationObserver 兜底
+        var obs = new MutationObserver(function () {
+            if (!modal.parentNode) {
+                document.removeEventListener('keydown', escHandler);
+                obs.disconnect();
+            }
+        });
+        obs.observe(document.body, { childList: true });
     }
 
     // 转义（progress.js 里没有就用内置小函数）
