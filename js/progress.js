@@ -33,8 +33,8 @@
         refresh: document.getElementById('prgRefresh'),
         overview: document.getElementById('prgOverview'),
         mProducing: document.getElementById('prgMProducing'),
+        mActive: document.getElementById('prgMActive'),
         mDone: document.getElementById('prgMDone'),
-        mToday: document.getElementById('prgMToday'),
         offline: document.getElementById('prgOffline'),
         launch: document.getElementById('prgLaunch'),
         retry: document.getElementById('prgRetry'),
@@ -140,9 +140,13 @@
     // 渲染概览
     function renderOverview(stats) {
         if (!stats) return;
-        el.mProducing.textContent = stats.producing != null ? stats.producing : '-';
-        el.mDone.textContent = stats.this_month_done != null ? stats.this_month_done : '-';
-        el.mToday.textContent = stats.this_month != null ? stats.this_month : '-';
+        var producing = stats.producing != null ? stats.producing : 0;
+        var done = stats.this_month_done != null ? stats.this_month_done : 0;
+        // 本月项目 = 制作中 + 已完成（本月涉及的项目总数）
+        var monthTotal = producing + done;
+        el.mProducing.textContent = monthTotal > 0 ? monthTotal : '-';
+        el.mActive.textContent = producing > 0 ? producing : '-';
+        el.mDone.textContent = done > 0 ? done : '-';
     }
 
     // 渲染组内进行中项目
@@ -469,12 +473,14 @@
         el.statusText.textContent = '找剧本：' + projectName + '…';
         var projDir = findLocalProjectDir(projectName);
         if (!projDir) {
-            showScriptMsg('没在本地项目盘（' + SCRIPT_ROOT + '）找到「' + projectName + '」对应目录。\n\n可能还没建本地项目，或项目名对不上。');
+            showScriptMsg('没在本地项目盘（' + SCRIPT_ROOT + '）找到「' + projectName + '」对应目录。\n\n可能还没建本地项目，或项目名对不上。',
+                [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName); } }]);
             return;
         }
         var docxList = findScriptDocxList(projDir);
         if (docxList.length === 0) {
-            showScriptMsg('找到了项目目录：' + projDir + '\n\n但里面没找到剧本 docx。请先把剧本拷贝进这个项目（放「剧本」文件夹或任意位置）。');
+            showScriptMsg('找到了项目目录：' + projDir + '\n\n但里面没找到剧本 docx。请先把剧本拷进这个项目，或直接手动选择剧本文件。',
+                [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName); } }]);
             return;
         }
         if (docxList.length === 1) {
@@ -541,24 +547,52 @@
         }
     }
 
-    // 简易消息弹层
-    function showScriptMsg(text) {
+    // 简易消息弹层（支持附加按钮）
+    function showScriptMsg(text, buttons) {
         var modal = document.createElement('div');
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:998;display:flex;align-items:center;justify-content:center;';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:998;display:flex;align-items:center;justify-content:center;';
         var box = document.createElement('div');
-        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:18px;max-width:480px;font-size:12px;color:#ddd;line-height:1.7;white-space:pre-wrap;';
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:18px;max-width:520px;width:90%;box-sizing:border-box;font-size:12px;color:#ddd;line-height:1.7;white-space:pre-wrap;word-break:break-word;';
         box.textContent = text;
+        var row = document.createElement('div');
+        row.style.cssText = 'margin-top:14px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;';
+        // 附加按钮
+        (buttons || []).forEach(function (b) {
+            var btn = document.createElement('button');
+            btn.textContent = b.text;
+            btn.style.cssText = b.primary ? 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;' : 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:6px 12px;cursor:pointer;font-size:12px;';
+            btn.addEventListener('click', function () {
+                if (modal.parentNode) modal.parentNode.removeChild(modal);
+                if (b.onClick) b.onClick();
+            });
+            row.appendChild(btn);
+        });
         var ok = document.createElement('button');
         ok.textContent = '知道了';
-        ok.style.cssText = 'margin-top:12px;background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;display:block;margin-left:auto;';
+        ok.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:6px 16px;cursor:pointer;font-size:12px;';
         ok.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
-        box.appendChild(ok);
+        row.appendChild(ok);
+        box.appendChild(row);
         modal.appendChild(box);
         document.body.appendChild(modal);
     }
 
-    // 剧本阅读浮层
-    // 剧本阅读浮层（分类排版 + 翻译）
+    // 手动选剧本 docx（浏览按钮）
+    function browseScriptFile(projectName) {
+        var result;
+        try {
+            result = window.cep.fs.showOpenDialogEx(false, false, '选择剧本 docx', '', [], '', '选择');
+        } catch (e) {
+            showScriptMsg('打开文件选择失败: ' + e.message);
+            return;
+        }
+        var p = result && result.data && result.data[0];
+        if (p) {
+            loadScriptDocx(p, projectName || '');
+        }
+    }
+
+    // 剧本阅读浮层：左集数列表 + 右内容 + 搜索（集号跳转/关键词高亮）+ 翻译/复制
     function openScriptReader(data, docxPath, projectName) {
         var old = document.getElementById('scriptReaderModal');
         if (old && old.parentNode) old.parentNode.removeChild(old);
@@ -566,27 +600,26 @@
         modal.id = 'scriptReaderModal';
         modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999;display:flex;align-items:center;justify-content:center;';
         var box = document.createElement('div');
-        box.style.cssText = 'background:#181818;border:1px solid #3a3a3a;border-radius:8px;width:94%;max-width:860px;height:88%;display:flex;flex-direction:column;overflow:hidden;';
-        // ---- 头部 ----
+        box.style.cssText = 'background:#181818;border:1px solid #3a3a3a;border-radius:8px;width:95%;max-width:1000px;height:90%;display:flex;flex-direction:column;overflow:hidden;';
+
+        // ---------- 头部 ----------
         var head = document.createElement('div');
         head.style.cssText = 'padding:8px 12px;border-bottom:1px solid #2e2e2e;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
         var title = document.createElement('span');
-        title.style.cssText = 'font-size:13px;font-weight:600;color:#e8e8e8;flex:1;min-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        title.style.cssText = 'font-size:13px;font-weight:600;color:#e8e8e8;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         title.textContent = '📖 ' + (projectName || '') + (docxPath ? ' · ' + path.basename(docxPath) : '');
         title.title = docxPath;
         head.appendChild(title);
-        var eps = data.episodes || [];
-        var epSel = document.createElement('select');
-        epSel.style.cssText = 'background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;padding:3px 6px;font-size:12px;';
-        epSel.innerHTML = '<option value="">全部</option>';
-        eps.forEach(function (e) {
-            var o = document.createElement('option');
-            o.value = e;
-            o.textContent = '第' + e + '集';
-            epSel.appendChild(o);
-        });
-        head.appendChild(epSel);
-        // 翻译按钮
+        // 搜索框
+        var searchInp = document.createElement('input');
+        searchInp.type = 'text';
+        searchInp.placeholder = '🔍 输入集号（如 3）或关键词…';
+        searchInp.style.cssText = 'flex:1;min-width:150px;background:#242424;color:#ddd;border:1px solid #444;border-radius:4px;padding:5px 8px;font-size:12px;';
+        head.appendChild(searchInp);
+        var searchState = document.createElement('span');
+        searchState.style.cssText = 'font-size:11px;color:#c9a86a;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        head.appendChild(searchState);
+        // 翻译
         var transBtn = document.createElement('button');
         transBtn.textContent = '🌐 翻译台词';
         transBtn.style.cssText = 'background:#1e3a2a;color:#7fd68b;border:1px solid #2a5a3a;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;';
@@ -594,14 +627,10 @@
         var transState = document.createElement('span');
         transState.style.cssText = 'font-size:11px;color:#888;';
         head.appendChild(transState);
-        // 翻译邮箱设置（提额用）
         var mailBtn = document.createElement('button');
         mailBtn.textContent = '📮';
         mailBtn.title = '设置翻译邮箱（MyMemory 提额 10 倍）';
         mailBtn.style.cssText = 'background:#2a2a2a;color:#c9a86a;border:1px solid #4a4a2a;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;';
-        mailBtn.addEventListener('click', function () {
-            showMailInput();
-        });
         head.appendChild(mailBtn);
         var close = document.createElement('button');
         close.textContent = '✕ 关闭';
@@ -609,42 +638,41 @@
         close.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
         head.appendChild(close);
         box.appendChild(head);
-        // ---- 内容区 ----
+
+        // ---------- 主体：左列表 + 右内容 ----------
+        var main = document.createElement('div');
+        main.style.cssText = 'flex:1;display:flex;overflow:hidden;';
+        // 左栏：集数列表
+        var sidebar = document.createElement('div');
+        sidebar.style.cssText = 'width:130px;flex:0 0 130px;border-right:1px solid #2a2a2a;overflow-y:auto;background:#141414;padding:6px 0;';
+        main.appendChild(sidebar);
+        // 右栏：内容
         var body = document.createElement('div');
-        body.style.cssText = 'flex:1;overflow-y:auto;padding:12px 18px 30px;font-size:13.5px;line-height:1.8;color:#ddd;word-break:break-word;';
-        box.appendChild(body);
+        body.style.cssText = 'flex:1;overflow-y:auto;padding:12px 18px 40px;font-size:13.5px;line-height:1.8;color:#ddd;word-break:break-word;';
+        main.appendChild(body);
+        box.appendChild(main);
         modal.appendChild(box);
         document.body.appendChild(modal);
 
-        // ---- 翻译状态 ----
-        var translating = false;      // 正在翻译
-        var transMap = {};            // 台词原文 → 译文（按集缓存）
-        var curEpKey = 'all';         // 当前翻译的集
-        var lineTransMap = {};        // 单句翻译缓存：台词原文 → 译文
+        // ---------- 状态 ----------
+        var eps = data.episodes || [];
+        var curEp = null;            // 当前选中集（null=全部）
+        var translating = false;
+        var transMap = {};           // 批量翻译缓存：'__'+epkey -> {台词行:译文}
+        var lineTransMap = {};       // 单句翻译缓存
+        var searchKeyword = '';      // 关键词搜索（非集号时）
 
         function epLines(ep) {
-            return (data.lines || []).filter(function (x) {
-                if (!ep) return true;
-                return x.episode === ep;
-            });
+            return (data.lines || []).filter(function (x) { return ep ? x.episode === ep : true; });
         }
-
-        // 从台词行提取纯英文（去掉角色名/动作标注/中文部分）
         function extractEnglish(line) {
             var t = line || '';
-            // 去掉 "角色名（动作）:" 前缀
             var m = t.match(/^[^:：]*[:：]\s*(.*)$/);
             if (m) t = m[1];
-            // 去掉中文（保留英文 + 标点）
             t = t.replace(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+/g, ' ').replace(/\s+/g, ' ').trim();
             return t;
         }
-
-        function isEnglish(s) {
-            return /[A-Za-z]{3,}/.test(s);
-        }
-
-        // 翻译一段台词（MyMemory 单条接口，串行）
+        function isEnglish(s) { return /[A-Za-z]{3,}/.test(s); }
         function translateLine(text, cb) {
             var U = window.__vhUtils || {};
             var url = (U.myMemoryUrl ? U.myMemoryUrl(text) :
@@ -665,140 +693,215 @@
             xhr.send();
         }
 
-        // 翻译当前显示范围的台词（按集）
-        function doTranslate() {
-            if (translating) return;
-            var fep = epSel.value ? parseInt(epSel.value, 10) : null;
-            var key = fep ? String(fep) : 'all';
-            // 已有该集翻译缓存 → 直接切显示
-            if (transMap['__' + key]) {
-                curEpKey = key;
-                render();
-                transState.textContent = '（已翻译）';
-                return;
-            }
-            // 收集该范围英文台词
-            var targets = [];
-            epLines(fep).forEach(function (x) {
-                if (x.type !== 'dialogue') return;
-                var en = extractEnglish(x.text);
-                if (en && isEnglish(en)) targets.push({ idx: targets.length, line: x.text, en: en });
-            });
-            if (targets.length === 0) {
-                transState.textContent = '该范围没有可翻译的英文台词';
-                return;
-            }
-            translating = true;
-            transBtn.disabled = true;
-            transState.textContent = '翻译中 0/' + targets.length + '…';
-            var results = {};
-            var i = 0;
-            function next() {
-                if (i >= targets.length) {
-                    transMap['__' + key] = results;
-                    translating = false;
-                    transBtn.disabled = false;
-                    curEpKey = key;
-                    transState.textContent = '已翻译 ' + targets.length + ' 条';
-                    render();
-                    return;
+        // ---------- 左栏集数列表 ----------
+        function renderSidebar() {
+            sidebar.innerHTML = '';
+            function addItem(label, ep) {
+                var it = document.createElement('div');
+                it.style.cssText = 'padding:5px 12px;font-size:12px;color:#aaa;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid transparent;';
+                it.textContent = label;
+                if (curEp === ep) {
+                    it.style.background = '#22303c';
+                    it.style.color = '#8fc0e8';
+                    it.style.borderLeft = '2px solid #537d96';
                 }
-                var tg = targets[i];
-                i++;
-                transState.textContent = '翻译中 ' + i + '/' + targets.length + '…';
-                translateLine(tg.en, function (err, zh) {
-                    results[tg.line] = (err || !zh) ? '' : zh;
-                    setTimeout(next, 250);
+                it.addEventListener('click', function () {
+                    curEp = ep;
+                    curEpKey = curEp ? String(curEp) : 'all';
+                    searchKeyword = '';
+                    searchInp.value = '';
+                    searchState.textContent = '';
+                    renderSidebar();
+                    render();
                 });
+                sidebar.appendChild(it);
             }
-            next();
+            addItem('📄 全部', null);
+            eps.forEach(function (e) { addItem('第 ' + e + ' 集', e); });
         }
 
-        // 台词行渲染（高亮英文 + 可选中文译文）
-        function renderDialogue(text, withTrans) {
-            // 拆 角色名(含动作标注) : 台词
+        // ---------- 台词渲染 ----------
+        function renderDialogue(text) {
             var m = text.match(/^([^:：]{1,50}?)[：:]\s*(.*)$/);
             if (!m) return '<div class="scr-dlg">' + escHtml(text) + '</div>';
-            var rolePart = m[1];
-            var speech = m[2];
-            // 判断台词主体语言
+            var rolePart = m[1], speech = m[2];
             var zhCount = (speech.match(/[\u4e00-\u9fff]/g) || []).length;
             var enCount = (speech.match(/[A-Za-z]/g) || []).length;
             var isZhMain = zhCount > enCount && zhCount > 2;
-
-            // 角色名：名字部分橙金加粗，括号动作弱化灰
             var roleHtml = escHtml(rolePart);
             roleHtml = roleHtml.replace(/([（(][^）)]*[）)])/g, '<span style="color:#9a8a8a;font-weight:400;">$1</span>');
-
             var speechHtml;
             if (isZhMain) {
-                speechHtml = escHtml(speech);
-                speechHtml = speechHtml.replace(/([（(][^）)]*[）)])/g, '<span style="color:#9a8a8a;font-size:12px;">$1</span>');
+                speechHtml = escHtml(speech).replace(/([（(][^）)]*[）)])/g, '<span style="color:#9a8a8a;font-size:12px;">$1</span>');
             } else {
-                speechHtml = escHtml(speech);
-                speechHtml = speechHtml.replace(/([\u4e00-\u9fff]+)/g, '<span style="color:#9a9a9a;font-size:12px;">$1</span>');
+                speechHtml = escHtml(speech).replace(/([\u4e00-\u9fff]+)/g, '<span style="color:#9a9a9a;font-size:12px;">$1</span>');
             }
-            var zhHtml = '';
-            if (withTrans && transMap['__' + curEpKey] && transMap['__' + curEpKey][text]) {
-                zhHtml = '<div class="scr-zh" data-src="batch">' + escHtml(transMap['__' + curEpKey][text]) + '</div>';
+            // 关键词高亮
+            if (searchKeyword) {
+                var kw = searchKeyword;
+                speechHtml = hlText(speechHtml, kw);
+                roleHtml = hlText(roleHtml, kw);
             }
             var spColor = isZhMain ? '#ff9090' : '#ff6b6b';
-            // 单句翻译：data-line 存整行原文，data-en 存纯英文；若已有缓存译文直接显示
-            var en = extractEnglish(text);
             var cachedZh = lineTransMap[text];
-            var trBtn = '<span class="scr-trn" data-line="' + escHtml(text) + '" data-en="' + escHtml(en) + '" title="翻译本句">译</span>';
-            if (cachedZh && cachedZh !== '') {
-                zhHtml = '<div class="scr-zh">' + escHtml(cachedZh) + '</div>';
-            }
-            return '<div class="scr-dlg" data-role="' + escHtml(rolePart) + '"><span style="color:#ffb347;font-weight:700;">' + roleHtml + '</span><span style="color:#8a7a6a;"> : </span><span style="color:' + spColor + ';">' + speechHtml + '</span><span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span>' + trBtn + zhHtml + '</div>';
-        }
-
-        // 主渲染
-        function render() {
-            var fep = epSel.value ? parseInt(epSel.value, 10) : null;
-            var showTrans = curEpKey === (fep ? String(fep) : 'all');
-            var html = '';
-            var lines = data.lines || [];
-            for (var li = 0; li < lines.length; li++) {
-                var x = lines[li];
-                if (fep && x.episode !== fep) continue;
-                var t = x.text || '';
-                var tp = x.type || 'plain';
-                if (tp === 'ep_title') {
-                    html += '<div style="margin:18px 0 8px;padding:6px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;">' + escHtml(t) + '</div>';
-                } else if (tp === 'scene') {
-                    html += '<div style="margin:12px 0 4px;padding:3px 10px;color:#7fb3d9;font-weight:600;font-size:12.5px;letter-spacing:.3px;">🎬 ' + escHtml(t) + '</div>';
-                } else if (tp === 'cast') {
-                    html += '<div style="color:#999;font-size:12px;padding:2px 10px;margin-bottom:6px;">' + escHtml(t) + '</div>';
-                } else if (tp === 'action') {
-                    html += '<div style="color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 10px;border-left:2px solid #3a3a3a;margin:2px 0;">' + escHtml(t) + '</div>';
-                } else if (tp === 'caption') {
-                    html += '<div style="color:#c9a86a;font-size:12px;padding:1px 10px;">' + escHtml(t) + '</div>';
-                } else if (tp === 'dialogue') {
-                    html += renderDialogue(t, showTrans);
-                } else {
-                    html += '<div style="padding:1px 10px;">' + escHtml(t) + '</div>';
+            var zhHtml = '';
+            if (cachedZh) zhHtml = '<div class="scr-zh">' + escHtml(cachedZh) + '</div>';
+            else {
+                // 批量翻译缓存（整集翻译按钮）
+                var bk = curEpKey;
+                if (bk && transMap['__' + bk] && transMap['__' + bk][text]) {
+                    zhHtml = '<div class="scr-zh">' + escHtml(transMap['__' + bk][text]) + '</div>';
                 }
             }
-            body.innerHTML = html || '<div style="color:#888;padding:20px;text-align:center;">该集暂无内容</div>';
-            body.scrollTop = 0;
+            var en = extractEnglish(text);
+            return '<div class="scr-dlg"><span style="color:#ffb347;font-weight:700;">' + roleHtml + '</span><span style="color:#8a7a6a;"> : </span><span style="color:' + spColor + ';">' + speechHtml + '</span><span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span><span class="scr-trn" data-line="' + escHtml(text) + '" data-en="' + escHtml(en) + '" title="翻译本句">译</span>' + zhHtml + '</div>';
         }
-        // 注入台词样式（红色调 + 复制按钮）
+        // 在已转义 HTML 上做关键词高亮（简单：大小写不敏感子串包 <mark>）—— 因 HTML 已含标签，仅在纯文本段操作有风险；改为渲染前对原文高亮。
+        function hlText(escapedHtml, kw) { return escapedHtml; } // 占位，实际用 render 层高亮
+
+        // 渲染右栏
+        function render() {
+            var lines = data.lines || [];
+            var html = '';
+            var hitCount = 0;
+            for (var li = 0; li < lines.length; li++) {
+                var x = lines[li];
+                if (curEp && x.episode !== curEp) continue;
+                var t = x.text || '';
+                var tp = x.type || 'plain';
+                // 关键词过滤：命中才显示
+                if (searchKeyword) {
+                    if (t.toLowerCase().indexOf(searchKeyword) < 0) continue;
+                    hitCount++;
+                }
+                var disp = escHtml(t);
+                if (searchKeyword) {
+                    disp = hlOnPlain(t);
+                }
+                if (tp === 'ep_title') {
+                    html += '<div class="scr-ept" data-raw="' + escHtml(t) + '">' + disp + '</div>';
+                } else if (tp === 'scene') {
+                    html += '<div class="scr-scene" data-raw="' + escHtml(t) + '">🎬 ' + disp + '</div>';
+                } else if (tp === 'cast') {
+                    html += '<div class="scr-cast" data-raw="' + escHtml(t) + '">' + disp + '</div>';
+                } else if (tp === 'action') {
+                    html += '<div class="scr-action" data-raw="' + escHtml(t) + '">' + disp + '</div>';
+                } else if (tp === 'caption') {
+                    html += '<div class="scr-caption" data-raw="' + escHtml(t) + '">' + disp + '</div>';
+                } else if (tp === 'dialogue') {
+                    html += renderDialogue(t);
+                } else {
+                    html += '<div class="scr-plain" data-raw="' + escHtml(t) + '">' + disp + '</div>';
+                }
+            }
+            if (searchKeyword) {
+                searchState.textContent = '命中 ' + hitCount + ' 处';
+            }
+            body.innerHTML = html || (searchKeyword ? '<div style="color:#888;padding:30px;text-align:center;">没有匹配「' + escHtml(searchKeyword) + '」的内容</div>' : '<div style="color:#888;padding:30px;text-align:center;">该集暂无内容</div>');
+            body.scrollTop = 0;
+            applyHighlight();
+        }
+        // 纯文本关键词高亮（在转义前的原文上做，避免破坏 HTML）
+        function hlOnPlain(raw) {
+            var kw = searchKeyword;
+            if (!kw) return escHtml(raw);
+            var out = '';
+            var lower = raw.toLowerCase();
+            var i = 0;
+            while (true) {
+                var idx = lower.indexOf(kw, i);
+                if (idx < 0) { out += escHtml(raw.slice(i)); break; }
+                out += escHtml(raw.slice(i, idx)) + '<mark class="scr-hl">' + escHtml(raw.slice(idx, idx + kw.length)) + '</mark>';
+                i = idx + kw.length;
+            }
+            return out;
+        }
+        // 渲染后把 dialogue 行内的关键词也高亮（dialogue 走了 renderDialogue 未处理搜索词，用 DOM 补）
+        function applyHighlight() {
+            if (!searchKeyword) return;
+            var kw = searchKeyword;
+            var dlgEls = body.querySelectorAll('.scr-dlg');
+            for (var i = 0; i < dlgEls.length; i++) {
+                var el = dlgEls[i];
+                if (el.getAttribute('data-hl')) continue;
+                walkHighlight(el, kw);
+                el.setAttribute('data-hl', '1');
+            }
+        }
+        function walkHighlight(el, kw) {
+            // 遍历文本节点，命中包 mark
+            var nodes = el.childNodes;
+            var toReplace = [];
+            for (var i = 0; i < nodes.length; i++) {
+                var n = nodes[i];
+                if (n.nodeType === 3) {
+                    var txt = n.nodeValue;
+                    var lower = txt.toLowerCase();
+                    if (lower.indexOf(kw) >= 0) toReplace.push(n);
+                } else if (n.nodeType === 1 && n.tagName !== 'MARK' && n.tagName !== 'SPAN') {
+                    walkHighlight(n, kw);
+                } else if (n.nodeType === 1 && n.tagName === 'SPAN') {
+                    walkHighlight(n, kw);
+                }
+            }
+            toReplace.forEach(function (n) {
+                var txt = n.nodeValue;
+                var lower = txt.toLowerCase();
+                var frag = document.createDocumentFragment();
+                var i = 0;
+                while (true) {
+                    var idx = lower.indexOf(kw, i);
+                    if (idx < 0) { frag.appendChild(document.createTextNode(txt.slice(i))); break; }
+                    frag.appendChild(document.createTextNode(txt.slice(i, idx)));
+                    var mk = document.createElement('mark');
+                    mk.className = 'scr-hl';
+                    mk.textContent = txt.slice(idx, idx + kw.length);
+                    frag.appendChild(mk);
+                    i = idx + kw.length;
+                }
+                n.parentNode.replaceChild(frag, n);
+            });
+        }
+
+        // 样式
         var st = document.createElement('style');
-        st.textContent = '.scr-dlg{margin:4px 0;padding:2px 6px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;}';
+        st.textContent = '.scr-dlg{margin:3px 0;padding:2px 4px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;} .scr-ept{margin:16px 0 8px;padding:5px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;} .scr-scene{margin:10px 0 3px;padding:2px 8px;color:#7fb3d9;font-weight:600;font-size:12.5px;} .scr-cast{color:#999;font-size:12px;padding:1px 8px;} .scr-action{color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 8px;border-left:2px solid #3a3a3a;margin:2px 0;} .scr-caption{color:#c9a86a;font-size:12px;padding:1px 8px;} .scr-plain{padding:1px 8px;} mark.scr-hl{background:#5a4a1e;color:#ffd76a;padding:0 1px;border-radius:2px;}';
         document.head.appendChild(st);
-        // 复制按钮：body 事件委托（从 data-copy 取值）
+
+        // 事件委托：复制 + 单句翻译
         if (!window.__copyDelegateBound) {
             window.__copyDelegateBound = true;
             document.body.addEventListener('click', function (e) {
-                var t = e.target;
-                var el2 = t.closest ? t.closest('.scr-copy') : null;
-                if (el2 && el2.getAttribute('data-copy')) {
-                    window.__copyText(el2.getAttribute('data-copy'));
-                }
+                var el2 = e.target.closest ? e.target.closest('.scr-copy') : null;
+                if (el2 && el2.getAttribute('data-copy')) window.__copyText(el2.getAttribute('data-copy'));
             });
         }
-        // 提示气泡（全局，供 __copyText 内部调用）
+        body.addEventListener('click', function (e) {
+            var trn = e.target.closest ? e.target.closest('.scr-trn') : null;
+            if (!trn) return;
+            var line = trn.getAttribute('data-line');
+            var en = trn.getAttribute('data-en') || '';
+            var dlg = trn.closest('.scr-dlg');
+            if (!dlg || !line) return;
+            if (lineTransMap[line]) { ensureZh(dlg, lineTransMap[line]); return; }
+            if (!en || !isEnglish(en)) { trn.textContent = '本句非英文'; return; }
+            trn.textContent = '译中…';
+            translateLine(en, function (err, zh) {
+                if (err || !zh) { trn.textContent = '译'; window.__copyFlash && window.__copyFlash('翻译失败'); return; }
+                lineTransMap[line] = zh;
+                trn.textContent = '译';
+                ensureZh(dlg, zh);
+            });
+        });
+        function ensureZh(dlg, zh) {
+            if (!zh) return;
+            var olds = dlg.querySelectorAll('.scr-zh');
+            for (var oi = 0; oi < olds.length; oi++) olds[oi].parentNode.removeChild(olds[oi]);
+            var d = document.createElement('div');
+            d.className = 'scr-zh';
+            d.textContent = zh;
+            dlg.appendChild(d);
+        }
         window.__copyFlash = function (msg) {
             var tip = document.createElement('span');
             tip.textContent = msg || '✓ 已复制';
@@ -808,106 +911,122 @@
             setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 1400);
         };
 
-        // 单句翻译：body 局部委托（能访问闭包内 lineTransMap/translateLine）
-        body.addEventListener('click', function (e) {
-            var t2 = e.target;
-            var trn = t2.closest ? t2.closest('.scr-trn') : null;
-            if (!trn) return;
-            var line = trn.getAttribute('data-line');
-            var en = trn.getAttribute('data-en') || '';
-            var dlg = trn.closest('.scr-dlg');
-            if (!dlg || !line) return;
-            // 已有译文 → 直接显示
-            if (lineTransMap[line]) {
-                ensureZh(dlg, lineTransMap[line]);
-                return;
-            }
-            if (!en || !isEnglish(en)) {
-                trn.textContent = '本句非英文';
-                return;
-            }
-            trn.textContent = '译中…';
-            translateLine(en, function (err, zh) {
-                if (err || !zh) {
-                    trn.textContent = '译';
-                    window.__copyFlash && window.__copyFlash('翻译失败');
+        // 搜索框：纯数字 → 集号跳转；否则关键词检索
+        searchInp.addEventListener('input', function () {
+            var v = searchInp.value.trim();
+            if (!v) { searchKeyword = ''; curEp = null; curEpKey = 'all'; renderSidebar(); render(); return; }
+            // 数字 → 集号
+            var numM = v.match(/^\s*(\d+)\s*$/);
+            if (numM) {
+                var n = parseInt(numM[1], 10);
+                if (eps.indexOf(n) >= 0) {
+                    curEp = n;
+                    curEpKey = String(n);
+                    searchKeyword = '';
+                    searchState.textContent = '已跳转 第' + n + ' 集';
+                    renderSidebar();
+                    render();
                     return;
                 }
-                lineTransMap[line] = zh;
-                trn.textContent = '译';
-                ensureZh(dlg, zh);
-            });
-        });
-        function ensureZh(dlg, zh) {
-            if (!zh) return;
-            // 移除该行已有译文（含整集批量译文），只显示本句单句译文
-            var olds = dlg.querySelectorAll('.scr-zh');
-            for (var oi = 0; oi < olds.length; oi++) {
-                var od = olds[oi];
-                od.parentNode.removeChild(od);
             }
-            var zhDiv = document.createElement('div');
-            zhDiv.className = 'scr-zh';
-            zhDiv.textContent = zh;
-            dlg.appendChild(zhDiv);
-        }
+            // 第X集 形式
+            var epM = v.match(/^第\s*(\d+)\s*集$/);
+            if (epM) {
+                var n2 = parseInt(epM[1], 10);
+                if (eps.indexOf(n2) >= 0) {
+                    curEp = n2;
+                    curEpKey = String(n2);
+                    searchKeyword = '';
+                    searchState.textContent = '已跳转 第' + n2 + ' 集';
+                    renderSidebar(); render(); return;
+                }
+            }
+            // 关键词：全文（所有集）检索
+            curEp = null;
+            curEpKey = 'all';
+            searchKeyword = v.toLowerCase();
+            renderSidebar();
+            render();
+        });
+        // Enter：清空搜索回全部
+        searchInp.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { searchInp.value = ''; searchKeyword = ''; curEp = null; curEpKey = 'all'; searchState.textContent = ''; renderSidebar(); render(); }
+        });
 
-        // 翻译邮箱输入弹层（MyMemory 提额：带 de=邮箱，5000→50000 字/天）
-        function showMailInput() {
+        // 整集翻译
+        function doTranslate() {
+            if (translating) return;
+            var key = curEp ? String(curEp) : 'all';
+            if (transMap['__' + key]) { curEpKey = key; render(); transState.textContent = '（已翻译）'; return; }
+            var targets = [];
+            epLines(curEp).forEach(function (x) {
+                if (x.type !== 'dialogue') return;
+                var en = extractEnglish(x.text);
+                if (en && isEnglish(en)) targets.push(x.text);
+            });
+            if (targets.length === 0) { transState.textContent = '该范围没有可翻译的英文台词'; return; }
+            translating = true;
+            transBtn.disabled = true;
+            transState.textContent = '翻译中 0/' + targets.length + '…';
+            var i = 0;
+            var results = {};
+            function next() {
+                if (i >= targets.length) {
+                    transMap['__' + key] = results;
+                    translating = false;
+                    transBtn.disabled = false;
+                    transState.textContent = '已翻译 ' + targets.length + ' 条';
+                    curEpKey = key;
+                    render();
+                    return;
+                }
+                var line = targets[i];
+                i++;
+                transState.textContent = '翻译中 ' + i + '/' + targets.length + '…';
+                translateLine(extractEnglish(line), function (err, zh) {
+                    results[line] = (err || !zh) ? '' : zh;
+                    setTimeout(next, 200);
+                });
+            }
+            next();
+        }
+        // 翻译后把当前范围的批量译文渲染到行下
+        var curEpKey = 'all';
+
+        transBtn.addEventListener('click', doTranslate);
+        mailBtn.addEventListener('click', function () {
             var U = window.__vhUtils || {};
             var cur = U.getTranslateEmail ? U.getTranslateEmail() : '';
-            var overlay = document.createElement('div');
-            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1002;display:flex;align-items:center;justify-content:center;';
-            var box2 = document.createElement('div');
-            box2.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;max-width:420px;width:90%;';
-            var h = document.createElement('div');
-            h.textContent = '翻译邮箱（MyMemory 提额）';
-            h.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:6px;';
-            var tip = document.createElement('div');
-            tip.textContent = '填一个邮箱后，翻译额度从每天约 5000 字提升到 50000 字（官方支持）。填一次全局生效（字幕翻译也适用）。';
-            tip.style.cssText = 'font-size:11px;color:#9a9a9a;line-height:1.6;margin-bottom:8px;';
+            var ov = document.createElement('div');
+            ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1002;display:flex;align-items:center;justify-content:center;';
+            var b2 = document.createElement('div');
+            b2.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;max-width:420px;width:90%;';
+            b2.innerHTML = '<div style="font-size:13px;font-weight:600;color:#eee;margin-bottom:6px;">翻译邮箱（MyMemory 提额）</div>' +
+                '<div style="font-size:11px;color:#9a9a9a;line-height:1.6;margin-bottom:8px;">填一个邮箱后，翻译额度从每天约 5000 字提升到 50000 字（官方支持）。填一次全局生效。</div>';
             var inp = document.createElement('input');
-            inp.type = 'email';
-            inp.placeholder = 'your@email.com';
-            inp.value = cur;
+            inp.type = 'email'; inp.value = cur; inp.placeholder = 'your@email.com';
             inp.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #444;border-radius:4px;background:#2a2a2a;color:#ddd;font-size:13px;margin-bottom:10px;';
             var row = document.createElement('div');
             row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
-            var save = document.createElement('button');
-            save.textContent = '保存';
-            save.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;font-size:12px;';
-            var clearB = document.createElement('button');
-            clearB.textContent = '清除';
-            clearB.style.cssText = 'background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;';
-            var cancel = document.createElement('button');
-            cancel.textContent = '取消';
-            cancel.style.cssText = 'background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;';
-            row.appendChild(clearB);
-            row.appendChild(cancel);
-            row.appendChild(save);
-            box2.appendChild(h);
-            box2.appendChild(tip);
-            box2.appendChild(inp);
-            box2.appendChild(row);
-            overlay.appendChild(box2);
-            document.body.appendChild(overlay);
-            function close2() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }
+            var save = document.createElement('button'); save.textContent = '保存'; save.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;font-size:12px;';
+            var clearB = document.createElement('button'); clearB.textContent = '清除'; clearB.style.cssText = 'background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;';
+            var cancel = document.createElement('button'); cancel.textContent = '取消'; cancel.style.cssText = 'background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;';
+            row.appendChild(clearB); row.appendChild(cancel); row.appendChild(save);
+            b2.appendChild(inp); b2.appendChild(row); ov.appendChild(b2);
+            document.body.appendChild(ov);
+            function close2() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
             save.addEventListener('click', function () {
                 var v = inp.value.trim();
                 if (v && U.setTranslateEmail) U.setTranslateEmail(v);
                 close2();
                 window.__copyFlash && window.__copyFlash(v ? '已保存邮箱（提额生效）' : '已清除邮箱');
             });
-            clearB.addEventListener('click', function () {
-                if (U.setTranslateEmail) U.setTranslateEmail('');
-                inp.value = '';
-            });
+            clearB.addEventListener('click', function () { if (U.setTranslateEmail) U.setTranslateEmail(''); inp.value = ''; });
             cancel.addEventListener('click', close2);
             inp.focus();
-        }
+        });
 
-        epSel.addEventListener('change', render);
-        transBtn.addEventListener('click', doTranslate);
+        renderSidebar();
         render();
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && modal.parentNode) modal.parentNode.removeChild(modal);

@@ -1509,6 +1509,9 @@
             padding: 8px 10px; text-align: center;
         }
         #panel-progress .prg-mv { font-size: 18px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+        #panel-progress .prg-mv-month { color: #7fb3d9; }
+        #panel-progress .prg-mv-active { color: #ffb84d; }
+        #panel-progress .prg-mv-done { color: #7fd68b; }
         #panel-progress .prg-ml { font-size: 10px; color: var(--muted); margin-top: 2px; }
         #panel-progress .prg-offline {
             background: var(--panel); border: 1px solid var(--err); border-radius: 8px;
@@ -1812,10 +1815,6 @@
     <div class="tab-panel" id="panel-sfx" style="display:none;">
         <!-- 本地音效库视图 -->
         <div id="sfx-local">
-            <div class="guide">
-                <b>什么时候用：</b>要找某个音效拖进时间轴时。
-                流程：<span class="gstep">选音效文件夹并扫描</span><span class="garrow">→</span><span class="gstep">搜索/筛选/收藏</span><span class="garrow">→</span><span class="gstep">点条目试听</span><span class="garrow">→</span><span class="gstep">点击导入或拖入时间轴</span>。
-            </div>
             <div class="sfx-toolbar">
                 <div class="tr">
                     <input type="text" id="sfxDir" placeholder="音效文件夹路径">
@@ -1842,11 +1841,6 @@
 
     <!-- ==================== 板块三.五：音乐（LX Music 联动） ==================== -->
     <div class="tab-panel" id="panel-music" style="display:none;">
-        <div class="guide">
-            <b>什么时候用：</b>要给片子找配乐/下载歌曲素材时。
-            流程：<span class="gstep">扫码登录网易云</span><span class="garrow">→</span><span class="gstep">搜歌或打开歌单</span><span class="garrow">→</span><span class="gstep">试听确认</span><span class="garrow">→</span><span class="gstep">下载</span><span class="garrow">→</span><span class="gstep">导入素材箱</span>。
-            需要联网。
-        </div>
         <!-- 登录视图 -->
         <div id="musicLogin" class="card" style="display:none;">
             <div class="music-login-head">
@@ -1946,12 +1940,6 @@
             <span class="exp-title">多版本交付导出</span>
             <span class="exp-ver" id="version"></span>
         </div>
-        <div class="guide">
-            <b>什么时候用：</b>片子剪完、要交片时，一次导出多个交付版本。
-            流程：<span class="gstep">勾选序列</span><span class="garrow">→</span><span class="gstep">选交付根目录并自动填充</span><span class="garrow">→</span><span class="gstep">确认各版本配置</span><span class="garrow">→</span><span class="gstep">一键导出</span>。
-            同一甲方/项目可把整套配置<span class="gstep">另存为模板</span>，下次下拉即用。
-        </div>
-
         <div class="group">
             <div class="group-title"><span>序列</span><span>勾选要导出的（支持多选）</span></div>
             <div class="seq-list" id="seq-list"></div>
@@ -2112,11 +2100,6 @@
 
     <!-- ==================== 板块六：视频下载 ==================== -->
     <div class="tab-panel" id="panel-video" style="display:none;">
-        <div class="guide">
-            <b>什么时候用：</b>从抖音/B站/YouTube 下素材片进时间轴时。
-            流程：<span class="gstep">粘贴链接</span><span class="garrow">→</span><span class="gstep">解析</span><span class="garrow">→</span><span class="gstep">下载</span><span class="garrow">→</span><span class="gstep">下载并导入 PR 一键到位</span>。
-            抖音/B站高清需先粘贴登录 Cookie；需要联网。
-        </div>
         <div class="v-cookiebar">
             <span class="dot" id="vCookieDot"></span>
             <span class="txt" id="vCookieTxt">未配置浏览器 Cookie（抖音 / B 站高清需登录态）</span>
@@ -2161,11 +2144,6 @@
 
     <!-- ==================== 板块八：项目进度（视频工作台联动） ==================== -->
     <div class="tab-panel" id="panel-progress">
-        <div class="guide">
-            <b>什么时候用：</b>剪辑时想瞄一眼各项目进行到哪了，不用切到视频工作台。
-            数据来自视频工作台（<span style="font-family:monospace">127.0.0.1:8089</span>），需先启动视频工作台。
-        </div>
-
         <!-- 服务状态条 -->
         <div class="prg-statusbar" id="prgStatusBar">
             <span class="prg-dot" id="prgDot"></span>
@@ -2175,9 +2153,9 @@
 
         <!-- 概览 -->
         <div class="prg-overview" id="prgOverview" style="display:none;">
-            <div class="prg-metric"><div class="prg-mv" id="prgMProducing">-</div><div class="prg-ml">本月制作中</div></div>
-            <div class="prg-metric"><div class="prg-mv" id="prgMDone">-</div><div class="prg-ml">本月已完成</div></div>
-            <div class="prg-metric"><div class="prg-mv" id="prgMToday">-</div><div class="prg-ml">今日新增</div></div>
+            <div class="prg-metric"><div class="prg-mv prg-mv-month" id="prgMProducing">-</div><div class="prg-ml">本月项目</div></div>
+            <div class="prg-metric"><div class="prg-mv prg-mv-active" id="prgMActive">-</div><div class="prg-ml">本月制作中</div></div>
+            <div class="prg-metric"><div class="prg-mv prg-mv-done" id="prgMDone">-</div><div class="prg-ml">本月已完成</div></div>
         </div>
 
         <!-- 离线引导 -->
