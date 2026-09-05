@@ -1702,6 +1702,15 @@
             color: var(--text);
         }
         #panel-video .v-cookiebar .vbtn:hover { border-color: var(--accent); color: var(--accent); }
+        #panel-video .tbtn {
+            padding: 6px 10px; font-size: 12px;
+            background: var(--panel2); color: var(--text);
+            border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+        }
+        #panel-video .tbtn:hover { border-color: var(--accent); color: var(--accent); }
+        #panel-video .tbtn.gv-on {
+            background: #2a5d3a; color: #7ee2a8; border-color: var(--ok);
+        }
         #panel-video .v-result {
             flex: 0 0 auto;
             display: none;

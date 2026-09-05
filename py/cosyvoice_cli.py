@@ -34,10 +34,23 @@ import sys
 import json
 import time
 
-# 默认引擎路径（用户机器上的 CosyVoice3 工具安装位置）
-DEFAULT_INTERNAL = r"D:\cosyvoice3_V30\_internal"
-DEFAULT_MATCHA = r"D:\cosyvoice3_V30\third_party\Matcha-TTS"
-DEFAULT_MODEL_DIR = r"D:\cosyvoice3_V30\pretrained_models"
+# 默认引擎路径：优先找插件目录内 engine/cosyvoice3_V30（自包含部署）；
+# 退回本机 D:\cosyvoice3_V30（开发机现状）
+_here = os.path.dirname(os.path.abspath(__file__))
+_ext_root = os.path.abspath(os.path.join(_here, '..'))
+_candidates = [
+    os.path.join(_ext_root, 'engine', 'cosyvoice3_V30'),
+    r"D:\cosyvoice3_V30",
+]
+def _find_engine():
+    for p in _candidates:
+        if p and os.path.isdir(os.path.join(p, '_internal')):
+            return p
+    return _candidates[0]
+_ENGINE = _find_engine()
+DEFAULT_INTERNAL = os.path.join(_ENGINE, '_internal')
+DEFAULT_MATCHA = os.path.join(_ENGINE, 'third_party', 'Matcha-TTS')
+DEFAULT_MODEL_DIR = os.path.join(_ENGINE, 'pretrained_models')
 
 
 def emit_stage(stage):
