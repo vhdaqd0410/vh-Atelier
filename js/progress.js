@@ -664,8 +664,22 @@
             var r = child_process.spawnSync(py, [scriptPath, '--file', docx], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
             var data = null;
             var out = (r.stdout || '').trim();
-            try { data = JSON.parse(out); } catch (e) {
-                try { data = JSON.parse((r.stderr || '').trim()); } catch (e2) {}
+            function tryParse(s) {
+                try { return JSON.parse(s); } catch (e) { return null; }
+            }
+            data = tryParse(out);
+            if (!data) {
+                // PyMuPDF 可能把 deprecation warning 打到 stdout 污染 JSON；从第一个 { 起截取再试
+                var brace = out.indexOf('{');
+                if (brace > 0) data = tryParse(out.slice(brace));
+            }
+            if (!data) {
+                data = tryParse((r.stderr || '').trim());
+                if (!data) {
+                    var sb = (r.stderr || '');
+                    var sbBrace = sb.indexOf('{');
+                    if (sbBrace > 0) data = tryParse(sb.slice(sbBrace));
+                }
             }
             if (!data || !data.ok) {
                 var msg = ((data && data.error) || (r.stderr || '').slice(0, 300) || '未知错误');

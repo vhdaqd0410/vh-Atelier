@@ -6,6 +6,11 @@
 用法: python docx_read.py --docx <path> [--out <json>]
 """
 import sys, re, json, zipfile, html as htmlmod
+# PyMuPDF(fitz) 会打 deprecation warning 到 stdout，污染 JSON 输出；提前静音
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', message='.*fitz.*deprecated.*')
+warnings.filterwarnings('ignore', message='.*import pymupdf.*')
 
 if sys.version_info[0] >= 3:
     try:
@@ -71,10 +76,14 @@ def docx_to_lines(path):
 
 
 def pdf_to_lines(path):
-    """文字版 PDF 抽文本为行。用 PyMuPDF(fitz)；每页 get_text 后按换行切，
+    """文字版 PDF 抽文本为行。用 PyMuPDF；每页 get_text 后按换行切，
     合并折行：若某行不以标点/引号结尾且下一行不是结构行（集/场景/人物/台词冒号），
     视为同段折行拼回。返回逐行 list。"""
-    import fitz  # 本机已装（pymupdf）
+    # 优先 import pymupdf（新版无 deprecation warning）；旧名 fitz 兜底
+    try:
+        import pymupdf as fitz
+    except Exception:
+        import fitz
     doc = fitz.open(path)
     raw_lines = []
     for i in range(doc.page_count):
