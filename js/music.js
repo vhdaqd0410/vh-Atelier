@@ -10,10 +10,62 @@
 
     var API = 'http://127.0.0.1:17890';
     var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
-    var musicDir = path.join(extRoot, 'collect', 'music');
+    var musicDir = path.join(extRoot, 'collect', 'music');   // 兜底目录（未设音乐库时的默认）
     var ncmDir = path.join(extRoot, 'ncm');
     var ncmIndex = path.join(ncmDir, 'index.js');
     var ncmChild = null;
+
+    // ---- 下载到音乐库 - 状态 ----
+    var DL_DIR_KEY = 'vh_music_dl_dir';   // 上次下载保存目录（绝对路径）
+    var selSet = {};                       // 批量下载多选：songId -> song
+    var dlState = {};                      // 已下载记录：songId -> {dest}（本次会话内）
+
+    // 轻提示（若全局无 __copyFlash 则本地兜底）
+    function flash(msg) {
+        if (window.__copyFlash) { try { window.__copyFlash(msg); } catch (e) {} return; }
+        try {
+            var tip = document.createElement('div');
+            tip.textContent = msg;
+            tip.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:#2a3a2a;color:#7fd68b;padding:6px 14px;border-radius:6px;font-size:12px;z-index:1001;pointer-events:none;';
+            document.body.appendChild(tip);
+            setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 2000);
+        } catch (e2) {}
+    }
+
+    // 下载保存目录逻辑：优先音乐库根（localStorage mllibDir），无则 collect/music
+    function getMusicLibRoot() {
+        try {
+            var p = localStorage.getItem('mllibDir');
+            if (p && fs.existsSync(p) && fs.statSync(p).isDirectory()) return p;
+        } catch (e) {}
+        return null;
+    }
+    // 当前下载目录 = 记忆的下载目录（若还指向音乐库内）否则音乐库根，再否则 collect/music
+    function getDlDir() {
+        try {
+            var mem = localStorage.getItem(DL_DIR_KEY);
+            if (mem && fs.existsSync(mem) && fs.statSync(mem).isDirectory()) return mem;
+        } catch (e) {}
+        var root = getMusicLibRoot();
+        if (root) return root;
+        return musicDir;
+    }
+    function setDlDir(p) {
+        try { localStorage.setItem(DL_DIR_KEY, p); } catch (e) {}
+    }
+    // 音乐库根目录下的一级子目录列表（用于选下载位置）
+    function listMusicSubdirs() {
+        var root = getMusicLibRoot();
+        var out = [];
+        if (root) {
+            try {
+                fs.readdirSync(root, { withFileTypes: true }).forEach(function (it) {
+                    if (it.isDirectory()) out.push(path.join(root, it.name));
+                });
+            } catch (e) {}
+        }
+        return out.sort();
+    }
 
     var LOGIN_STATE = { 800: '二维码已过期', 801: '等待扫码', 802: '已扫码，请在手机上确认', 803: '登录成功' };
 
@@ -357,6 +409,9 @@
 
     function renderSongList(songs) {
         currentList = songs;
+        // 新列表清空旧勾选
+        selSet = {};
+        refreshSelUI();
         // 建立播放队列（歌曲列表）
         playQueue = songs;
         var box = $('musicList');
@@ -366,12 +421,26 @@
             return;
         }
         songs.forEach(function (s, idx) {
+            var sid = String(s.id);
             var row = document.createElement('div');
             row.className = 'music-item';
             row.dataset.idx = String(idx);
+            row.dataset.sid = sid;
             row.style.cursor = 'pointer';
             // 双击整行播放
             row.addEventListener('dblclick', function () { playFromQueue(idx, null); });
+
+            // 多选（批量下载用）
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'mchk';
+            cb.style.cssText = 'flex:0 0 auto;accent-color:var(--accent,#537d96);cursor:pointer;';
+            cb.checked = !!selSet[sid];
+            cb.addEventListener('click', function (ev) { ev.stopPropagation(); });
+            cb.addEventListener('change', function () {
+                if (cb.checked) selSet[sid] = s; else delete selSet[sid];
+                refreshSelUI();
+            });
 
             var cover = document.createElement('img');
             cover.className = 'cover';
@@ -394,17 +463,111 @@
             var playBtn = document.createElement('button');
             playBtn.className = 'mbtn';
             playBtn.textContent = '试听';
-            playBtn.dataset.sid = String(s.id);
+            playBtn.dataset.sid = sid;
             playBtn.dataset.idx = String(idx);
             playBtn.addEventListener('click', function () { playFromQueue(idx, playBtn); });
 
             var dlBtn = document.createElement('button');
             dlBtn.className = 'mbtn dl';
             dlBtn.textContent = '下载';
-            dlBtn.addEventListener('click', function () { downloadSong(s.id, s.name, artistNames); });
+            dlBtn.dataset.sid = sid;
+            dlBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                // 若本会话已下载过，点它弹菜单；否则直接下载（默认存上次目录）
+                if (dlState[sid]) {
+                    showDownloadedMenu(sid, dlState[sid].dest, dlBtn, ev);
+                } else {
+                    downloadSong(s.id, s.name, artistNames);
+                }
+            });
 
-            row.appendChild(cover); row.appendChild(info); row.appendChild(playBtn); row.appendChild(dlBtn);
+            row.appendChild(cb); row.appendChild(cover); row.appendChild(info); row.appendChild(playBtn); row.appendChild(dlBtn);
             box.appendChild(row);
+
+            // 拖拽：已下载的歌可直接拖进 PR；未下载则提示先下载
+            row.setAttribute('draggable', 'true');
+            row.addEventListener('dragstart', function (ev) {
+                if (ev.target && (ev.target.tagName === 'INPUT' || ev.target.tagName === 'BUTTON' || ev.target.tagName === 'IMG')) {
+                    ev.preventDefault();
+                    return;
+                }
+                var dest = row.dataset.dest || (dlState[sid] && dlState[sid].dest);
+                if (!dest || !fs.existsSync(dest)) {
+                    ev.preventDefault();
+                    flash('请先点「下载」下载这首歌，才能拖入 PR');
+                    return;
+                }
+                ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', dest);
+                ev.dataTransfer.setData('text/plain', dest);
+                ev.dataTransfer.effectAllowed = 'copy';
+            });
+
+            // 若本会话已下载过该歌（切歌单/搜索回来），恢复已下载状态
+            if (dlState[sid] && dlState[sid].dest) {
+                var f = dlState[sid].dest;
+                if (fs.existsSync(f)) {
+                    dlBtn.textContent = '✓ 已下载';
+                    dlBtn.classList.add('done');
+                    dlBtn.title = f;
+                    row.dataset.dest = f;
+                }
+            }
+        });
+    }
+
+    // 批量选择 UI 刷新
+    function refreshSelUI() {
+        var cnt = Object.keys(selSet).length;
+        var lb = $('musicSelCount');
+        if (lb) lb.textContent = cnt ? ('已选 ' + cnt + ' 首') : '';
+        var allBtn = $('btnMusicSelectAll');
+        if (allBtn) allBtn.textContent = (currentList.length && cnt === currentList.length) ? '取消全选' : '全选';
+    }
+
+    // 批量下载：先选一次目录，再逐首严格串行下载
+    function batchDownloadSelected() {
+        var ids = Object.keys(selSet);
+        if (!ids.length) { setStatus('请先勾选要下载的歌曲', 'warn'); return; }
+        var songs = ids.map(function (k) { return selSet[k]; });
+        chooseDlDir(function (dir) {
+            if (!dir) return;
+            setDlDir(dir);
+            refreshDlDirLabel();
+            setStatus('批量下载 ' + songs.length + ' 首到 ' + dir + ' ...', '');
+            var i = 0;
+            function next() {
+                if (i >= songs.length) {
+                    setStatus('批量下载完成：' + songs.length + ' 首已存入音乐库', 'ok');
+                    // 下载完自动清空选择
+                    selSet = {};
+                    refreshSelUI();
+                    var allBtn = $('btnMusicSelectAll');
+                    if (allBtn) allBtn.textContent = '全选';
+                    // 重置所有 checkbox
+                    document.querySelectorAll('.music-item .mchk').forEach(function (c2) { c2.checked = false; });
+                    return;
+                }
+                var s2 = songs[i++];
+                var an = (s2.artists || []).map(function (a) { return a.name; }).join(' / ');
+                setStatus('批量下载 ' + i + '/' + songs.length + '：' + s2.name + ' ...', '');
+                downloadSong(s2.id, s2.name, an, dir, next);
+            }
+            next();
+        });
+    }
+
+    // 全选 / 取消全选
+    function toggleSelectAll() {
+        if (!currentList || !currentList.length) return;
+        var allSel = currentList.length && Object.keys(selSet).length === currentList.length;
+        selSet = {};
+        if (!allSel) {
+            currentList.forEach(function (s) { selSet[String(s.id)] = s; });
+        }
+        refreshSelUI();
+        document.querySelectorAll('.music-item .mchk').forEach(function (c2) {
+            var row = c2.closest('.music-item');
+            c2.checked = row && !!selSet[row.dataset.sid];
         });
     }
 
@@ -772,37 +935,52 @@
         });
     }
 
-    // ---------- 下载到本地 ----------
-    function downloadSong(songId, name, artist) {
+    // ---------- 下载到音乐库 ----------
+    // 单首下载：默认存到 getDlDir()（上次目录/音乐库根），destDir 可指定；cb 下载流程结束回调
+    function downloadSong(songId, name, artist, destDir, cb) {
+        var dir = destDir || getDlDir();
         setStatus('获取下载链接...', '');
         api('/song/url?id=' + enc(String(songId)) + '&br=320000').then(function (r) {
             var url = r && r.data && r.data[0] && r.data[0].url;
-            if (!url) { setStatus('该歌曲无下载源（可能是 VIP 或版权限制）', 'err'); return; }
+            if (!url) {
+                setStatus('该歌曲无下载源（可能是 VIP 或版权限制）', 'err');
+                if (cb) cb(false);
+                return;
+            }
             setStatus('正在下载: ' + name + ' ...', '');
-            // 用 Node 侧下载（避免 CEF 跨域下载限制）
-            downloadViaNode(url, name, artist);
-        }).catch(function (e) { setStatus('下载失败: ' + e.message, 'err'); });
+            downloadViaNode(url, name, artist, dir, songId, cb);
+        }).catch(function (e) {
+            setStatus('下载失败: ' + e.message, 'err');
+            if (cb) cb(false);
+        });
     }
 
     // 通过面板 Node 侧下载文件（CEF 的 fetch 拿二进制不可靠，用 Node http/https 下载）
-    function downloadViaNode(url, name, artist) {
+    function downloadViaNode(url, name, artist, dir, songId, cb) {
         var safe = safeName(artist + ' - ' + name);
-        var dest = path.join(musicDir, safe + '.mp3');
+        var dest = path.join(dir, safe + '.mp3');
         try {
-            if (!fs.existsSync(musicDir)) fs.mkdirSync(musicDir, { recursive: true });
-        } catch (e) { setStatus('创建目录失败: ' + e.message, 'err'); return; }
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        } catch (e) { setStatus('创建目录失败: ' + e.message, 'err'); if (cb) cb(false); return; }
 
         var https = require('https');
         var http = require('http');
         var mod = url.indexOf('https://') === 0 ? https : http;
         setStatus('正在下载: ' + name + ' ...', '');
+        var done = false;
+        function finish(ok) {
+            if (done) return;
+            done = true;
+            if (cb) cb(ok);
+        }
         var req = mod.get(url, function (res) {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 // 重定向
-                downloadViaNode(res.headers.location, name, artist);
+                downloadViaNode(res.headers.location, name, artist, dir, songId, cb);
+                finish(false); // 原请求不再算
                 return;
             }
-            if (res.statusCode !== 200) { setStatus('下载失败，状态码 ' + res.statusCode, 'err'); return; }
+            if (res.statusCode !== 200) { setStatus('下载失败，状态码 ' + res.statusCode, 'err'); finish(false); return; }
             var ws = fs.createWriteStream(dest);
             var total = parseInt(res.headers['content-length'] || '0', 10);
             var received = 0;
@@ -814,40 +992,190 @@
             ws.on('finish', function () {
                 ws.close(function () {
                     setStatus('已下载: ' + safe + '.mp3', 'ok');
-                    // 提示可导入
-                    confirmImport(dest, safe);
+                    // 记录已下载，更新行内状态（替换顶部横幅）
+                    if (songId) dlState[songId] = { dest: dest, name: name };
+                    markRowDownloaded(songId, dest, safe);
+                    // 若音乐库 tab 开着，提示刷新可见（扫描目录即可看到）
+                    var root = getMusicLibRoot();
+                    var inLib = root && dest.indexOf(root) === 0;
+                    if (inLib) {
+                        flash('已存入音乐库 ✓ 可直接拖入时间线');
+                    }
+                    finish(true);
                 });
             });
         });
-        req.on('error', function (e) { setStatus('下载出错: ' + e.message, 'err'); });
-        req.setTimeout(60000, function () { req.abort(); setStatus('下载超时', 'err'); });
+        req.on('error', function (e) { setStatus('下载出错: ' + e.message, 'err'); finish(false); });
+        req.setTimeout(60000, function () { req.abort(); setStatus('下载超时', 'err'); finish(false); });
     }
 
-    function confirmImport(dest, safe) {
-        // 下载完成后直接询问是否导入 PR
-        var box = $('musicList');
-        var banner = document.createElement('div');
-        banner.className = 'music-item';
-        banner.style.background = '#2a3a2a';
-        var info = document.createElement('div');
-        info.className = 'info';
-        var t = document.createElement('div');
-        t.className = 'title';
-        t.textContent = '已下载: ' + safe + '.mp3';
-        info.appendChild(t);
-        var btn = document.createElement('button');
-        btn.className = 'mbtn dl';
-        btn.textContent = '导入 PR';
-        btn.addEventListener('click', function () {
-            importToPR([dest]);
-            banner.remove();
+    // 更新歌行下载按钮 → 「已下载」状态（按钮右侧），点击可导入 PR / 换目录
+    function markRowDownloaded(songId, dest, safe) {
+        if (!songId) return;
+        var row = document.querySelector('.music-item[data-sid="' + songId + '"]');
+        if (!row) return;
+        var dlBtn = row.querySelector('.mbtn.dl');
+        if (!dlBtn) return;
+        dlBtn.textContent = '✓ 已下载';
+        dlBtn.classList.add('done');
+        dlBtn.title = dest;
+        // 整行可拖拽（已下载文件 → 拖入 PR）
+        row.setAttribute('draggable', 'true');
+        row.dataset.dest = dest;
+        // 注：下载按钮的 click 在 renderSongList 里统一处理（已下载→弹菜单/未下载→下载）
+    }
+
+    // 已下载操作小菜单：导入 PR / 改存位置 / 打开目录
+    function showDownloadedMenu(songId, dest, anchor, ev) {
+        ev.stopPropagation();
+        var old = document.getElementById('musicDlMenu');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var menu = document.createElement('div');
+        menu.id = 'musicDlMenu';
+        menu.style.cssText = 'position:fixed;z-index:9999;min-width:170px;background:#2b2b2b;border:1px solid #444;border-radius:6px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,0.45);font-size:12px;';
+        function mi(text, fn) {
+            var d = document.createElement('div');
+            d.style.cssText = 'padding:7px 12px;cursor:pointer;border-radius:4px;color:var(--text);white-space:nowrap;';
+            d.textContent = text;
+            d.addEventListener('click', function () { menu.remove(); fn(); });
+            menu.appendChild(d);
+            return d;
+        }
+        mi('📥 导入 PR 素材箱', function () { importToPR([dest]); });
+        mi('📂 改存到其他目录…', function () { pickDlDirAndMove(songId, dest); });
+        mi('🗂 在资源管理器显示', function () {
+            try { childProcess.spawn('explorer.exe', ['/select,' + dest]); } catch (e) {}
         });
-        var close = document.createElement('button');
-        close.className = 'mbtn';
-        close.textContent = '忽略';
-        close.addEventListener('click', function () { banner.remove(); });
-        banner.appendChild(info); banner.appendChild(btn); banner.appendChild(close);
-        box.insertBefore(banner, box.firstChild);
+        document.body.appendChild(menu);
+        var r = anchor.getBoundingClientRect();
+        var x = r.left, y = r.bottom + 4;
+        if (x + 180 > window.innerWidth) x = window.innerWidth - 185;
+        menu.style.left = x + 'px'; menu.style.top = y + 'px';
+        setTimeout(function () {
+            var kill = function (e2) { if (!menu.contains(e2.target)) { menu.remove(); document.removeEventListener('click', kill); } };
+            document.addEventListener('click', kill);
+        }, 10);
+    }
+
+    // 改存位置：选择音乐库目录后把文件移过去
+    function pickDlDirAndMove(songId, dest) {
+        chooseDlDir(function (newDir) {
+            if (!newDir || newDir === path.dirname(dest)) return;
+            try {
+                var nf = path.join(newDir, path.basename(dest));
+                fs.renameSync(dest, nf);
+                setDlDir(newDir);
+                dlState[songId] = { dest: nf };
+                var row = document.querySelector('.music-item[data-sid="' + songId + '"]');
+                if (row) row.dataset.dest = nf;
+                setStatus('已移动到: ' + nf, 'ok');
+            } catch (e) {
+                setStatus('移动失败: ' + e.message, 'err');
+            }
+        });
+    }
+
+    // 选下载目录弹窗（音乐库子目录 + 根目录 + 新建）
+    function chooseDlDir(cb) {
+        var root = getMusicLibRoot();
+        var subs = listMusicSubdirs();
+        var ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1001;display:flex;align-items:center;justify-content:center;';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;max-width:380px;width:90%;font-size:12px;color:#ddd;';
+        var tt = document.createElement('div');
+        tt.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:10px;';
+        tt.textContent = '选择音乐库目录';
+        box.appendChild(tt);
+        var tip = document.createElement('div');
+        tip.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;';
+        tip.textContent = root ? ('音乐库根目录: ' + root) : '未设置音乐库目录（将用插件默认下载目录）';
+        box.appendChild(tip);
+        var sel = document.createElement('select');
+        sel.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 8px;background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;margin-bottom:8px;';
+        if (root) {
+            var oRoot = document.createElement('option');
+            oRoot.value = root;
+            oRoot.textContent = '（音乐库根目录）';
+            sel.appendChild(oRoot);
+        }
+        subs.forEach(function (s) {
+            var op = document.createElement('option');
+            op.value = s;
+            op.textContent = path.basename(s);
+            sel.appendChild(op);
+        });
+        var oNew = document.createElement('option');
+        oNew.value = '__new__';
+        oNew.textContent = '＋ 新建子目录…';
+        sel.appendChild(oNew);
+        box.appendChild(sel);
+        var newRow = document.createElement('div');
+        newRow.style.cssText = 'display:none;margin-bottom:8px;';
+        var newInp = document.createElement('input');
+        newInp.type = 'text';
+        newInp.placeholder = '新目录名';
+        newInp.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 8px;background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;';
+        newRow.appendChild(newInp);
+        box.appendChild(newRow);
+        sel.addEventListener('change', function () {
+            newRow.style.display = sel.value === '__new__' ? '' : 'none';
+            if (sel.value === '__new__') newInp.focus();
+        });
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+        var cancel = document.createElement('button');
+        cancel.textContent = '取消';
+        cancel.style.cssText = 'background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;';
+        cancel.addEventListener('click', function () { ov.remove(); cb(null); });
+        var ok = document.createElement('button');
+        ok.textContent = '确定';
+        ok.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;';
+        ok.addEventListener('click', function () {
+            var v = sel.value;
+            if (v === '__new__') {
+                var nn = (newInp.value || '').trim();
+                if (!nn) { return; }
+                var base = root || musicDir;
+                var np = path.join(base, nn);
+                try {
+                    if (!fs.existsSync(np)) fs.mkdirSync(np, { recursive: true });
+                } catch (e) { return; }
+                v = np;
+            }
+            if (!v) { ov.remove(); cb(null); return; }
+            ov.remove();
+            cb(v);
+        });
+        row.appendChild(cancel); row.appendChild(ok);
+        box.appendChild(row);
+        ov.appendChild(box);
+        document.body.appendChild(ov);
+        sel.focus();
+    }
+
+    // 设置下载目录（工具栏「下载目录…」）
+    function setDlDirFromUI() {
+        chooseDlDir(function (dir) {
+            if (!dir) return;
+            setDlDir(dir);
+            refreshDlDirLabel();
+            setStatus('下载目录已设为: ' + dir, 'ok');
+        });
+    }
+    function refreshDlDirLabel() {
+        var lb = $('musicDlDirLabel');
+        if (lb) {
+            var d = getDlDir();
+            var root = getMusicLibRoot();
+            var show = d;
+            if (root && d.indexOf(root) === 0) {
+                var rel = d.slice(root.length).replace(/^[\\\/]+/, '');
+                show = rel ? ('📂 ' + rel) : '📂 （音乐库根目录）';
+            }
+            lb.textContent = show;
+            lb.title = d;
+        }
     }
 
     function safeName(s) {
@@ -877,6 +1205,13 @@
             if (ev.key === 'Enter') { ev.preventDefault(); doSearch(); }
         });
         $('btnMusicMyPlaylist').addEventListener('click', loadMyPlaylist);
+        // 批量下载 / 选择 / 下载目录
+        var allBtn = $('btnMusicSelectAll');
+        if (allBtn) allBtn.addEventListener('click', toggleSelectAll);
+        var batchBtn = $('btnMusicBatchDl');
+        if (batchBtn) batchBtn.addEventListener('click', batchDownloadSelected);
+        var dirBtn = $('btnMusicSetDir');
+        if (dirBtn) dirBtn.addEventListener('click', setDlDirFromUI);
         $('btnMusicRefreshQr').addEventListener('click', function () { $('btnMusicRefreshQr').disabled = true; fetchQr(); });
         $('btnMusicLogout').addEventListener('click', function () {
             api('/logout').then(function () {
@@ -927,5 +1262,6 @@
         type: $('musicType')
     };
     bindEvents();
+    refreshDlDirLabel();
     showLogin();
 })();

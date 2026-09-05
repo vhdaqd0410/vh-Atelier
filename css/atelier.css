@@ -569,6 +569,7 @@
         .music-item .mbtn:disabled { opacity: 0.4; cursor: not-allowed; border-color: var(--border); color: var(--muted); }
         .music-item .mbtn.playing { background: var(--accent); color: #fff; border-color: var(--accent); }
         .music-item .mbtn.dl { color: var(--accent); border-color: var(--accent); }
+        .music-item .mbtn.dl.done { color: #7fd68b; border-color: #2a5d3a; background: #1e3a2a; cursor: pointer; }
         .music-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 12px; }
         .music-loading { padding: 16px; text-align: center; color: var(--muted); font-size: 12px; }
         /* 音乐播放条（网易云三段式：封面/歌名 | 控制/进度 | 播放模式） */

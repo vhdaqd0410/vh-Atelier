@@ -412,6 +412,13 @@
                     <button id="btnMusicMyPlaylist" class="tbtn">我的歌单</button>
                     <button id="btnMusicBack" class="tbtn" style="display:none;">← 返回</button>
                 </div>
+                <div class="tr" style="margin-top:6px;">
+                    <button id="btnMusicSelectAll" class="tbtn">全选</button>
+                    <span id="musicSelCount" style="font-size:11px;color:var(--muted);"></span>
+                    <button id="btnMusicBatchDl" class="tbtn" style="background:var(--accent,#537d96);color:#fff;">批量下载选中</button>
+                    <button id="btnMusicSetDir" class="tbtn" title="设置下载保存到音乐库的哪个目录">下载目录…</button>
+                    <span id="musicDlDirLabel" style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;"></span>
+                </div>
             </div>
             <div id="musicList" class="music-list"></div>
             <!-- 歌词面板 -->
