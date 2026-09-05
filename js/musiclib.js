@@ -521,6 +521,10 @@
             ev.dataTransfer.setData('text/plain', f.fullPath);
             ev.dataTransfer.effectAllowed = 'copy';
         });
+        // 拖拽结束（放下/取消）：停止当前播放
+        item.addEventListener('dragend', function (ev) {
+            stopPlayback();
+        });
 
         // 右键菜单
         item.addEventListener('contextmenu', function (ev) {

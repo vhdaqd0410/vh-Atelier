@@ -501,6 +501,13 @@
                 ev.dataTransfer.setData('text/plain', dest);
                 ev.dataTransfer.effectAllowed = 'copy';
             });
+            // 拖拽结束（放下）：若正在播放则暂停（与音效/音乐库行为一致）
+            row.addEventListener('dragend', function (ev) {
+                try {
+                    var a2 = getAudio();
+                    if (a2 && !a2.paused && a2.src) a2.pause();
+                } catch (e) {}
+            });
 
             // 若本会话已下载过该歌（切歌单/搜索回来），恢复已下载状态
             if (dlState[sid] && dlState[sid].dest) {
