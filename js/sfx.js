@@ -11,7 +11,6 @@
     var collectDir = path.join(extRoot, 'collect');
     var favsFile = path.join(collectDir, 'favs.json');
     var cacheFile = path.join(collectDir, 'index.json');
-    var searchIndexFile = path.join(collectDir, 'searchIndex.json');
 
     var AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'aiff', 'wma'];
     var MAX_FILES = 20000;
@@ -130,10 +129,6 @@
         try {
             if (!fs.existsSync(collectDir)) fs.mkdirSync(collectDir, { recursive: true });
             fs.writeFileSync(cacheFile, JSON.stringify({ root: root, files: files, updatedAt: Date.now() }), 'utf8');
-            // 生成 search 浮窗专用轻量索引：只保留搜索/插入/播放所需字段，
-            // 避免热键每次拉起浮窗都解析 7MB 全量索引导致白屏 + 两次拉起。
-            var slim = files.map(function (f) { return { n: f.name, p: f.fullPath, e: f.ext }; });
-            fs.writeFileSync(searchIndexFile, JSON.stringify(slim), 'utf8');
         } catch (e) {}
     }
 
