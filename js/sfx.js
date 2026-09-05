@@ -584,13 +584,13 @@
     }
 
     function onTrackEnd() {
-        // 播完自动下一个（当前可见列表内）
-        var idx = visibleIdx[playingPath];
-        if (idx !== undefined && idx < visibleFiles.length - 1) {
-            playFrom(visibleFiles[idx + 1], 0);
-        } else {
-            stopPlayback();
+        // 音效：播完即停，不自动连播下一段（音效短又多，自动续播会烦）
+        // 播放条保留显示当前文件，进度停在结尾；用户可再点播放从头（playFrom 会 seek 0）
+        if (curWs) {
+            try { curWs.pause(); curWs.seekTo(0); } catch (e) {}
         }
+        setProgressUI();
+        updatePlayState();
     }
 
     function nextTrack(dir) {
