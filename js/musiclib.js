@@ -167,10 +167,20 @@
                 rootDir = dirPath;
                 treeRoot = root;
                 flattenTree(root);
-                // 写缓存（不含波形），带版本号：字段变更时旧缓存自动失效重扫
-                var slim = { v: 2, root: dirPath, dirs: [], music: [] };
-                allDirs.forEach(function (d) { slim.dirs.push({ a: d.abs, n: d.name, d: d.depth, p: d.parent ? d.parent.abs : null }); });
-                allDirs.forEach(function (d) { (d.music || []).forEach(function (m) { slim.music.push({ p: m.fullPath, n: m.name, e: m.ext, c: m.ctime || 0, t: m.mtime || 0, s: m.size || 0 }); }); });
+                // 写缓存 v3：dirs 全量 + music 用 dirs 下标(di)引用父目录，避免重复 6 万次全路径
+                // 结构: { v:3, root, dirs:[{a,n,d,p}...], music:[{di,n,c,t,s}...] }  e 由文件名后缀推
+                var slim = { v: 3, root: dirPath, dirs: [], music: [] };
+                var dirIdx = {};
+                allDirs.forEach(function (d, i) {
+                    dirIdx[d.abs] = i;
+                    slim.dirs.push({ a: d.abs, n: d.name, d: d.depth, p: d.parent ? d.parent.abs : null });
+                });
+                allDirs.forEach(function (d) {
+                    var di = dirIdx[d.abs];
+                    (d.music || []).forEach(function (m) {
+                        slim.music.push({ di: di, n: m.name, c: Math.round(m.ctime || 0), t: Math.round(m.mtime || 0), s: m.size || 0 });
+                    });
+                });
                 try {
                     if (!fs.existsSync(collectDir)) fs.mkdirSync(collectDir, { recursive: true });
                     fs.writeFileSync(treeCacheFile, JSON.stringify(slim), 'utf8');
@@ -192,7 +202,7 @@
         try {
             if (!fs.existsSync(treeCacheFile)) return false;
             var c = JSON.parse(fs.readFileSync(treeCacheFile, 'utf8'));
-            if (!c || c.v !== 2 || c.root !== dirPath || !Array.isArray(c.dirs)) return false;
+            if (!c || c.v !== 3 || c.root !== dirPath || !Array.isArray(c.dirs)) return false;
             // 重建树节点
             var nodeByAbs = {};
             var rootNode = null;
@@ -207,15 +217,18 @@
                 var n = nodeByAbs[d.a];
                 if (d.p && nodeByAbs[d.p]) { n.parent = nodeByAbs[d.p]; nodeByAbs[d.p].children.push(n); }
             });
-            // 挂音乐（懒：只挂路径，mtime 校验在加载列表时做）
+            // 挂音乐：music.di 是 dirs 数组下标（v3），父目录 = c.dirs[di].a
             var byPath = {};
             c.music.forEach(function (m) {
-                var n = nodeByAbs[path.dirname(m.p)];
+                var dd = c.dirs[m.di];
+                if (!dd) return;
+                var n = nodeByAbs[dd.a];
                 if (!n) return;
-                var f = { name: m.n, fullPath: m.p, ext: m.e, dir: n.abs, ctime: m.c || 0, mtime: m.t || 0, size: m.s || 0 };
+                var full = path.join(dd.a, m.n);
+                var f = { name: m.n, fullPath: full, ext: path.extname(m.n).replace('.', '').toLowerCase(), dir: dd.a, ctime: m.c || 0, mtime: m.t || 0, size: m.s || 0 };
                 if (!n.music) n.music = [];
                 n.music.push(f);
-                byPath[m.p] = f;
+                byPath[full] = f;
             });
             // 计数
             (function count(n) {
