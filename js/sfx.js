@@ -160,15 +160,19 @@
 
     // 从 allFiles 构建目录树（文件夹结构 + 每层直接音乐文件）
     function buildSfxTree() {
-        var rootNode = { abs: rootDir, name: path.basename(rootDir) || rootDir, depth: 0, children: [], music: [], parent: null, files: 0, dirs: 0 };
+        // 统一路径分隔符：rootDir 可能是用户填的正斜杠 D:/...，而 scanDir 产出的 f.dir 是反斜杠 D:\...
+        // 不统一会导致 ensureNode 回溯永远到不了根 → 树只剩空根。用 path.normalize 统一为系统风格
+        var normRoot = path.normalize(rootDir);
+        var rootNode = { abs: normRoot, name: path.basename(normRoot) || normRoot, depth: 0, children: [], music: [], parent: null, files: 0, dirs: 0 };
         var nodeByDir = {};
-        nodeByDir[rootDir] = rootNode;   // 修正：key 用变量值而非字面量 'rootDir'
+        nodeByDir[normRoot] = rootNode;
         function ensureNode(dirAbs) {
-            if (nodeByDir[dirAbs]) return nodeByDir[dirAbs];
-            var parentAbs = path.dirname(dirAbs);
-            var parent = parentAbs === dirAbs ? rootNode : ensureNode(parentAbs);
-            var n = { abs: dirAbs, name: path.basename(dirAbs), depth: parent.depth + 1, children: [], music: [], parent: parent, files: 0, dirs: 0 };
-            nodeByDir[dirAbs] = n;
+            var d = path.normalize(dirAbs);
+            if (nodeByDir[d]) return nodeByDir[d];
+            var parentAbs = path.dirname(d);
+            var parent = parentAbs === d ? rootNode : ensureNode(parentAbs);
+            var n = { abs: d, name: path.basename(d), depth: parent.depth + 1, children: [], music: [], parent: parent, files: 0, dirs: 0 };
+            nodeByDir[d] = n;
             parent.children.push(n);
             return n;
         }
@@ -255,13 +259,14 @@
             // 收藏视图：所有收藏
             list = allFiles.filter(function (f) { return isFav(f.fullPath); });
         } else if (kw) {
-            // 搜索：文件名 + 所在文件夹路径
+            // 搜索：文件名 + 所在文件夹路径（路径用反斜杠统一比较，避免正反斜杠混用）
+            var kwL = kw.toLowerCase();
             list = allFiles.filter(function (f) {
-                var nameHit = path.basename(f.name, path.extname(f.name)).toLowerCase().indexOf(kw) >= 0;
+                var nameHit = path.basename(f.name, path.extname(f.name)).toLowerCase().indexOf(kwL) >= 0;
                 if (nameHit) return true;
                 try {
-                    var rel = path.relative(rootDir, f.dir);
-                    return rel.toLowerCase().indexOf(kw) >= 0;
+                    var dirL = path.normalize(f.dir).toLowerCase();
+                    return dirL.indexOf(kwL) >= 0;
                 } catch (e) { return false; }
             });
         } else if (curSfxDir) {
