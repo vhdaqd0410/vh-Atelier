@@ -294,17 +294,20 @@
         var links = extractLinks();
         if (!links.length) { setStatus('没有检测到有效链接', 'err'); return; }
         var link = links[0];
-        setStatus('解析中...', '');
-        addLog('解析: ' + link, '');
+        var eng = forceGv ? 'gv' : 'auto';
+        setStatus('解析中' + (eng === 'gv' ? '（免登录通道）' : '') + '...', '');
+        addLog('解析: ' + link + (eng === 'gv' ? '（强制免登录通道）' : ''), '');
         hideResult();
         ensureServer().then(function () {
-            return api('/parse?url=' + enc(link));
+            return api('/parse?engine=' + eng + '&url=' + enc(link));
         }).then(function (r) {
             if (r && r.code === 0 && r.data) {
                 parsedInfo = r.data;
                 renderResult(r.data);
-                setStatus('解析成功', 'ok');
-                addLog('解析成功: ' + r.data.title, 'ok');
+                var eng2 = r.data.engine || 'yt-dlp';
+                var why = r.data._fallbackReason ? '（yt-dlp 失败已自动切换）' : '';
+                setStatus('解析成功 [' + eng2 + ']' + why, 'ok');
+                addLog('解析成功: ' + r.data.title + ' [' + eng2 + ']', 'ok');
             } else {
                 var msg = (r && r.msg) || '解析失败';
                 setStatus(friendlyErr(msg), 'err');
@@ -314,6 +317,18 @@
             setStatus('解析失败: ' + e.message, 'err');
             addLog('解析失败: ' + e.message, 'err');
         });
+    }
+
+    // 免登录通道开关：置位后解析/下载强制走 greenvideo（不依赖 cookie）
+    var forceGv = false;
+    function toggleGv() {
+        forceGv = !forceGv;
+        var b = $('btnVGv');
+        if (!b) return;
+        b.className = forceGv ? 'tbtn gv-on' : 'tbtn';
+        b.title = forceGv ? '当前强制走免登录通道（greenvideo），点击恢复自动' : '当前自动模式（yt-dlp 优先，失败切免登录），点击强制走免登录';
+        setStatus(forceGv ? '已切换到免登录通道（greenvideo）：不依赖 cookie，单档源' : '已恢复自动模式（yt-dlp 优先，失败自动降级免登录）', forceGv ? 'warn' : 'ok');
+        addLog(forceGv ? '已强制免登录通道（greenvideo）' : '已恢复自动模式', forceGv ? 'warn' : '');
     }
 
     function hideResult() {
@@ -403,6 +418,9 @@
 
     // 下载单条：提交 → 轮询 → 结束
     function runOne(link, fmt, silent) {
+        // 引擎：手动强制免登录 > 解析结果本身是 greenvideo > yt-dlp
+        var eng = forceGv ? 'gv' : ((parsedInfo && parsedInfo.engine === 'greenvideo') ? 'gv' : 'auto');
+        var engQ = (eng === 'gv') ? '&engine=gv' : '';
         $('vProgress').className = 'v-progress show';
         $('vProgressFill').style.width = '0%';
         setMeta('提交下载...');
@@ -410,7 +428,7 @@
         $('btnVDownload').disabled = true;
 
         return ensureServer().then(function () {
-            return api('/download?url=' + enc(link) + '&quality=' + enc(fmt));
+            return api('/download?url=' + enc(link) + '&quality=' + enc(fmt) + engQ);
         }).then(function (r) {
             if (r && r.code === 0 && r.data && r.data.id) {
                 return pollTask(r.data.id, silent);
@@ -564,6 +582,7 @@
     // ---------- 事件绑定 & 初始化 ----------
     function bindEvents() {
         $('btnVParse').addEventListener('click', doParse);
+        $('btnVGv').addEventListener('click', toggleGv);
         $('btnVDownload').addEventListener('click', doDownload);
         $('btnVDownloadAll').addEventListener('click', doDownloadAll);
         $('btnVOpenDir').addEventListener('click', openDir);

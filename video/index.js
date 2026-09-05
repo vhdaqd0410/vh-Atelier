@@ -2,12 +2,19 @@
 // 只暴露插件需要的接口：健康检查 / 解析视频信息 / 下载 / 进度查询 / cookie 管理
 // 底层调用 bin/yt-dlp.exe，ffmpeg 用 bin/ffmpeg-win32-x64.exe 合流
 // cookie：用户粘贴浏览器 Cookie，存本地 .video_cookie，喂给 yt-dlp 提升抖音/B站成功率
+//
+// v2.0 引擎扩展（2026-09-05）：
+//   引擎 = yt-dlp（默认主引擎，多清晰度 + cookie 高清）| greenvideo（免登录兜底引擎）
+//   解析失败自动降级：yt-dlp 报错/超时/需 cookie 时，尝试 greenvideo 免登录解析
+//   /parse?engine=gv 与 /download?engine=gv 可强制指定引擎
+//   greenvideo 模块见同目录 gv.js（复刻 greenvideo.cc AES+RSA 加密接口，零依赖）
 const http = require('http')
-const https = require('https')
 const fs = require('fs')
 const path = require('path')
 const url = require('url')
 const childProcess = require('child_process')
+
+const gv = require('./gv.js')
 
 const PORT = 17892
 const HOST = '127.0.0.1'
@@ -97,6 +104,17 @@ function baseArgs() {
   return args
 }
 
+// auto 模式下 yt-dlp 只要失败就值得尝试 greenvideo 兜底：
+// 无论是 cookie 缺失/登录态失效/平台风控/提取器失效/网络超时，还是 spawn/权限类环境错误，
+// 兜底引擎都是零成本的额外尝试（多一次免登录解析请求而已）。
+// 例外：gv 模块本身不可用时不降级。
+function shouldFallbackToGv(errText) {
+  const s = String(errText || '').toLowerCase()
+  // 明确属于"链接不是视频平台/用户输入错误"时才不降级（避免用 gv 掩盖脏输入）
+  if (/not a valid url|unsupported url|no video formats found/i.test(s)) return false
+  return true
+}
+
 // ---------- 路由 ----------
 const server = http.createServer(function (req, res) {
   const u = url.parse(req.url, true)
@@ -110,16 +128,19 @@ const server = http.createServer(function (req, res) {
 
   try {
     if (p === '/health') {
+      let gvOk = false
+      try { gvOk = typeof gv.gvExtract === 'function' } catch (e) { gvOk = false }
       if (!fs.existsSync(YTDLP)) return json(res, fail('yt-dlp.exe 缺失'))
       let ver = ''
       try { ver = childProcess.execFileSync(YTDLP, ['--version'], { encoding: 'utf8', timeout: 15000 }).trim() } catch (e) { ver = '' }
-      return json(res, ok({ alive: true, version: ver, hasCookie: cookieMode !== 'none', cookieMode: cookieMode, hasFfmpeg: fs.existsSync(FFMPEG) }))
+      return json(res, ok({ alive: true, version: ver, hasCookie: cookieMode !== 'none', cookieMode: cookieMode, hasFfmpeg: fs.existsSync(FFMPEG), engines: ['yt-dlp', 'greenvideo'], gvReady: gvOk }))
     }
 
     if (p === '/parse') {
       const link = (q.url || '').trim()
       if (!link) return json(res, fail('缺少 url'))
-      parseVideo(link, function (err, info) {
+      const engine = (q.engine || 'auto').toLowerCase()
+      parseSmart(link, engine, function (err, info) {
         if (err) return json(res, fail(err.message || String(err)))
         json(res, ok(info))
       })
@@ -130,7 +151,8 @@ const server = http.createServer(function (req, res) {
       const link = (q.url || '').trim()
       if (!link) return json(res, fail('缺少 url'))
       const quality = q.quality || 'best'
-      startDownload(link, quality, function (err, id) {
+      const engine = (q.engine || 'auto').toLowerCase()
+      startDownload(link, quality, engine, function (err, id) {
         if (err) return json(res, fail(err.message || String(err)))
         json(res, ok({ id }))
       })
@@ -141,7 +163,7 @@ const server = http.createServer(function (req, res) {
       const id = q.id || ''
       const t = tasks[id]
       if (!t) return json(res, fail('任务不存在'))
-      return json(res, ok({ id: id, status: t.status, title: t.title, outPath: t.outPath, err: t.err, progress: t.progress, log: t.log }))
+      return json(res, ok({ id: id, status: t.status, title: t.title, outPath: t.outPath, err: t.err, progress: t.progress, log: t.log, engine: t.engine }))
     }
 
     if (p === '/cookie') {
@@ -177,54 +199,84 @@ const server = http.createServer(function (req, res) {
   }
 })
 
-// ---------- 解析视频信息 ----------
-function parseVideo(link, cb) {
+// ---------- 解析（智能引擎选择） ----------
+// engine: 'auto'（默认，yt-dlp 优先，失败降级 gv）/ 'yt-dlp'（强制主引擎）/ 'gv'（强制兜底）
+function parseSmart(link, engine, cb) {
+  const runGv = function (reason) {
+    gv.gvExtract(link).then(function (info) {
+      info._fallbackReason = reason || ''
+      cb(null, info)
+    }).catch(function (e) {
+      cb(new Error('greenvideo 兜底也失败: ' + (e.message || e)))
+    })
+  }
+
+  if (engine === 'gv') return runGv('')
+
   const args = baseArgs().concat(['-J', link])
-  childProcess.execFile(YTDLP, args, { timeout: 60000, maxBuffer: 1024 * 1024 * 20, windowsHide: true }, function (err, stdout) {
-    if (err) return cb(err)
-    try {
-      const j = JSON.parse(stdout)
-      // 提取可选格式（去重，按分辨率/扩展名）
-      const formats = []
-      const seen = {}
-      ;(j.formats || []).forEach(function (f) {
-        const key = (f.height || f.format_note || 'audio') + '|' + (f.ext || '')
-        if (seen[key]) return
-        seen[key] = 1
-        formats.push({
-          formatId: f.format_id,
-          note: f.format_note || '',
-          ext: f.ext || '',
-          height: f.height || 0,
-          width: f.width || 0,
-          vcodec: f.vcodec || '',
-          acodec: f.acodec || '',
-          filesize: f.filesize || 0
+  // execFile 在部分 Windows 环境（如沙箱/权限受限）spawn 会同步抛 EPERM，
+  // 必须 try-catch，否则同步异常会绕过回调直接冒泡到路由层，降级逻辑失效。
+  let handle
+  try {
+    handle = childProcess.execFile(YTDLP, args, { timeout: 60000, maxBuffer: 1024 * 1024 * 20, windowsHide: true }, function (err, stdout) {
+      if (err) {
+        if (engine === 'auto' && shouldFallbackToGv(err.message)) return runGv('yt-dlp: ' + (err.message || '').split('\n')[0])
+        return cb(err)
+      }
+      try {
+        const j = JSON.parse(stdout)
+        // 提取可选格式（去重，按分辨率/扩展名）
+        const formats = []
+        const seen = {}
+        ;(j.formats || []).forEach(function (f) {
+          const key = (f.height || f.format_note || 'audio') + '|' + (f.ext || '')
+          if (seen[key]) return
+          seen[key] = 1
+          formats.push({
+            formatId: f.format_id,
+            note: f.format_note || '',
+            ext: f.ext || '',
+            height: f.height || 0,
+            width: f.width || 0,
+            vcodec: f.vcodec || '',
+            acodec: f.acodec || '',
+            filesize: f.filesize || 0
+          })
         })
-      })
-      cb(null, {
-        id: j.id || '',
-        title: j.title || '',
-        uploader: j.uploader || j.channel || '',
-        duration: j.duration || 0,
-        thumbnail: j.thumbnail || '',
-        webpageUrl: j.webpage_url || link,
-        formats: formats
-      })
-    } catch (e) {
-      cb(new Error('解析结果无效: ' + e.message))
-    }
-  })
+        cb(null, {
+          engine: 'yt-dlp',
+          id: j.id || '',
+          title: j.title || '',
+          uploader: j.uploader || j.channel || '',
+          duration: j.duration || 0,
+          thumbnail: j.thumbnail || '',
+          webpageUrl: j.webpage_url || link,
+          formats: formats
+        })
+      } catch (e) {
+        cb(new Error('解析结果无效: ' + e.message))
+      }
+    })
+  } catch (e) {
+    // 同步抛异常（如 spawn EPERM）：auto 模式下同样降级
+    if (engine === 'auto' && shouldFallbackToGv(e.message)) return runGv('yt-dlp: ' + (e.message || '').split('\n')[0])
+    return cb(e)
+  }
 }
 
 // ---------- 下载 ----------
-function startDownload(link, quality, cb) {
+function startDownload(link, quality, engine, cb) {
   try {
     if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true })
   } catch (e) { return cb(e) }
 
   const id = 'v' + (++taskSeq) + '_' + Date.now()
   const outTmpl = path.join(OUT_DIR, '%(title).80s [%(id)s].%(ext)s')
+
+  // greenvideo 兜底：不走 yt-dlp 任务，直接下载直链。仍挂到 tasks 表，前端轮询逻辑不变。
+  if (engine === 'gv') {
+    return startGvDownload(id, link, quality, cb)
+  }
 
   const args = baseArgs().concat(['-o', outTmpl, '--merge-output-format', 'mp4'])
 
@@ -241,7 +293,7 @@ function startDownload(link, quality, cb) {
     args.push('-f', 'bv*+ba/b')
   }
 
-  const task = { url: link, status: 'downloading', title: '', outPath: '', err: '', progress: 0, log: [] }
+  const task = { url: link, status: 'downloading', title: '', outPath: '', err: '', progress: 0, log: [], engine: 'yt-dlp' }
   tasks[id] = task
 
   let child
@@ -275,6 +327,102 @@ function startDownload(link, quality, cb) {
   })
 
   return cb(null, id)
+}
+
+// greenvideo 兜底下载：先解析拿直链，再按平台策略直接下。
+// 关键：抖音直链（v*.douyin.com / ixigua）自带音轨免头直接下；
+//       B站（bilivideo）需带 Referer: https://www.bilibili.com。
+// 下载期间同步更新任务进度。
+function startGvDownload(id, link, quality, cb) {
+  const task = { url: link, status: 'downloading', title: '', outPath: '', err: '', progress: 0, log: [], engine: 'greenvideo' }
+  tasks[id] = task
+
+  gv.gvExtract(link).then(function (info) {
+    const g = info._gv || {}
+    const vid = g.video || {}
+    const base = vid.baseUrl
+    if (!base) { task.status = 'error'; task.err = 'greenvideo 未返回可下载直链'; return cb(null, id) }
+
+    const title = safeName(info.title || ('video-' + (g.vid || Date.now())))
+    // 目录：host-vid-标题（与 yt-dlp 风格一致，防重名）
+    const host = (g.host || 'unknown').replace(/[\\/:*?"<>|]/g, '_')
+    const dir = path.join(OUT_DIR, host + '-' + safeName(g.vid || 'x') + '-' + title)
+    try { fs.mkdirSync(dir, { recursive: true }) } catch (e) { task.status = 'error'; task.err = '创建目录失败: ' + e.message; return cb(null, id) }
+
+    // 文件名
+    let fileName = 'video.mp4'
+    try {
+      const up = new url.URL(base)
+      const pm = up.pathname || ''
+      if (/\.mp3($|\?)/i.test(pm) || quality === 'audio') fileName = 'audio.mp3'
+      else if (/\.(mp4|m4a|webm)($|\?)/i.test(pm)) fileName = 'video.' + (pm.match(/\.(mp4|m4a|webm)($|\?)/i)[1] || 'mp4')
+      else fileName = 'video.mp4'
+    } catch (e) { fileName = 'video.mp4' }
+
+    // 保存 info.json（结构对齐 download_videos.cjs 的规范）
+    try {
+      fs.writeFileSync(path.join(dir, 'info.json'), JSON.stringify({
+        input: link, engine: 'greenvideo', host: g.host, vid: g.vid, title: info.title,
+        items: [vid].concat(g.audios || []).concat(g.covers || []), fetchedAt: new Date().toISOString()
+      }, null, 2))
+    } catch (e) {}
+
+    const dest = path.join(dir, fileName)
+    task.outPath = dest
+    task.title = info.title
+
+    // 平台 referer：B站直链必须带，否则 403
+    const headers = { 'user-agent': 'Mozilla/5.0', 'accept': '*/*' }
+    const hostL = (g.host || '').toLowerCase()
+    if (hostL.indexOf('bilibili') >= 0 || /bilivideo\.com/.test(base)) {
+      headers['referer'] = 'https://www.bilibili.com'
+    }
+
+    downloadFileWithProgress(base, dest, headers, task).then(function () {
+      task.status = 'done'
+      task.progress = 100
+    }).catch(function (e) {
+      task.status = 'error'
+      task.err = '下载失败: ' + (e.message || e)
+    })
+    return cb(null, id)
+  }).catch(function (e) {
+    task.status = 'error'
+    task.err = 'greenvideo 解析失败: ' + (e.message || e)
+    return cb(null, id)
+  })
+}
+
+// 带进度与断点续传能力的下载。为避免下载大文件时 fetch 全量进内存，用流式写入。
+function downloadFileWithProgress(uri, destPath, headers, task) {
+  return new Promise(function (resolve, reject) {
+    const mod = uri.indexOf('https:') === 0 ? require('https') : require('http')
+    const req = mod.request(uri, { headers: headers, method: 'GET' }, function (res) {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume()
+        const loc = res.headers.location
+        return downloadFileWithProgress(loc.indexOf('http') === 0 ? loc : new url.URL(loc, uri).toString(), destPath, headers, task).then(resolve, reject)
+      }
+      if (res.statusCode >= 400) {
+        res.resume()
+        return reject(new Error('HTTP ' + res.statusCode))
+      }
+      const total = parseInt(res.headers['content-length'] || '0', 10) || 0
+      let got = 0
+      const file = fs.createWriteStream(destPath)
+      res.on('data', function (c) {
+        got += c.length
+        if (total > 0) task.progress = Math.min(99, Math.round((got / total) * 100))
+        task.log = [destPath]
+      })
+      res.pipe(file)
+      file.on('finish', function () { file.close(function () { resolve() }) })
+      file.on('error', reject)
+    })
+    req.setTimeout(120000, function () { req.destroy(new Error('下载超时 120s')) })
+    req.on('error', reject)
+    req.end()
+  })
 }
 
 // 从 yt-dlp stdout 解析进度（默认 [download] xx.x% 与 [Merger] 阶段）
@@ -322,4 +470,5 @@ function findOutput(dir, log) {
 
 server.listen(PORT, HOST, function () {
   console.log('[video-server] listening on http://' + HOST + ':' + PORT)
+  console.log('[video-server] engines: yt-dlp (default) + greenvideo (fallback, no-login)')
 })
