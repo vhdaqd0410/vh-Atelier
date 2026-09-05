@@ -70,6 +70,45 @@ def docx_to_lines(path):
     return lines
 
 
+def pdf_to_lines(path):
+    """文字版 PDF 抽文本为行。用 PyMuPDF(fitz)；每页 get_text 后按换行切，
+    合并折行：若某行不以标点/引号结尾且下一行不是结构行（集/场景/人物/台词冒号），
+    视为同段折行拼回。返回逐行 list。"""
+    import fitz  # 本机已装（pymupdf）
+    doc = fitz.open(path)
+    raw_lines = []
+    for i in range(doc.page_count):
+        t = doc[i].get_text()
+        for ln in t.split('\n'):
+            s = ln.strip()
+            if s:
+                raw_lines.append(s)
+    doc.close()
+
+    # 折行合并（保守）：上一行不以结尾标点/闭合引号收尾，且不以「角色名：」结构开头，
+    # 且当前行不以结构关键词开头时，拼到上一行。避免把独立台词行误并。
+    out = []
+    for s in raw_lines:
+        if not out:
+            out.append(s)
+            continue
+        prev = out[-1]
+        # 判断上一行是否“未完”：不以 。！？；："”』」）】… 结束，且不短（>4字）
+        prev_unfinished = prev and not re.search(r'[。！？；：\u201d\u2019\u300d\u300f\uff09\u3011]\s*$', prev)
+        # 当前行是否新结构（集/场景/人物/纯标点动作）
+        cur_struct = re.match(r'^第\s*[0-9一二两三四五六七八九十百千]+\s*集', s) or \
+                     re.match(r'^\d+[-_]\d+', s) or s.startswith('人物') or \
+                     s.startswith(('△', '▲', '【', '（旁白）')) or \
+                     re.match(r'^[\u4e00-\u9fffA-Za-z ]{1,20}?[：（:]', s)
+        # 上一行若本身是完整台词（角色名开头+结尾标点）则不并
+        prev_dialogue = re.match(r'^[\u4e00-\u9fffA-Za-z .\'\"]{1,24}?[：（:]', prev)
+        if prev_unfinished and not cur_struct and len(s) > 1 and not prev_dialogue:
+            out[-1] = prev + s
+        else:
+            out.append(s)
+    return out
+
+
 def parse(lines):
     """给每段标注所属集数 + 行类型（供前端易读排版）
     两遍扫描：先收集角色名（cast 行），再用角色名识别台词行，中英文剧都适用。
@@ -151,13 +190,18 @@ def main():
             i += 2
         else:
             i += 1
-    docx_path = args.get('--docx')
+    # 兼容旧参数名 --docx；也接受通用 --file
+    docx_path = args.get('--file') or args.get('--docx')
     out_path = args.get('--out')
     if not docx_path:
-        print(json.dumps({'ok': False, 'error': '缺少 --docx'}, ensure_ascii=False))
+        print(json.dumps({'ok': False, 'error': '缺少 --file/--docx'}, ensure_ascii=False))
         return
     try:
-        lines = docx_to_lines(docx_path)
+        ext = docx_path.rsplit('.', 1)[-1].lower() if '.' in docx_path else ''
+        if ext == 'pdf':
+            lines = pdf_to_lines(docx_path)
+        else:
+            lines = docx_to_lines(docx_path)
         parsed = parse(lines)
         # 集数清单
         eps = sorted(set(x['episode'] for x in parsed if x['episode'] is not None))

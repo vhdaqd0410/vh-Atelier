@@ -415,8 +415,7 @@
         } catch (e) { return null; }
     }
 
-    // 在项目目录递归找剧本 docx（优先「剧本/脚本」文件夹，再全目录递归）
-    // 在项目目录递归找所有剧本 docx（过滤 ~$ 临时文件；优先「剧本/脚本」目录）
+    // 在项目目录递归找剧本 docx/pdf（过滤 ~$ 临时文件；优先「剧本/脚本」目录）
     function findScriptDocxList(projDir) {
         var found = [];
         var limit = 400;  // 防失控
@@ -434,8 +433,11 @@
                     try { st = fs.statSync(full); } catch (e) { return; }
                     if (st.isDirectory()) {
                         walk(full, depth + 1);
-                    } else if (en.toLowerCase().endsWith('.docx')) {
-                        found.push(full);
+                    } else {
+                        var low = en.toLowerCase();
+                        if (low.endsWith('.docx') || low.endsWith('.pdf')) {
+                            found.push(full);
+                        }
                     }
                 });
             } catch (e) {}
@@ -637,7 +639,7 @@
     function browseScriptFile(projectName, addToMark) {
         var result;
         try {
-            result = window.cep.fs.showOpenDialogEx(false, false, '选择剧本 docx', '', [], '', '选择');
+            result = window.cep.fs.showOpenDialogEx(false, false, '选择剧本 docx/pdf', '', [], '', '选择');
         } catch (e) {
             showScriptMsg('打开文件选择失败: ' + e.message);
             return;
@@ -649,7 +651,7 @@
         }
     }
 
-    // 解析指定 docx 并打开阅读浮层
+    // 解析指定剧本文件（docx/pdf）并打开阅读浮层
     function loadScriptDocx(docx, projectName) {
         el.statusText.textContent = '解析剧本：' + path.basename(docx) + '…';
         var py = findPython();
@@ -659,14 +661,19 @@
             return;
         }
         try {
-            var r = child_process.spawnSync(py, [scriptPath, '--docx', docx], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+            var r = child_process.spawnSync(py, [scriptPath, '--file', docx], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
             var data = null;
             var out = (r.stdout || '').trim();
             try { data = JSON.parse(out); } catch (e) {
                 try { data = JSON.parse((r.stderr || '').trim()); } catch (e2) {}
             }
             if (!data || !data.ok) {
-                showScriptMsg('解析剧本失败：' + ((data && data.error) || (r.stderr || '').slice(0, 300) || '未知错误') + '\n\n文件：' + docx);
+                var msg = ((data && data.error) || (r.stderr || '').slice(0, 300) || '未知错误');
+                var low = docx.toLowerCase();
+                if (low.endsWith('.pdf')) {
+                    msg += '\n\n（PDF 剧本需为文字版；若是扫描图片版 PDF 暂不支持）';
+                }
+                showScriptMsg('解析剧本失败：' + msg + '\n\n文件：' + docx);
                 return;
             }
             openScriptReader(data, docx, projectName);
@@ -838,7 +845,7 @@
         if (recents.length === 0 && fixed.length === 0) {
             var tip = document.createElement('div');
             tip.style.cssText = 'padding:18px;text-align:center;font-size:12px;color:var(--muted);background:#202020;border:1px dashed #3a3a3a;border-radius:8px;line-height:1.8;';
-            tip.innerHTML = '还没有剧本记录。<br>点上方「📂 打开剧本文件…」选一个 docx 开始，<br>或从视频工作台项目卡片里点「剧本」打开。<br><br>打开过的会自动出现在「最近阅读」，方便下次直接点。';
+            tip.innerHTML = '还没有剧本记录。<br>点上方「📂 打开剧本文件…」选一个 docx / pdf 开始，<br>或从视频工作台项目卡片里点「剧本」打开。<br><br>打开过的会自动出现在「最近阅读」，方便下次直接点。';
             box.appendChild(tip);
         }
 
