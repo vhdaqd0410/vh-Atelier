@@ -91,6 +91,7 @@
     // ---------- 探测 Python ----------
     function detectPython() {
         var candidates = [
+            path.join(extRoot, 'runtime', 'python.exe'),   // 便携运行时优先（自包含部署）
             path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
             path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe'),
             'python',
