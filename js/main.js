@@ -76,6 +76,10 @@
         if (name === 'progress' && window.__progressOnShow) {
             try { window.__progressOnShow(); } catch (e) {}
         }
+        // 剧本：切到剧本 tab 时若面板是空的（没在阅读、也没首页），渲染剧本库首页
+        if (name === 'script' && window.__atShowScriptHome) {
+            try { window.__atShowScriptHome(); } catch (e) {}
+        }
     }
 
     // 切到某个 tab（面板 + 组条 + 高亮同步）
