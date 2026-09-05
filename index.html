@@ -11,16 +11,12 @@
 
     <div class="ws-groups">
         <button class="ws-group" data-group="script">📖 剧本</button>
-        <button class="ws-group active" data-group="progress">进度</button>
-        <button class="ws-group" data-group="sub">字幕</button>
+        <button class="ws-group active" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="deliver">交付</button>
     </div>
 
-    <div class="tabs ws-subtabs" data-group="progress">
-        <button class="tab active" data-tab="progress">项目进度</button>
-    </div>
-    <div class="tabs ws-subtabs" data-group="sub" style="display:none;">
+    <div class="tabs ws-subtabs" data-group="sub">
         <button class="tab active" data-tab="subtitle">字幕识别</button>
         <button class="tab" data-tab="check">字幕校对</button>
     </div>
@@ -676,48 +672,7 @@
         <div class="v-status" id="vStatus"></div>
     </div>
 
-    <!-- ==================== 板块八：项目进度（视频工作台联动） ==================== -->
-    <div class="tab-panel" id="panel-progress">
-        <!-- 服务状态条 -->
-        <div class="prg-statusbar" id="prgStatusBar">
-            <span class="prg-dot" id="prgDot"></span>
-            <span class="prg-status" id="prgStatusText">检测视频工作台服务…</span>
-            <button id="prgRefresh" class="secondary mini" style="flex:0 0 auto;">刷新</button>
-        </div>
-
-        <!-- 概览 -->
-        <div class="prg-overview" id="prgOverview" style="display:none;">
-            <div class="prg-metric"><div class="prg-mv prg-mv-month" id="prgMProducing">-</div><div class="prg-ml">本月项目</div></div>
-            <div class="prg-metric"><div class="prg-mv prg-mv-active" id="prgMActive">-</div><div class="prg-ml">本月制作中</div></div>
-            <div class="prg-metric"><div class="prg-mv prg-mv-done" id="prgMDone">-</div><div class="prg-ml">本月已完成</div></div>
-        </div>
-
-        <!-- 离线引导 -->
-        <div class="prg-offline" id="prgOffline" style="display:none;">
-            <div style="margin-bottom:8px;">视频工作台未运行，无法读取项目进度。</div>
-            <div class="row">
-                <button id="prgLaunch">启动视频工作台</button>
-                <button id="prgRetry" class="secondary">重试检测</button>
-            </div>
-            <div class="hint">启动后约需几秒服务就绪，点「重试检测」即可。</div>
-        </div>
-
-        <!-- 进行中项目列表 -->
-        <div class="prg-sec" id="prgActiveWrap" style="display:none;">
-            <div class="prg-sec-head"><span>组内进行中</span><span class="prg-count" id="prgActiveCount"></span></div>
-            <div class="prg-filters">
-                <select id="prgFilterState" class="prg-filter" title="按状态筛选">
-                    <option value="">全部状态</option>
-                </select>
-                <label class="prg-chk" title="只看已有集数进度的项目">
-                    <input type="checkbox" id="prgFilterProgress" style="width:auto;"> 只看有进度
-                </label>
-            </div>
-            <div class="prg-list" id="prgActiveList"></div>
-        </div>
-    </div>
-
-    <!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
+    <!-- ==================== 剧本阅读（动态面板：由 script.js 填充） ==================== -->
     <div class="tab-panel" id="panel-script" style="display:none;"></div>
 
     <script src="js/CSInterface.js"></script>
@@ -733,6 +688,6 @@
     <script src="js/export.js"></script>
     <script src="js/check.js"></script>
     <script src="js/video.js"></script>
-    <script src="js/progress.js"></script>
+    <script src="js/script.js"></script>
 </body>
 </html>
