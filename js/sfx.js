@@ -161,7 +161,8 @@
     // 从 allFiles 构建目录树（文件夹结构 + 每层直接音乐文件）
     function buildSfxTree() {
         var rootNode = { abs: rootDir, name: path.basename(rootDir) || rootDir, depth: 0, children: [], music: [], parent: null, files: 0, dirs: 0 };
-        var nodeByDir = { rootDir: rootNode };
+        var nodeByDir = {};
+        nodeByDir[rootDir] = rootNode;   // 修正：key 用变量值而非字面量 'rootDir'
         function ensureNode(dirAbs) {
             if (nodeByDir[dirAbs]) return nodeByDir[dirAbs];
             var parentAbs = path.dirname(dirAbs);
@@ -264,12 +265,24 @@
                 } catch (e) { return false; }
             });
         } else if (curSfxDir) {
-            // 目录视图：该目录直接层
+            // 目录视图：该目录 + 其所有子孙目录的音效（递归收集）
             var node = findSfxNode(curSfxDir);
-            list = node ? (node.music || []).slice() : [];
+            list = [];
+            if (node) {
+                (function collect(n2) {
+                    (n2.music || []).forEach(function (m) { list.push(m); });
+                    n2.children.forEach(collect);
+                })(node);
+            }
         } else {
-            // 根视图：根直接层
-            list = sfxTreeRoot ? (sfxTreeRoot.music || []).slice() : [];
+            // 根视图：整个库（所有目录音效）
+            list = [];
+            if (sfxTreeRoot) {
+                (function collect2(n3) {
+                    (n3.music || []).forEach(function (m) { list.push(m); });
+                    n3.children.forEach(collect2);
+                })(sfxTreeRoot);
+            }
         }
         setVisibleFiles(list);
         el.empty.textContent = allFiles.length === 0 ? '目录下没有音频文件' : (list.length === 0 ? '该目录下没有音效' : '');
