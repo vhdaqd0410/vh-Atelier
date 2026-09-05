@@ -1000,6 +1000,10 @@
                     var inLib = root && dest.indexOf(root) === 0;
                     if (inLib) {
                         flash('已存入音乐库 ✓ 可直接拖入时间线');
+                        // 增量写入音乐库索引：不重扫全量，新歌下次打开音乐库直接可见
+                        try {
+                            if (window.__musiclibAddFiles) window.__musiclibAddFiles({ path: dest });
+                        } catch (e2) {}
                     }
                     finish(true);
                 });
@@ -1075,55 +1079,180 @@
         });
     }
 
-    // 选下载目录弹窗（音乐库子目录 + 根目录 + 新建）
+    // 选下载目录弹窗（目录树样式，可逐层展开，支持新建子目录）
     function chooseDlDir(cb) {
         var root = getMusicLibRoot();
-        var subs = listMusicSubdirs();
+        if (!root) {
+            // 没设音乐库目录：直接确认用默认目录
+            cb(musicDir);
+            return;
+        }
+        // 递归枚举目录树：返回 [{ abs, name, depth, children }]
+        function buildDirTree(abs, depth, maxDepth) {
+            var node = { abs: abs, name: depth === 0 ? path.basename(abs) : path.basename(abs), depth: depth, children: [] };
+            if (depth >= (maxDepth || 6)) return node;
+            try {
+                fs.readdirSync(abs, { withFileTypes: true }).forEach(function (it) {
+                    if (it.isDirectory()) {
+                        var cabs = path.join(abs, it.name);
+                        try {
+                            node.children.push(buildDirTree(cabs, depth + 1, maxDepth));
+                        } catch (e) {}
+                    }
+                });
+            } catch (e) {}
+            node.children.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+            return node;
+        }
+        var tree = buildDirTree(root, 0, 6);
+        var curDl = getDlDir();
+        var selected = { abs: curDl };
+
         var ov = document.createElement('div');
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1001;display:flex;align-items:center;justify-content:center;';
         var box = document.createElement('div');
-        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;max-width:380px;width:90%;font-size:12px;color:#ddd;';
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;max-width:420px;width:92%;max-height:70vh;display:flex;flex-direction:column;font-size:12px;color:#ddd;';
         var tt = document.createElement('div');
-        tt.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:10px;';
+        tt.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:2px;';
         tt.textContent = '选择音乐库目录';
         box.appendChild(tt);
         var tip = document.createElement('div');
-        tip.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;';
-        tip.textContent = root ? ('音乐库根目录: ' + root) : '未设置音乐库目录（将用插件默认下载目录）';
+        tip.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:8px;word-break:break-all;';
+        tip.textContent = '音乐库根目录: ' + root;
         box.appendChild(tip);
-        var sel = document.createElement('select');
-        sel.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 8px;background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;margin-bottom:8px;';
-        if (root) {
-            var oRoot = document.createElement('option');
-            oRoot.value = root;
-            oRoot.textContent = '（音乐库根目录）';
-            sel.appendChild(oRoot);
+
+        // 当前选择显示
+        var selShow = document.createElement('div');
+        selShow.style.cssText = 'font-size:11px;color:#7fd68b;margin-bottom:6px;word-break:break-all;min-height:14px;';
+        selShow.textContent = '保存到: ' + (selected.abs === root ? '（音乐库根目录）' : selected.abs);
+        box.appendChild(selShow);
+
+        // 目录树容器
+        var treeBox = document.createElement('div');
+        treeBox.style.cssText = 'flex:1;overflow-y:auto;background:#181818;border:1px solid #333;border-radius:6px;padding:6px;min-height:160px;max-height:320px;';
+        box.appendChild(treeBox);
+
+        var openSet = {};
+        // 默认展开到当前下载目录的祖先
+        (function initOpen(n) {
+            if (curDl.indexOf(n.abs) === 0 && n.abs !== curDl) openSet[n.abs] = true;
+            n.children.forEach(initOpen);
+        })(tree);
+
+        function renderTreeNode(n) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:4px;cursor:pointer;white-space:nowrap;' + (n.abs === selected.abs ? 'background:#1e3a33;color:#7fd68b;' : '');
+            row.style.paddingLeft = (6 + n.depth * 16) + 'px';
+            var hasKids = n.children.length > 0;
+            var caret = document.createElement('span');
+            caret.style.cssText = 'flex:0 0 14px;font-size:10px;color:var(--muted);text-align:center;';
+            caret.textContent = hasKids ? (openSet[n.abs] ? '▼' : '▶') : '';
+            var ico = document.createElement('span');
+            ico.style.cssText = 'flex:0 0 auto;';
+            ico.textContent = n.depth === 0 ? '📀' : (hasKids ? '📁' : '📂');
+            var lb = document.createElement('span');
+            lb.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;';
+            lb.textContent = n.depth === 0 ? (path.basename(n.abs) || n.abs) : n.name;
+            row.appendChild(caret); row.appendChild(ico); row.appendChild(lb);
+            // 点击：选中目录；点 caret 展开/收起
+            row.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                if (ev.target === caret && hasKids) {
+                    openSet[n.abs] = !openSet[n.abs];
+                    // 重渲染子树
+                    var holder = row.parentNode;
+                    var next = row.nextSibling;
+                    // 移除旧子行（本节点后续 depth 更大的行）
+                    var myDepth = n.depth;
+                    while (next && next.__depth !== undefined && next.__depth > myDepth) {
+                        var todel = next;
+                        next = next.nextSibling;
+                        holder.removeChild(todel);
+                    }
+                    // 展开则插入子行
+                    if (openSet[n.abs]) {
+                        var frag = document.createDocumentFragment();
+                        n.children.forEach(function (ch) {
+                            var cr = renderTreeNode(ch);
+                            cr.__depth = ch.depth;
+                            frag.appendChild(cr);
+                            if (openSet[ch.abs]) appendDescendants(frag, ch);
+                        });
+                        holder.insertBefore(frag, next);
+                    }
+                    return;
+                }
+                selected.abs = n.abs;
+                selShow.textContent = '保存到: ' + (n.abs === root ? '（音乐库根目录）' : n.abs);
+                // 刷新选中高亮
+                treeBox.querySelectorAll('div').forEach(function (d2) {
+                    if (d2.style && d2.style.background === 'rgb(30, 58, 51)') {
+                        d2.style.background = '';
+                        d2.style.color = '';
+                    }
+                });
+                row.style.background = '#1e3a33';
+                row.style.color = '#7fd68b';
+            });
+            return row;
         }
-        subs.forEach(function (s) {
-            var op = document.createElement('option');
-            op.value = s;
-            op.textContent = path.basename(s);
-            sel.appendChild(op);
-        });
-        var oNew = document.createElement('option');
-        oNew.value = '__new__';
-        oNew.textContent = '＋ 新建子目录…';
-        sel.appendChild(oNew);
-        box.appendChild(sel);
+        function appendDescendants(frag, n) {
+            if (!openSet[n.abs]) return;
+            n.children.forEach(function (ch) {
+                var cr2 = renderTreeNode(ch);
+                cr2.__depth = ch.depth;
+                frag.appendChild(cr2);
+                if (openSet[ch.abs]) appendDescendants(frag, ch);
+            });
+        }
+        function renderTree() {
+            treeBox.innerHTML = '';
+            var frag = document.createDocumentFragment();
+            var rr = renderTreeNode(tree);
+            rr.__depth = tree.depth;
+            frag.appendChild(rr);
+            if (openSet[tree.abs]) appendDescendants(frag, tree);
+            treeBox.appendChild(frag);
+        }
+        renderTree();
+
+        // 新建子目录
         var newRow = document.createElement('div');
-        newRow.style.cssText = 'display:none;margin-bottom:8px;';
+        newRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
         var newInp = document.createElement('input');
         newInp.type = 'text';
-        newInp.placeholder = '新目录名';
-        newInp.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 8px;background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;';
+        newInp.placeholder = '在当前选中目录下新建子目录名';
+        newInp.style.cssText = 'flex:1;min-width:0;padding:6px 8px;background:#2a2a2a;color:#ddd;border:1px solid #444;border-radius:4px;font-size:12px;';
         newRow.appendChild(newInp);
-        box.appendChild(newRow);
-        sel.addEventListener('change', function () {
-            newRow.style.display = sel.value === '__new__' ? '' : 'none';
-            if (sel.value === '__new__') newInp.focus();
+        var newBtn = document.createElement('button');
+        newBtn.textContent = '新建';
+        newBtn.style.cssText = 'flex:0 0 auto;background:#1e3a2a;color:#7fd68b;border:1px solid #2a5a3a;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;';
+        newBtn.addEventListener('click', function () {
+            var nn = (newInp.value || '').trim();
+            if (!nn) return;
+            var base = selected.abs || root;
+            var np = path.join(base, nn);
+            try {
+                if (!fs.existsSync(np)) fs.mkdirSync(np, { recursive: true });
+                else { flash('该目录已存在'); return; }
+            } catch (e) { flash('创建失败: ' + e.message); return; }
+            // 重建树并选中新目录
+            tree = buildDirTree(root, 0, 6);
+            selected.abs = np;
+            selShow.textContent = '保存到: ' + np;
+            // 展开新目录祖先
+            (function mark(n2) {
+                if (np.indexOf(n2.abs) === 0 && n2.abs !== np) openSet[n2.abs] = true;
+                n2.children.forEach(mark);
+            })(tree);
+            renderTree();
+            newInp.value = '';
         });
+        newRow.appendChild(newBtn);
+        box.appendChild(newRow);
+
         var row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+        row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:10px;';
         var cancel = document.createElement('button');
         cancel.textContent = '取消';
         cancel.style.cssText = 'background:#3a3a3a;color:#aaa;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;';
@@ -1132,26 +1261,13 @@
         ok.textContent = '确定';
         ok.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 16px;cursor:pointer;';
         ok.addEventListener('click', function () {
-            var v = sel.value;
-            if (v === '__new__') {
-                var nn = (newInp.value || '').trim();
-                if (!nn) { return; }
-                var base = root || musicDir;
-                var np = path.join(base, nn);
-                try {
-                    if (!fs.existsSync(np)) fs.mkdirSync(np, { recursive: true });
-                } catch (e) { return; }
-                v = np;
-            }
-            if (!v) { ov.remove(); cb(null); return; }
             ov.remove();
-            cb(v);
+            cb(selected.abs || root);
         });
         row.appendChild(cancel); row.appendChild(ok);
         box.appendChild(row);
         ov.appendChild(box);
         document.body.appendChild(ov);
-        sel.focus();
     }
 
     // 设置下载目录（工具栏「下载目录…」）

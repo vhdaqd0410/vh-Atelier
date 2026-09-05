@@ -254,18 +254,24 @@
                     <button id="btnSfxScan" class="tbtn">扫描</button>
                 </div>
                 <div class="tr">
-                    <input type="text" id="sfxSearch" placeholder="搜索音效名...">
-                    <select id="sfxSubdir"><option value="">全部</option></select>
-                    <button id="btnSfxAll" class="tbtn on">全部</button>
+                    <input type="text" id="sfxSearch" placeholder="搜索音效名 / 文件夹名...">
+                    <button id="btnSfxAll" class="tbtn on">浏览</button>
                     <button id="btnSfxFav" class="tbtn">★ 收藏</button>
+                    <span id="sfxCount" style="margin-left:auto;"></span>
                 </div>
             </div>
-            <div class="sfx-list" id="sfxList">
-                <div class="sfx-spacer" id="sfxSpacer"></div>
-                <div class="sfx-empty" id="sfxEmpty" style="display:none;">先选择音效库目录并「扫描目录」</div>
+            <div class="mllib-body">
+                <div class="mllib-tree" id="sfxTree"></div>
+                <div class="mllib-main">
+                    <div class="sfx-list" id="sfxList">
+                        <div class="sfx-spacer" id="sfxSpacer"></div>
+                        <div class="sfx-empty" id="sfxEmpty" style="display:none;">先选择音效库目录并「扫描目录」</div>
+                    </div>
+                    <div class="mllib-foot">
+                        <span id="sfxStatus"></span>
+                    </div>
+                </div>
             </div>
-            <div id="sfxCount"></div>
-            <div id="sfxStatus"></div>
             <div class="mllib-player" id="sfxPlayerBar" style="display:none;">
                 <div class="mlp-ctrl">
                     <button id="btnSfxPrev" class="mlp-btn" title="上一个">

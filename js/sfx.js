@@ -24,19 +24,21 @@
     var visibleIdx = {};      // fullPath -> 在 visibleFiles 中的下标
     var renderedMap = {};     // fullPath -> 已挂载的 DOM item
     var favSet = {};          // fullPath -> true
-    var filterFav = false;
-    var savedSubdir = '';      // 记住上次选择的子目录
+    var filterFav = false;    // 收藏视图
     var playingPath = null;
     var busy = false;
-    var subdirs = [];
     var rootDir = '';
+    // ---- 目录树浏览状态 ----
+    var sfxTreeRoot = null;   // 目录树根 {abs,name,depth,children,music[],files}
+    var curSfxDir = '';       // 当前选中目录（绝对路径）；'' = 浏览根全部
+    var sfxViewMode = 'tree'; // 'tree' | 'fav' | 'search'
 
     var el = {
         dir: document.getElementById('sfxDir'),
         browse: document.getElementById('btnSfxBrowse'),
         scan: document.getElementById('btnSfxScan'),
-        subdir: document.getElementById('sfxSubdir'),
         search: document.getElementById('sfxSearch'),
+        tree: document.getElementById('sfxTree'),
         btnAll: document.getElementById('btnSfxAll'),
         btnFav: document.getElementById('btnSfxFav'),
         count: document.getElementById('sfxCount'),
@@ -156,36 +158,136 @@
         }
     }
 
-    function collectSubdirs(root) {
-        var dirs = [];
-        try {
-            fs.readdirSync(root, { withFileTypes: true }).forEach(function (item) {
-                if (item.isDirectory()) dirs.push(item.name);
-            });
-        } catch (e) {}
-        return dirs.sort();
+    // 从 allFiles 构建目录树（文件夹结构 + 每层直接音乐文件）
+    function buildSfxTree() {
+        var rootNode = { abs: rootDir, name: path.basename(rootDir) || rootDir, depth: 0, children: [], music: [], parent: null, files: 0, dirs: 0 };
+        var nodeByDir = { rootDir: rootNode };
+        function ensureNode(dirAbs) {
+            if (nodeByDir[dirAbs]) return nodeByDir[dirAbs];
+            var parentAbs = path.dirname(dirAbs);
+            var parent = parentAbs === dirAbs ? rootNode : ensureNode(parentAbs);
+            var n = { abs: dirAbs, name: path.basename(dirAbs), depth: parent.depth + 1, children: [], music: [], parent: parent, files: 0, dirs: 0 };
+            nodeByDir[dirAbs] = n;
+            parent.children.push(n);
+            return n;
+        }
+        allFiles.forEach(function (f) {
+            var node = ensureNode(f.dir);
+            node.music.push(f);
+        });
+        function recount(n) {
+            n.files = (n.music || []).length;
+            n.dirs = 0;
+            n.children.forEach(function (c) { recount(c); n.dirs += c.dirs + 1; n.files += c.files; });
+        }
+        recount(rootNode);
+        return rootNode;
     }
 
-    function renderSubdirs() {
-        var cur = el.subdir.value;
-        el.subdir.innerHTML = '';
-        var allOpt = document.createElement('option');
-        allOpt.value = '';
-        allOpt.textContent = '全部';
-        el.subdir.appendChild(allOpt);
-        subdirs.forEach(function (d) {
-            var opt = document.createElement('option');
-            opt.value = d;
-            opt.textContent = d;
-            el.subdir.appendChild(opt);
+    // 渲染左目录树
+    function renderSfxTree() {
+        if (!el.tree) return;
+        el.tree.innerHTML = '';
+        if (!sfxTreeRoot) return;
+        (function walk(n) {
+            var row = document.createElement('div');
+            row.className = 'tnode';
+            row.style.paddingLeft = (6 + n.depth * 14) + 'px';
+            var hasKids = n.children.length > 0;
+            var caret = document.createElement('span');
+            caret.className = 'caret';
+            caret.textContent = hasKids ? '▶' : '';
+            var ico = document.createElement('span');
+            ico.className = 'tico';
+            ico.textContent = n.depth === 0 ? '🗂' : (hasKids ? '📁' : '📂');
+            var lbl = document.createElement('span');
+            lbl.className = 'tlabel';
+            lbl.textContent = n.depth === 0 ? (path.basename(n.abs) || n.abs) : n.name;
+            lbl.title = n.abs;
+            var cnt = document.createElement('span');
+            cnt.className = 'tcnt';
+            cnt.textContent = n.files > 0 ? String(n.files) : '';
+            row.appendChild(caret); row.appendChild(ico); row.appendChild(lbl); row.appendChild(cnt);
+            row.__node = n;
+            row.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                if (ev.target && ev.target.classList && ev.target.classList.contains('caret')) {
+                    n.__open = !n.__open;
+                    collapseSfxTree();
+                    return;
+                }
+                sfxViewMode = 'tree';
+                curSfxDir = n.abs;
+                syncSfxViewBtns();
+                if (n.children.length && !n.__open) n.__open = true;
+                collapseSfxTree();
+                applyView();
+            });
+            el.tree.appendChild(row);
+            n.children.forEach(walk);
+        })(sfxTreeRoot);
+        collapseSfxTree();
+    }
+
+    function collapseSfxTree() {
+        if (!el.tree || !sfxTreeRoot) return;
+        if (sfxTreeRoot.__open !== false) sfxTreeRoot.__open = true;
+        var rows = Array.prototype.slice.call(el.tree.querySelectorAll('.tnode'));
+        rows.forEach(function (r) {
+            var n = r.__node;
+            if (!n) return;
+            var show = true;
+            var p = n.parent;
+            while (p) { if (!p.__open) { show = false; break; } p = p.parent; }
+            r.style.display = show ? '' : 'none';
+            var caret = r.querySelector('.caret');
+            if (caret) caret.textContent = (n.children.length && n.__open) ? '▼' : (n.children.length ? '▶' : '');
+            r.classList.toggle('sel', show && sfxViewMode === 'tree' && n.abs === curSfxDir);
         });
-        // 恢复上次选择的子目录（若目录仍在）
-        var want = cur || savedSubdir;
-        if (want && subdirs.indexOf(want) >= 0) {
-            el.subdir.value = want;
+    }
+
+    // 根据当前视图（目录/收藏/搜索）算出可见文件列表
+    function applyView() {
+        var kw = (el.search.value || '').trim().toLowerCase();
+        var list = [];
+        if (sfxViewMode === 'fav') {
+            // 收藏视图：所有收藏
+            list = allFiles.filter(function (f) { return isFav(f.fullPath); });
+        } else if (kw) {
+            // 搜索：文件名 + 所在文件夹路径
+            list = allFiles.filter(function (f) {
+                var nameHit = path.basename(f.name, path.extname(f.name)).toLowerCase().indexOf(kw) >= 0;
+                if (nameHit) return true;
+                try {
+                    var rel = path.relative(rootDir, f.dir);
+                    return rel.toLowerCase().indexOf(kw) >= 0;
+                } catch (e) { return false; }
+            });
+        } else if (curSfxDir) {
+            // 目录视图：该目录直接层
+            var node = findSfxNode(curSfxDir);
+            list = node ? (node.music || []).slice() : [];
         } else {
-            el.subdir.value = '';
+            // 根视图：根直接层
+            list = sfxTreeRoot ? (sfxTreeRoot.music || []).slice() : [];
         }
+        setVisibleFiles(list);
+        el.empty.textContent = allFiles.length === 0 ? '目录下没有音频文件' : (list.length === 0 ? '该目录下没有音效' : '');
+    }
+
+    function findSfxNode(abs) {
+        if (!sfxTreeRoot) return null;
+        var out = null;
+        (function w(n) { if (n.abs === abs) { out = n; return; } n.children.forEach(function (c) { if (!out) w(c); }); })(sfxTreeRoot);
+        return out;
+    }
+
+    function syncSfxViewBtns() {
+        if (!el.btnAll || !el.btnFav) return;
+        el.btnAll.classList.toggle('on', sfxViewMode === 'tree');
+        el.btnFav.classList.toggle('on', sfxViewMode === 'fav');
+        if (sfxViewMode === 'tree') { el.btnAll.textContent = '浏览'; el.btnFav.textContent = '★ 收藏'; }
+        else if (sfxViewMode === 'fav') { el.btnAll.textContent = '浏览'; el.btnFav.textContent = '★ 收藏中'; }
     }
 
     // ---------- 扫描入口 ----------
@@ -232,30 +334,13 @@
         allFiles = files;
         fileByPath = {};
         allFiles.forEach(function (f) { fileByPath[f.fullPath] = f; });
-        subdirs = collectSubdirs(rootDir);
-        renderSubdirs();
-        setVisibleFiles(currentFiltered());
-    }
-
-    // ---------- 过滤 ----------
-    function currentFiltered() {
-        var kw = el.search.value.trim().toLowerCase();
-        var sub = el.subdir.value;
-        return allFiles.filter(function (f) {
-            if (filterFav && !isFav(f.fullPath)) return false;
-            if (sub && f.topSub !== sub) return false;
-            if (kw) {
-                // 文件名 + 所在文件夹路径都参与匹配（文件夹名含关键词 → 该文件夹内音效全部展示）
-                var nameHit = path.basename(f.name, path.extname(f.name)).toLowerCase().indexOf(kw) >= 0;
-                if (!nameHit) {
-                    // 取相对根目录的文件夹路径作匹配
-                    var rel = path.relative(rootDir, f.dir);
-                    var dirPathHit = rel.toLowerCase().indexOf(kw) >= 0;
-                    if (!dirPathHit) return false;
-                }
-            }
-            return true;
-        });
+        // 构建目录树 + 重置浏览视图到根
+        sfxTreeRoot = buildSfxTree();
+        curSfxDir = '';
+        sfxViewMode = 'tree';
+        syncSfxViewBtns();
+        renderSfxTree();
+        applyView();
     }
 
     // ---------- 虚拟列表渲染 ----------
@@ -268,8 +353,13 @@
         // 设定滚动高度
         el.spacer.style.height = (visibleFiles.length * ITEM_H) + 'px';
         el.empty.style.display = visibleFiles.length === 0 ? '' : 'none';
-        el.empty.textContent = allFiles.length === 0 ? '目录下没有音频文件' : '没有匹配的结果';
-        el.count.textContent = '显示 ' + visibleFiles.length + ' / ' + allFiles.length + ' 个音频';
+        if (el.empty && !el.empty.textContent) el.empty.textContent = '没有匹配的结果';
+        // 计数显示（工具栏上）：当前视图/总数
+        var scope = '';
+        if (sfxViewMode === 'fav') scope = '★ 收藏 ';
+        else if (curSfxDir) scope = path.basename(curSfxDir) + ' ';
+        else scope = '根目录 ';
+        el.count.textContent = scope + visibleFiles.length + ' / ' + allFiles.length + ' 个';
         el.list.scrollTop = 0;
         renderWindow();
     }
@@ -377,7 +467,7 @@
             toggleFav(f.fullPath);
             star.className = 'star' + (isFav(f.fullPath) ? ' on' : '');
             star.textContent = isFav(f.fullPath) ? '★' : '☆';
-            if (filterFav && !isFav(f.fullPath)) setVisibleFiles(currentFiltered());
+            if (sfxViewMode === 'fav' && !isFav(f.fullPath)) applyView();
         });
 
         item.appendChild(nm);
@@ -681,7 +771,7 @@
                     starEl.textContent = isFav(f.fullPath) ? '★' : '☆';
                 }
             }
-            if (filterFav && !isFav(f.fullPath)) setVisibleFiles(currentFiltered());
+            if (sfxViewMode === 'fav' && !isFav(f.fullPath)) applyView();
             hideContextMenu();
         });
 
@@ -811,24 +901,18 @@
     // ---------- 事件绑定 ----------
     el.browse.addEventListener('click', browseDir);
     el.scan.addEventListener('click', function () { doScan(false); });
-    el.search.addEventListener('input', function () { setVisibleFiles(currentFiltered()); });
-    el.subdir.addEventListener('change', function () {
-        savedSubdir = el.subdir.value;
-        try { localStorage.setItem('sfxSubdir', savedSubdir); } catch (e) {}
-        setVisibleFiles(currentFiltered());
-    });
+    el.search.addEventListener('input', function () { applyView(); });
     el.list.addEventListener('scroll', renderWindow);
     el.btnAll.addEventListener('click', function () {
-        filterFav = false;
-        el.btnAll.classList.add('on');
-        el.btnFav.classList.remove('on');
-        setVisibleFiles(currentFiltered());
+        sfxViewMode = 'tree';
+        syncSfxViewBtns();
+        collapseSfxTree();
+        applyView();
     });
     el.btnFav.addEventListener('click', function () {
-        filterFav = true;
-        el.btnFav.classList.add('on');
-        el.btnAll.classList.remove('on');
-        setVisibleFiles(currentFiltered());
+        sfxViewMode = 'fav';
+        syncSfxViewBtns();
+        applyView();
     });
 
     // 播放条事件（单活动实例控制）
@@ -901,7 +985,6 @@
     loadFavs();
     registerShortcutInterest();
     startProgressTick();
-    try { savedSubdir = localStorage.getItem('sfxSubdir') || ''; } catch (e) {}
     try {
         var savedDir = localStorage.getItem('sfxDir');
         if (savedDir) {

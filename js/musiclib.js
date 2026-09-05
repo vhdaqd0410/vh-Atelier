@@ -1041,4 +1041,130 @@
             doLoad(savedDir, false);
         }
     } catch (e) {}
+
+    // ================= 增量写入（供外部：网易云下载后把新文件塞进音乐库索引） =================
+    // 不重扫全量：只把新增文件挂进内存树 + 追加到磁盘缓存。
+    // files: [{ path: 绝对路径 }]
+    window.__musiclibAddFiles = function (files) {
+        try {
+            if (!files || !files.length) return;
+            var list = Array.isArray(files) ? files : [files];
+            // 确保树已就绪：优先用当前 treeRoot；没加载则尝试 loadTreeCache；仍无则忽略（用户下次扫全量会带上）
+            if (!treeRoot) {
+                var saved = '';
+                try { saved = localStorage.getItem('mllibDir') || ''; } catch (e) {}
+                if (saved && fs.existsSync(saved)) {
+                    if (!loadTreeCache(saved)) return; // 缓存也失效，等用户手动全扫
+                } else {
+                    return;
+                }
+            }
+            var root = treeRoot;
+            if (!root || !fs.existsSync(root.abs)) return;
+            var addedAny = false;
+            list.forEach(function (item) {
+                var fp = item && item.path;
+                if (!fp || !fs.existsSync(fp)) return;
+                // 已在树中则跳过
+                if (fileByPath[fp]) return;
+                var dirAbs = path.dirname(fp);
+                if (dirAbs.indexOf(root.abs) !== 0) return; // 不在音乐库根下
+                var node = findNode(dirAbs);
+                if (!node) {
+                    // 目标目录可能不存在（子目录新建）——按相对根路径逐级建节点
+                    var rel = path.relative(root.abs, dirAbs);
+                    if (!rel || rel.indexOf('..') === 0) return;
+                    var parts = rel.split(path.sep);
+                    var cur = root;
+                    var ok = true;
+                    for (var pi = 0; pi < parts.length; pi++) {
+                        var seg = parts[pi];
+                        var next = null;
+                        for (var ci = 0; ci < cur.children.length; ci++) {
+                            if (cur.children[ci].name === seg) { next = cur.children[ci]; break; }
+                        }
+                        if (!next) {
+                            var nabs = path.join(cur.abs, seg);
+                            if (!fs.existsSync(nabs)) { ok = false; break; }
+                            next = { abs: nabs, name: seg, depth: cur.depth + 1, children: [], parent: cur, music: [], dirs: 0, files: 0 };
+                            cur.children.push(next);
+                            if (!dirChildren[cur.abs]) dirChildren[cur.abs] = [];
+                            dirChildren[cur.abs].push(next);
+                            allDirs.push(next);
+                        }
+                        cur = next;
+                    }
+                    if (!ok) return;
+                    node = cur;
+                }
+                var st = null;
+                try { st = fs.statSync(fp); } catch (e) { return; }
+                var mf = {
+                    name: path.basename(fp),
+                    fullPath: fp,
+                    ext: path.extname(fp).replace('.', '').toLowerCase(),
+                    dir: node.abs,
+                    ctime: st ? (st.birthtimeMs || st.ctimeMs || 0) : 0,
+                    mtime: st ? (st.mtimeMs || 0) : 0,
+                    size: st ? (st.size || 0) : 0
+                };
+                if (!node.music) node.music = [];
+                node.music.push(mf);
+                fileByPath[fp] = mf;
+                addedAny = true;
+            });
+            if (!addedAny) return;
+            // 重算计数
+            (function recount(n) {
+                n.files = (n.music || []).length;
+                n.dirs = 0;
+                for (var i2 = 0; i2 < n.children.length; i2++) { recount(n.children[i2]); n.dirs += n.children[i2].dirs + 1; n.files += n.children[i2].files; }
+            })(root);
+            // 若正在浏览受影响的目录，刷新列表（新歌按当前排序可见）
+            var curNode = curDir ? findNode(curDir) : null;
+            if (curNode) {
+                var cf = (curNode.music || []).slice();
+                cf.forEach(function (mm) { fileByPath[mm.fullPath] = mm; });
+                visibleDirFiles = cf;
+                setVisibleFiles(currentFiltered(cf));
+            }
+            // 刷新树（保留展开状态：__open 存在节点上，renderTree 不重置它们，但 collapseRender 依赖 __open，重建 row 无妨）
+            renderTree();
+            // 增量写盘缓存：读现有 v3，追加上层新目录与音乐条目
+            try {
+                if (!fs.existsSync(collectDir)) fs.mkdirSync(collectDir, { recursive: true });
+                if (fs.existsSync(treeCacheFile)) {
+                    var slim = JSON.parse(fs.readFileSync(treeCacheFile, 'utf8'));
+                    if (slim && slim.v === 3 && slim.root === root.abs) {
+                        var dirIdx = {};
+                        slim.dirs.forEach(function (d, i) { dirIdx[d.a] = i; });
+                        // 新目录补齐
+                        var added = false;
+                        allDirs.forEach(function (d) {
+                            if (dirIdx[d.abs] === undefined) {
+                                dirIdx[d.abs] = slim.dirs.length;
+                                slim.dirs.push({ a: d.abs, n: d.name, d: d.depth, p: d.parent ? d.parent.abs : null });
+                                added = true;
+                            }
+                        });
+                        list.forEach(function (item) {
+                            var fp2 = item && item.path;
+                            if (!fp2 || !fileByPath[fp2]) return;
+                            var dir2 = path.dirname(fp2);
+                            var di = dirIdx[dir2];
+                            if (di === undefined) return;
+                            var m2 = fileByPath[fp2];
+                            slim.music.push({ di: di, n: m2.name, c: Math.round(m2.ctime || 0), t: Math.round(m2.mtime || 0), s: m2.size || 0 });
+                        });
+                        if (added || true) {
+                            fs.writeFileSync(treeCacheFile, JSON.stringify(slim), 'utf8');
+                        }
+                    }
+                }
+            } catch (e) { log('增量写盘失败: ' + e.message); }
+            log('musiclib 增量写入 ' + list.length + ' 首');
+        } catch (e) {
+            log('musiclibAddFiles 错误: ' + e.message);
+        }
+    };
 })();
