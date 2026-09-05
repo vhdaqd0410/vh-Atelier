@@ -652,7 +652,8 @@
     }
 
     // 解析指定剧本文件（docx/pdf）并打开阅读浮层
-    function loadScriptDocx(docx, projectName) {
+    // restoreEp: 可选，打开后定位到第几集（用于自动续读）
+    function loadScriptDocx(docx, projectName, restoreEp) {
         el.statusText.textContent = '解析剧本：' + path.basename(docx) + '…';
         var py = findPython();
         var scriptPath = path.join(extRoot, 'py', 'docx_read.py');
@@ -690,7 +691,7 @@
                 showScriptMsg('解析剧本失败：' + msg + '\n\n文件：' + docx);
                 return;
             }
-            openScriptReader(data, docx, projectName);
+            openScriptReader(data, docx, projectName, restoreEp);
         } catch (e) {
             showScriptMsg('调用解析器失败：' + e.message);
         }
@@ -763,6 +764,25 @@
             });
         });
         return out;
+    }
+
+    // 在读状态：记住上次读的剧本 + 集（点「剧本」组时自动续读；关闭剧本时清除）
+    var SCRIPT_READING_KEY = 'vh_script_reading';  // { path, ep }  ep: null=全部 / 数字=第几集
+    function saveReading(path, ep) {
+        try { localStorage.setItem(SCRIPT_READING_KEY, JSON.stringify({ path: path, ep: ep })); } catch (e) {}
+    }
+    function clearReading() {
+        try { localStorage.removeItem(SCRIPT_READING_KEY); } catch (e) {}
+    }
+    function loadReading() {
+        try {
+            var raw = localStorage.getItem(SCRIPT_READING_KEY);
+            if (raw) {
+                var o = JSON.parse(raw);
+                if (o && o.path) return o;
+            }
+        } catch (e) {}
+        return null;
     }
 
     // 剧本库首页：手动打开按钮 + 最近阅读 + 已固定剧本
@@ -866,27 +886,38 @@
         hostPanel.appendChild(box);
     }
 
-    // 暴露给 main.js：切到剧本组且面板为空时，渲染首页
+    // 暴露给 main.js：切到剧本组且面板为空时，渲染首页（若有在读剧本则自动续开）
     window.__atShowScriptHome = function () {
         var hostPanel = document.getElementById('panel-script');
         if (!hostPanel) return;
         var hasReader = hostPanel.querySelector('#scriptReaderBox');
         var hasHome = hostPanel.querySelector('#scriptHomeBox');
-        if (!hasReader && !hasHome) {
-            showScriptHome();
-        } else if (hasHome && !hasReader) {
-            // 已显示首页则刷新最近/固定
-            showScriptHome();
+        if (hasReader) return;  // 阅读器还在，不打扰
+        if (hasHome) { showScriptHome(); return; }  // 已显示首页则刷新最近/固定
+        // 面板空：优先自动续读上次打开的剧本
+        var reading = loadReading();
+        if (reading && reading.path) {
+            var exist = false;
+            try { exist = fs.existsSync(reading.path); } catch (e) {}
+            if (exist) {
+                loadScriptDocx(reading.path, '', reading.ep);
+                return;
+            }
+            clearReading();  // 文件已不在，清记录回首页
         }
+        showScriptHome();
     };
 
     // 剧本阅读浮层：左集数列表 + 右内容 + 搜索（集号跳转/关键词高亮）+ 翻译/复制
-    function openScriptReader(data, docxPath, projectName) {
+    // restoreEp: 打开后定位到的集（可为 null=全部）
+    function openScriptReader(data, docxPath, projectName, restoreEp) {
         // 剧本阅读作为独立面板（panel-script + 顶部「剧本」组），不遮挡其它板块
         var hostPanel = document.getElementById('panel-script');
         if (!hostPanel) return;
         // 记录最近阅读（跨项目，供剧本库首页）
         if (docxPath) pushRecentScript(docxPath, projectName);
+        // 记为「在读」：点剧本组自动续读；关闭时清除
+        saveReading(docxPath, restoreEp != null ? restoreEp : null);
         hostPanel.innerHTML = '';
         var box = document.createElement('div');
         box.id = 'scriptReaderBox';
@@ -929,6 +960,7 @@
         switchBtn.style.cssText = 'background:#1e3a2a;color:#7fd68b;border:1px solid #2a5a3a;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;flex:0 0 auto;';
         switchBtn.addEventListener('click', function () {
             document.removeEventListener('keydown', escHandler);
+            clearReading();   // 主动换剧本：不再续读当前这本
             if (hostPanel) hostPanel.innerHTML = '';
             showScriptHome();
             if (window.__atSwitchToScript) { try { window.__atSwitchToScript(); } catch (e) {} }
@@ -961,7 +993,10 @@
 
         // ---------- 状态 ----------
         var eps = data.episodes || [];
-        var curEp = null;            // 当前选中集（null=全部）
+        // 恢复上次阅读的集：restoreEp 存在且在该剧本集数内才定位；否则 null=全部
+        var curEp = null;
+        if (restoreEp != null && eps.indexOf(restoreEp) >= 0) curEp = restoreEp;
+        var curEpKey = curEp != null ? String(curEp) : 'all';
         var translating = false;
         var transMap = {};           // 批量翻译缓存：'__'+epkey -> {台词行:译文}
         var lineTransMap = {};       // 单句翻译缓存
@@ -1012,10 +1047,11 @@
                 }
                 it.addEventListener('click', function () {
                     curEp = ep;
-                    curEpKey = curEp ? String(curEp) : 'all';
+                    curEpKey = curEp != null ? String(curEp) : 'all';
                     searchKeyword = '';
                     searchInp.value = '';
                     searchState.textContent = '';
+                    saveReading(docxPath, curEp);   // 记住读到第几集
                     renderSidebar();
                     render();
                 });
@@ -1229,6 +1265,7 @@
                     curEpKey = String(n);
                     searchKeyword = '';
                     searchState.textContent = '已跳转 第' + n + ' 集';
+                    saveReading(docxPath, curEp);   // 跳集也算在读位置
                     renderSidebar();
                     render();
                     return;
@@ -1243,6 +1280,7 @@
                     curEpKey = String(n2);
                     searchKeyword = '';
                     searchState.textContent = '已跳转 第' + n2 + ' 集';
+                    saveReading(docxPath, curEp);
                     renderSidebar(); render(); return;
                 }
             }
@@ -1295,8 +1333,6 @@
             }
             next();
         }
-        // 翻译后把当前范围的批量译文渲染到行下
-        var curEpKey = 'all';
 
         transBtn.addEventListener('click', doTranslate);
         mailBtn.addEventListener('click', function () {
@@ -1333,9 +1369,10 @@
 
         renderSidebar();
         render();
-        // 关闭当前剧本：清空面板 → 显示剧本库首页（留在剧本组，方便换下一个）
+        // 关闭当前剧本：清空面板 → 显示剧本库首页（留在剧本组）；清除在读记录（下次进剧本组回首页）
         function closeReader() {
             document.removeEventListener('keydown', escHandler);
+            clearReading();
             if (hostPanel) hostPanel.innerHTML = '';
             showScriptHome();
         }
