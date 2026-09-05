@@ -113,17 +113,22 @@
 
     // 暴露给其他板块调用：字幕识别 → 字幕校对 联动时切 tab
     window.__atSwitchTab = switchTab;
-    // 剧本阅读：打开时显示「剧本」组并切过去；关闭时隐藏组，若正处在剧本组则切回进度
+    // 剧本工作台（常驻）：切过去并确保面板有内容；无内容时显示剧本库首页
+    // 剧本库首页由 progress.js 提供（__atShowScriptHome），面板无阅读器时切到该组就展示它
     window.__atShowScriptGroup = function () {
         var btn = document.querySelector('.ws-group[data-group="script"]');
         if (btn) btn.style.display = '';
+        // 若面板是空的（没有正在阅读的剧本），先渲染剧本库首页
+        var panel = document.getElementById('panel-script');
+        var hasReader = panel && panel.querySelector('#scriptReaderBox');
+        if (panel && !hasReader && window.__atShowScriptHome) {
+            try { window.__atShowScriptHome(); } catch (e) {}
+        }
         switchGroup('script');
     };
+    // 关闭剧本阅读：切回进度（按钮常驻，不隐藏）
     window.__atHideScriptGroup = function () {
-        var btn = document.querySelector('.ws-group[data-group="script"]');
-        if (btn) btn.style.display = 'none';
         if (currentInGroup['script'] && groupBtns.length) {
-            // 若当前正显示剧本组，退回进度组
             var active = null;
             groupBtns.forEach(function (b) { if (b.classList.contains('active')) active = b.dataset.group; });
             if (active === 'script') switchGroup('progress');
@@ -134,5 +139,9 @@
         var active = null;
         groupBtns.forEach(function (b) { if (b.classList.contains('active')) active = b.dataset.group; });
         return active === 'script';
+    };
+    // 供 progress.js 调用：直接切到剧本组（已渲染好内容时用）
+    window.__atSwitchToScript = function () {
+        switchGroup('script');
     };
 })();

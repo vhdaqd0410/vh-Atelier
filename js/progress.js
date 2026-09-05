@@ -705,11 +705,167 @@
         document.body.appendChild(modal);
     }
 
+    // ==================== 剧本库首页（常驻入口：手动开 / 最近 / 固定） ====================
+    var SCRIPT_RECENT_KEY = 'vh_script_recent';   // [{ path, name, project, t }] 最近阅读（新的在前）
+    var SCRIPT_HOME_SHOWN = false;
+
+    function loadRecentScripts() {
+        try {
+            var raw = localStorage.getItem(SCRIPT_RECENT_KEY);
+            if (raw) {
+                var arr = JSON.parse(raw);
+                if (Array.isArray(arr)) return arr;
+            }
+        } catch (e) {}
+        return [];
+    }
+    function saveRecentScripts(arr) {
+        try { localStorage.setItem(SCRIPT_RECENT_KEY, JSON.stringify(arr)); } catch (e) {}
+    }
+    // 打开剧本时记录最近（去重，最多 30 条）
+    function pushRecentScript(docxPath, projectName) {
+        try {
+            var arr = loadRecentScripts();
+            arr = arr.filter(function (r) { return r.path !== docxPath; });
+            arr.unshift({ path: docxPath, name: path.basename(docxPath), project: projectName || '', t: Date.now() });
+            if (arr.length > 30) arr = arr.slice(0, 30);
+            saveRecentScripts(arr);
+        } catch (e) {}
+    }
+    // 汇总所有项目下固定的剧本：返回 [{ path, name, project }]
+    function collectAllFixedScripts() {
+        var marks = loadScriptMarks();
+        var out = [];
+        Object.keys(marks).forEach(function (proj) {
+            (marks[proj] || []).forEach(function (p) {
+                try { if (fs.existsSync(p)) out.push({ path: p, name: path.basename(p), project: proj }); } catch (e) {}
+            });
+        });
+        return out;
+    }
+
+    // 剧本库首页：手动打开按钮 + 最近阅读 + 已固定剧本
+    function showScriptHome() {
+        var hostPanel = document.getElementById('panel-script');
+        if (!hostPanel) return;
+        hostPanel.innerHTML = '';
+        var box = document.createElement('div');
+        box.id = 'scriptHomeBox';
+        box.style.cssText = 'flex:1;height:auto;display:flex;flex-direction:column;overflow:hidden;background:var(--panel,#181818);border-radius:8px;border:1px solid #3a3a3a;padding:14px 16px;overflow-y:auto;';
+
+        // 标题
+        var h = document.createElement('div');
+        h.style.cssText = 'font-size:14px;font-weight:600;color:#e8e8e8;margin-bottom:4px;';
+        h.textContent = '📖 剧本库';
+        box.appendChild(h);
+        var sub = document.createElement('div');
+        sub.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:14px;';
+        sub.textContent = '不依赖视频工作台项目，直接打开本地剧本阅读';
+        box.appendChild(sub);
+
+        // 手动打开按钮
+        var openBtn = document.createElement('button');
+        openBtn.textContent = '📂  打开剧本文件…';
+        openBtn.style.cssText = 'display:block;width:100%;padding:12px;font-size:13px;font-weight:600;background:var(--accent,#537d96);color:#fff;border:none;border-radius:8px;cursor:pointer;margin-bottom:14px;';
+        openBtn.addEventListener('click', function () { browseScriptFile('', false); });
+        box.appendChild(openBtn);
+
+        // 段标题工具
+        function secTitle(txt, hint) {
+            var t = document.createElement('div');
+            t.style.cssText = 'font-size:11px;color:#9fb3c8;font-weight:600;margin:6px 0 6px;display:flex;align-items:center;gap:8px;';
+            var sp = document.createElement('span');
+            sp.textContent = txt;
+            t.appendChild(sp);
+            if (hint) {
+                var hs = document.createElement('span');
+                hs.textContent = hint;
+                hs.style.cssText = 'color:var(--muted);font-weight:400;font-size:10px;';
+                t.appendChild(hs);
+            }
+            return t;
+        }
+        function itemRow(p, metaRight) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;background:#242424;border:1px solid #333;border-radius:6px;padding:7px 10px;margin-bottom:6px;cursor:pointer;';
+            row.addEventListener('click', function () { loadScriptDocx(p, ''); });
+            var ic = document.createElement('span');
+            ic.textContent = '📄';
+            row.appendChild(ic);
+            var nm = document.createElement('span');
+            nm.style.cssText = 'flex:1;font-size:12px;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            nm.textContent = path.basename(p);
+            nm.title = p;
+            row.appendChild(nm);
+            if (metaRight) {
+                var mt = document.createElement('span');
+                mt.style.cssText = 'flex:0 0 auto;font-size:10px;color:var(--muted);';
+                mt.textContent = metaRight;
+                row.appendChild(mt);
+            }
+            return row;
+        }
+
+        // 最近阅读
+        var recents = loadRecentScripts().filter(function (r) {
+            try { return fs.existsSync(r.path); } catch (e) { return false; }
+        });
+        if (recents.length > 0) {
+            box.appendChild(secTitle('最近阅读', '点开即读'));
+            recents.slice(0, 10).forEach(function (r) {
+                var when = '';
+                try {
+                    var d = new Date(r.t);
+                    var now = new Date();
+                    var sameDay = d.toDateString() === now.toDateString();
+                    when = sameDay ? '今天 ' + (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes()
+                        : (d.getMonth() + 1) + '/' + d.getDate();
+                } catch (e) {}
+                var meta = r.project ? (r.project + ' · ' + when) : when;
+                box.appendChild(itemRow(r.path, meta));
+            });
+        }
+
+        // 已固定（跨项目汇总）
+        var fixed = collectAllFixedScripts();
+        if (fixed.length > 0) {
+            box.appendChild(secTitle('已固定', '点开即读'));
+            fixed.forEach(function (f) {
+                box.appendChild(itemRow(f.path, f.project));
+            });
+        }
+
+        if (recents.length === 0 && fixed.length === 0) {
+            var tip = document.createElement('div');
+            tip.style.cssText = 'padding:18px;text-align:center;font-size:12px;color:var(--muted);background:#202020;border:1px dashed #3a3a3a;border-radius:8px;line-height:1.8;';
+            tip.innerHTML = '还没有剧本记录。<br>点上方「📂 打开剧本文件…」选一个 docx 开始，<br>或从视频工作台项目卡片里点「剧本」打开。<br><br>打开过的会自动出现在「最近阅读」，方便下次直接点。';
+            box.appendChild(tip);
+        }
+
+        hostPanel.appendChild(box);
+    }
+
+    // 暴露给 main.js：切到剧本组且面板为空时，渲染首页
+    window.__atShowScriptHome = function () {
+        var hostPanel = document.getElementById('panel-script');
+        if (!hostPanel) return;
+        var hasReader = hostPanel.querySelector('#scriptReaderBox');
+        var hasHome = hostPanel.querySelector('#scriptHomeBox');
+        if (!hasReader && !hasHome) {
+            showScriptHome();
+        } else if (hasHome && !hasReader) {
+            // 已显示首页则刷新最近/固定
+            showScriptHome();
+        }
+    };
+
     // 剧本阅读浮层：左集数列表 + 右内容 + 搜索（集号跳转/关键词高亮）+ 翻译/复制
     function openScriptReader(data, docxPath, projectName) {
         // 剧本阅读作为独立面板（panel-script + 顶部「剧本」组），不遮挡其它板块
         var hostPanel = document.getElementById('panel-script');
         if (!hostPanel) return;
+        // 记录最近阅读（跨项目，供剧本库首页）
+        if (docxPath) pushRecentScript(docxPath, projectName);
         hostPanel.innerHTML = '';
         var box = document.createElement('div');
         box.id = 'scriptReaderBox';
@@ -745,6 +901,18 @@
         mailBtn.title = '设置翻译邮箱（MyMemory 提额 10 倍）';
         mailBtn.style.cssText = 'background:#2a2a2a;color:#c9a86a;border:1px solid #4a4a2a;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;';
         head.appendChild(mailBtn);
+        // 换一个剧本：回剧本库首页（不关闭面板）
+        var switchBtn = document.createElement('button');
+        switchBtn.textContent = '📂 换剧本';
+        switchBtn.title = '回到剧本库，换一个剧本';
+        switchBtn.style.cssText = 'background:#1e3a2a;color:#7fd68b;border:1px solid #2a5a3a;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;flex:0 0 auto;';
+        switchBtn.addEventListener('click', function () {
+            document.removeEventListener('keydown', escHandler);
+            if (hostPanel) hostPanel.innerHTML = '';
+            showScriptHome();
+            if (window.__atSwitchToScript) { try { window.__atSwitchToScript(); } catch (e) {} }
+        });
+        head.appendChild(switchBtn);
         var close = document.createElement('button');
         close.textContent = '✕ 关闭剧本';
         close.title = '关闭剧本阅读，返回进度';
@@ -1144,13 +1312,11 @@
 
         renderSidebar();
         render();
-        // 关闭剧本：清空面板、隐藏「剧本」组、移除键盘监听
+        // 关闭当前剧本：清空面板 → 显示剧本库首页（留在剧本组，方便换下一个）
         function closeReader() {
             document.removeEventListener('keydown', escHandler);
             if (hostPanel) hostPanel.innerHTML = '';
-            if (window.__atHideScriptGroup) {
-                try { window.__atHideScriptGroup(); } catch (e) {}
-            }
+            showScriptHome();
         }
         close.addEventListener('click', closeReader);
         function escHandler(e) {
