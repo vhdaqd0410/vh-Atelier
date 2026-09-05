@@ -2163,6 +2163,36 @@
             </div>
             <div id="sfxCount"></div>
             <div id="sfxStatus"></div>
+            <div class="mllib-player" id="sfxPlayerBar" style="display:none;">
+                <div class="mlp-ctrl">
+                    <button id="btnSfxPrev" class="mlp-btn" title="上一个">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                    </button>
+                    <button id="btnSfxPlay" class="mlp-btn mlp-main" title="播放/暂停">
+                        <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                    </button>
+                    <button id="btnSfxNext" class="mlp-btn" title="下一个">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                    </button>
+                </div>
+                <div class="mlp-now">
+                    <div class="mlp-title" id="sfxPlayerTitle">未在播放</div>
+                    <div class="mlp-sub" id="sfxPlayerSub"></div>
+                </div>
+                <div class="mlp-bar">
+                    <span class="ptime" id="sfxCur">0:00</span>
+                    <div class="seek" id="sfxSeek"><div class="seek-fill" id="sfxSeekFill"></div></div>
+                    <span class="ptime" id="sfxDur">0:00</span>
+                </div>
+                <div class="mlp-vol">
+                    <button id="btnSfxVol" class="mlp-btn" title="静音/取消静音">
+                        <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                        <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                    </button>
+                    <input type="range" id="sfxVol" class="mlp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                </div>
+            </div>
         </div>
 
         <div id="sfxContextMenu"></div>

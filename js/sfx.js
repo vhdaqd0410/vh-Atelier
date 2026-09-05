@@ -28,7 +28,6 @@
     var filterFav = false;
     var savedSubdir = '';      // 记住上次选择的子目录
     var playingPath = null;
-    var activeWs = null;
     var busy = false;
     var subdirs = [];
     var rootDir = '';
@@ -46,8 +45,26 @@
         spacer: document.getElementById('sfxSpacer'),
         empty: document.getElementById('sfxEmpty'),
         status: document.getElementById('sfxStatus'),
-        ctxMenu: document.getElementById('sfxContextMenu')
+        ctxMenu: document.getElementById('sfxContextMenu'),
+        player: document.getElementById('sfxPlayerBar'),
+        playBtn: document.getElementById('btnSfxPlay'),
+        prevBtn: document.getElementById('btnSfxPrev'),
+        nextBtn: document.getElementById('btnSfxNext'),
+        volBtn: document.getElementById('btnSfxVol'),
+        volSlider: document.getElementById('sfxVol'),
+        seek: document.getElementById('sfxSeek'),
+        seekFill: document.getElementById('sfxSeekFill'),
+        curT: document.getElementById('sfxCur'),
+        durT: document.getElementById('sfxDur'),
+        pTitle: document.getElementById('sfxPlayerTitle'),
+        pSub: document.getElementById('sfxPlayerSub')
     };
+
+    // 统一播放状态（单活动实例模型，同音乐库）
+    var curWs = null;        // 当前活动 wavesurfer
+    var curWsPath = null;
+    var activeItem = null;
+    var progressTimer = null;
 
     function log(msg) {
         try {
@@ -199,7 +216,7 @@
     }
 
     function fullScan(dirPath) {
-        stopCurrent();
+        stopPlayback();
         setStatus('正在扫描 ' + dirPath + ' ...', '');
         var out = [];
         try {
@@ -276,19 +293,25 @@
     }
 
     function mountItem(f, idx) {
-        var item = buildItem(f);
+        var item;
+        try {
+            item = buildItem(f);
+        } catch (e) {
+            log('buildItem 失败 ' + f.fullPath + ': ' + e.message);
+            return;
+        }
         item.style.top = (idx * ITEM_H) + 'px';
         el.list.appendChild(item);
         renderedMap[f.fullPath] = item;
         item.__idx = idx;
-        // 挂载即加载波形（窗口很小，几十条无压力）
-        ensureWave(item);
+        try { ensureWave(item); } catch (e) { log('ensureWave 失败: ' + e.message); }
     }
 
     function unmountItem(p) {
+        // 正在播放的行保持挂载（播放不中断，行 pin 在视口内）
+        if (playingPath === p) return;
         var item = renderedMap[p];
         if (!item) return;
-        if (playingPath === p) stopCurrent();
         if (item.__ws) { try { item.__ws.destroy(); } catch (e) {} item.__ws = null; }
         item.__waveDone = false;
         item.__wsReady = false;
@@ -297,11 +320,13 @@
     }
 
     function unmountAll() {
-        stopCurrent();
+        // 换目录/刷新列表：统一停播（播放行随列表重建，避免悬空 ws）
+        stopPlayback();
         Object.keys(renderedMap).forEach(function (p) {
             var item = renderedMap[p];
-            if (item && item.__ws) { try { item.__ws.destroy(); } catch (e) {} }
-            if (item && item.parentNode) item.parentNode.removeChild(item);
+            if (!item) return;
+            if (item.__ws) { try { item.__ws.destroy(); } catch (e) {} }
+            if (item.parentNode) item.parentNode.removeChild(item);
         });
         renderedMap = {};
     }
@@ -318,7 +343,8 @@
         playBtn.title = '播放 / 暂停';
         playBtn.addEventListener('click', function (ev) {
             ev.stopPropagation();
-            togglePlay(f);
+            if (playingPath === f.fullPath && curPlaying()) { pausePlayback(); }
+            else playFrom(f, 0);
         });
 
         var waveEl = document.createElement('div');
@@ -403,7 +429,7 @@
                 barGap: 1,
                 barMinHeight: 1,
                 cursorWidth: 1,
-                interact: true,
+                interact: false,   // 点击统一走我们的 handler（点波形从指针处播放）
                 hideScrollbar: true
             });
         } catch (e) {
@@ -416,8 +442,38 @@
             var d = ws.getDuration();
             var durEl = item.querySelector('.dur');
             if (durEl && isFinite(d)) durEl.textContent = formatDur(d);
+            if (playingPath === f.fullPath) setProgressUI();
         });
-        ws.on('finish', function () { onPlayEnd(item); });
+        ws.on('finish', function () {
+            if (playingPath === f.fullPath) onTrackEnd();
+        });
+
+        // 点波形从指针处播放（Resonic 手感）；行内 ws 默认 interact:true 会自带 seek，这里统一走我们的 handler
+        waveEl.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            var rect = waveEl.getBoundingClientRect();
+            if (!rect.width) return;
+            var ratio = (ev.clientX - rect.left) / rect.width;
+            if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
+            if (item.__wsReady && item.__ws) {
+                var d = item.__ws.getDuration() || 0;
+                item.__ws.seekTo(ratio);
+                playFrom(f, ratio * d);
+            } else {
+                ensureReady(f, function (ws) {
+                    curWs = ws;
+                    curWsPath = f.fullPath;
+                    playingPath = f.fullPath;
+                    activeItem = item;
+                    try {
+                        var d2 = ws.getDuration() || 0;
+                        ws.seekTo(ratio);
+                        ws.play();
+                    } catch (e) {}
+                    syncPlayUI(f);
+                });
+            }
+        });
 
         readAsBlob(f.fullPath, function (err, blob) {
             if (err) {
@@ -444,59 +500,147 @@
         }
     }
 
-    // ---------- 播放 ----------
-    function togglePlay(f) {
+    // ---------- 统一播放（单活动实例，点波形从指针处播） ----------
+    function curPlaying() { return curWs && curWs.isPlaying && curWs.isPlaying(); }
+
+    function ensureReady(f, cb) {
         var item = renderedMap[f.fullPath];
-        if (!item) return;
-        if (item.__ws && item.__wsReady) {
-            if (playingPath === f.fullPath && item.__ws.isPlaying()) {
-                item.__ws.pause();
-            } else {
-                startPlay(f, item);
-            }
+        if (item && item.__ws && item.__wsReady) { cb && cb(item.__ws); return; }
+        if (item) {
+            if (!item.__ws) ensureWave(item);
+            var tries = 0;
+            var w = setInterval(function () {
+                tries++;
+                if (item.__wsReady) { clearInterval(w); cb && cb(item.__ws); return; }
+                if (tries > 150) { clearInterval(w); setStatus('音频加载超时', 'err'); }
+            }, 80);
         } else {
-            setStatus('正在加载 ' + f.name + ' ...', '');
-            ensureWave(item);
-            var wait = setInterval(function () {
-                if (item.__wsReady) {
-                    clearInterval(wait);
-                    startPlay(f, item);
-                }
-            }, 100);
+            setStatus('该行未在列表中', 'err');
         }
     }
 
-    function startPlay(f, item) {
-        stopCurrent();
-        activeWs = item.__ws;
-        playingPath = f.fullPath;
-        try { item.__ws.play(); } catch (e) {}
-        updatePlayState();
+    function applyVolume() {
+        if (!curWs) return;
+        try {
+            var v = parseFloat(el.volSlider.value);
+            if (!isFinite(v)) v = 0.8;
+            curWs.setVolume(v);
+        } catch (e) {}
     }
 
-    function stopCurrent() {
-        if (activeWs) { try { activeWs.pause(); } catch (e) {} }
+    function playFrom(f, sec) {
+        var item = renderedMap[f.fullPath];
+        // 已在播同文件 → seek 续播
+        if (playingPath === f.fullPath && curWs && item && item.__ws === curWs) {
+            try {
+                var dd = curWs.getDuration() || 1;
+                curWs.seekTo(Math.min(1, Math.max(0, (sec || 0) / dd)));
+                curWs.play();
+            } catch (e) {}
+            syncPlayUI(f);
+            return;
+        }
+        stopPlayback();
+        ensureReady(f, function (ws) {
+            curWs = ws;
+            curWsPath = f.fullPath;
+            playingPath = f.fullPath;
+            activeItem = item || renderedMap[f.fullPath] || null;
+            try {
+                applyVolume();
+                var d = curWs.getDuration() || 1;
+                curWs.seekTo(Math.min(1, Math.max(0, (sec || 0) / d)));
+                curWs.play();
+            } catch (e) {}
+            syncPlayUI(f);
+            setProgressUI();
+        });
+    }
+
+    function stopPlayback() {
+        if (curWs) { try { curWs.pause(); curWs.seekTo(0); } catch (e) {} }
+        curWs = null;
+        curWsPath = null;
         playingPath = null;
-        activeWs = null;
+        activeItem = null;
+        updatePlayState();
+        setPlayerUI();
+    }
+    function pausePlayback() {
+        if (curWs) { try { curWs.pause(); } catch (e) {} }
+        updatePlayState();
+        setPlayerUI();
     }
 
-    function onPlayEnd(item) {
-        if (playingPath === item.dataset.path) {
-            playingPath = null;
-            activeWs = null;
-        }
+    function syncPlayUI(f) {
+        playingPath = f.fullPath;
+        activeItem = renderedMap[f.fullPath] || null;
+        if (el.player) el.player.style.display = '';
+        if (el.pTitle) el.pTitle.textContent = f.name;
+        if (el.pSub) el.pSub.textContent = f.dir + ' · ' + f.ext.toUpperCase();
         updatePlayState();
+        setPlayerUI();
+        setProgressUI();
+    }
+
+    function onTrackEnd() {
+        // 播完自动下一个（当前可见列表内）
+        var idx = visibleIdx[playingPath];
+        if (idx !== undefined && idx < visibleFiles.length - 1) {
+            playFrom(visibleFiles[idx + 1], 0);
+        } else {
+            stopPlayback();
+        }
+    }
+
+    function nextTrack(dir) {
+        if (!visibleFiles.length) return;
+        var idx = playingPath ? visibleIdx[playingPath] : -1;
+        if (idx === undefined || idx < 0) idx = -1;
+        var ni = idx + dir;
+        if (ni < 0) ni = visibleFiles.length - 1;
+        if (ni >= visibleFiles.length) ni = 0;
+        playFrom(visibleFiles[ni], 0);
     }
 
     function updatePlayState() {
         Object.keys(renderedMap).forEach(function (p) {
             var item = renderedMap[p];
             if (!item) return;
-            var playing = playingPath === p && item.__ws && item.__ws.isPlaying && item.__ws.isPlaying();
+            var playing = playingPath === p && curPlaying();
             item.classList.toggle('playing', !!playing);
             var btn = item.querySelector('.playbtn');
             if (btn) btn.textContent = playing ? '⏸' : '▶';
         });
+        var playing = curPlaying();
+        if (el.playBtn) {
+            var icp = el.playBtn.querySelector('.ic-play');
+            var icp2 = el.playBtn.querySelector('.ic-pause');
+            if (icp) icp.style.display = playing ? 'none' : '';
+            if (icp2) icp2.style.display = playing ? '' : 'none';
+        }
+    }
+
+    function setPlayerUI() {
+        if (!el.player) return;
+        var active = playingPath && curWs;
+        el.player.style.display = active ? '' : 'none';
+    }
+
+    function setProgressUI() {
+        if (!curWs || !playingPath) return;
+        var d = curWs.getDuration() || 0;
+        var t = curWs.getCurrentTime ? curWs.getCurrentTime() : 0;
+        if (el.curT) el.curT.textContent = formatDur(t);
+        if (el.durT) el.durT.textContent = formatDur(d);
+        if (el.seekFill) el.seekFill.style.width = (d > 0 ? (t / d * 100) : 0) + '%';
+    }
+
+    function startProgressTick() {
+        clearInterval(progressTimer);
+        progressTimer = setInterval(function () {
+            if (playingPath && curWs && curPlaying()) setProgressUI();
+        }, 250);
     }
 
     // ---------- 导入 PR 项目面板 ----------
@@ -548,6 +692,14 @@
             hideContextMenu();
         });
 
+        var insItem = document.createElement('div');
+        insItem.className = 'ctx-item';
+        insItem.textContent = '⏱ 插入到时间线（播放头处）';
+        insItem.addEventListener('click', function () {
+            insertToTimeline(f);
+            hideContextMenu();
+        });
+
         var sep = document.createElement('div');
         sep.className = 'ctx-sep';
 
@@ -559,6 +711,7 @@
         pathItem.textContent = f.fullPath;
 
         menu.appendChild(favItem);
+        menu.appendChild(insItem);
         menu.appendChild(showItem);
         menu.appendChild(sep);
         menu.appendChild(pathItem);
@@ -586,6 +739,28 @@
         } catch (e) {
             setStatus('打开资源管理器失败: ' + e.message, 'err');
         }
+    }
+
+    // 插入到时间线（播放头处，插入语义不覆盖）
+    function insertToTimeline(f) {
+        if (busy) return;
+        setStatus('正在获取播放头位置...', '');
+        csInterface.evalScript('sfxGetPlayerPosition()', function (posResult) {
+            var posSec = 0;
+            try { var pr = JSON.parse(posResult); posSec = pr.positionSec || 0; } catch (e) {}
+            busy = true;
+            setStatus('正在插入时间线: ' + f.name + ' @ ' + formatDur(posSec) + ' ...', '');
+            csInterface.evalScript('sfxInsertPayload = ' + JSON.stringify({ path: f.fullPath, positionSec: posSec }) + ';', function () {
+                csInterface.evalScript('sfxInsertToTimelineStr()', function (result) {
+                    busy = false;
+                    try {
+                        var data = JSON.parse(result);
+                        if (data.ok) setStatus('已插入时间线 @ ' + formatDur(data.positionSec) + '（音轨 ' + (data.trackIndex + 1) + '）：' + data.name, 'ok');
+                        else setStatus(data.error || '插入失败', 'err');
+                    } catch (e) { setStatus('插入解析失败: ' + result, 'err'); }
+                });
+            });
+        });
     }
 
     // ---------- 浏览目录（CEP 原生对话框）----------
@@ -655,6 +830,37 @@
         setVisibleFiles(currentFiltered());
     });
 
+    // 播放条事件（单活动实例控制）
+    if (el.playBtn) el.playBtn.addEventListener('click', function () {
+        if (curPlaying()) pausePlayback();
+        else if (playingPath && curWs) { try { curWs.play(); } catch (e) {} updatePlayState(); }
+        else if (visibleFiles.length) playFrom(visibleFiles[0], 0);
+    });
+    if (el.prevBtn) el.prevBtn.addEventListener('click', function () { nextTrack(-1); });
+    if (el.nextBtn) el.nextBtn.addEventListener('click', function () { nextTrack(1); });
+    if (el.seek) el.seek.addEventListener('click', function (ev) {
+        if (!curWs) return;
+        var rect = el.seek.getBoundingClientRect();
+        if (!rect.width) return;
+        var ratio = (ev.clientX - rect.left) / rect.width;
+        if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
+        curWs.seekTo(ratio);
+        if (!curPlaying()) { try { curWs.play(); } catch (e) {} updatePlayState(); }
+        setProgressUI();
+    });
+    if (el.volSlider) el.volSlider.addEventListener('input', function () {
+        if (curWs) { try { curWs.setVolume(parseFloat(el.volSlider.value) || 0.8); } catch (e) {} }
+    });
+    if (el.volBtn) el.volBtn.addEventListener('click', function () {
+        var muted = curWs && curWs.getMuted && curWs.getMuted();
+        var toMute = !muted;
+        if (curWs) { try { curWs.setMute(toMute); } catch (e) {} }
+        var iconOn = el.volBtn.querySelector('.ic-vol-on');
+        var iconOff = el.volBtn.querySelector('.ic-vol-off');
+        if (iconOn) iconOn.style.display = toMute ? 'none' : '';
+        if (iconOff) iconOff.style.display = toMute ? '' : 'none';
+    });
+
     // 面板内快捷键
     document.addEventListener('keydown', function (ev) {
         var tag = (ev.target && ev.target.tagName) ? ev.target.tagName.toLowerCase() : '';
@@ -693,6 +899,7 @@
     // ---------- 初始化 ----------
     loadFavs();
     registerShortcutInterest();
+    startProgressTick();
     try { savedSubdir = localStorage.getItem('sfxSubdir') || ''; } catch (e) {}
     try {
         var savedDir = localStorage.getItem('sfxDir');
