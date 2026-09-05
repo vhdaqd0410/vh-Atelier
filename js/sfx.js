@@ -250,8 +250,14 @@
             if (filterFav && !isFav(f.fullPath)) return false;
             if (sub && f.topSub !== sub) return false;
             if (kw) {
-                var base = path.basename(f.name, path.extname(f.name)).toLowerCase();
-                if (base.indexOf(kw) < 0) return false;
+                // 文件名 + 所在文件夹路径都参与匹配（文件夹名含关键词 → 该文件夹内音效全部展示）
+                var nameHit = path.basename(f.name, path.extname(f.name)).toLowerCase().indexOf(kw) >= 0;
+                if (!nameHit) {
+                    // 取相对根目录的文件夹路径作匹配
+                    var rel = path.relative(rootDir, f.dir);
+                    var dirPathHit = rel.toLowerCase().indexOf(kw) >= 0;
+                    if (!dirPathHit) return false;
+                }
             }
             return true;
         });
