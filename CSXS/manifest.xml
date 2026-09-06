@@ -32,6 +32,8 @@
                         <Parameter>--allow-file-access</Parameter>
                         <Parameter>--allow-file-access-from-files</Parameter>
                         <Parameter>--allow-running-insecure-content</Parameter>
+                        <Parameter>--disable-site-isolation-trials</Parameter>
+                        <Parameter>--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure</Parameter>
                     </CEFCommandLine>
                 </Resources>
                 <Lifecycle>
