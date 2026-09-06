@@ -1135,6 +1135,9 @@
         if (!songId) return;
         var box = $('musicIdentifyResult');
         if (!box) return;
+        // 把 dest 写到条目上，供拖拽进时间线用
+        var item = box.querySelector('.identify-item[data-sid="' + songId + '"]');
+        if (item) item.dataset.dest = dest;
         var btns = box.querySelectorAll('button[data-name][data-sid="' + songId + '"]');
         btns.forEach(function (b) {
             b.textContent = '✓ 已下载';
@@ -1749,6 +1752,30 @@
                 if (!s) return;
                 playQueue.push(s);
                 playFromQueue(playQueue.length - 1, null);
+            });
+            // 拖拽进时间线：已下载则直接拖，未下载提示先下载
+            it.setAttribute('draggable', 'true');
+            it.addEventListener('dragstart', function (ev) {
+                if (ev.target && (ev.target.tagName === 'BUTTON' || ev.target.tagName === 'IMG')) {
+                    ev.preventDefault();
+                    return;
+                }
+                var sid = it.dataset.sid;
+                var dest = it.dataset.dest || (dlState[sid] && dlState[sid].dest);
+                if (!dest || !fs.existsSync(dest)) {
+                    ev.preventDefault();
+                    flash('请先点「下载」下载这首歌，才能拖入时间线');
+                    return;
+                }
+                ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', dest);
+                ev.dataTransfer.setData('text/plain', dest);
+                ev.dataTransfer.effectAllowed = 'copy';
+            });
+            it.addEventListener('dragend', function (ev) {
+                try {
+                    var a2 = getAudio();
+                    if (a2 && !a2.paused && a2.src) a2.pause();
+                } catch (e) {}
             });
         });
         var histBtn = box.querySelector('#btnIdentifyHistoryToggle');
