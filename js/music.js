@@ -20,6 +20,25 @@
     var selSet = {};                       // 批量下载多选：songId -> song
     var dlState = {};                      // 已下载记录：songId -> {dest}（本次会话内）
 
+    // ---- 识别历史 - 状态 ----
+    var IDENTIFY_HISTORY_KEY = 'vh_identify_history';
+    var identifyHistoryShown = false;
+    function loadIdentifyHistory() {
+        try { return JSON.parse(localStorage.getItem(IDENTIFY_HISTORY_KEY) || '[]'); } catch (e) { return []; }
+    }
+    function saveIdentifyHistory(h) {
+        try { localStorage.setItem(IDENTIFY_HISTORY_KEY, JSON.stringify(h)); } catch (e) {}
+    }
+    function addIdentifyHistory(song) {
+        var h = loadIdentifyHistory();
+        var nm = song.name || '';
+        var ar = (song.artists || []).map(function (a) { return a.name; }).join(', ');
+        h = h.filter(function (x) { return x.id !== song.id; });   // 去重：同歌顶到最前
+        h.unshift({ id: song.id, name: nm, artist: ar, t: Date.now() });
+        if (h.length > 20) h = h.slice(0, 20);
+        saveIdentifyHistory(h);
+    }
+
     // 轻提示（若全局无 __copyFlash 则本地兜底）
     function flash(msg) {
         if (window.__copyFlash) { try { window.__copyFlash(msg); } catch (e) {} return; }
@@ -1324,15 +1343,23 @@
     // ================= 听歌识曲（抓系统正在播放的声音） =================
     function findPython() {
         var os2 = require('os');
+        // 按「装了 pyaudiowpatch 的优先」排：先用 runtime，再探测各 Python 是否可 import pyaudiowpatch
         var cands = [
             path.join(extRoot, 'runtime', 'python.exe'),
             path.join(os2.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
             path.join(os2.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe')
         ];
+        var usable = null;
         for (var i = 0; i < cands.length; i++) {
-            try { if (fs.existsSync(cands[i])) return cands[i]; } catch (e) {}
+            var c = cands[i];
+            if (!fs.existsSync(c)) continue;
+            try {
+                var r = childProcess.spawnSync(c, ['-c', 'import pyaudiowpatch'], { encoding: 'utf8', timeout: 10000 });
+                if (r.status === 0) { usable = c; break; }
+            } catch (e) {}
+            if (!usable) usable = c; // 兜底：即使 import 失败也先记下，最后用
         }
-        return 'python';
+        return usable || 'python';
     }
 
     function doIdentify() {
@@ -1349,19 +1376,21 @@
         var py = findPython();
         var scriptPath = path.join(extRoot, 'py', 'identify_record.py');
         var wavPath = path.join(require('os').tmpdir(), 'vh_identify_' + Date.now() + '.wav');
-        childProcess.execFile(py, [scriptPath, wavPath, '8'], { encoding: 'utf8', timeout: 20000 }, function (err, stdout) {
+        childProcess.execFile(py, [scriptPath, wavPath, '15'], { encoding: 'utf8', timeout: 30000 }, function (err, stdout) {
             var rec = null;
             try { rec = JSON.parse((stdout || '').trim().split('\n').pop()); } catch (e) {}
             if (err || !rec || !rec.ok) {
                 btn.disabled = false;
                 btn.textContent = oldText;
-                if (box) box.innerHTML = '<div style="color:#ff9a9a;">录音失败：' + ((rec && rec.error) || (err && err.message) || '未知错误') + '</div>';
+                var diag = (rec && rec.probe && rec.probe.length) ? ('<div style="margin-top:4px;font-size:11px;color:#889;">设备探测：' + rec.probe.map(function (x) { return x.name + ' RMS=' + (x.rms == null ? 'ERR' : x.rms); }).join('；') + '</div>') : '';
+                if (box) box.innerHTML = '<div style="color:#ff9a9a;">录音失败：' + ((rec && rec.error) || (err && err.message) || '未知错误') + '</div>' + diag;
                 return;
             }
             if (rec.silent) {
                 btn.disabled = false;
                 btn.textContent = oldText;
-                if (box) box.innerHTML = '<div style="color:#ffb84d;">没听到声音——请确认音乐正在播放（检查音量/输出设备）</div>';
+                var diag2 = (rec && rec.probe && rec.probe.length) ? ('<div style="margin-top:4px;font-size:11px;color:#889;">设备探测：' + rec.probe.map(function (x) { return x.name + ' RMS=' + (x.rms == null ? 'ERR' : x.rms); }).join('；') + '</div>') : '';
+                if (box) box.innerHTML = '<div style="color:#ffb84d;">没听到声音——请确认音乐正在播放（检查音量/输出设备）</div>' + diag2;
                 return;
             }
             btn.textContent = '🎵 识别中…';
@@ -1387,35 +1416,57 @@
                     }
                     var html = '<div style="font-weight:600;color:#7fd68b;margin-bottom:6px;">✅ 识别到：</div>';
                     var shown = 0;
+                    var songById = {};
                     results.forEach(function (m) {
                         if (shown >= 3) return;
                         var s = m.song || {};
                         var nm = s.name || '未知';
                         var ar = (s.artists || []).map(function (a) { return a.name; }).join(', ');
                         var sid = s.id;
-                        html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #2a3a5d;">' +
+                        songById[sid] = s;
+                        html += '<div class="identify-item" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #2a3a5d;">' +
                             '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + nm + ' <span style="color:var(--muted);font-size:11px;">- ' + ar + '</span></span>' +
-                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-sid="' + sid + '">搜这首歌</button>' +
-                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-q="' + enc(nm + ' ' + ar) + '">下载</button></div>';
+                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-play="1" data-sid="' + sid + '">播放</button>' +
+                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-sid="' + sid + '" data-name="' + enc(nm) + '" data-artist="' + enc(ar) + '">下载</button>' +
+                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-sid="' + sid + '">搜这首歌</button></div>';
                         shown++;
                     });
+                    // 识别历史入口
+                    html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2a3a5d;text-align:right;">' +
+                        '<button class="tbtn" id="btnIdentifyHistoryToggle" style="padding:2px 8px;font-size:11px;">📜 识别历史</button></div>';
                     if (box) box.innerHTML = html;
-                    // 绑定按钮
-                    box.querySelectorAll('button[data-sid]').forEach(function (b) {
+
+                    // 写入历史（只记 top1 命中）
+                    if (results[0] && results[0].song) addIdentifyHistory(results[0].song);
+
+                    // 播放：直接把识别到的歌曲加入播放队列并播放，不关结果框
+                    box.querySelectorAll('button[data-play]').forEach(function (b) {
+                        b.addEventListener('click', function () {
+                            var s = songById[b.dataset.sid];
+                            if (!s) return;
+                            playQueue.push(s);
+                            playFromQueue(playQueue.length - 1, null);
+                        });
+                    });
+                    // 下载：直接下载，不关结果框
+                    box.querySelectorAll('button[data-name]').forEach(function (b) {
+                        b.addEventListener('click', function () {
+                            var sid = b.dataset.sid;
+                            var nm = decodeURIComponent(b.dataset.name);
+                            var ar = decodeURIComponent(b.dataset.artist);
+                            downloadSong(sid, nm, ar);
+                        });
+                    });
+                    // 搜这首歌：跳转搜索（保留原行为）
+                    box.querySelectorAll('button[data-sid]:not([data-play]):not([data-name])').forEach(function (b) {
                         b.addEventListener('click', function () {
                             $('musicQuery').value = b.dataset.sid;
                             doSearch();
-                            box.style.display = 'none';
                         });
                     });
-                    box.querySelectorAll('button[data-q]').forEach(function (b) {
-                        b.addEventListener('click', function () {
-                            $('musicQuery').value = decodeURIComponent(b.dataset.q);
-                            $('musicType').value = '1';
-                            doSearch();
-                            box.style.display = 'none';
-                        });
-                    });
+                    // 历史开关
+                    var histBtn = box.querySelector('#btnIdentifyHistoryToggle');
+                    if (histBtn) histBtn.addEventListener('click', function () { toggleIdentifyHistory(); });
                 } catch (e) {
                     if (box) box.innerHTML = '<div style="color:#ff9a9a;">识别响应解析失败：' + e.message + '</div>';
                 }
@@ -1429,6 +1480,54 @@
                 if (box) box.innerHTML = '<div style="color:#ff9a9a;">识别超时</div>';
             };
             xhr.send(body);
+        });
+    }
+
+    // ---------- 识别历史（展开/收起，显示在结果框下方） ----------
+    function toggleIdentifyHistory() {
+        var box = $('musicIdentifyResult');
+        if (!box) return;
+        var existing = box.querySelector('#identifyHistoryList');
+        if (existing) { existing.remove(); identifyHistoryShown = false; return; }
+
+        var h = loadIdentifyHistory();
+        var wrap = document.createElement('div');
+        wrap.id = 'identifyHistoryList';
+        wrap.style.cssText = 'margin-top:6px;padding-top:6px;border-top:1px solid #2a3a5d;';
+        if (h.length === 0) {
+            wrap.innerHTML = '<div style="color:var(--muted);font-size:11px;">暂无识别历史</div>';
+        } else {
+            var html = '<div style="font-weight:600;color:#9db9ff;margin-bottom:4px;">📜 识别历史：</div>';
+            h.forEach(function (it) {
+                var t = new Date(it.t).toLocaleString();
+                html += '<div class="identify-hist-item" style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid #22304a;">' +
+                    '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (it.name || '未知') + ' <span style="color:var(--muted);font-size:11px;">- ' + (it.artist || '') + '</span></span>' +
+                    '<span style="color:var(--muted);font-size:10px;white-space:nowrap;">' + t + '</span>' +
+                    '<button class="tbtn" style="padding:1px 6px;font-size:11px;" data-hplay="' + it.id + '">播放</button>' +
+                    '<button class="tbtn" style="padding:1px 6px;font-size:11px;" data-hdl="' + it.id + '" data-hname="' + enc(it.name || '') + '" data-hartist="' + enc(it.artist || '') + '">下载</button></div>';
+            });
+            wrap.innerHTML = html;
+        }
+        box.appendChild(wrap);
+        identifyHistoryShown = true;
+
+        // 历史条目：播放/下载
+        wrap.querySelectorAll('button[data-hplay]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var sid = b.dataset.hplay;
+                api('/song/detail?ids=' + sid).then(function (r) {
+                    var songs = r && r.songs;
+                    if (songs && songs[0]) {
+                        playQueue.push(songs[0]);
+                        playFromQueue(playQueue.length - 1, null);
+                    }
+                });
+            });
+        });
+        wrap.querySelectorAll('button[data-hdl]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                downloadSong(b.dataset.hdl, decodeURIComponent(b.dataset.hname), decodeURIComponent(b.dataset.hartist));
+            });
         });
     }
 

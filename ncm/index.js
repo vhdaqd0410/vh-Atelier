@@ -265,14 +265,39 @@ app.post('/identify', async (req, res) => {
       return res.json(fail('缺少 wavPath 或 wavBase64'))
     }
 
-    const duration = 3  // 网易云匹配算法用前几秒
-    const take = Math.min(f32.length, duration * 8000)
-    const clip = take < f32.length ? f32.subarray(0, take) : f32
-    const audioFP = await afp.GenerateFP(clip)
-
-    const r = await ncm.audio_match({ audioFP, duration, cookie })
-    if (r && r.body) return res.json(r.body)
-    res.json(fail('识别服务无响应'))
+    // 滑窗扫描：短剧含人声+BGM，固定取前3秒容易落在对白段。
+    // 整段切多个 3 秒窗口(步进1.5s)逐一匹配，汇总所有命中按出现频次+顺序排序。
+    const WIN = 3, STEP = 1.5, SR = 8000
+    const total = f32.length / SR
+    const maxScan = Math.min(total, 20)  // 最多扫前 20 秒
+    const hits = []  // { song, count, firstIdx }
+    const byId = {}
+    for (let off = 0; off + WIN <= maxScan; off += STEP) {
+      const s = Math.floor(off * SR)
+      const e = Math.min(f32.length, Math.floor((off + WIN) * SR))
+      const clip = f32.subarray(s, e)
+      const audioFP = await afp.GenerateFP(clip)
+      try {
+        const r = await ncm.audio_match({ audioFP, duration: WIN, cookie })
+        const body = r && r.body ? r.body : null
+        const results = body && body.data && body.data.result ? body.data.result : []
+        results.forEach(function (m) {
+          const sng = m && m.song
+          if (!sng || !sng.id) return
+          if (!byId[sng.id]) {
+            byId[sng.id] = { song: sng, count: 0, firstIdx: hits.length }
+            hits.push(byId[sng.id])
+          }
+          byId[sng.id].count++
+        })
+      } catch (e) { /* 单窗失败跳过 */ }
+      // 找到一个窗口连续命中同一首达 2 次可提前收工
+      if (Object.keys(byId).length === 1 && hits[0] && hits[0].count >= 2) break
+    }
+    // 按 count 降序、firstIdx 升序排
+    hits.sort(function (a, b) { return (b.count - a.count) || (a.firstIdx - b.firstIdx) })
+    const outResults = hits.map(function (h) { return { song: h.song, hits: h.count } })
+    return res.json({ code: 200, data: { result: outResults, scanWindows: Math.ceil(maxScan / STEP) } })
   } catch (e) {
     res.json(fail('识曲失败: ' + e.message))
   }
