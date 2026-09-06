@@ -1321,6 +1321,117 @@
         });
     }
 
+    // ================= 听歌识曲（抓系统正在播放的声音） =================
+    function findPython() {
+        var os2 = require('os');
+        var cands = [
+            path.join(extRoot, 'runtime', 'python.exe'),
+            path.join(os2.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
+            path.join(os2.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe')
+        ];
+        for (var i = 0; i < cands.length; i++) {
+            try { if (fs.existsSync(cands[i])) return cands[i]; } catch (e) {}
+        }
+        return 'python';
+    }
+
+    function doIdentify() {
+        var btn = $('btnMusicIdentify');
+        if (!btn) return;
+        var box = $('musicIdentifyResult');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        var oldText = btn.textContent;
+        btn.textContent = '🎵 录音中…';
+        if (box) { box.style.display = 'block'; box.innerHTML = '<div style="color:#9db9ff;">正在录音 8 秒… 请确保电脑正在播放要识别的音乐（红果/抖音等）</div>'; }
+
+        // 1. 录音
+        var py = findPython();
+        var scriptPath = path.join(extRoot, 'py', 'identify_record.py');
+        var wavPath = path.join(require('os').tmpdir(), 'vh_identify_' + Date.now() + '.wav');
+        childProcess.execFile(py, [scriptPath, wavPath, '8'], { encoding: 'utf8', timeout: 20000 }, function (err, stdout) {
+            var rec = null;
+            try { rec = JSON.parse((stdout || '').trim().split('\n').pop()); } catch (e) {}
+            if (err || !rec || !rec.ok) {
+                btn.disabled = false;
+                btn.textContent = oldText;
+                if (box) box.innerHTML = '<div style="color:#ff9a9a;">录音失败：' + ((rec && rec.error) || (err && err.message) || '未知错误') + '</div>';
+                return;
+            }
+            if (rec.silent) {
+                btn.disabled = false;
+                btn.textContent = oldText;
+                if (box) box.innerHTML = '<div style="color:#ffb84d;">没听到声音——请确认音乐正在播放（检查音量/输出设备）</div>';
+                return;
+            }
+            btn.textContent = '🎵 识别中…';
+            if (box) box.innerHTML = '<div style="color:#9db9ff;">录音完成，正在识别…</div>';
+
+            // 2. POST wav 给本地服务识别
+            var body = JSON.stringify({ wavPath: wavPath });
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', API + '/identify', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.timeout = 30000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                btn.disabled = false;
+                btn.textContent = oldText;
+                try {
+                    var j = JSON.parse(xhr.responseText);
+                    var data = j.data || {};
+                    var results = data.result || [];
+                    if (results.length === 0) {
+                        if (box) box.innerHTML = '<div style="color:#ffb84d;">未识别到歌曲。可能原因：BGM 太冷门/纯音乐不在曲库，或录音质量不佳。请确保识别时音乐清晰播放。</div>';
+                        return;
+                    }
+                    var html = '<div style="font-weight:600;color:#7fd68b;margin-bottom:6px;">✅ 识别到：</div>';
+                    var shown = 0;
+                    results.forEach(function (m) {
+                        if (shown >= 3) return;
+                        var s = m.song || {};
+                        var nm = s.name || '未知';
+                        var ar = (s.artists || []).map(function (a) { return a.name; }).join(', ');
+                        var sid = s.id;
+                        html += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #2a3a5d;">' +
+                            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + nm + ' <span style="color:var(--muted);font-size:11px;">- ' + ar + '</span></span>' +
+                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-sid="' + sid + '">搜这首歌</button>' +
+                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-q="' + enc(nm + ' ' + ar) + '">下载</button></div>';
+                        shown++;
+                    });
+                    if (box) box.innerHTML = html;
+                    // 绑定按钮
+                    box.querySelectorAll('button[data-sid]').forEach(function (b) {
+                        b.addEventListener('click', function () {
+                            $('musicQuery').value = b.dataset.sid;
+                            doSearch();
+                            box.style.display = 'none';
+                        });
+                    });
+                    box.querySelectorAll('button[data-q]').forEach(function (b) {
+                        b.addEventListener('click', function () {
+                            $('musicQuery').value = decodeURIComponent(b.dataset.q);
+                            $('musicType').value = '1';
+                            doSearch();
+                            box.style.display = 'none';
+                        });
+                    });
+                } catch (e) {
+                    if (box) box.innerHTML = '<div style="color:#ff9a9a;">识别响应解析失败：' + e.message + '</div>';
+                }
+            };
+            xhr.onerror = function () {
+                btn.disabled = false; btn.textContent = oldText;
+                if (box) box.innerHTML = '<div style="color:#ff9a9a;">无法连接本地识曲服务</div>';
+            };
+            xhr.ontimeout = function () {
+                btn.disabled = false; btn.textContent = oldText;
+                if (box) box.innerHTML = '<div style="color:#ff9a9a;">识别超时</div>';
+            };
+            xhr.send(body);
+        });
+    }
+
 
     function bindEvents() {
         $('btnMusicSearch').addEventListener('click', doSearch);
@@ -1335,6 +1446,8 @@
         if (batchBtn) batchBtn.addEventListener('click', batchDownloadSelected);
         var dirBtn = $('btnMusicSetDir');
         if (dirBtn) dirBtn.addEventListener('click', setDlDirFromUI);
+        var idBtn = $('btnMusicIdentify');
+        if (idBtn) idBtn.addEventListener('click', doIdentify);
         $('btnMusicRefreshQr').addEventListener('click', function () { $('btnMusicRefreshQr').disabled = true; fetchQr(); });
         $('btnMusicLogout').addEventListener('click', function () {
             api('/logout').then(function () {
