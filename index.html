@@ -735,11 +735,8 @@
     <!-- ==================== 审片（内嵌分秒帧，看批注不切出 PR） ==================== -->
     <div class="tab-panel" id="panel-shenpian" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
-            <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11px;color:var(--muted);">
-                <span>🎬 分秒帧审片</span>
-                <span style="flex:1;"></span>
-                <button id="btnSpHome" class="tbtn" style="padding:3px 10px;font-size:11px;" title="回到分秒帧首页">首页</button>
-                <button id="btnSpRefresh" class="tbtn" style="padding:3px 10px;font-size:11px;" title="刷新当前页（看最新批注）">刷新</button>
+            <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11px;">
+                <button id="btnSpHome" class="tbtn" style="padding:3px 10px;font-size:11px;" title="回到分秒帧首页">🏠 首页</button>
             </div>
             <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
         </div>
@@ -767,7 +764,6 @@
     (function () {
         var fr = document.getElementById('spFrame');
         var btnHome = document.getElementById('btnSpHome');
-        var btnRefresh = document.getElementById('btnSpRefresh');
         function tryLoad(url) {
             if (!fr) return;
             fr.src = url;
@@ -780,10 +776,14 @@
             }
         };
         if (btnHome) btnHome.addEventListener('click', function () {
+            // 优先刷新当前页（若在项目详情/批注页，刷新=看最新批注）；跨域受限则回首页
+            try {
+                if (fr && fr.contentWindow && fr.contentWindow.location) {
+                    fr.contentWindow.location.reload();
+                    return;
+                }
+            } catch (e) {}
             tryLoad('https://app.mediatrack.cn/');
-        });
-        if (btnRefresh) btnRefresh.addEventListener('click', function () {
-            if (fr) { try { fr.contentWindow.location.reload(); } catch (e) { tryLoad('https://app.mediatrack.cn/'); } }
         });
     })();
     </script>
