@@ -10,6 +10,10 @@ models/spleeter/
 bin/whisper/
 bin/sherpa/
 
+# 大二进制（ffmpeg / yt-dlp 不入仓，部署时手动拷贝到 bin/）
+bin/ffmpeg-win32-x64.exe
+bin/yt-dlp.exe
+
 # 系统文件
 Thumbs.db
 Desktop.ini
