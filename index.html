@@ -777,6 +777,13 @@
             if (!fr) return;
             fr.src = url;
         }
+        // 切到审片面板时自动加载分秒帧（仅首次/空白时）
+        window.__spAutoLoad = function () {
+            if (!fr) return;
+            if (!fr.src || fr.src === 'about:blank') {
+                tryLoad('https://app.mediatrack.cn/');
+            }
+        };
         if (btnL) btnL.addEventListener('click', function () {
             tryLoad('https://app.mediatrack.cn/');
         });

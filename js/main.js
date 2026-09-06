@@ -82,6 +82,10 @@
         if (name === 'script' && window.__atShowScriptHome) {
             try { window.__atShowScriptHome(); } catch (e) {}
         }
+        // 审片：切到时 iframe 若未加载则自动加载分秒帧
+        if (name === 'shenpian' && window.__spAutoLoad) {
+            try { window.__spAutoLoad(); } catch (e) {}
+        }
     }
 
     // 切到某个 tab（面板 + 组条 + 高亮同步）
