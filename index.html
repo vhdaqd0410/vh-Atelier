@@ -10,11 +10,16 @@
     <div class="sub">字幕 · 声音 · 交付 · 进度 四工作台</div>
 
     <div class="ws-groups">
+        <button class="ws-group" data-group="shenpian">🔗 审片测试</button>
         <button class="ws-group" data-group="script">📖 剧本</button>
         <button class="ws-group active" data-group="progress">进度</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="deliver">交付</button>
+    </div>
+
+    <div class="tabs ws-subtabs" data-group="shenpian" style="display:none;">
+        <button class="tab active" data-tab="shenpian">审片</button>
     </div>
 
     <div class="tabs ws-subtabs" data-group="progress">
@@ -731,6 +736,19 @@
         </div>
     </div>
 
+    <!-- ==================== 审片测试（临时，验证 CEP iframe 能否加载外部网页） ==================== -->
+    <div class="tab-panel" id="panel-shenpian" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
+            <div style="flex:0 0 auto;font-size:11px;color:var(--muted);padding:4px 2px;">测试：CEP 内嵌分秒帧。若能显示登录/页面则可行。</div>
+            <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+            <div style="flex:0 0 auto;display:flex;gap:6px;padding:6px 0;">
+                <button id="btnSpLoad" class="tbtn">加载分秒帧</button>
+                <button id="btnSpLogin" class="tbtn">登录页</button>
+                <button id="btnSpReset" class="tbtn">清空</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
     <div class="tab-panel" id="panel-script" style="display:none;"></div>
 
@@ -748,5 +766,27 @@
     <script src="js/check.js"></script>
     <script src="js/video.js"></script>
     <script src="js/progress.js"></script>
+    <script>
+    // ==== 审片测试（临时）：验证 CEP iframe 能否加载外部网页 ====
+    (function () {
+        var fr = document.getElementById('spFrame');
+        var btnL = document.getElementById('btnSpLoad');
+        var btnLogin = document.getElementById('btnSpLogin');
+        var btnReset = document.getElementById('btnSpReset');
+        function tryLoad(url) {
+            if (!fr) return;
+            fr.src = url;
+        }
+        if (btnL) btnL.addEventListener('click', function () {
+            tryLoad('https://app.mediatrack.cn/');
+        });
+        if (btnLogin) btnLogin.addEventListener('click', function () {
+            tryLoad('https://app.mediatrack.cn/login');
+        });
+        if (btnReset) btnReset.addEventListener('click', function () {
+            fr.src = 'about:blank';
+        });
+    })();
+    </script>
 </body>
 </html>

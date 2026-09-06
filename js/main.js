@@ -12,7 +12,8 @@
         export: document.getElementById('panel-export'),
         video: document.getElementById('panel-video'),
         progress: document.getElementById('panel-progress'),
-        script: document.getElementById('panel-script')
+        script: document.getElementById('panel-script'),
+        shenpian: document.getElementById('panel-shenpian')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
@@ -21,7 +22,8 @@
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
-        script: { members: ['script'], default: 'script' }
+        script: { members: ['script'], default: 'script' },
+        shenpian: { members: ['shenpian'], default: 'shenpian' }
     };
     // tab 归属映射
     var groupOf = {};
