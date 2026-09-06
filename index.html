@@ -16,6 +16,7 @@
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
+        <button class="ws-group" data-group="douyin">🎵 抖音</button>
     </div>
 
     <div class="tabs ws-subtabs" data-group="progress">
@@ -742,6 +743,16 @@
         </div>
     </div>
 
+    <!-- ==================== 抖音（内嵌网页版，刷素材/参考） ==================== -->
+    <div class="tab-panel" id="panel-douyin" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
+            <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11px;">
+                <button id="btnDyHome" class="tbtn" style="padding:3px 10px;font-size:11px;" title="回到抖音首页">🏠 首页</button>
+            </div>
+            <iframe id="dyFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+        </div>
+    </div>
+
     <!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
     <div class="tab-panel" id="panel-script" style="display:none;"></div>
 
@@ -784,6 +795,31 @@
                 }
             } catch (e) {}
             tryLoad('https://app.mediatrack.cn/');
+        });
+    })();
+
+    // ==== 抖音：内嵌网页版（刷素材/参考；联动下载后续加） ====
+    (function () {
+        var fr = document.getElementById('dyFrame');
+        var btnHome = document.getElementById('btnDyHome');
+        function tryLoad(url) {
+            if (!fr) return;
+            fr.src = url;
+        }
+        window.__dyAutoLoad = function () {
+            if (!fr) return;
+            if (!fr.src || fr.src === 'about:blank') {
+                tryLoad('https://www.douyin.com/');
+            }
+        };
+        if (btnHome) btnHome.addEventListener('click', function () {
+            try {
+                if (fr && fr.contentWindow && fr.contentWindow.location) {
+                    fr.contentWindow.location.reload();
+                    return;
+                }
+            } catch (e) {}
+            tryLoad('https://www.douyin.com/');
         });
     })();
     </script>
