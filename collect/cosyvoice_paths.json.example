@@ -1,0 +1,7 @@
+{
+  "_说明": "CosyVoice3 引擎路径配置。目标电脑上复制本文件为 cosyvoice_paths.json，改成本机 CosyVoice3 工具的实际路径。三个字段都可留空字符串表示用默认值(D盘)。",
+  "internal": "D:\\cosyvoice3_V30\\_internal",
+  "matcha": "D:\\cosyvoice3_V30\\third_party\\Matcha-TTS",
+  "model_dir": "D:\\cosyvoice3_V30\\pretrained_models",
+  "torio_stub": ""
+}

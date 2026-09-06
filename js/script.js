@@ -1,21 +1,12 @@
-// vh-Atelier 板块八：项目进度（联动「视频工作台」只读快照）
-// 数据源：视频工作台 Flask 服务（127.0.0.1:8089），token 在 backend/config.yaml 的 web.api_secret
-// 本面板只读展示：本月概览 + 组内进行中项目（集数进度/状态/剧名）
+// vh-Atelier 板块：剧本阅读（独立板块，不依赖视频工作台/进度）
+// 能力：打开本地 docx/pdf 剧本 → 内嵌阅读（集数导航/关键词搜索/台词翻译/复制）
+// 说明：从原 progress.js 拆出，移除「进度联动」相关代码（项目卡片点剧本入口等）。
 (function () {
     var fs = require('fs');
     var path = require('path');
     var os = require('os');
     var child_process = require('child_process');
 
-    var WB_PORT = 8089;
-    var WB_BASE = 'http://127.0.0.1:' + WB_PORT;
-    // 视频工作台 config.yaml 位置（默认桌面；可通过 localStorage 覆盖）
-    var CFG_MEM_KEY = 'vh_progress_wb_yaml';
-    var WB_CFG_PATH = 'C:/Users/Admin/Desktop/视频工作台/backend/config.yaml';
-    var WB_START = 'C:/Users/Admin/Desktop/视频工作台/start_desktop.vbs';
-    // 兜底：找不到 start_desktop.vbs 时用 main_desktop.py + pythonw
-    var WB_PY = 'C:/Users/Admin/Desktop/视频工作台/main_desktop.py';
-    // 插件根目录（js/ 的上一级），供定位 py/ 等资源
     var extRoot = (function () {
         try {
             if (typeof __dirname !== 'undefined') {
@@ -25,438 +16,6 @@
         } catch (e) {}
         return '';
     })();
-
-    // DOM
-    var el = {
-        dot: document.getElementById('prgDot'),
-        statusText: document.getElementById('prgStatusText'),
-        refresh: document.getElementById('prgRefresh'),
-        overview: document.getElementById('prgOverview'),
-        mProducing: document.getElementById('prgMProducing'),
-        mActive: document.getElementById('prgMActive'),
-        mDone: document.getElementById('prgMDone'),
-        offline: document.getElementById('prgOffline'),
-        launch: document.getElementById('prgLaunch'),
-        retry: document.getElementById('prgRetry'),
-        activeWrap: document.getElementById('prgActiveWrap'),
-        activeCount: document.getElementById('prgActiveCount'),
-        activeList: document.getElementById('prgActiveList'),
-        filterState: document.getElementById('prgFilterState'),
-        filterProgress: document.getElementById('prgFilterProgress')
-    };
-
-    var busy = false;
-    var lastData = null;
-    var allActiveProjects = [];   // 最近一次拉到的 group_active 全量（供筛选/排序）
-
-    // 工作流状态排序权重（越小越靠前 = 越接近交付越优先展示）
-    var STATE_ORDER = ['剪辑中', '分集中', '制作中', '审核中', '修改中', '交付中', '质检中', '已完成'];
-    function stateWeight(st) {
-        st = st || '';
-        for (var i = 0; i < STATE_ORDER.length; i++) {
-            if (st.indexOf(STATE_ORDER[i]) >= 0) return i;
-        }
-        return 99;
-    }
-    // 工作流步骤数（用于筛选下拉的有序去重）
-    function stateGroup(st) {
-        st = st || '';
-        for (var i = 0; i < STATE_ORDER.length; i++) {
-            if (st.indexOf(STATE_ORDER[i]) >= 0) return STATE_ORDER[i];
-        }
-        return '其他';
-    }
-
-    function setOnline(on, msg) {
-        el.dot.className = 'prg-dot ' + (on ? 'on' : 'off');
-        el.statusText.textContent = msg || (on ? '视频工作台在线' : '视频工作台离线');
-        el.offline.style.display = on ? 'none' : '';
-        el.overview.style.display = on ? '' : 'none';
-        el.activeWrap.style.display = on ? '' : 'none';
-        if (!on) {
-            el.overview.style.display = 'none';
-            el.activeWrap.style.display = 'none';
-        }
-    }
-
-    // 读视频工作台 config.yaml 取 api_secret
-    function readSecret() {
-        var p = WB_CFG_PATH;
-        try { p = localStorage.getItem(CFG_MEM_KEY) || WB_CFG_PATH; } catch (e) {}
-        try {
-            if (!fs.existsSync(p)) return null;
-            var raw = fs.readFileSync(p, 'utf8');
-            // 只取 web: 段下的 api_secret（避免匹配到别的 yaml 里的同名字段）
-            var m = raw.match(/api_secret\s*:\s*["']?([A-Za-z0-9_\-]+)/);
-            return m ? m[1] : null;
-        } catch (e) {
-            return null;
-        }
-    }
-
-    // 拉取项目数据
-    function fetchProjects(cb) {
-        var secret = readSecret();
-        if (!secret) { cb(new Error('读不到 api_secret（config.yaml 路径不对？）'), null); return; }
-        var url = WB_BASE + '/api/projects?key=' + encodeURIComponent(secret);
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.timeout = 8000;
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState !== 4) return;
-            if (xhr.status === 200) {
-                try {
-                    cb(null, JSON.parse(xhr.responseText));
-                } catch (e) {
-                    cb(new Error('解析失败'), null);
-                }
-            } else if (xhr.status === 401) {
-                cb(new Error('鉴权失败（api_secret 过期？请重启视频工作台）'), null);
-            } else {
-                cb(new Error('HTTP ' + xhr.status), null);
-            }
-        };
-        xhr.onerror = function () { cb(new Error('网络错误'), null); };
-        xhr.ontimeout = function () { cb(new Error('超时'), null); };
-        xhr.send();
-    }
-
-    // 状态标签样式映射
-    function stateClass(st) {
-        st = st || '';
-        if (st.indexOf('审核') >= 0) return 'st-review';
-        if (st.indexOf('修改') >= 0) return 'st-modify';
-        if (st.indexOf('交付') >= 0) return 'st-deliver';
-        if (st.indexOf('剪辑') >= 0 || st.indexOf('制作') >= 0) return 'st-edit';
-        return 'st-other';
-    }
-
-    function esc(s) {
-        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
-    }
-
-    // 渲染概览
-    function renderOverview(stats) {
-        if (!stats) return;
-        var producing = stats.producing != null ? stats.producing : 0;
-        var done = stats.this_month_done != null ? stats.this_month_done : 0;
-        // 本月项目 = 制作中 + 已完成（本月涉及的项目总数）
-        var monthTotal = producing + done;
-        el.mProducing.textContent = monthTotal > 0 ? monthTotal : '-';
-        el.mActive.textContent = producing > 0 ? producing : '-';
-        el.mDone.textContent = done > 0 ? done : '-';
-    }
-
-    // 渲染组内进行中项目
-    function renderActive(sections) {
-        // 保存全量 group_active（供筛选/排序）
-        var sec = null;
-        (sections || []).forEach(function (s) { if (s && s.key === 'group_active') sec = s; });
-        allActiveProjects = sec ? (sec.projects || []) : [];
-        el.activeWrap.style.display = allActiveProjects.length ? '' : 'none';
-        el.activeCount.textContent = allActiveProjects.length ? '共 ' + allActiveProjects.length + ' 个' : '';
-        fillStateFilter();
-        renderFilteredList();
-    }
-
-    // 填充状态筛选下拉（按工作流顺序去重）
-    function fillStateFilter() {
-        var seen = [];
-        var cur = el.filterState.value;
-        allActiveProjects.forEach(function (p) {
-            var g = stateGroup(p.custom_status || '');
-            if (seen.indexOf(g) < 0) seen.push(g);
-        });
-        seen.sort(function (a, b) {
-            var ia = STATE_ORDER.indexOf(a), ib = STATE_ORDER.indexOf(b);
-            if (a === '其他') return 1;
-            if (b === '其他') return -1;
-            return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-        });
-        // 仅在选项集合变化时重建（避免打断用户选择）
-        var needRebuild = false;
-        var opts = el.filterState.querySelectorAll('option');
-        var names = [];
-        for (var i = 1; i < opts.length; i++) names.push(opts[i].value);
-        if (names.length !== seen.length) needRebuild = true;
-        else for (var j = 0; j < seen.length; j++) if (names[j] !== seen[j]) { needRebuild = true; break; }
-        if (!needRebuild) return;
-        el.filterState.innerHTML = '<option value="">全部状态</option>';
-        seen.forEach(function (s) {
-            var o = document.createElement('option');
-            o.value = s;
-            o.textContent = s;
-            el.filterState.appendChild(o);
-        });
-        if (cur && seen.indexOf(cur) >= 0) el.filterState.value = cur;
-    }
-
-    // 应用筛选 + 排序后渲染
-    function renderFilteredList() {
-        var fState = el.filterState.value;
-        var fProgress = el.filterProgress.checked;
-        var list = allActiveProjects.filter(function (p) {
-            if (fState && stateGroup(p.custom_status || '') !== fState) return false;
-            if (fProgress) {
-                var cur = parseInt(p.current_episodes, 10) || 0;
-                if (cur <= 0) return false;
-            }
-            return true;
-        });
-        // 排序：状态工作流权重 + 同状态集数进度降序（进度高=更接近完成=靠前）
-        list.sort(function (a, b) {
-            var wa = stateWeight(a.custom_status || ''), wb = stateWeight(b.custom_status || '');
-            if (wa !== wb) return wa - wb;
-            var ca = parseInt(a.current_episodes, 10) || 0;
-            var cb = parseInt(b.current_episodes, 10) || 0;
-            var ta = parseInt(a.total_episodes, 10) || 0;
-            var tb = parseInt(b.total_episodes, 10) || 0;
-            var pa = ta > 0 ? ca / ta : 0;
-            var pb = tb > 0 ? cb / tb : 0;
-            return pb - pa;
-        });
-        el.activeCount.textContent = '共 ' + list.length + ' 个' + (list.length !== allActiveProjects.length ? '（筛选中）' : '');
-        el.activeList.innerHTML = '';
-        if (list.length === 0) {
-            el.activeList.innerHTML = '<div class="prg-empty">没有符合条件的项目</div>';
-            return;
-        }
-        list.forEach(function (p) {
-            var cur = parseInt(p.current_episodes, 10) || 0;
-            var total = parseInt(p.total_episodes, 10) || 0;
-            var pct = total > 0 ? Math.min(100, Math.round(cur / total * 100)) : 0;
-            var state = p.custom_status || '';
-
-            var item = document.createElement('div');
-            item.className = 'prg-item';
-            var head = document.createElement('div');
-            head.className = 'prg-item-head';
-            var nm = document.createElement('div');
-            nm.className = 'prg-item-name';
-            nm.textContent = p.name || '';
-            nm.title = p.name || '';
-            var tag = document.createElement('span');
-            tag.className = 'prg-state ' + stateClass(state);
-            tag.textContent = state || '待同步';
-            head.appendChild(nm);
-            head.appendChild(tag);
-            item.appendChild(head);
-
-            var bar = document.createElement('div');
-            bar.className = 'prg-bar';
-            var fill = document.createElement('div');
-            fill.className = 'prg-bar-fill';
-            fill.style.width = pct + '%';
-            bar.appendChild(fill);
-            item.appendChild(bar);
-
-            var foot = document.createElement('div');
-            foot.className = 'prg-item-foot';
-            var ep = document.createElement('span');
-            ep.textContent = total > 0 ? (cur + ' / ' + total + ' 集 · ' + pct + '%') : '未设总集数';
-            var meta = document.createElement('span');
-            meta.className = 'prg-item-sub';
-            meta.textContent = (p.source_department || p.department || '') + (p.project_month ? ' · ' + p.project_month : '');
-            foot.appendChild(ep);
-            foot.appendChild(meta);
-            item.appendChild(foot);
-
-            // 操作行：剧本（最左）+ 打开工作台
-            var openRow = document.createElement('div');
-            openRow.className = 'prg-open-row';
-            var scriptBtn = document.createElement('button');
-            scriptBtn.type = 'button';
-            scriptBtn.className = 'prg-open-btn prg-open-main';
-            scriptBtn.textContent = '📖 剧本';
-            scriptBtn.title = '在本地项目里找剧本并阅读';
-            scriptBtn.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                openScriptForProject(p.name || '');
-            });
-            openRow.appendChild(scriptBtn);
-            var openBtn = document.createElement('button');
-            openBtn.type = 'button';
-            openBtn.className = 'prg-open-btn';
-            openBtn.textContent = '在工作台打开 ↗';
-            openBtn.title = '跳转视频工作台并定位到该项目';
-            openBtn.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                openInWorkbench(p.name || '');
-            });
-            openRow.appendChild(openBtn);
-            item.appendChild(openRow);
-
-            el.activeList.appendChild(item);
-        });
-    }
-
-    // 请求视频工作台跳转定位（通过 SSE jump 事件）；服务离线则先启动再跳
-    function openInWorkbench(projectName) {
-        var secret = readSecret();
-        if (!secret) {
-            setOnline(false, '读不到视频工作台配置（api_secret）');
-            return;
-        }
-        var url = WB_BASE + '/api/_self/jump?project=' + encodeURIComponent(projectName);
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.timeout = 6000;
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState !== 4) return;
-            if (xhr.status === 200) {
-                el.statusText.textContent = '已通知工作台定位：' + projectName;
-            } else {
-                // 服务没起来 → 一键启动后重试
-                el.statusText.textContent = '工作台未响应，正在启动…';
-                launchWBThenJump(projectName);
-            }
-        };
-        xhr.onerror = function () { launchWBThenJump(projectName); };
-        xhr.ontimeout = function () { launchWBThenJump(projectName); };
-        xhr.send();
-    }
-
-    function launchWBThenJump(projectName) {
-        var started = false;
-        try {
-            if (fs.existsSync(WB_START)) {
-                child_process.exec('wscript "' + WB_START + '"');
-                started = true;
-            } else if (fs.existsSync(WB_PY)) {
-                child_process.exec('pythonw "' + WB_PY + '"');
-                started = true;
-            }
-        } catch (e) {}
-        if (!started) {
-            setOnline(false, '找不到视频工作台启动脚本，请手动启动');
-            return;
-        }
-        el.statusText.textContent = '正在启动视频工作台…';
-        // 等服务就绪后广播跳转
-        var tries = 0;
-        var timer = setInterval(function () {
-            tries++;
-            var xhr = new XMLHttpRequest();
-            var url = WB_BASE + '/api/_self/jump?project=' + encodeURIComponent(projectName);
-            xhr.open('GET', url, true);
-            xhr.timeout = 4000;
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState !== 4) return;
-                if (xhr.status === 200) {
-                    clearInterval(timer);
-                    el.statusText.textContent = '已启动并定位：' + projectName;
-                    setTimeout(function () { refresh(true); }, 1200);
-                } else if (tries > 15) {
-                    clearInterval(timer);
-                    setOnline(false, '启动超时，请确认视频工作台能正常运行');
-                }
-            };
-            xhr.onerror = function () {
-                if (tries > 15) { clearInterval(timer); setOnline(false, '启动超时'); }
-            };
-            xhr.ontimeout = function () {
-                if (tries > 15) { clearInterval(timer); setOnline(false, '启动超时'); }
-            };
-            xhr.send();
-        }, 1500);
-    }
-
-    // ==================== 剧本阅读（本地项目找 docx → 内嵌阅读） ====================
-    var SCRIPT_ROOT = 'F:/001AI漫剧';  // 本地项目盘根目录（固定）
-
-    // 从项目名提取用于匹配目录的特征：去掉序号前缀，保留下划线分隔的核心段
-    function normName(n) {
-        return String(n || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
-    }
-
-    // 在本地项目盘里找匹配的目录
-    function findLocalProjectDir(projectName) {
-        try {
-            if (!fs.existsSync(SCRIPT_ROOT)) return null;
-            var name = normName(projectName);
-            var dirs = fs.readdirSync(SCRIPT_ROOT);
-            // 候选匹配键：全名、去掉前导序号、取《》内剧名、下划线末段
-            var candidates = [];
-            candidates.push(name);
-            var m0 = name.match(/^\d+[-_\s]*/);
-            if (m0) candidates.push(name.slice(m0[0].length));
-            var m1 = name.match(/《([^》]+)》/);
-            if (m1) candidates.push(m1[1]);
-            var segs = name.split('_');
-            if (segs.length > 1) candidates.push(segs[segs.length - 1].trim());
-            if (segs.length > 1) candidates.push(segs.slice(1).join('_'));
-            var m2 = name.match(/\((.*)\)/);
-            if (m2) candidates.push(m2[1]);
-
-            // 去掉候选里的空格小写化，做包含匹配
-            function squash(s) { return s.toLowerCase().replace(/\s+/g, ''); }
-            var sqName = squash(name);
-            var best = null, bestScore = 0;
-            dirs.forEach(function (d) {
-                if (d.charAt(0) === '.') return;
-                var sqDir = squash(d);
-                // 目录名包含项目全名（squash 后）得分最高
-                var score = 0;
-                if (sqDir === sqName) score = 100;
-                else if (sqDir.indexOf(sqName) >= 0) score = 80;
-                else if (sqName.indexOf(sqDir) >= 0) score = 60;
-                else {
-                    // 试各候选键包含
-                    for (var ci = 0; ci < candidates.length; ci++) {
-                        var c = squash(candidates[ci]);
-                        if (c.length >= 2 && sqDir.indexOf(c) >= 0) { score = Math.max(score, 70 - ci); }
-                    }
-                }
-                if (score > bestScore) { bestScore = score; best = d; }
-            });
-            return best ? path.join(SCRIPT_ROOT, best) : null;
-        } catch (e) { return null; }
-    }
-
-    // 在项目目录递归找剧本 docx/pdf（过滤 ~$ 临时文件；优先「剧本/脚本」目录）
-    function findScriptDocxList(projDir) {
-        var found = [];
-        var limit = 400;  // 防失控
-        function walk(dir, depth) {
-            if (depth > 5) return;
-            try {
-                var entries = fs.readdirSync(dir);
-                entries.forEach(function (en) {
-                    if (limit-- <= 0) return;
-                    if (en.charAt(0) === '.') return;
-                    // 跳过 Word 临时锁文件（~$开头）
-                    if (en.charAt(0) === '~' && en.charAt(1) === '$') return;
-                    var full = path.join(dir, en);
-                    var st = null;
-                    try { st = fs.statSync(full); } catch (e) { return; }
-                    if (st.isDirectory()) {
-                        walk(full, depth + 1);
-                    } else {
-                        var low = en.toLowerCase();
-                        if (low.endsWith('.docx') || low.endsWith('.pdf')) {
-                            found.push(full);
-                        }
-                    }
-                });
-            } catch (e) {}
-        }
-        var scriptDirs = [];
-        // 先找「剧本/脚本」目录
-        ['剧本', '脚本', 'Script'].forEach(function (k) {
-            var p = path.join(projDir, k);
-            if (fs.existsSync(p)) scriptDirs.push(p);
-        });
-        if (scriptDirs.length > 0) {
-            scriptDirs.forEach(function (p) { walk(p, 1); });
-        }
-        if (found.length === 0) walk(projDir, 0);
-        // 去重
-        var uniq = [];
-        found.forEach(function (f) { if (uniq.indexOf(f) < 0) uniq.push(f); });
-        return uniq;
-    }
 
     function findPython() {
         var c = [
@@ -470,7 +29,19 @@
         return 'python';
     }
 
-    // 主入口：项目卡片点「剧本」→ 定位目录 → 找 docx（可能多个）→ 选择后打开阅读浮层
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    // ==================== 剧本阅读（本地项目找 docx → 内嵌阅读） ====================
+
+    // 从项目名提取用于匹配目录的特征：去掉序号前缀，保留下划线分隔的核心段
+    function normName(n) {
+        return String(n || '').replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
     // ==================== 剧本书签（固定剧本：手动选的记住，多剧本可固定） ====================
     var SCRIPT_MARKS_KEY = 'vh_script_marks';
     // { 项目名: [剧本绝对路径, ...] }  跨会话持久
@@ -515,126 +86,6 @@
     }
 
     // 打开某项目的剧本
-    function openScriptForProject(projectName) {
-        var fixed = getProjectMarks(projectName);
-        var projDir = findLocalProjectDir(projectName);
-        var auto = [];
-        if (projDir) auto = findScriptDocxList(projDir);
-        // 合并候选：固定优先，再加检测到的（去重）；最终只有一份就直接打开
-        var cands = fixed.slice();
-        auto.forEach(function (p) { if (cands.indexOf(p) < 0) cands.push(p); });
-        if (cands.length === 0) {
-            // 没找到剧本（或项目目录对不上）→ 手动选择
-            showScriptMsg('没找到「' + projectName + '」的剧本。\n\n可手动选择剧本文件并固定，下次点开直接可用。',
-                [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName, true); } }]);
-        } else if (cands.length === 1) {
-            // 只有一份 → 直接打开
-            loadScriptDocx(cands[0], projectName);
-        } else {
-            // 多份（固定多份或中英并存）→ 弹面板选
-            showScriptPanel(projectName, fixed, auto, projDir);
-        }
-    }
-
-    // 剧本面板：固定列表（常驻）+ 自动检测 + 添加按钮
-    function showScriptPanel(projectName, fixed, auto, projDir) {
-        var modal = document.createElement('div');
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:998;display:flex;align-items:center;justify-content:center;';
-        var box = document.createElement('div');
-        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;max-width:560px;width:92%;box-sizing:border-box;max-height:80%;overflow-y:auto;';
-        var title = document.createElement('div');
-        title.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:4px;';
-        title.textContent = '📖 ' + projectName;
-        box.appendChild(title);
-        var sub = document.createElement('div');
-        sub.style.cssText = 'font-size:11px;color:#9a9a9a;margin-bottom:10px;';
-        sub.textContent = (projDir ? projDir : '未匹配到本地目录') + (fixed.length ? ' · 已固定 ' + fixed.length + ' 份' : '');
-        box.appendChild(sub);
-
-        function itemRow(p, isFixed) {
-            var row = document.createElement('div');
-            row.style.cssText = 'display:flex;align-items:center;gap:8px;background:#242424;border:1px solid #333;border-radius:6px;padding:7px 10px;margin-bottom:6px;';
-            var nm = document.createElement('span');
-            nm.style.cssText = 'flex:1;font-size:12px;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;';
-            nm.textContent = path.basename(p);
-            nm.title = p;
-            nm.addEventListener('click', function () {
-                if (modal.parentNode) modal.parentNode.removeChild(modal);
-                loadScriptDocx(p, projectName);
-            });
-            row.appendChild(nm);
-            if (isFixed) {
-                var pin = document.createElement('span');
-                pin.textContent = '📌 固定';
-                pin.style.cssText = 'font-size:10px;color:#7fb3d9;flex:0 0 auto;';
-                row.appendChild(pin);
-                var rm = document.createElement('button');
-                rm.textContent = '移除';
-                rm.style.cssText = 'flex:0 0 auto;background:#3a1f1f;color:#ff9a9a;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;';
-                rm.addEventListener('click', function () {
-                    removeProjectMark(projectName, p);
-                    // 刷新面板
-                    var f2 = getProjectMarks(projectName);
-                    var a2 = projDir ? findScriptDocxList(projDir) : [];
-                    if (modal.parentNode) modal.parentNode.removeChild(modal);
-                    if (f2.length > 0 || a2.length > 0) showScriptPanel(projectName, f2, a2, projDir);
-                    else showScriptMsg('已移除。项目没有固定的剧本了。', [{ text: '📂 手动选择剧本文件', primary: true, onClick: function () { browseScriptFile(projectName, true); } }]);
-                });
-                row.appendChild(rm);
-            } else {
-                var pinBtn = document.createElement('button');
-                pinBtn.textContent = '📌 固定';
-                pinBtn.style.cssText = 'flex:0 0 auto;background:#1e3a5b;color:#6db3ff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;';
-                pinBtn.addEventListener('click', function () {
-                    addProjectMark(projectName, p);
-                    var f3 = getProjectMarks(projectName);
-                    var a3 = projDir ? findScriptDocxList(projDir) : [];
-                    if (modal.parentNode) modal.parentNode.removeChild(modal);
-                    showScriptPanel(projectName, f3, a3, projDir);
-                });
-                row.appendChild(pinBtn);
-            }
-            return row;
-        }
-
-        // 固定列表
-        if (fixed.length > 0) {
-            var fh = document.createElement('div');
-            fh.style.cssText = 'font-size:11px;color:#7fb3d9;font-weight:600;margin:4px 0 6px;';
-            fh.textContent = '已固定（点击打开）';
-            box.appendChild(fh);
-            fixed.forEach(function (p) { box.appendChild(itemRow(p, true)); });
-        }
-        // 自动检测但未固定的
-        var autoNew = auto.filter(function (p) { return fixed.indexOf(p) < 0; });
-        if (autoNew.length > 0) {
-            var ah = document.createElement('div');
-            ah.style.cssText = 'font-size:11px;color:#9a9a9a;font-weight:600;margin:8px 0 6px;';
-            ah.textContent = '在项目里检测到的（可固定）';
-            box.appendChild(ah);
-            autoNew.forEach(function (p) { box.appendChild(itemRow(p, false)); });
-        }
-        // 底部按钮：添加文件 / 关闭
-        var rowBtn = document.createElement('div');
-        rowBtn.style.cssText = 'display:flex;gap:8px;margin-top:10px;justify-content:flex-end;';
-        var addB = document.createElement('button');
-        addB.textContent = '📂 添加剧本文件…';
-        addB.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;';
-        addB.addEventListener('click', function () {
-            if (modal.parentNode) modal.parentNode.removeChild(modal);
-            browseScriptFile(projectName, true);
-        });
-        rowBtn.appendChild(addB);
-        var ok = document.createElement('button');
-        ok.textContent = '关闭';
-        ok.style.cssText = 'background:#3a3a3a;color:#ccc;border:none;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:12px;';
-        ok.addEventListener('click', function () { if (modal.parentNode) modal.parentNode.removeChild(modal); });
-        rowBtn.appendChild(ok);
-        box.appendChild(rowBtn);
-        modal.appendChild(box);
-        document.body.appendChild(modal);
-    }
-
     // 手动选剧本 docx（addToMark=true 时固定）
     function browseScriptFile(projectName, addToMark) {
         var result;
@@ -654,7 +105,7 @@
     // 解析指定剧本文件（docx/pdf）并打开阅读浮层
     // restoreEp: 可选，打开后定位到第几集（用于自动续读）
     function loadScriptDocx(docx, projectName, restoreEp) {
-        el.statusText.textContent = '解析剧本：' + path.basename(docx) + '…';
+        window.__copyFlash && window.__copyFlash('解析剧本：' + path.basename(docx));
         var py = findPython();
         var scriptPath = path.join(extRoot, 'py', 'docx_read.py');
         if (!fs.existsSync(scriptPath)) {
@@ -1243,14 +694,6 @@
             d.textContent = zh;
             dlg.appendChild(d);
         }
-        window.__copyFlash = function (msg) {
-            var tip = document.createElement('span');
-            tip.textContent = msg || '✓ 已复制';
-            var okStyle = (msg || '').indexOf('失败') >= 0;
-            tip.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:' + (okStyle ? '#3a2a2a' : '#2a3a2a') + ';color:' + (okStyle ? '#ff9090' : '#7fd68b') + ';padding:6px 14px;border-radius:6px;font-size:12px;z-index:1001;pointer-events:none;';
-            document.body.appendChild(tip);
-            setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 1400);
-        };
 
         // 搜索框：纯数字 → 集号跳转；否则关键词检索
         searchInp.addEventListener('input', function () {
@@ -1383,16 +826,7 @@
         document.addEventListener('keydown', escHandler);
         // 打开下一个剧本前若面板被其它路径清空，监听会随 hostPanel.innerHTML='' 一起失效；此处仅保留引用避免 GC 误伤
     }
-
-    // 转义（progress.js 里没有就用内置小函数）
-    function escHtml(s) {
-        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-        });
-    }
-
     // 复制文本到剪贴板（供阅读器台词复制按钮用）
-    // CEP 的 Chromium 对 navigator.clipboard 支持不稳定，优先用 execCommand('copy')
     window.__copyText = function (text) {
         var done = false;
         try {
@@ -1417,82 +851,12 @@
         window.__copyFlash && window.__copyFlash(done ? '已复制' : '复制失败，请手动选中复制');
     };
 
-    // 主刷新
-    function refresh(showBusy) {
-        if (busy) return;
-        busy = true;
-        if (showBusy) {
-            el.refresh.disabled = true;
-            el.statusText.textContent = '拉取中…';
-        }
-        fetchProjects(function (err, data) {
-            busy = false;
-            if (el.refresh) el.refresh.disabled = false;
-            if (err) {
-                // 尝试区分：服务没起 vs 鉴权失败
-                var secret = readSecret();
-                if (!secret) {
-                    setOnline(false, '读不到视频工作台配置（api_secret）');
-                } else if (err.message === '网络错误' || err.message === '超时') {
-                    setOnline(false, '视频工作台未运行');
-                } else {
-                    setOnline(false, err.message);
-                }
-                return;
-            }
-            lastData = data;
-            setOnline(true, '视频工作台在线 · ' + new Date().toLocaleTimeString());
-            renderOverview(data.overview_stats || {});
-            renderActive(data.sections || []);
-        });
-    }
-
-    // 启动视频工作台
-    function launchWB() {
-        el.statusText.textContent = '正在启动视频工作台…';
-        var started = false;
-        try {
-            if (fs.existsSync(WB_START)) {
-                child_process.exec('wscript "' + WB_START + '"');
-                started = true;
-            } else if (fs.existsSync(WB_PY)) {
-                child_process.exec('pythonw "' + WB_PY + '"');
-                started = true;
-            }
-        } catch (e) {}
-        if (!started) {
-            el.statusText.textContent = '找不到视频工作台启动脚本，请手动启动';
-            return;
-        }
-        // 轮询等服务就绪
-        var tries = 0;
-        var timer = setInterval(function () {
-            tries++;
-            fetchProjects(function (err, data) {
-                if (!err) {
-                    clearInterval(timer);
-                    refresh(true);
-                } else if (tries > 20) {
-                    clearInterval(timer);
-                    setOnline(false, '启动超时，请确认视频工作台能正常运行');
-                }
-            });
-        }, 1500);
-    }
-
-    // 事件
-    el.refresh.addEventListener('click', function () { refresh(true); });
-    el.launch.addEventListener('click', launchWB);
-    el.retry.addEventListener('click', function () { refresh(true); });
-    // 筛选：状态 / 只看有进度 → 重渲染当前列表
-    el.filterState.addEventListener('change', function () { renderFilteredList(); });
-    el.filterProgress.addEventListener('change', function () { renderFilteredList(); });
-
-    // 暴露给 main.js：切到 progress tab 时自动刷新一次
-    window.__progressOnShow = function () {
-        refresh(true);
+    window.__copyFlash = function (msg) {
+        var tip = document.createElement('span');
+        tip.textContent = msg || '已复制';
+        var okStyle = (msg || '').indexOf('失败') >= 0;
+        tip.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:' + (okStyle ? '#3a2a2a' : '#2a3a2a') + ';color:' + (okStyle ? '#ff9090' : '#7fd68b') + ';padding:6px 14px;border-radius:6px;font-size:12px;z-index:1001;pointer-events:none;';
+        document.body.appendChild(tip);
+        setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 1400);
     };
-
-    // 初始化：先探测在线状态
-    refresh(true);
 })();

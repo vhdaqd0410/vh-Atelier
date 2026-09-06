@@ -39,6 +39,34 @@ DEFAULT_INTERNAL = r"D:\cosyvoice3_V30\_internal"
 DEFAULT_MATCHA = r"D:\cosyvoice3_V30\third_party\Matcha-TTS"
 DEFAULT_MODEL_DIR = r"D:\cosyvoice3_V30\pretrained_models"
 
+# 配置文件：插件根目录 collect/cosyvoice_paths.json，可覆盖默认路径
+# 结构: {"internal": "...", "matcha": "...", "model_dir": "...", "torio_stub": "..."}
+# 目标电脑上改这个文件即可，无需改代码。
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'collect', 'cosyvoice_paths.json')
+
+
+def _load_paths_config():
+    """读取 collect/cosyvoice_paths.json 覆盖默认路径；读取失败返回空 dict"""
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8-sig') as f:
+                cfg = json.load(f)
+            if isinstance(cfg, dict):
+                return cfg
+    except Exception:
+        pass
+    return {}
+
+
+def _resolve_paths():
+    """合并默认路径与配置文件，返回 (internal, matcha, model_dir, torio_stub)"""
+    cfg = _load_paths_config()
+    internal = cfg.get('internal', DEFAULT_INTERNAL)
+    matcha = cfg.get('matcha', DEFAULT_MATCHA)
+    model_dir = cfg.get('model_dir', DEFAULT_MODEL_DIR)
+    torio_stub = cfg.get('torio_stub', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'stubs', 'torio_stub'))
+    return internal, matcha, model_dir, torio_stub
+
 
 def emit_stage(stage):
     print('STAGE %s' % stage, file=sys.stderr, flush=True)
@@ -119,16 +147,24 @@ def main():
         emit_result({'ok': False, 'error': '参考文本为空（参考音频对应的文字）'})
         return 1
 
-    # 引擎路径（config 可覆盖，缺省用默认）
-    internal = cfg.get('internal', DEFAULT_INTERNAL)
-    matcha = cfg.get('matcha', DEFAULT_MATCHA)
-    model_dir = cfg.get('model_dir', DEFAULT_MODEL_DIR)
-    torio_stub = cfg.get('torio_stub', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'stubs', 'torio_stub'))
+    # 引擎路径优先级：config.json 显式传入 > collect/cosyvoice_paths.json 配置 > 默认 D 盘路径
+    _def_internal, _def_matcha, _def_model_dir, _def_torio = _resolve_paths()
+    internal = cfg.get('internal', _def_internal)
+    matcha = cfg.get('matcha', _def_matcha)
+    model_dir = cfg.get('model_dir', _def_model_dir)
+    torio_stub = cfg.get('torio_stub', _def_torio)
 
     # 输出路径 ASCII 化
     out_wav = ascii_path(out_wav)
 
     emit_stage('init')
+    # 路径存在性预检：给出友好报错（目标电脑常见问题是 CosyVoice3 没装或路径不对）
+    if not os.path.isdir(internal):
+        emit_result({'ok': False, 'error': 'CosyVoice3 引擎目录不存在: %s（请安装 CosyVoice3 工具，或在 collect/cosyvoice_paths.json 里配置正确路径）' % internal})
+        return 1
+    if not os.path.isdir(model_dir):
+        emit_result({'ok': False, 'error': 'CosyVoice3 模型目录不存在: %s（请检查 pretrained_models 路径）' % model_dir})
+        return 1
     inject_runtime(internal, matcha, torio_stub)
     try:
         import torch

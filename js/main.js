@@ -1,5 +1,5 @@
 // vh-Atelier 整合插件 - 两级导航切换逻辑
-// 工作台（组）→ 子功能（面板）。三组：字幕(字幕识别/字幕校对)、声音(人声分离/语音克隆/音效库/音乐)、交付(多版本导出/视频下载)
+// 工作台（组）→ 子功能（面板）。四组：剧本、字幕、声音、交付
 (function () {
     var panels = {
         subtitle: document.getElementById('panel-subtitle'),
@@ -11,14 +11,12 @@
         music: document.getElementById('panel-music'),
         export: document.getElementById('panel-export'),
         video: document.getElementById('panel-video'),
-        progress: document.getElementById('panel-progress'),
         script: document.getElementById('panel-script'),
         shenpian: document.getElementById('panel-shenpian')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
-        progress: { members: ['progress'], default: 'progress' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
@@ -75,9 +73,6 @@
         if (name === 'video' && window.__videoOnShow) {
             try { window.__videoOnShow(); } catch (e) {}
         }
-        if (name === 'progress' && window.__progressOnShow) {
-            try { window.__progressOnShow(); } catch (e) {}
-        }
         // 剧本：切到剧本 tab 时若面板是空的（没在阅读、也没首页），渲染剧本库首页
         if (name === 'script' && window.__atShowScriptHome) {
             try { window.__atShowScriptHome(); } catch (e) {}
@@ -124,7 +119,7 @@
     // 暴露给其他板块调用：字幕识别 → 字幕校对 联动时切 tab
     window.__atSwitchTab = switchTab;
     // 剧本工作台（常驻）：切过去并确保面板有内容；无内容时显示剧本库首页
-    // 剧本库首页由 progress.js 提供（__atShowScriptHome），面板无阅读器时切到该组就展示它
+    // 剧本库首页由 script.js 提供（__atShowScriptHome），面板无阅读器时切到该组就展示它
     window.__atShowScriptGroup = function () {
         var btn = document.querySelector('.ws-group[data-group="script"]');
         if (btn) btn.style.display = '';
@@ -136,12 +131,12 @@
         }
         switchGroup('script');
     };
-    // 关闭剧本阅读：切回进度（按钮常驻，不隐藏）
+    // 关闭剧本阅读：切回字幕组（按钮常驻，不隐藏）
     window.__atHideScriptGroup = function () {
         if (currentInGroup['script'] && groupBtns.length) {
             var active = null;
             groupBtns.forEach(function (b) { if (b.classList.contains('active')) active = b.dataset.group; });
-            if (active === 'script') switchGroup('progress');
+            if (active === 'script') switchGroup('sub');
         }
         delete currentInGroup['script'];
     };
@@ -150,7 +145,7 @@
         groupBtns.forEach(function (b) { if (b.classList.contains('active')) active = b.dataset.group; });
         return active === 'script';
     };
-    // 供 progress.js 调用：直接切到剧本组（已渲染好内容时用）
+    // 供 script.js 调用：直接切到剧本组（已渲染好内容时用）
     window.__atSwitchToScript = function () {
         switchGroup('script');
     };
