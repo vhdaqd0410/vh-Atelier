@@ -28,6 +28,7 @@
 
     function findNode() {
         var candidates = [
+            path.join(extRoot, 'runtime', 'node.exe'),  // 便携 node（自包含部署优先）
             'C:\\Program Files\\nodejs\\node.exe',
             'C:\\Program Files (x86)\\nodejs\\node.exe'
         ];
