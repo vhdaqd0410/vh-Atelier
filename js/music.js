@@ -1695,12 +1695,12 @@
             var ar = (s.artists || []).map(function (a) { return a.name; }).join(', ');
             var sid = s.id;
             songById[sid] = s;
-            html += '<div class="identify-item" style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #2a3a5d;">' +
+            html += '<div class="identify-item" style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #2a3a5d;" data-sid="' + sid + '">' +
                 '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + nm + ' <span style="color:var(--muted);font-size:11px;">- ' + ar + '</span></span>' +
                 '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-play="1" data-sid="' + sid + '">播放</button>' +
                 '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-sid="' + sid + '" data-name="' + enc(nm) + '" data-artist="' + enc(ar) + '">下载</button>' +
                 '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-add="1" data-sid="' + sid + '">+ 歌单</button>' +
-                '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-sid="' + sid + '">搜</button></div>';
+                '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-q="' + enc(nm + ' ' + ar) + '">搜</button></div>';
             shown++;
         });
         html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2a3a5d;text-align:right;">' +
@@ -1733,10 +1733,22 @@
                 if (s) addToPlaylist(s);
             });
         });
-        box.querySelectorAll('button[data-sid]:not([data-play]):not([data-name]):not([data-add])').forEach(function (b) {
+        // 搜：填歌名+歌手搜索（不要填歌曲 id，否则搜出一串数字）
+        box.querySelectorAll('button[data-q]').forEach(function (b) {
             b.addEventListener('click', function () {
-                $('musicQuery').value = b.dataset.sid;
+                $('musicQuery').value = decodeURIComponent(b.dataset.q);
+                $('musicType').value = '1';
                 doSearch();
+            });
+        });
+        // 双击整条结果 → 播放
+        box.querySelectorAll('.identify-item').forEach(function (it) {
+            it.style.cursor = 'pointer';
+            it.addEventListener('dblclick', function () {
+                var s = songById[it.dataset.sid];
+                if (!s) return;
+                playQueue.push(s);
+                playFromQueue(playQueue.length - 1, null);
             });
         });
         var histBtn = box.querySelector('#btnIdentifyHistoryToggle');
