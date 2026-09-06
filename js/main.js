@@ -13,8 +13,7 @@
         video: document.getElementById('panel-video'),
         progress: document.getElementById('panel-progress'),
         script: document.getElementById('panel-script'),
-        shenpian: document.getElementById('panel-shenpian'),
-        douyin: document.getElementById('panel-douyin')
+        shenpian: document.getElementById('panel-shenpian')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
@@ -24,8 +23,7 @@
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
-        shenpian: { members: ['shenpian'], default: 'shenpian' },
-        douyin: { members: ['douyin'], default: 'douyin' }
+        shenpian: { members: ['shenpian'], default: 'shenpian' }
     };
     // tab 归属映射
     var groupOf = {};
@@ -87,10 +85,6 @@
         // 审片：切到时 iframe 若未加载则自动加载分秒帧
         if (name === 'shenpian' && window.__spAutoLoad) {
             try { window.__spAutoLoad(); } catch (e) {}
-        }
-        // 抖音：切到时 iframe 若未加载则自动加载
-        if (name === 'douyin' && window.__dyAutoLoad) {
-            try { window.__dyAutoLoad(); } catch (e) {}
         }
     }
 
