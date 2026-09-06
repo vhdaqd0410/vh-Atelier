@@ -41,8 +41,12 @@ DEFAULT_MODEL_DIR = r"D:\cosyvoice3_V30\pretrained_models"
 
 # 配置文件：插件根目录 collect/cosyvoice_paths.json，可覆盖默认路径
 # 结构: {"internal": "...", "matcha": "...", "model_dir": "...", "torio_stub": "..."}
-# 目标电脑上改这个文件即可，无需改代码。
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'collect', 'cosyvoice_paths.json')
+
+# 自包含引擎目录：插件根目录 engine/cosyvoice3_V30（打包部署时把 CosyVoice3 整个工具放这里）
+_here = os.path.dirname(os.path.abspath(__file__))
+_ext_root = os.path.abspath(os.path.join(_here, '..'))
+_ENGINE_DIR = os.path.join(_ext_root, 'engine', 'cosyvoice3_V30')
 
 
 def _load_paths_config():
@@ -59,12 +63,23 @@ def _load_paths_config():
 
 
 def _resolve_paths():
-    """合并默认路径与配置文件，返回 (internal, matcha, model_dir, torio_stub)"""
-    cfg = _load_paths_config()
-    internal = cfg.get('internal', DEFAULT_INTERNAL)
-    matcha = cfg.get('matcha', DEFAULT_MATCHA)
-    model_dir = cfg.get('model_dir', DEFAULT_MODEL_DIR)
-    torio_stub = cfg.get('torio_stub', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'stubs', 'torio_stub'))
+    """三级优先级解析引擎路径：
+    1. 插件目录内 engine/cosyvoice3_V30（自包含部署，最高优先级）
+    2. collect/cosyvoice_paths.json 配置文件
+    3. 默认 D 盘路径
+    返回 (internal, matcha, model_dir, torio_stub)
+    """
+    # 自包含引擎优先
+    if os.path.isdir(os.path.join(_ENGINE_DIR, '_internal')):
+        internal = os.path.join(_ENGINE_DIR, '_internal')
+        matcha = os.path.join(_ENGINE_DIR, 'third_party', 'Matcha-TTS')
+        model_dir = os.path.join(_ENGINE_DIR, 'pretrained_models')
+    else:
+        cfg = _load_paths_config()
+        internal = cfg.get('internal', DEFAULT_INTERNAL)
+        matcha = cfg.get('matcha', DEFAULT_MATCHA)
+        model_dir = cfg.get('model_dir', DEFAULT_MODEL_DIR)
+    torio_stub = os.path.join(_here, '..', 'stubs', 'torio_stub')
     return internal, matcha, model_dir, torio_stub
 
 

@@ -223,10 +223,16 @@ def main():
     # CosyVoice3（语音克隆）
     print()
     print('--- 语音克隆（CosyVoice3） ---')
+    # 三级优先级：自包含 engine 目录 > 配置文件 > D 盘默认
+    engine_dir = os.path.join(EXT_ROOT, 'engine', 'cosyvoice3_V30')
     cfg_file = os.path.join(EXT_ROOT, 'collect', 'cosyvoice_paths.json')
     internal = r'D:\cosyvoice3_V30\_internal'
     model_dir = r'D:\cosyvoice3_V30\pretrained_models'
-    if os.path.exists(cfg_file):
+    if os.path.isdir(os.path.join(engine_dir, '_internal')):
+        internal = os.path.join(engine_dir, '_internal')
+        model_dir = os.path.join(engine_dir, 'pretrained_models')
+        add('CosyVoice配置', 'ok', '自包含引擎 engine/cosyvoice3_V30')
+    elif os.path.exists(cfg_file):
         try:
             with open(cfg_file, encoding='utf-8-sig') as f:
                 cfg = json.load(f)
