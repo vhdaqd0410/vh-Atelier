@@ -189,6 +189,17 @@ app.get('/user/playlist', async (req, res) => {
   }
 })
 
+// 最近播放的歌曲（需登录，按周）
+app.get('/record/recent/song', async (req, res) => {
+  const limit = parseInt(req.query.limit || '50', 10)
+  try {
+    const r = await ncm.record_recent_song({ limit, cookie })
+    res.json(r.body || fail('no body'))
+  } catch (e) {
+    res.json(fail(e.message))
+  }
+})
+
 // 歌词（用于未来扩展）
 app.get('/lyric', async (req, res) => {
   const id = req.query.id || ''
