@@ -10,16 +10,12 @@
     <div class="sub">字幕 · 声音 · 交付 · 进度 四工作台</div>
 
     <div class="ws-groups">
-        <button class="ws-group" data-group="shenpian">🔗 审片测试</button>
         <button class="ws-group" data-group="script">📖 剧本</button>
         <button class="ws-group active" data-group="progress">进度</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="deliver">交付</button>
-    </div>
-
-    <div class="tabs ws-subtabs" data-group="shenpian" style="display:none;">
-        <button class="tab active" data-tab="shenpian">审片</button>
+        <button class="ws-group" data-group="shenpian">🎬 审片</button>
     </div>
 
     <div class="tabs ws-subtabs" data-group="progress">
@@ -736,16 +732,16 @@
         </div>
     </div>
 
-    <!-- ==================== 审片测试（临时，验证 CEP iframe 能否加载外部网页） ==================== -->
+    <!-- ==================== 审片（内嵌分秒帧，看批注不切出 PR） ==================== -->
     <div class="tab-panel" id="panel-shenpian" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
-            <div style="flex:0 0 auto;font-size:11px;color:var(--muted);padding:4px 2px;">测试：CEP 内嵌分秒帧。若能显示登录/页面则可行。</div>
-            <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
-            <div style="flex:0 0 auto;display:flex;gap:6px;padding:6px 0;">
-                <button id="btnSpLoad" class="tbtn">加载分秒帧</button>
-                <button id="btnSpLogin" class="tbtn">登录页</button>
-                <button id="btnSpReset" class="tbtn">清空</button>
+            <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11px;color:var(--muted);">
+                <span>🎬 分秒帧审片</span>
+                <span style="flex:1;"></span>
+                <button id="btnSpHome" class="tbtn" style="padding:3px 10px;font-size:11px;" title="回到分秒帧首页">首页</button>
+                <button id="btnSpRefresh" class="tbtn" style="padding:3px 10px;font-size:11px;" title="刷新当前页（看最新批注）">刷新</button>
             </div>
+            <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
         </div>
     </div>
 
@@ -767,12 +763,11 @@
     <script src="js/video.js"></script>
     <script src="js/progress.js"></script>
     <script>
-    // ==== 审片测试（临时）：验证 CEP iframe 能否加载外部网页 ====
+    // ==== 审片：内嵌分秒帧（自动加载，首页/刷新控制） ====
     (function () {
         var fr = document.getElementById('spFrame');
-        var btnL = document.getElementById('btnSpLoad');
-        var btnLogin = document.getElementById('btnSpLogin');
-        var btnReset = document.getElementById('btnSpReset');
+        var btnHome = document.getElementById('btnSpHome');
+        var btnRefresh = document.getElementById('btnSpRefresh');
         function tryLoad(url) {
             if (!fr) return;
             fr.src = url;
@@ -784,14 +779,11 @@
                 tryLoad('https://app.mediatrack.cn/');
             }
         };
-        if (btnL) btnL.addEventListener('click', function () {
+        if (btnHome) btnHome.addEventListener('click', function () {
             tryLoad('https://app.mediatrack.cn/');
         });
-        if (btnLogin) btnLogin.addEventListener('click', function () {
-            tryLoad('https://app.mediatrack.cn/login');
-        });
-        if (btnReset) btnReset.addEventListener('click', function () {
-            fr.src = 'about:blank';
+        if (btnRefresh) btnRefresh.addEventListener('click', function () {
+            if (fr) { try { fr.contentWindow.location.reload(); } catch (e) { tryLoad('https://app.mediatrack.cn/'); } }
         });
     })();
     </script>
