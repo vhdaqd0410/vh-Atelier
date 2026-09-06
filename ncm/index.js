@@ -200,6 +200,33 @@ app.get('/lyric', async (req, res) => {
   }
 })
 
+// 创建歌单（需登录）
+app.post('/playlist/create', async (req, res) => {
+  const name = (req.body && req.body.name) || ''
+  const privacy = (req.body && req.body.privacy) || '0'
+  if (!name) return res.json(fail('缺少歌单名'))
+  try {
+    const r = await ncm.playlist_create({ name, privacy, cookie })
+    res.json(r.body || fail('no body'))
+  } catch (e) {
+    res.json(fail(e.message))
+  }
+})
+
+// 添加歌曲到歌单（需登录）：ids 逗号分隔，pid 歌单 id
+app.post('/playlist/track/add', async (req, res) => {
+  const pid = (req.body && req.body.pid) || ''
+  const ids = (req.body && req.body.ids) || ''
+  if (!pid || !ids) return res.json(fail('缺少 pid 或 ids'))
+  try {
+    const r = await ncm.playlist_track_add({ pid, ids, cookie })
+    res.json(r.body || fail('no body'))
+  } catch (e) {
+    res.json(fail(e.message))
+  }
+})
+
+
 // 听歌识曲：上传 Shazam 指纹（audioFP），返回匹配的歌曲
 // audioFP 由前端用 afp.js/wasm 生成（8kHz 音频指纹），duration 单位秒
 app.post('/audio/match', async (req, res) => {

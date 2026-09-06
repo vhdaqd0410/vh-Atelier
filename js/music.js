@@ -23,6 +23,11 @@
     // ---- 识别历史 - 状态 ----
     var IDENTIFY_HISTORY_KEY = 'vh_identify_history';
     var identifyHistoryShown = false;
+    // ---- 识别进行中状态 ----
+    var identifyActive = false;      // 是否正在识别（边听边识别循环中）
+    var identifyStop = false;        // 用户点了停止
+    var identifyRound = 0;           // 当前第几轮录音
+    var identifyCache = [];          // 最近一次识别到的结果（song 对象数组）
     function loadIdentifyHistory() {
         try { return JSON.parse(localStorage.getItem(IDENTIFY_HISTORY_KEY) || '[]'); } catch (e) { return []; }
     }
@@ -150,6 +155,29 @@
     }
 
     function enc(v) { return encodeURIComponent(v); }
+
+    // ---------- fetch 封装（POST，JSON body） ----------
+    function apiPost(pathname, body) {
+        return new Promise(function (resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', API + pathname, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.timeout = 10000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    try {
+                        var data = JSON.parse(xhr.responseText);
+                        resolve(data);
+                    } catch (e) {
+                        reject(new Error('响应解析失败'));
+                    }
+                }
+            };
+            xhr.onerror = function () { reject(new Error('无法连接本地服务')); };
+            xhr.ontimeout = function () { reject(new Error('请求超时')); };
+            xhr.send(JSON.stringify(body || {}));
+        });
+    }
 
     // ---------- 服务自举 ----------
     function findNode() {
@@ -421,8 +449,53 @@
             btn.textContent = '打开';
             btn.addEventListener('click', function () { openPlaylist(p.id, p.name); });
 
-            row.appendChild(cover); row.appendChild(info); row.appendChild(btn);
+            var btn = document.createElement('button');
+            btn.className = 'mbtn';
+            btn.textContent = '打开';
+            btn.addEventListener('click', function () { openPlaylist(p.id, p.name); });
+
+            var dlBtn = document.createElement('button');
+            dlBtn.className = 'mbtn dl';
+            dlBtn.textContent = '下载';
+            dlBtn.title = '下载整个歌单（会先询问存放位置）';
+            dlBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                downloadPlaylist(p.id, p.name);
+            });
+
+            row.appendChild(cover); row.appendChild(info); row.appendChild(btn); row.appendChild(dlBtn);
             box.appendChild(row);
+        });
+    }
+
+    // ---------- 歌单一键下载（先询问存放位置） ----------
+    function downloadPlaylist(pid, pname) {
+        setStatus('加载歌单「' + pname + '」...', '');
+        api('/playlist/detail?id=' + enc(String(pid))).then(function (r) {
+            var tracks = r && r.playlist && r.playlist.tracks || [];
+            if (!tracks.length) { setStatus('歌单为空', 'warn'); return; }
+            // 询问存放位置（目录树弹窗）
+            chooseDlDir(function (dir) {
+                if (!dir) return;
+                setDlDir(dir);
+                refreshDlDirLabel();
+                setStatus('开始下载歌单「' + pname + '」共 ' + tracks.length + ' 首...', '');
+                var i = 0;
+                function next() {
+                    if (i >= tracks.length) {
+                        setStatus('歌单「' + pname + '」下载完成：' + tracks.length + ' 首', 'ok');
+                        return;
+                    }
+                    var t = tracks[i++];
+                    var nm = t.name || '';
+                    var ar = (t.ar || t.artists || []).map(function (a) { return a.name; }).join(' / ');
+                    setStatus('下载歌单 [' + i + '/' + tracks.length + '] ' + nm + ' ...', '');
+                    downloadSong(t.id, nm, ar, dir, next);
+                }
+                next();
+            });
+        }).catch(function (e) {
+            setStatus('歌单加载失败: ' + e.message, 'err');
         });
     }
 
@@ -962,8 +1035,8 @@
     }
 
     // ---------- 下载到音乐库 ----------
-    // 单首下载：默认存到 getDlDir()（上次目录/音乐库根），destDir 可指定；cb 下载流程结束回调
-    function downloadSong(songId, name, artist, destDir, cb) {
+    // 单首下载：默认存到 getDlDir()（上次目录/音乐库根），destDir 可指定；cb 下载流程结束回调；songObj 可选完整歌曲对象（用于标记已下载/加歌单）
+    function downloadSong(songId, name, artist, destDir, cb, songObj) {
         var dir = destDir || getDlDir();
         setStatus('获取下载链接...', '');
         api('/song/url?id=' + enc(String(songId)) + '&br=320000').then(function (r) {
@@ -974,7 +1047,7 @@
                 return;
             }
             setStatus('正在下载: ' + name + ' ...', '');
-            downloadViaNode(url, name, artist, dir, songId, cb);
+            downloadViaNode(url, name, artist, dir, songId, cb, songObj);
         }).catch(function (e) {
             setStatus('下载失败: ' + e.message, 'err');
             if (cb) cb(false);
@@ -982,7 +1055,7 @@
     }
 
     // 通过面板 Node 侧下载文件（CEF 的 fetch 拿二进制不可靠，用 Node http/https 下载）
-    function downloadViaNode(url, name, artist, dir, songId, cb) {
+    function downloadViaNode(url, name, artist, dir, songId, cb, songObj) {
         var safe = safeName(artist + ' - ' + name);
         var dest = path.join(dir, safe + '.mp3');
         try {
@@ -1021,6 +1094,8 @@
                     // 记录已下载，更新行内状态（替换顶部横幅）
                     if (songId) dlState[songId] = { dest: dest, name: name };
                     markRowDownloaded(songId, dest, safe);
+                    // 若识别结果框里有这首歌的下载按钮，也标成已下载
+                    markIdentifyDownloaded(songId, dest);
                     // 若音乐库 tab 开着，提示刷新可见（扫描目录即可看到）
                     var root = getMusicLibRoot();
                     var inLib = root && dest.indexOf(root) === 0;
@@ -1053,6 +1128,123 @@
         row.setAttribute('draggable', 'true');
         row.dataset.dest = dest;
         // 注：下载按钮的 click 在 renderSongList 里统一处理（已下载→弹菜单/未下载→下载）
+    }
+
+    // 识别结果框里的下载按钮 → 「已下载」状态（绿色），可再点弹菜单（导入/改目录）
+    function markIdentifyDownloaded(songId, dest) {
+        if (!songId) return;
+        var box = $('musicIdentifyResult');
+        if (!box) return;
+        var btns = box.querySelectorAll('button[data-name][data-sid="' + songId + '"]');
+        btns.forEach(function (b) {
+            b.textContent = '✓ 已下载';
+            b.style.background = '#1e3a33';
+            b.style.color = '#7fd68b';
+            b.dataset.dest = dest;
+            // 改成弹菜单
+            b.removeAttribute('data-name');
+            b.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                showDownloadedMenu(songId, dest, b, ev);
+            }, true);
+        });
+    }
+
+    // ---------- 添加到歌单 ----------
+    function addToPlaylist(song) {
+        if (!song || !song.id) return;
+        // 拉我的歌单列表
+        setStatus('加载我的歌单...', '');
+        var uid = account && account.id ? account.id : '';
+        api('/user/playlist?uid=' + enc(String(uid))).then(function (r) {
+            var lists = r && r.playlist || [];
+            showAddToPlaylistDialog(song, lists);
+        }).catch(function (e) {
+            setStatus('歌单加载失败: ' + e.message, 'err');
+        });
+    }
+
+    function showAddToPlaylistDialog(song, lists) {
+        var old = document.getElementById('musicAddPlOv');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var ov = document.createElement('div');
+        ov.id = 'musicAddPlOv';
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:1002;display:flex;align-items:center;justify-content:center;';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:16px;width:92%;max-width:420px;max-height:70vh;display:flex;flex-direction:column;font-size:12px;color:#ddd;';
+        var tt = document.createElement('div');
+        tt.style.cssText = 'font-size:13px;font-weight:600;color:#eee;margin-bottom:4px;';
+        tt.textContent = '添加到歌单';
+        box.appendChild(tt);
+        var sub = document.createElement('div');
+        sub.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:8px;';
+        sub.textContent = '歌曲：' + (song.name || '') + ' ' + ((song.artists || []).map(function (a) { return a.name; }).join(' / '));
+        box.appendChild(sub);
+
+        var listBox = document.createElement('div');
+        listBox.style.cssText = 'flex:1;overflow-y:auto;border:1px solid #333;border-radius:6px;padding:4px;min-height:140px;max-height:300px;';
+        if (!lists.length) {
+            listBox.innerHTML = '<div style="color:var(--muted);padding:8px;">还没有歌单，先创建一个</div>';
+        } else {
+            lists.forEach(function (p) {
+                var row = document.createElement('div');
+                row.style.cssText = 'padding:7px 10px;cursor:pointer;border-radius:4px;display:flex;align-items:center;gap:6px;';
+                row.innerHTML = '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (p.name || '歌单') + '</span><span style="color:var(--muted);font-size:10px;">' + (p.trackCount != null ? p.trackCount + ' 首' : '') + '</span>';
+                row.addEventListener('click', function () {
+                    ov.remove();
+                    doAddToPlaylist(p.id, song);
+                });
+                row.onmouseenter = function () { row.style.background = '#2a2a2a'; };
+                row.onmouseleave = function () { row.style.background = ''; };
+                listBox.appendChild(row);
+            });
+        }
+        box.appendChild(listBox);
+
+        var createBtn = document.createElement('button');
+        createBtn.className = 'tbtn';
+        createBtn.style.cssText = 'margin-top:8px;';
+        createBtn.textContent = '＋ 新建歌单并添加';
+        createBtn.addEventListener('click', function () {
+            ov.remove();
+            promptCreatePlaylist(song);
+        });
+        box.appendChild(createBtn);
+
+        ov.appendChild(box);
+        document.body.appendChild(ov);
+        ov.addEventListener('click', function (e2) { if (e2.target === ov) ov.remove(); });
+    }
+
+    function promptCreatePlaylist(song) {
+        var name = window.prompt('输入新歌单名称：', '');
+        if (!name || !name.trim()) return;
+        setStatus('创建歌单...', '');
+        apiPost('/playlist/create', { name: name.trim() }).then(function (r) {
+            var pid = r && r.id;
+            if (r && r.playlist && r.playlist.id) pid = r.playlist.id;
+            if (pid) {
+                doAddToPlaylist(pid, song);
+            } else {
+                setStatus('创建歌单失败：' + ((r && r.msg) || '未知'), 'err');
+            }
+        }).catch(function (e) {
+            setStatus('创建歌单失败: ' + e.message, 'err');
+        });
+    }
+
+    function doAddToPlaylist(pid, song) {
+        setStatus('添加歌曲到歌单...', '');
+        apiPost('/playlist/track/add', { pid: String(pid), ids: String(song.id) }).then(function (r) {
+            if (r && (r.code === 200 || r.body && r.body.code === 200)) {
+                setStatus('已添加到歌单', 'ok');
+                flash('已添加到歌单 ✓');
+            } else {
+                setStatus('添加失败：' + ((r && r.msg) || '未知'), 'err');
+            }
+        }).catch(function (e) {
+            setStatus('添加失败: ' + e.message, 'err');
+        });
     }
 
     // 已下载操作小菜单：导入 PR / 改存位置 / 打开目录
@@ -1365,122 +1557,190 @@
     function doIdentify() {
         var btn = $('btnMusicIdentify');
         if (!btn) return;
+        if (identifyActive) return;   // 已在识别中
+        var stopBtn = $('btnMusicIdentifyStop');
+        var prog = $('musicIdentifyProgress');
         var box = $('musicIdentifyResult');
-        if (btn.disabled) return;
-        btn.disabled = true;
-        var oldText = btn.textContent;
-        btn.textContent = '🎵 录音中…';
-        if (box) { box.style.display = 'block'; box.innerHTML = '<div style="color:#9db9ff;">正在录音 8 秒… 请确保电脑正在播放要识别的音乐（红果/抖音等）</div>'; }
 
-        // 1. 录音
+        identifyActive = true;
+        identifyStop = false;
+        identifyRound = 0;
+        identifyCache = [];
+
+        btn.disabled = true;
+        btn.textContent = '🎵 识别中…（边听边识别）';
+        if (stopBtn) stopBtn.style.display = '';
+        if (prog) { prog.style.display = 'block'; prog.innerHTML = ''; }
+        if (box) box.style.display = 'none';
+
         var py = findPython();
         var scriptPath = path.join(extRoot, 'py', 'identify_record.py');
-        var wavPath = path.join(require('os').tmpdir(), 'vh_identify_' + Date.now() + '.wav');
-        childProcess.execFile(py, [scriptPath, wavPath, '15'], { encoding: 'utf8', timeout: 30000 }, function (err, stdout) {
-            var rec = null;
-            try { rec = JSON.parse((stdout || '').trim().split('\n').pop()); } catch (e) {}
-            if (err || !rec || !rec.ok) {
-                btn.disabled = false;
-                btn.textContent = oldText;
-                var diag = (rec && rec.probe && rec.probe.length) ? ('<div style="margin-top:4px;font-size:11px;color:#889;">设备探测：' + rec.probe.map(function (x) { return x.name + ' RMS=' + (x.rms == null ? 'ERR' : x.rms); }).join('；') + '</div>') : '';
-                if (box) box.innerHTML = '<div style="color:#ff9a9a;">录音失败：' + ((rec && rec.error) || (err && err.message) || '未知错误') + '</div>' + diag;
-                return;
-            }
-            if (rec.silent) {
-                btn.disabled = false;
-                btn.textContent = oldText;
-                var diag2 = (rec && rec.probe && rec.probe.length) ? ('<div style="margin-top:4px;font-size:11px;color:#889;">设备探测：' + rec.probe.map(function (x) { return x.name + ' RMS=' + (x.rms == null ? 'ERR' : x.rms); }).join('；') + '</div>') : '';
-                if (box) box.innerHTML = '<div style="color:#ffb84d;">没听到声音——请确认音乐正在播放（检查音量/输出设备）</div>' + diag2;
-                return;
-            }
-            btn.textContent = '🎵 识别中…';
-            if (box) box.innerHTML = '<div style="color:#9db9ff;">录音完成，正在识别…</div>';
+        var tmpdir = require('os').tmpdir();
 
-            // 2. POST wav 给本地服务识别
-            var body = JSON.stringify({ wavPath: wavPath });
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', API + '/identify', true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.timeout = 30000;
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState !== 4) return;
-                btn.disabled = false;
-                btn.textContent = oldText;
-                try {
-                    var j = JSON.parse(xhr.responseText);
-                    var data = j.data || {};
-                    var results = data.result || [];
-                    if (results.length === 0) {
-                        if (box) box.innerHTML = '<div style="color:#ffb84d;">未识别到歌曲。可能原因：BGM 太冷门/纯音乐不在曲库，或录音质量不佳。请确保识别时音乐清晰播放。</div>';
-                        return;
-                    }
-                    var html = '<div style="font-weight:600;color:#7fd68b;margin-bottom:6px;">✅ 识别到：</div>';
-                    var shown = 0;
-                    var songById = {};
-                    results.forEach(function (m) {
-                        if (shown >= 3) return;
-                        var s = m.song || {};
-                        var nm = s.name || '未知';
-                        var ar = (s.artists || []).map(function (a) { return a.name; }).join(', ');
-                        var sid = s.id;
-                        songById[sid] = s;
-                        html += '<div class="identify-item" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #2a3a5d;">' +
-                            '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + nm + ' <span style="color:var(--muted);font-size:11px;">- ' + ar + '</span></span>' +
-                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-play="1" data-sid="' + sid + '">播放</button>' +
-                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-sid="' + sid + '" data-name="' + enc(nm) + '" data-artist="' + enc(ar) + '">下载</button>' +
-                            '<button class="tbtn" style="padding:2px 8px;font-size:11px;" data-sid="' + sid + '">搜这首歌</button></div>';
-                        shown++;
-                    });
-                    // 识别历史入口
-                    html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2a3a5d;text-align:right;">' +
-                        '<button class="tbtn" id="btnIdentifyHistoryToggle" style="padding:2px 8px;font-size:11px;">📜 识别历史</button></div>';
-                    if (box) box.innerHTML = html;
+        function setProg(html) {
+            if (prog) prog.innerHTML = html;
+        }
 
-                    // 写入历史（只记 top1 命中）
-                    if (results[0] && results[0].song) addIdentifyHistory(results[0].song);
-
-                    // 播放：直接把识别到的歌曲加入播放队列并播放，不关结果框
-                    box.querySelectorAll('button[data-play]').forEach(function (b) {
-                        b.addEventListener('click', function () {
-                            var s = songById[b.dataset.sid];
-                            if (!s) return;
-                            playQueue.push(s);
-                            playFromQueue(playQueue.length - 1, null);
-                        });
-                    });
-                    // 下载：直接下载，不关结果框
-                    box.querySelectorAll('button[data-name]').forEach(function (b) {
-                        b.addEventListener('click', function () {
-                            var sid = b.dataset.sid;
-                            var nm = decodeURIComponent(b.dataset.name);
-                            var ar = decodeURIComponent(b.dataset.artist);
-                            downloadSong(sid, nm, ar);
-                        });
-                    });
-                    // 搜这首歌：跳转搜索（保留原行为）
-                    box.querySelectorAll('button[data-sid]:not([data-play]):not([data-name])').forEach(function (b) {
-                        b.addEventListener('click', function () {
-                            $('musicQuery').value = b.dataset.sid;
-                            doSearch();
-                        });
-                    });
-                    // 历史开关
-                    var histBtn = box.querySelector('#btnIdentifyHistoryToggle');
-                    if (histBtn) histBtn.addEventListener('click', function () { toggleIdentifyHistory(); });
-                } catch (e) {
-                    if (box) box.innerHTML = '<div style="color:#ff9a9a;">识别响应解析失败：' + e.message + '</div>';
+        // 边听边识别：循环录 6 秒 → 识别 → 命中则显示结果，否则继续下一轮
+        function round() {
+            if (identifyStop || !identifyActive) { finishIdentify(); return; }
+            identifyRound++;
+            setProg('<div style="color:#9db9ff;">🎙 第 ' + identifyRound + ' 轮录音中（6 秒）… 正在捕捉电脑播放的声音</div>');
+            var wavPath = path.join(tmpdir, 'vh_identify_' + Date.now() + '.wav');
+            childProcess.execFile(py, [scriptPath, wavPath, '6'], { encoding: 'utf8', timeout: 20000 }, function (err, stdout) {
+                if (identifyStop || !identifyActive) { finishIdentify(); return; }
+                var rec = null;
+                try { rec = JSON.parse((stdout || '').trim().split('\n').pop()); } catch (e) {}
+                if (err || !rec || !rec.ok) {
+                    // 录音失败：显示错误并停止循环
+                    identifyActive = false;
+                    finishIdentify();
+                    var diag = (rec && rec.allOutputDevices) ? ('<div style="margin-top:4px;font-size:11px;color:#889;">输出设备：' + rec.allOutputDevices.join('；') + '</div>') : '';
+                    if (box) { box.style.display = 'block'; box.innerHTML = '<div style="color:#ff9a9a;">录音失败：' + ((rec && rec.error) || (err && err.message) || '未知错误') + '</div>' + diag; }
+                    return;
                 }
-            };
-            xhr.onerror = function () {
-                btn.disabled = false; btn.textContent = oldText;
-                if (box) box.innerHTML = '<div style="color:#ff9a9a;">无法连接本地识曲服务</div>';
-            };
-            xhr.ontimeout = function () {
-                btn.disabled = false; btn.textContent = oldText;
-                if (box) box.innerHTML = '<div style="color:#ff9a9a;">识别超时</div>';
-            };
-            xhr.send(body);
+                if (rec.silent) {
+                    // 这轮静音：继续下一轮，不报错
+                    setProg('<div style="color:#9db9ff;">🎙 第 ' + identifyRound + ' 轮录音完成，未听到声音，继续监听…</div>');
+                    round();
+                    return;
+                }
+                // 识别
+                setProg('<div style="color:#9db9ff;">🔍 正在识别第 ' + identifyRound + ' 轮录音…</div>');
+                var body = JSON.stringify({ wavPath: wavPath });
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', API + '/identify', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.timeout = 20000;
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState !== 4) return;
+                    if (identifyStop || !identifyActive) { finishIdentify(); return; }
+                    try {
+                        var j = JSON.parse(xhr.responseText);
+                        var data = j.data || {};
+                        var results = data.result || [];
+                        if (results.length > 0 && results[0].song) {
+                            // 命中：显示结果，结束循环
+                            identifyActive = false;
+                            identifyCache = results.map(function (m) { return m.song; });
+                            renderIdentifyResult(results);
+                            finishIdentify();
+                        } else {
+                            setProg('<div style="color:#ffb84d;">第 ' + identifyRound + ' 轮未识别到，继续监听…（可点停止）</div>');
+                            round();
+                        }
+                    } catch (e) {
+                        identifyActive = false;
+                        finishIdentify();
+                        if (box) { box.style.display = 'block'; box.innerHTML = '<div style="color:#ff9a9a;">识别响应解析失败：' + e.message + '</div>'; }
+                    }
+                };
+                xhr.onerror = function () {
+                    if (identifyStop || !identifyActive) { finishIdentify(); return; }
+                    setProg('<div style="color:#ff9a9a;">无法连接识曲服务，重试中…</div>');
+                    round();
+                };
+                xhr.ontimeout = function () {
+                    if (identifyStop || !identifyActive) { finishIdentify(); return; }
+                    setProg('<div style="color:#ff9a9a;">识别超时，重试中…</div>');
+                    round();
+                };
+                xhr.send(body);
+            });
+        }
+
+        function finishIdentify() {
+            identifyActive = false;
+            identifyStop = false;
+            var b2 = $('btnMusicIdentify');
+            var s2 = $('btnMusicIdentifyStop');
+            var p2 = $('musicIdentifyProgress');
+            if (b2) { b2.disabled = false; b2.textContent = '🎵 听歌识曲'; }
+            if (s2) s2.style.display = 'none';
+            if (p2) p2.style.display = 'none';
+        }
+
+        round();
+    }
+
+    function stopIdentify() {
+        if (!identifyActive) return;
+        identifyStop = true;
+        identifyActive = false;
+        var b2 = $('btnMusicIdentify');
+        var s2 = $('btnMusicIdentifyStop');
+        var p2 = $('musicIdentifyProgress');
+        var box = $('musicIdentifyResult');
+        if (b2) { b2.disabled = false; b2.textContent = '🎵 听歌识曲'; }
+        if (s2) s2.style.display = 'none';
+        if (p2) { p2.style.display = 'none'; }
+        setStatus('已停止识别', '');
+        // 若之前已有识别结果，保留在结果框
+        if (identifyCache.length && box && box.style.display === 'none') {
+            // 无操作，保持现状
+        }
+    }
+
+    // 渲染识别结果（播放/下载/加歌单/搜），不关结果框
+    function renderIdentifyResult(results) {
+        var box = $('musicIdentifyResult');
+        if (!box) return;
+        var html = '<div style="font-weight:600;color:#7fd68b;margin-bottom:6px;">✅ 识别到：</div>';
+        var shown = 0;
+        var songById = {};
+        results.forEach(function (m) {
+            if (shown >= 3) return;
+            var s = m.song || {};
+            var nm = s.name || '未知';
+            var ar = (s.artists || []).map(function (a) { return a.name; }).join(', ');
+            var sid = s.id;
+            songById[sid] = s;
+            html += '<div class="identify-item" style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #2a3a5d;">' +
+                '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + nm + ' <span style="color:var(--muted);font-size:11px;">- ' + ar + '</span></span>' +
+                '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-play="1" data-sid="' + sid + '">播放</button>' +
+                '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-sid="' + sid + '" data-name="' + enc(nm) + '" data-artist="' + enc(ar) + '">下载</button>' +
+                '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-add="1" data-sid="' + sid + '">+ 歌单</button>' +
+                '<button class="tbtn" style="padding:2px 7px;font-size:11px;" data-sid="' + sid + '">搜</button></div>';
+            shown++;
         });
+        html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2a3a5d;text-align:right;">' +
+            '<button class="tbtn" id="btnIdentifyHistoryToggle" style="padding:2px 8px;font-size:11px;">📜 识别历史</button></div>';
+        box.innerHTML = html;
+        box.style.display = 'block';
+
+        if (results[0] && results[0].song) addIdentifyHistory(results[0].song);
+
+        box.querySelectorAll('button[data-play]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var s = songById[b.dataset.sid];
+                if (!s) return;
+                playQueue.push(s);
+                playFromQueue(playQueue.length - 1, null);
+            });
+        });
+        box.querySelectorAll('button[data-name]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var sid = b.dataset.sid;
+                var nm = decodeURIComponent(b.dataset.name);
+                var ar = decodeURIComponent(b.dataset.artist);
+                var s = songById[sid];
+                downloadSong(sid, nm, ar, null, null, s);
+            });
+        });
+        box.querySelectorAll('button[data-add]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var s = songById[b.dataset.sid];
+                if (s) addToPlaylist(s);
+            });
+        });
+        box.querySelectorAll('button[data-sid]:not([data-play]):not([data-name]):not([data-add])').forEach(function (b) {
+            b.addEventListener('click', function () {
+                $('musicQuery').value = b.dataset.sid;
+                doSearch();
+            });
+        });
+        var histBtn = box.querySelector('#btnIdentifyHistoryToggle');
+        if (histBtn) histBtn.addEventListener('click', function () { toggleIdentifyHistory(); });
     }
 
     // ---------- 识别历史（展开/收起，显示在结果框下方） ----------
@@ -1547,6 +1807,8 @@
         if (dirBtn) dirBtn.addEventListener('click', setDlDirFromUI);
         var idBtn = $('btnMusicIdentify');
         if (idBtn) idBtn.addEventListener('click', doIdentify);
+        var idStopBtn = $('btnMusicIdentifyStop');
+        if (idStopBtn) idStopBtn.addEventListener('click', stopIdentify);
         $('btnMusicRefreshQr').addEventListener('click', function () { $('btnMusicRefreshQr').disabled = true; fetchQr(); });
         $('btnMusicLogout').addEventListener('click', function () {
             api('/logout').then(function () {
