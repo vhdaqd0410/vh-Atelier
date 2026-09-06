@@ -859,4 +859,7 @@
         document.body.appendChild(tip);
         setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 1400);
     };
+
+    // 初始化：剧本面板默认显示，主动渲染剧本库首页（避免初始空白）
+    showScriptHome();
 })();
