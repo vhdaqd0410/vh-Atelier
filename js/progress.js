@@ -855,50 +855,280 @@
                     container.appendChild(row);
                 });
             }
-            // 文件列表（成片/修改），每条可打开所在目录
-            function renderFiles(container, d, mode) {
-                var files = listFiles(d);
-                if (files.length === 0) {
-                    var t = mode === 'revising' ? '暂无修改文件' : '暂无成片文件';
+            // ---- 状态：修改文件夹导航 ----------------
+            var revSub = '';          // 当前修改子路径（空 = 修改根）
+            var revStack = [];        // 进入过的子路径栈
+            var curTabKey = 'miss';
+
+            function show(key) {
+                curTabKey = key;
+                var tabs2 = [tabMiss, tabEdit, tabRev];
+                var keys = ['miss', 'edit', 'rev'];
+                for (var i = 0; i < 3; i++) {
+                    tabs2[i].style.borderBottomColor = (keys[i] === key) ? 'var(--accent,#537d96)' : 'transparent';
+                    tabs2[i].style.color = (keys[i] === key) ? 'var(--text,#e8e8e8)' : 'var(--muted,#999)';
+                }
+                body.innerHTML = '';
+                if (key === 'miss') renderMiss(body);
+                else if (key === 'edit') renderEditFiles(body);
+                else renderRev(body);
+            }
+            tabMiss.addEventListener('click', function () { show('miss'); });
+            tabEdit.addEventListener('click', function () { show('edit'); });
+            tabRev.addEventListener('click', function () { show('rev'); });
+
+            function fileCount(d) {
+                if (!d) return 0;
+                if (Array.isArray(d)) return d.length;
+                return (d.files || []).length + (d.folders || []).length;
+            }
+            function listFiles(d) {
+                if (!d) return [];
+                if (Array.isArray(d)) return d;
+                return (d.files || []).concat(d.folders || []);
+            }
+            // 缺集：按剪辑师分组
+            function renderMiss(container) {
+                if (missing.length === 0) {
+                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#7fd68b;font-size:12px">✅ 已全部完成，无缺集</div>';
+                    return;
+                }
+                var groups = {};
+                missing.forEach(function (ep) {
+                    var ed = editorPlan[String(ep)] || editorPlan[ep] || '未分配';
+                    if (!groups[ed]) groups[ed] = [];
+                    groups[ed].push(parseInt(ep, 10));
+                });
+                var keys = Object.keys(groups);
+                container.innerHTML = '';
+                keys.forEach(function (ed) {
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:baseline;gap:8px;padding:4px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;';
+                    var name = document.createElement('span');
+                    name.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-weight:600;';
+                    name.textContent = ed;
+                    var eps = document.createElement('span');
+                    eps.style.cssText = 'flex:1;color:var(--text,#ccc);word-break:break-all;';
+                    eps.textContent = '缺 ' + compactEpList(groups[ed]);
+                    row.appendChild(name);
+                    row.appendChild(eps);
+                    container.appendChild(row);
+                });
+            }
+
+            // 构造一行：图标 + 名称 + 右侧信息 + 可选尾按钮；整行点击回调 onClick
+            function mkFileRow(container, cfg) {
+                var row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;cursor:pointer;';
+                if (cfg.title) row.title = cfg.title;
+                if (cfg.onClick) row.addEventListener('click', cfg.onClick);
+                var ic = document.createElement('span');
+                ic.style.cssText = 'flex:0 0 auto;';
+                ic.textContent = cfg.icon || '📄';
+                row.appendChild(ic);
+                var nmEl = document.createElement('span');
+                nmEl.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text,#ddd);';
+                nmEl.textContent = cfg.name;
+                nmEl.title = cfg.name;
+                row.appendChild(nmEl);
+                var edEl = document.createElement('span');
+                edEl.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-size:11px;';
+                if (cfg.meta) { edEl.textContent = cfg.meta; edEl.title = cfg.meta; }
+                row.appendChild(edEl);
+                var szEl = document.createElement('span');
+                szEl.style.cssText = 'flex:0 0 auto;color:var(--muted,#777);font-size:10px;';
+                if (cfg.size) szEl.textContent = cfg.size;
+                row.appendChild(szEl);
+                // 尾按钮：打开文件管理目录（不触发整行点击）
+                if (cfg.openDir) {
+                    var ob = document.createElement('button');
+                    ob.type = 'button';
+                    ob.textContent = '📂';
+                    ob.title = '在文件管理器中打开所在目录';
+                    ob.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border,#555);border-radius:3px;color:var(--accent,#7aa7c7);font-size:10px;padding:0 5px;cursor:pointer;line-height:16px;';
+                    ob.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        if (cfg.openDir) cfg.openDir();
+                    });
+                    row.appendChild(ob);
+                }
+                container.appendChild(row);
+            }
+
+            // 视频行（成片或修改内文件）：点行播放，尾按钮开目录
+            function renderVideoRows(container, files, mode, subpath) {
+                if (!files.length) {
+                    var t = mode === 'revising' ? '该修改文件夹暂无视频' : '暂无成片文件';
                     container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">' + t + '</div>';
                     return;
                 }
                 container.innerHTML = '';
                 files.forEach(function (f) {
                     var nm = f.name || f;
-                    var isFolder = f.folder === true || !f.ext;
-                    var row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;cursor:pointer;';
-                    row.title = f.path || f.name || '';
-                    var ic = document.createElement('span');
-                    ic.textContent = isFolder ? '📁' : (mode === 'revising' ? '✏️' : '🎬');
-                    row.appendChild(ic);
-                    var nmEl = document.createElement('span');
-                    nmEl.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text,#ddd);';
-                    nmEl.textContent = nm;
-                    nmEl.title = f.path || nm;
-                    row.appendChild(nmEl);
-                    var edEl = document.createElement('span');
-                    edEl.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-size:11px;';
-                    if (f.editor) edEl.textContent = f.editor;
-                    row.appendChild(edEl);
-                    var szEl = document.createElement('span');
-                    szEl.style.cssText = 'flex:0 0 auto;color:var(--muted,#777);font-size:10px;';
-                    if (f.size_mb) szEl.textContent = Math.round(f.size_mb) + 'MB';
-                    row.appendChild(szEl);
-                    // 点行打开所在目录（修改文件夹用 abs_path，成片文件用 path）
-                    row.addEventListener('click', function () {
-                        var target = f.abs_path || f.path || '';
-                        if (!target) return;
-                        apiPost('/api/project/' + enc + '/open_folder', { which: 'path', path: target }, function (err2, d2) {
-                            if (!err2 && d2 && d2.ok) el.statusText.textContent = '已打开目录';
-                            else el.statusText.textContent = '打开失败：' + ((err2 && err2.message) || (d2 && d2.message) || '');
+                    mkFileRow(container, {
+                        icon: mode === 'revising' ? '✏️' : '🎬',
+                        name: nm,
+                        title: (f.path || '') + '\n点击播放，📂 打开所在目录',
+                        meta: f.editor || '',
+                        size: f.size_mb ? Math.round(f.size_mb) + 'MB' : '',
+                        onClick: function () { playVideo(projectName, nm, mode, subpath || ''); },
+                        openDir: function () {
+                            var target = f.path || '';
+                            if (target) openFolderPath(target);
+                        }
+                    });
+                });
+            }
+
+            // 成片 Tab（editing，无子目录导航）
+            function renderEditFiles(container) {
+                var files = Array.isArray(got.edit) ? got.edit : ((got.edit && got.edit.files) || []);
+                renderVideoRows(container, files, 'editing', '');
+            }
+
+            // 修改 Tab：根=修改文件夹列表（点行进），子路径=集数视频（点行播放）
+            function renderRev(container) {
+                container.innerHTML = '';
+                if (!revSub) {
+                    // 修改根：列文件夹
+                    var folders = (got.rev && got.rev.folders) || [];
+                    var files = (got.rev && got.rev.files) || [];
+                    if (!folders.length && !files.length) {
+                        container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">暂无修改文件夹</div>';
+                        return;
+                    }
+                    folders.forEach(function (fd) {
+                        var fname = fd.name || '';
+                        mkFileRow(container, {
+                            icon: '📁',
+                            name: fname,
+                            title: (fd.abs_path || '') + '\n点击进入查看集数，📂 打开目录',
+                            onClick: function () { enterRevFolder(fname); },
+                            openDir: function () { if (fd.abs_path) openFolderPath(fd.abs_path); }
                         });
                     });
-                    container.appendChild(row);
+                    // 修改根下可能有散文件（罕见）
+                    renderVideoRows(container, files, 'revising', '');
+                } else {
+                    // 已进入修改文件夹：面包屑 + 集数视频
+                    var crumb = document.createElement('div');
+                    crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;';
+                    var backBtn = document.createElement('button');
+                    backBtn.type = 'button';
+                    backBtn.textContent = '← 返回';
+                    backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:1px 8px;cursor:pointer;font-size:11px;';
+                    backBtn.addEventListener('click', function () {
+                        revSub = revStack.length ? revStack.pop() : '';
+                        fetchRevSub(container);
+                    });
+                    crumb.appendChild(backBtn);
+                    var crumbTxt = document.createElement('span');
+                    crumbTxt.style.cssText = 'color:var(--muted,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                    crumbTxt.textContent = '📁 ' + revSub;
+                    crumbTxt.title = revSub;
+                    crumb.appendChild(crumbTxt);
+                    container.appendChild(crumb);
+                    renderVideoRows(container, revFilesCache || [], 'revising', revSub);
+                }
+            }
+
+            var revFilesCache = [];
+            function fetchRevSub(container) {
+                if (!revSub) { renderRev(container); return; }
+                var q = '/api/output_files/' + enc + '?mode=revising&subpath=' + encodeURIComponent(revSub);
+                apiGet(q, function (err, d) {
+                    if (err) {
+                        container.innerHTML = '<div style="padding:14px;color:#ff9a9a;font-size:12px">加载失败：' + err.message + '</div>';
+                        return;
+                    }
+                    revFilesCache = (d && d.files) || [];
+                    renderRev(container);
+                });
+            }
+            function enterRevFolder(fname) {
+                revStack.push(revSub);
+                revSub = revSub ? (revSub + '/' + fname) : fname;
+                fetchRevSub(body);
+            }
+
+            // 播放视频：内嵌 video 浮层，源走工作台流式端点
+            function playVideo(proj, fileName, mode, subpath) {
+                var url = WB_BASE + '/api/preview/' + encodeURIComponent(proj) + '/' + encodeURIComponent(fileName)
+                    + '?mode=' + encodeURIComponent(mode);
+                if (subpath) url += '&subpath=' + encodeURIComponent(subpath);
+                showVideoPlayer(proj, fileName, url, mode, subpath);
+            }
+
+            // 打开文件管理目录（独立尾按钮）
+            function openFolderPath(target) {
+                apiPost('/api/project/' + enc + '/open_folder', { which: 'path', path: target }, function (err2, d2) {
+                    if (!err2 && d2 && d2.ok) el.statusText.textContent = '已打开目录';
+                    else el.statusText.textContent = '打开失败：' + ((err2 && err2.message) || (d2 && d2.message) || '');
                 });
             }
             show('miss');
+        }
+    }
+
+    // ==================== 内嵌视频播放器浮层 ====================
+    var _videoOverlay = null;
+    function showVideoPlayer(proj, fileName, url, mode, subpath) {
+        if (_videoOverlay) closeVideoPlayer();
+        var overlay = document.createElement('div');
+        overlay.className = 'prg-modal-mask';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:#000;border:1px solid var(--border,#333);border-radius:10px;width:560px;max-width:95vw;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.6);';
+
+        // 标题条
+        var head = document.createElement('div');
+        head.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 10px;background:#111;border-bottom:1px solid #222;';
+        var ttl = document.createElement('span');
+        ttl.style.cssText = 'flex:1;font-size:12px;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        ttl.textContent = '▶ ' + (mode === 'revising' ? '📝 ' : '🎬 ') + fileName;
+        head.appendChild(ttl);
+        // 用本地播放器打开
+        var localBtn = document.createElement('button');
+        localBtn.type = 'button';
+        localBtn.textContent = '📺 本地播放器';
+        localBtn.title = '用 PotPlayer / 系统默认播放器打开（全屏、倍速更强）';
+        localBtn.style.cssText = 'background:none;border:1px solid #444;color:#7aa7c7;border-radius:4px;padding:1px 8px;cursor:pointer;font-size:11px;';
+        localBtn.addEventListener('click', function () {
+            apiPost('/api/preview/open_local', { project_name: proj, filename: fileName, mode: mode, subpath: subpath }, function (err, d) {
+                if (err) { ttl.textContent = '打开失败：' + err.message; return; }
+                if (d && d.ok) ttl.textContent = '📺 已用本地播放器打开：' + fileName;
+                else ttl.textContent = (d && d.message) || '打开失败';
+            });
+        });
+        head.appendChild(localBtn);
+        var xBtn = document.createElement('button');
+        xBtn.type = 'button';
+        xBtn.textContent = '✕';
+        xBtn.style.cssText = 'background:none;border:none;color:#999;font-size:14px;cursor:pointer;padding:0 6px;';
+        head.appendChild(xBtn);
+        box.appendChild(head);
+
+        // 视频
+        var video = document.createElement('video');
+        video.controls = true;
+        video.autoplay = true;
+        video.style.cssText = 'display:block;width:100%;max-height:56vh;background:#000;';
+        video.src = url;
+        box.appendChild(video);
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        _videoOverlay = overlay;
+        var closeIt = function () { closeVideoPlayer(); };
+        xBtn.addEventListener('click', closeIt);
+        overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) closeIt(); });
+    }
+    function closeVideoPlayer() {
+        if (_videoOverlay) {
+            var v = _videoOverlay.querySelector('video');
+            if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
+            if (_videoOverlay.parentNode) _videoOverlay.parentNode.removeChild(_videoOverlay);
+            _videoOverlay = null;
         }
     }
 
