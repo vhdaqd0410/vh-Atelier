@@ -825,14 +825,21 @@
 
     // ===== 数据与状态（函数顶层，不随渲染重建） =====
     var enc = encodeURIComponent(projectName);
-    var got = { ep: null, edit: null, rev: null };   // null=未返回，[] / {}=空结果
-    var curTab = 'miss';          // 当前 tab
+    var got = { ep: null, edit: null, rev: null, del: null };   // null=未返回，[] / {}=空结果
+    // 默认 tab：待交付 / 已完成 项目优先看交付；修改中看修改；其余看缺集
+    var st0 = (p.custom_status || '');
+    var curTab = (st0.indexOf('交付') >= 0 || st0 === '已完成' || st0 === '待质检' || st0 === '质检中')
+        ? 'del' : (st0.indexOf('修改') >= 0 ? 'rev' : 'miss');
     var revSub = '';              // 修改子路径（空=修改根）
-    var revStack = [];            // 导航栈
+    var revStack = [];            // 修改导航栈
     var revFilesCache = [];       // 当前修改文件夹内文件缓存
+    var delSub = '';              // 交付子路径（空=000交付 根）
+    var delStack = [];            // 交付导航栈
+    var delFilesCache = [];       // 当前交付文件夹内文件缓存
+    var delCheck = null;          // delivery_check（000交付 根时返回）
 
     // DOM 引用（renderContent 构建后赋值）
-    var dom = { ov: null, tabMiss: null, tabEdit: null, tabRev: null, body: null };
+    var dom = { ov: null, tabMiss: null, tabEdit: null, tabRev: null, tabDel: null, body: null };
 
     // ===== 工具 =====
     function fileCount(d) {
@@ -849,25 +856,37 @@
         }
         if (!dom.body) return;
         updateTabCounts();
-        // 当前 tab：数据变化时刷新。miss 只依赖 ep（首次已渲染，跳过）；edit/rev 各自依赖自身数据
+        // 当前 tab：数据变化时刷新。miss 只依赖 ep（首次已渲染，跳过）；edit/rev/del 各自依赖自身数据
         if (curTab === 'miss') return;
         if (curTab === 'edit' && got.edit !== null) renderCurrent();
         else if (curTab === 'rev' && got.rev !== null) renderCurrent();
+        else if (curTab === 'del' && got.del !== null) renderCurrent();
     }
 
     function updateTabCounts() {
-        if (!dom.tabMiss || !dom.tabEdit || !dom.tabRev) return;
+        if (!dom.tabMiss || !dom.tabEdit || !dom.tabRev || !dom.tabDel) return;
         var missingN = got.ep && got.ep.ok ? (got.ep.missing || []).length : 0;
         dom.tabMiss.textContent = '缺集 ' + missingN;
         dom.tabEdit.textContent = '🎬 成片 ' + fileCount(got.edit);
         dom.tabRev.textContent = '📝 修改 ' + fileCount(got.rev);
+        dom.tabDel.textContent = '📦 交付 ' + fileCount(got.del);
     }
 
     function renderCurrent() {
         if (!dom.body) return;
         if (curTab === 'miss') { dom.body.innerHTML = ''; renderMiss(dom.body); }
-        else if (curTab === 'edit') { dom.body.innerHTML = ''; renderEditFiles(dom.body); }
-        else { dom.body.innerHTML = ''; renderRev(dom.body); }
+        else if (curTab === 'edit') {
+            if (got.edit === null) { dom.body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted,#999);font-size:12px">⏳ 加载成片列表…</div>'; return; }
+            dom.body.innerHTML = ''; renderEditFiles(dom.body);
+        }
+        else if (curTab === 'rev') {
+            if (got.rev === null) { dom.body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted,#999);font-size:12px">⏳ 加载修改文件夹…</div>'; return; }
+            dom.body.innerHTML = ''; renderRev(dom.body);
+        }
+        else {
+            if (got.del === null) { dom.body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted,#999);font-size:12px">⏳ 加载交付预览…</div>'; return; }
+            dom.body.innerHTML = ''; renderDel(dom.body);
+        }
     }
 
     function renderContent() {
@@ -909,9 +928,11 @@
         dom.tabMiss = mkTab('缺集 0');
         dom.tabEdit = mkTab('🎬 成片 0');
         dom.tabRev = mkTab('📝 修改 0');
+        dom.tabDel = mkTab('📦 交付 0');
         tabs.appendChild(dom.tabMiss);
         tabs.appendChild(dom.tabEdit);
         tabs.appendChild(dom.tabRev);
+        tabs.appendChild(dom.tabDel);
         content.appendChild(tabs);
 
         var body = document.createElement('div');
@@ -923,6 +944,7 @@
         dom.tabMiss.addEventListener('click', function () { switchTab('miss'); });
         dom.tabEdit.addEventListener('click', function () { switchTab('edit'); });
         dom.tabRev.addEventListener('click', function () { switchTab('rev'); });
+        dom.tabDel.addEventListener('click', function () { switchTab('del'); });
 
         updateTabCounts();
         renderCurrent();
@@ -930,9 +952,9 @@
 
     function switchTab(key) {
         curTab = key;
-        var map = { miss: dom.tabMiss, edit: dom.tabEdit, rev: dom.tabRev };
-        var keys = ['miss', 'edit', 'rev'];
-        for (var i = 0; i < 3; i++) {
+        var map = { miss: dom.tabMiss, edit: dom.tabEdit, rev: dom.tabRev, del: dom.tabDel };
+        var keys = ['miss', 'edit', 'rev', 'del'];
+        for (var i = 0; i < 4; i++) {
             var b = map[keys[i]];
             if (!b) continue;
             b.style.borderBottomColor = (keys[i] === key) ? 'var(--accent,#537d96)' : 'transparent';
@@ -942,7 +964,8 @@
         dom.body.innerHTML = '';
         if (key === 'miss') renderMiss(dom.body);
         else if (key === 'edit') renderEditFiles(dom.body);
-        else renderRev(dom.body);
+        else if (key === 'rev') renderRev(dom.body);
+        else renderDel(dom.body);
     }
 
     // ===== 缺集 =====
@@ -1019,18 +1042,29 @@
         if (!files || !files.length) {
             var t = mode === 'revising'
                 ? (subpath ? '「' + subpath + '」内暂无视频文件' : '修改根目录暂无散文件')
-                : '暂无成片文件';
+                : (mode === 'delivery'
+                    ? (subpath ? '「' + subpath + '」内暂无视频文件' : '交付目录暂无散文件')
+                    : '暂无成片文件');
             container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">' + t + '</div>';
             return;
         }
         container.innerHTML = '';
         files.forEach(function (f) {
             var nm = f.name || f;
+            // 交付目录里可能有非视频（字幕/截图），只对视频行给播放点击；其余仅当信息行
+            var isVid = /^\d+(\.\w+)?$/.test(nm) || /\.(mp4|mov|mkv|avi|webm)$/i.test(nm);
+            if (mode === 'delivery' && !isVid) return;
+            var meta = f.editor || '';
+            if (mode === 'delivery') {
+                // 交付目录文件名可能带扩展名集号如 3.mp4；显示集号徽章
+                var mm = String(nm).match(/^(\d+)/);
+                if (mm) meta = '第' + mm[1] + '集' + (f.editor ? ' · ' + f.editor : '');
+            }
             mkFileRow(container, {
-                icon: mode === 'revising' ? '✏️' : '🎬',
+                icon: mode === 'revising' ? '✏️' : (mode === 'delivery' ? '📦' : '🎬'),
                 name: nm,
                 title: (f.path || '') + '\n点击播放，📂 打开所在目录',
-                meta: f.editor || '',
+                meta: meta,
                 size: f.size_mb ? Math.round(f.size_mb) + 'MB' : '',
                 onClick: function () {
                     try {
@@ -1144,6 +1178,152 @@
         fetchRevSub();
     }
 
+    // ===== 交付 Tab（000交付 目录树，与桌面端一致） =====
+    var delReqId = 0;
+    function renderDel(container) {
+        container.innerHTML = '';
+        if (!delSub) {
+            // 交付根：齐套提示 + 版本文件夹 + 根目录散文件
+            var data = got.del || {};
+            var folders = data.folders || [];
+            var files = data.files || [];
+            var dc = data.delivery_check || delCheck || null;
+            // 齐套状态条（有才显示）
+            if (dc && dc.base_exists) {
+                var okBanner = document.createElement('div');
+                okBanner.style.cssText = 'padding:7px 10px;border-radius:6px;font-size:11px;line-height:1.5;margin-bottom:8px;';
+                if (dc.all_ok) {
+                    okBanner.style.cssText += 'background:#1e3a2a;color:#7fd68b;border:1px solid #2a5a3a;';
+                    okBanner.textContent = '✅ 交付文件已完成（' + (dc.folders || []).length + ' 个文件夹全部齐套）';
+                } else {
+                    okBanner.style.cssText += 'background:#3a2f1e;color:#ffd76a;border:1px solid #5a4a1e;';
+                    var bads = (dc.folders || []).filter(function (f) { return !f.ok; });
+                    okBanner.textContent = '⚠️ 交付文件不齐套（' + (dc.folders || []).length + ' 个文件夹，缺 ' + bads.length + ' 个）';
+                    if (bads.length) {
+                        var sub = document.createElement('div');
+                        sub.style.cssText = 'margin-top:4px;color:#c9a86a;font-size:10px;line-height:1.6;';
+                        bads.forEach(function (f) {
+                            var missing = (f.missing_episodes || []);
+                            sub.textContent += '· ' + f.name + '：' + f.actual + '/' + f.expected + (missing.length ? '（缺 ' + compactEpList(missing) + '）' : '') + '\n';
+                        });
+                        okBanner.appendChild(sub);
+                    }
+                }
+                container.appendChild(okBanner);
+            }
+            if (!folders.length && !files.length) {
+                container.innerHTML += '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">暂无交付文件夹（项目未建 000交付？）</div>';
+                return;
+            }
+            folders.forEach(function (fd) {
+                var fname = fd.name || '';
+                var fcnt = fd.file_count != null && fd.file_count > 0 ? '（' + fd.file_count + '）' : '';
+                var isRootV = (fname === '000交付');
+                mkFileRow(container, {
+                    icon: '📁',
+                    name: fname + (isRootV ? '' : fcnt),
+                    title: isRootV ? '000交付 文件夹：点击进入查看各版本交付内容' : '点击进入查看交付内容，📂 打开目录',
+                    onClick: function () { enterDelFolder(fname); },
+                    openDir: function () {
+                        var target = fd.abs_path || '';
+                        if (target) openFolderPath(target);
+                    }
+                });
+            });
+            if (files.length) renderVideoRows(container, files, 'delivery', '');
+        } else {
+            // 已进入交付子文件夹：面包屑 + 内容
+            var crumb = document.createElement('div');
+            crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;flex-wrap:wrap;';
+            var backBtn = document.createElement('button');
+            backBtn.type = 'button';
+            backBtn.textContent = '← 返回';
+            backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:1px 8px;cursor:pointer;font-size:11px;';
+            backBtn.addEventListener('click', function () {
+                delSub = delStack.length ? delStack.pop() : '';
+                delFilesCache = [];
+                fetchDelSub();
+            });
+            crumb.appendChild(backBtn);
+            var crumbTxt = document.createElement('span');
+            crumbTxt.style.cssText = 'color:var(--muted,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            crumbTxt.textContent = '📦 ' + delSub;
+            crumbTxt.title = delSub;
+            crumb.appendChild(crumbTxt);
+            container.appendChild(crumb);
+            if (delFilesCache.length) {
+                renderDelContent(container);
+            } else {
+                container.innerHTML += '<div style="padding:14px;text-align:center;color:var(--muted,#888);font-size:12px">⏳ 加载交付内容…</div>';
+                fetchDelSub();
+            }
+        }
+    }
+
+    // 交付子目录内容：可能是子文件夹 + 文件（继续套 mkFileRow 导航），也可能只有视频文件
+    function renderDelContent(container) {
+        if (!delFilesCache.length) {
+            container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">📭 该目录下没有文件</div>';
+            return;
+        }
+        var folders = delFilesCache.filter(function (x) { return x.kind === 'folder'; });
+        var files = delFilesCache.filter(function (x) { return x.kind !== 'folder'; });
+        folders.forEach(function (fd) {
+            var fname = fd.name || '';
+            var fcnt = fd.file_count != null && fd.file_count > 0 ? '（' + fd.file_count + '）' : '';
+            mkFileRow(container, {
+                icon: '📁',
+                name: fname + fcnt,
+                title: '点击进入，📂 打开目录',
+                onClick: function () { enterDelFolder(fname); },
+                openDir: function () { if (fd.abs_path) openFolderPath(fd.abs_path); }
+            });
+        });
+        // 只剩视频文件（交付的 00成片/无字幕版本目录）；字幕/截图目录无视频是正常现象
+        var vids = files.filter(function (x) { return /\.(mp4|mov|mkv|avi|webm)$/i.test(String(x.name || '')); });
+        if (!vids.length && folders.length) {
+            container.innerHTML += '<div style="padding:10px;text-align:center;color:var(--muted,#666);font-size:11px">该目录无视频（可能是字幕/截图等交付物）</div>';
+            return;
+        }
+        if (vids.length) renderVideoRows(container, vids, 'delivery', delSub);
+    }
+
+    function enterDelFolder(fname) {
+        delStack.push(delSub);
+        delSub = delSub ? (delSub + '/' + fname) : fname;
+        delFilesCache = [];
+        fetchDelSub();
+    }
+
+    function fetchDelSub() {
+        var q = '/api/output_files/' + enc + '?mode=delivery';
+        if (delSub) q += '&subpath=' + encodeURIComponent(delSub);
+        var myId = ++delReqId;
+        apiGet(q, function (err, d) {
+            if (myId !== delReqId) return;
+            if (err) {
+                if (dom.body) dom.body.innerHTML = '<div style="padding:14px;color:#ff9a9a;font-size:12px">加载失败：' + err.message + '</div>';
+                return;
+            }
+            if (!delSub) {
+                got.del = d || { files: [], folders: [] };
+                delCheck = (d && d.delivery_check) || null;
+                if (curTab === 'del') {
+                    if (dom.body) { dom.body.innerHTML = ''; renderDel(dom.body); }
+                }
+            } else {
+                delFilesCache = (d && d.files) || [];
+                // 后端在子目录返回 folders + files；把 folders 转成带 kind 标记统一进缓存
+                var dFolders = (d && d.folders) || [];
+                dFolders.forEach(function (x) { x.kind = 'folder'; });
+                delFilesCache = dFolders.concat(delFilesCache);
+                if (curTab === 'del' && delSub) {
+                    if (dom.body) { dom.body.innerHTML = ''; renderDel(dom.body); }
+                }
+            }
+        });
+    }
+
     // 播放视频
     function playVideo(proj, fileName, mode, subpath) {
         dbg('③ playVideo 构造 URL…');
@@ -1166,6 +1346,11 @@
     apiGet('/api/project/' + enc + '/episodes_status', function (err, d) { got.ep = err ? { ok: false } : d; dataReady(); });
     apiGet('/api/output_files/' + enc + '?mode=editing', function (err, d) { got.edit = err ? [] : d; dataReady(); });
     apiGet('/api/output_files/' + enc + '?mode=revising', function (err, d) { got.rev = err ? { files: [], folders: [] } : d; dataReady(); });
+    apiGet('/api/output_files/' + enc + '?mode=delivery', function (err, d) {
+        got.del = err ? { files: [], folders: [], delivery_check: null } : d;
+        delCheck = (d && d.delivery_check) || null;
+        dataReady();
+    });
 }
 
 
