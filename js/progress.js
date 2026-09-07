@@ -1014,7 +1014,13 @@
                 title: (f.path || '') + '\n点击播放，📂 打开所在目录',
                 meta: f.editor || '',
                 size: f.size_mb ? Math.round(f.size_mb) + 'MB' : '',
-                onClick: function () { playVideo(projectName, nm, mode, subpath || ''); },
+                onClick: function () {
+                    try { playVideo(projectName, nm, mode, subpath || ''); }
+                    catch (err) {
+                        el.statusText.textContent = '播放失败：' + (err && err.message);
+                        try { console.error('[vh播放]', err); } catch (e2) {}
+                    }
+                },
                 openDir: function () {
                     var target = f.path || '';
                     if (target) openFolderPath(target);
@@ -1168,10 +1174,23 @@
         // 视频
         var video = document.createElement('video');
         video.controls = true;
-        video.autoplay = true;
         video.style.cssText = 'display:block;width:100%;max-height:56vh;background:#000;';
-        video.src = url;
+        var loadTip = document.createElement('div');
+        loadTip.style.cssText = 'text-align:center;padding:6px;font-size:11px;color:#888;background:#111;border-bottom:1px solid #222;';
+        loadTip.textContent = '⏳ 加载视频流…（若长时间黑屏，点右上「📺 本地播放器」）';
+        box.appendChild(loadTip);
         box.appendChild(video);
+        // 流加载失败时明确提示（CEP 环境偶发跨域拦截）
+        video.addEventListener('error', function () {
+            loadTip.textContent = '⚠️ 内嵌播放失败（' + (video.error ? video.error.code : '未知') + '）。可点「📺 本地播放器」用 PotPlayer 打开。';
+        });
+        video.addEventListener('loadeddata', function () {
+            loadTip.textContent = '';
+            try { var pp = video.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) {}
+        });
+        video.src = url;
+        // 显式触发加载（部分环境需用户手势后才允许 autoplay）
+        try { var pp = video.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) {}
 
         overlay.appendChild(box);
         document.body.appendChild(overlay);
