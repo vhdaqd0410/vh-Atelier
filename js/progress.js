@@ -37,6 +37,7 @@
         mProducing: document.getElementById('prgMProducing'),
         mActive: document.getElementById('prgMActive'),
         mDone: document.getElementById('prgMDone'),
+        mLeft: document.getElementById('prgMLeft'),
         offline: document.getElementById('prgOffline'),
         launch: document.getElementById('prgLaunch'),
         retry: document.getElementById('prgRetry'),
@@ -210,8 +211,10 @@
         if (!stats) return;
         var producing = stats.producing != null ? stats.producing : 0;
         var done = stats.this_month_done != null ? stats.this_month_done : 0;
+        var left = stats.last_month_left != null ? stats.last_month_left : 0;
         // 本月项目 = 制作中 + 已完成（本月涉及的项目总数）
         var monthTotal = producing + done;
+        if (el.mLeft) el.mLeft.textContent = left > 0 ? left : '-';
         el.mProducing.textContent = monthTotal > 0 ? monthTotal : '-';
         el.mActive.textContent = producing > 0 ? producing : '-';
         el.mDone.textContent = done > 0 ? done : '-';

@@ -1841,6 +1841,7 @@
         #panel-progress .prg-mv-month { color: #7fb3d9; }
         #panel-progress .prg-mv-active { color: #ffb84d; }
         #panel-progress .prg-mv-done { color: #7fd68b; }
+        #panel-progress .prg-mv-left { color: #ff9a9a; }
         #panel-progress .prg-ml { font-size: 10px; color: var(--muted); margin-top: 2px; }
         #panel-progress .prg-offline {
             background: var(--panel); border: 1px solid var(--err); border-radius: 8px;
