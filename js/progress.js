@@ -1140,13 +1140,14 @@
             // 修改根下的散文件（罕见）——仅在有值时追加，空时不显示误导性空态
             if (files.length) renderVideoRows(container, files, 'revising', '');
         } else {
-            // 已进入修改文件夹：面包屑 + 集数视频
-            var crumb = document.createElement('div');
-            crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;';
+            // 已进入修改文件夹：醒目导航条（返回）+ 集数视频
+            var nav = document.createElement('div');
+            nav.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 8px;background:var(--panel2,#242424);border:1px solid var(--border,#444);border-radius:6px;';
             var backBtn = document.createElement('button');
             backBtn.type = 'button';
             backBtn.textContent = '← 返回修改列表';
-            backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:2px 10px;cursor:pointer;font-size:11px;flex:0 0 auto;';
+            backBtn.title = '回到修改文件夹列表';
+            backBtn.style.cssText = 'flex:0 0 auto;background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;font-weight:600;';
             backBtn.addEventListener('click', function () {
                 dbg('← 修改返回：回根列表');
                 revSub = '';
@@ -1154,13 +1155,13 @@
                 revFilesCache = [];
                 fetchRevSub();
             });
-            crumb.appendChild(backBtn);
+            nav.appendChild(backBtn);
             var crumbTxt = document.createElement('span');
-            crumbTxt.style.cssText = 'color:var(--muted,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            crumbTxt.style.cssText = 'color:var(--muted,#ccc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;';
             crumbTxt.textContent = '📁 ' + revSub;
             crumbTxt.title = revSub;
-            crumb.appendChild(crumbTxt);
-            container.appendChild(crumb);
+            nav.appendChild(crumbTxt);
+            container.appendChild(nav);
             if (revFilesCache.length) {
                 renderVideoRows(container, revFilesCache, 'revising', revSub);
             } else {
@@ -1274,31 +1275,30 @@
             });
             if (files.length) renderVideoRows(container, files, 'delivery', '');
         } else {
-            // 已进入交付子文件夹：面包屑 + 内容
+            // 已进入交付子文件夹：醒目导航条（返回）+ 内容
             var crumb = document.createElement('div');
-            crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;flex-wrap:wrap;';
-            var crumb = document.createElement('div');
-            crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;flex-wrap:wrap;';
+            crumb.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 8px;background:var(--panel2,#242424);border:1px solid var(--border,#444);border-radius:6px;';
             var backBtn = document.createElement('button');
             backBtn.type = 'button';
-            // 在 000交付 版本列表层（刚自动进入）不显示返回；更深层才需要回退
+            // 在 000交付 版本列表层（顶层）不显示返回；更深层才显示
             var isRootLevel = (delSub === '000交付');
             if (isRootLevel) {
                 backBtn.style.display = 'none';
             }
-            backBtn.textContent = '← 返回版本列表';
-            backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:2px 10px;cursor:pointer;font-size:11px;flex:0 0 auto;';
+            backBtn.textContent = '← 返回';
+            backBtn.title = isRootLevel ? '' : '回到上一级目录';
+            backBtn.style.cssText = 'flex:0 0 auto;background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;font-weight:600;';
             backBtn.addEventListener('click', function () {
-                dbg('← 交付返回：回 000交付 版本列表');
-                delStack = [];
+                dbg('← 交付返回：上一级');
+                var prev = delStack.length ? delStack.pop() : '';
+                if (!prev) { prev = '000交付'; }  // 若已到根则回 000交付 版本列表
+                delSub = prev;
                 delFilesCache = [];
-                // 直接回到 000交付 版本列表层（省一次根请求）
-                delSub = '000交付';
                 fetchDelSub();
             });
             crumb.appendChild(backBtn);
             var crumbTxt = document.createElement('span');
-            crumbTxt.style.cssText = 'color:var(--muted,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            crumbTxt.style.cssText = 'color:var(--muted,#ccc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;';
             crumbTxt.textContent = '📦 ' + delSub;
             crumbTxt.title = delSub;
             crumb.appendChild(crumbTxt);
