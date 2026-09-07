@@ -350,9 +350,15 @@
             missRow.style.display = 'none';
             item.appendChild(missRow);
 
-            // 操作行：查剪辑 / 缺集明细 / 刷新进度（剪辑中）/ 组内NAS / 制作部 / 剧本 / 在工作台打开
+            // 操作区：主操作行（明细/查剪辑/刷新） + 辅助操作行（目录/素材/剧本/跳转）
             var openRow = document.createElement('div');
             openRow.className = 'prg-open-row';
+            var opsMain = document.createElement('div');
+            opsMain.className = 'prg-ops-main';
+            var opsMore = document.createElement('div');
+            opsMore.className = 'prg-ops-more';
+            openRow.appendChild(opsMain);
+            openRow.appendChild(opsMore);
 
             // 🔍 查剪辑：输入集号查该集剪辑师（或反查）
             var searchBtn = document.createElement('button');
@@ -364,19 +370,19 @@
                 ev.stopPropagation();
                 openEpSearch(p);
             });
-            openRow.appendChild(searchBtn);
+            opsMain.appendChild(searchBtn);
 
-            // 📋 缺集/成片/修改 明细浮层
+            // 📋 缺集/成片/修改/交付 明细浮层（核心操作）
             var detBtn = document.createElement('button');
             detBtn.type = 'button';
-            detBtn.className = 'prg-open-btn';
+            detBtn.className = 'prg-open-btn prg-btn-primary';
             detBtn.textContent = '📋 明细';
-            detBtn.title = '缺集明细 + 成片列表 + 修改文件';
+            detBtn.title = '缺集明细 + 成片列表 + 修改 + 交付预览';
             detBtn.addEventListener('click', function (ev) {
                 ev.stopPropagation();
                 openProjectDetail(p);
             });
-            openRow.appendChild(detBtn);
+            opsMain.appendChild(detBtn);
 
 
             // 🔄 刷新进度：仅剪辑中项目，扫描磁盘实算已剪集数
@@ -390,79 +396,79 @@
                     ev.stopPropagation();
                     refreshProject(p.name || '');
                 });
-                openRow.appendChild(rfBtn);
+                opsMain.appendChild(rfBtn);
             }
 
             // 📁 组内NAS
             if (p.group_path) {
                 var gBtn = document.createElement('button');
                 gBtn.type = 'button';
-                gBtn.className = 'prg-open-btn';
-                gBtn.textContent = '📁 组内NAS';
+                gBtn.className = 'prg-open-btn prg-ops-icon';
+                gBtn.textContent = '📁 组内';
                 gBtn.title = '打开组内 NAS 项目目录';
                 gBtn.addEventListener('click', function (ev) {
                     ev.stopPropagation();
                     openProjFolder(p.name || '', 'group_root');
                 });
-                openRow.appendChild(gBtn);
+                opsMore.appendChild(gBtn);
             }
 
             // 🏢 制作部
             if (p.production_path) {
                 var pBtn = document.createElement('button');
                 pBtn.type = 'button';
-                pBtn.className = 'prg-open-btn';
+                pBtn.className = 'prg-open-btn prg-ops-icon';
                 pBtn.textContent = '🏢 制作部';
                 pBtn.title = '打开制作部项目目录';
                 pBtn.addEventListener('click', function (ev) {
                     ev.stopPropagation();
                     openProjFolder(p.name || '', 'prod');
                 });
-                openRow.appendChild(pBtn);
+                opsMore.appendChild(pBtn);
             }
 
             var scriptBtn = document.createElement('button');
             scriptBtn.type = 'button';
-            scriptBtn.className = 'prg-open-btn prg-open-main';
+            scriptBtn.className = 'prg-open-btn prg-ops-icon';
             scriptBtn.textContent = '📖 剧本';
             scriptBtn.title = '在本地项目里找剧本并阅读';
             scriptBtn.addEventListener('click', function (ev) {
                 ev.stopPropagation();
                 openScriptForProject(p.name || '');
             });
-            openRow.appendChild(scriptBtn);
+            opsMore.appendChild(scriptBtn);
             var impBtn = document.createElement('button');
             impBtn.type = 'button';
-            impBtn.className = 'prg-open-btn prg-open-main';
-            impBtn.textContent = '📥 导入素材';
+            impBtn.className = 'prg-open-btn prg-ops-icon';
+            impBtn.textContent = '📥 素材';
             impBtn.title = '把该项目的本地素材(01原素材)一键导入当前 PR 工程素材箱';
             impBtn.addEventListener('click', function (ev) {
                 ev.stopPropagation();
                 importMaterialsForProject(p.name || '');
             });
-            openRow.appendChild(impBtn);
+            opsMore.appendChild(impBtn);
             var openBtn = document.createElement('button');
             openBtn.type = 'button';
-            openBtn.className = 'prg-open-btn';
-            openBtn.textContent = '在工作台打开 ↗';
+            openBtn.className = 'prg-open-btn prg-ops-icon';
+            openBtn.textContent = '↗ 工作台';
             openBtn.title = '跳转视频工作台并定位到该项目';
             openBtn.addEventListener('click', function (ev) {
                 ev.stopPropagation();
                 openInWorkbench(p.name || '');
             });
-            openRow.appendChild(openBtn);
+            opsMore.appendChild(openBtn);
 
             // 🔗 分秒帧：点开该项目的分秒帧审核页（无链接先填）
             var fmBtn = document.createElement('button');
             fmBtn.type = 'button';
-            fmBtn.className = 'prg-open-btn prg-fm-btn';
+            fmBtn.className = 'prg-open-btn prg-fm-btn prg-ops-icon';
             fmBtn.textContent = '🔗 分秒帧';
             fmBtn.title = '打开该项目的分秒帧审核页；Shift+点击可修改链接';
             fmBtn.addEventListener('click', function (ev) {
                 ev.stopPropagation();
                 openFenmiaozhen(p.name || '', ev.shiftKey);
             });
-            openRow.appendChild(fmBtn);
+            opsMore.appendChild(fmBtn);
             item.appendChild(openRow);
 
             el.activeList.appendChild(item);

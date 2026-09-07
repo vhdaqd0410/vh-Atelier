@@ -1904,9 +1904,10 @@
             flex: 0 0 auto; font-size: 11px;
             background: transparent; color: var(--accent);
             border: 1px solid var(--accent); border-radius: 5px;
-            padding: 3px 10px; cursor: pointer;
+            padding: 3px 10px; cursor: pointer; transition: background .15s, color .15s;
         }
-        #panel-progress .prg-open-btn:hover { background: var(--accent); color: #fff; }
+        #panel-progress .prg-ops-main .prg-open-btn:not(.prg-btn-primary):not(.prg-refresh-btn):hover { background: var(--accent); color: #fff; }
+        #panel-progress .prg-ops-more .prg-open-btn:hover { background: var(--panel2); color: var(--text); }
         #panel-progress .prg-empty {
             background: var(--panel); border: 1px dashed var(--border); border-radius: 8px;
             padding: 14px; text-align: center; font-size: 12px; color: var(--muted);
@@ -1921,7 +1922,28 @@
         #panel-progress .prg-refresh-btn:disabled { opacity: .6; cursor: wait; }
         /* 操作行可换行，按钮不要挤爆 */
         #panel-progress .prg-open-row { flex-wrap: wrap; }
-        /* 查剪辑浮层：隐藏 number 输入框的上下箭头 */
+        /* ===== 操作区两行布局：主操作(实心大按钮) + 辅助操作(紧凑小按钮) ===== */
+        #panel-progress .prg-ops-main {
+            display: flex; gap: 6px; flex-wrap: wrap; width: 100%; margin-bottom: 5px;
+        }
+        #panel-progress .prg-ops-more {
+            display: flex; gap: 5px; flex-wrap: wrap; width: 100%;
+            padding-top: 5px; border-top: 1px dashed var(--border);
+        }
+        #panel-progress .prg-btn-primary {
+            background: var(--accent); color: #fff; font-weight: 600;
+            border-color: var(--accent); padding: 4px 14px;
+        }
+        #panel-progress .prg-btn-primary:hover { background: var(--accent-hover); color: #fff; }
+        #panel-progress .prg-ops-main .prg-open-btn {
+            font-size: 12px; padding: 4px 12px;
+        }
+        #panel-progress .prg-ops-more .prg-open-btn {
+            font-size: 10.5px; padding: 2px 7px; opacity: .92;
+            background: transparent; color: var(--muted); border-color: var(--border);
+        }
+        #panel-progress .prg-ops-more .prg-open-btn:hover { background: var(--panel2); color: var(--text); }
+        /* 刷新/分秒帧专属配色沿用上方旧规则 */
         .prg-modal input::-webkit-outer-spin-button,
         .prg-modal input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .prg-modal input[type=number] { -moz-appearance: textfield; }
