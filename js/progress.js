@@ -1023,6 +1023,19 @@
         szEl.style.cssText = 'flex:0 0 auto;color:var(--muted,#777);font-size:10px;';
         if (cfg.size) szEl.textContent = cfg.size;
         row.appendChild(szEl);
+        // 可选「▶ 进入」按钮：文件夹行用它进入（不依赖整行 click，点击更明确）
+        if (cfg.enterLabel && cfg.onClick) {
+            var eb = document.createElement('button');
+            eb.type = 'button';
+            eb.textContent = cfg.enterLabel;
+            eb.title = cfg.enterTitle || '点击进入';
+            eb.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border,#555);border-radius:3px;color:#7fd68b;font-size:10px;padding:0 6px;cursor:pointer;line-height:16px;';
+            eb.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (cfg.onClick) cfg.onClick();
+            });
+            row.appendChild(eb);
+        }
         if (cfg.openDir) {
             var ob = document.createElement('button');
             ob.type = 'button';
@@ -1118,6 +1131,8 @@
                     icon: '📁',
                     name: fname,
                     title: (fd.abs_path || '') + '\n点击进入查看集数，📂 打开目录',
+                    enterLabel: '进入 →',
+                    enterTitle: '进入 ' + fname + ' 查看集数',
                     onClick: function () { enterRevFolder(fname); },
                     openDir: function () { if (fd.abs_path) openFolderPath(fd.abs_path); }
                 });
@@ -1248,6 +1263,8 @@
                     icon: '📁',
                     name: fname + (isRootV ? '' : fcnt),
                     title: isRootV ? '000交付 文件夹：点击进入查看各版本交付内容' : '点击进入查看交付内容，📂 打开目录',
+                    enterLabel: '进入 →',
+                    enterTitle: '进入 ' + fname,
                     onClick: function () { enterDelFolder(fname); },
                     openDir: function () {
                         var target = fd.abs_path || '';
@@ -1309,18 +1326,20 @@
             mkFileRow(container, {
                 icon: '📁',
                 name: fname + fcnt,
-                title: '点击进入，📂 打开目录',
+                title: '点击进入查看交付内容',
+                enterLabel: '进入 →',
+                enterTitle: '进入 ' + fname,
                 onClick: function () { enterDelFolder(fname); },
                 openDir: function () { if (fd.abs_path) openFolderPath(fd.abs_path); }
             });
         });
         // 只剩视频文件（交付的 00成片/无字幕版本目录）；字幕/截图目录无视频是正常现象
         var vids = files.filter(function (x) { return /\.(mp4|mov|mkv|avi|webm)$/i.test(String(x.name || '')); });
-        if (!vids.length && folders.length) {
-            container.innerHTML += '<div style="padding:10px;text-align:center;color:var(--muted,#666);font-size:11px">该目录无视频（可能是字幕/截图等交付物）</div>';
-            return;
-        }
         if (vids.length) renderVideoRows(container, vids, 'delivery', delSub);
+        // 有文件夹列表（版本/子目录导航）就不提示；只有既无文件夹也无视频才给说明
+        if (!folders.length && !vids.length) {
+            container.innerHTML += '<div style="padding:10px;text-align:center;color:var(--muted,#666);font-size:11px">该目录无视频文件（可能是字幕/截图等交付物）</div>';
+        }
     }
 
     function enterDelFolder(fname) {
