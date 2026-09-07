@@ -121,6 +121,55 @@
         xhr.send();
     }
 
+    // 通用带鉴权的 API GET（相对 /api/ 路径）
+    function apiGet(sub, cb) {
+        var secret = readSecret();
+        if (!secret) { cb(new Error('读不到 api_secret（config.yaml 路径不对？）'), null); return; }
+        var url = WB_BASE + sub + (sub.indexOf('?') >= 0 ? '&' : '?') + 'key=' + encodeURIComponent(secret);
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.timeout = 20000;
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status === 200) {
+                try { cb(null, JSON.parse(xhr.responseText)); }
+                catch (e) { cb(new Error('解析失败'), null); }
+            } else if (xhr.status === 401) {
+                cb(new Error('鉴权失败（api_secret 过期？请重启视频工作台）'), null);
+            } else {
+                cb(new Error('HTTP ' + xhr.status), null);
+            }
+        };
+        xhr.onerror = function () { cb(new Error('网络错误'), null); };
+        xhr.ontimeout = function () { cb(new Error('超时'), null); };
+        xhr.send();
+    }
+
+    // 通用带鉴权的 API POST（JSON body）
+    function apiPost(sub, bodyObj, cb) {
+        var secret = readSecret();
+        if (!secret) { cb(new Error('读不到 api_secret（config.yaml 路径不对？）'), null); return; }
+        var url = WB_BASE + sub + (sub.indexOf('?') >= 0 ? '&' : '?') + 'key=' + encodeURIComponent(secret);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', url, true);
+        xhr.timeout = 20000;
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status === 200) {
+                try { cb(null, JSON.parse(xhr.responseText)); }
+                catch (e) { cb(new Error('解析失败'), null); }
+            } else if (xhr.status === 401) {
+                cb(new Error('鉴权失败（api_secret 过期？请重启视频工作台）'), null);
+            } else {
+                cb(new Error('HTTP ' + xhr.status), null);
+            }
+        };
+        xhr.onerror = function () { cb(new Error('网络错误'), null); };
+        xhr.ontimeout = function () { cb(new Error('超时'), null); };
+        xhr.send(JSON.stringify(bodyObj || {}));
+    }
+
     // 状态标签样式映射
     function stateClass(st) {
         st = st || '';
@@ -201,7 +250,9 @@
             if (fState && stateGroup(p.custom_status || '') !== fState) return false;
             if (fProgress) {
                 var cur = parseInt(p.current_episodes, 10) || 0;
-                if (cur <= 0) return false;
+                // 剪辑中项目总会实扫，视作有进度；其余按 DB 值判断
+                var isClipSt = (p.custom_status || '').indexOf('剪辑') >= 0;
+                if (cur <= 0 && !isClipSt) return false;
             }
             return true;
         });
@@ -228,9 +279,12 @@
             var total = parseInt(p.total_episodes, 10) || 0;
             var pct = total > 0 ? Math.min(100, Math.round(cur / total * 100)) : 0;
             var state = p.custom_status || '';
+            var isClip = state.indexOf('剪辑') >= 0;
+            var safeId = String(p.name || '').replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
 
             var item = document.createElement('div');
             item.className = 'prg-item';
+            item.setAttribute('data-proj', p.name || '');
             var head = document.createElement('div');
             head.className = 'prg-item-head';
             var nm = document.createElement('div');
@@ -247,7 +301,7 @@
             var bar = document.createElement('div');
             bar.className = 'prg-bar';
             var fill = document.createElement('div');
-            fill.className = 'prg-bar-fill';
+            fill.className = 'prg-bar-fill' + (pct >= 100 && total > 0 ? ' prg-done' : '');
             fill.style.width = pct + '%';
             bar.appendChild(fill);
             item.appendChild(bar);
@@ -255,7 +309,15 @@
             var foot = document.createElement('div');
             foot.className = 'prg-item-foot';
             var ep = document.createElement('span');
-            ep.textContent = total > 0 ? (cur + ' / ' + total + ' 集 · ' + pct + '%') : '未设总集数';
+            ep.className = 'prg-ep-text';
+            ep.setAttribute('data-proj', p.name || '');
+            // 剪辑中项目：DB 缓存 current_episodes 不可靠，初始显示待扫描，等实扫回填
+            if (isClip && total > 0) {
+                ep.textContent = '待扫描…';
+                ep.title = '点「🔄 刷新」或稍候自动扫描输出目录';
+            } else {
+                ep.textContent = total > 0 ? (cur + ' / ' + total + ' 集 · ' + pct + '%') : '未设总集数';
+            }
             var meta = document.createElement('span');
             meta.className = 'prg-item-sub';
             meta.textContent = (p.source_department || p.department || '') + (p.project_month ? ' · ' + p.project_month : '');
@@ -263,9 +325,64 @@
             foot.appendChild(meta);
             item.appendChild(foot);
 
-            // 操作行：剧本（最左）+ 打开工作台
+            // 操作行：查剪辑 / 刷新进度（剪辑中）/ 组内NAS / 制作部 / 剧本 / 在工作台打开
             var openRow = document.createElement('div');
             openRow.className = 'prg-open-row';
+
+            // 🔍 查剪辑：输入集号查该集剪辑师（或反查）
+            var searchBtn = document.createElement('button');
+            searchBtn.type = 'button';
+            searchBtn.className = 'prg-open-btn';
+            searchBtn.textContent = '🔍 查剪辑';
+            searchBtn.title = '输入集号查谁剪的，或点剪辑师看他负责哪些集';
+            searchBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openEpSearch(p);
+            });
+            openRow.appendChild(searchBtn);
+
+            // 🔄 刷新进度：仅剪辑中项目，扫描磁盘实算已剪集数
+            if (isClip) {
+                var rfBtn = document.createElement('button');
+                rfBtn.type = 'button';
+                rfBtn.className = 'prg-open-btn prg-refresh-btn';
+                rfBtn.textContent = '🔄 刷新';
+                rfBtn.title = '扫描项目输出目录，刷新已剪辑集数';
+                rfBtn.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    refreshProject(p.name || '');
+                });
+                openRow.appendChild(rfBtn);
+            }
+
+            // 📁 组内NAS
+            if (p.group_path) {
+                var gBtn = document.createElement('button');
+                gBtn.type = 'button';
+                gBtn.className = 'prg-open-btn';
+                gBtn.textContent = '📁 组内NAS';
+                gBtn.title = '打开组内 NAS 项目目录';
+                gBtn.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    openProjFolder(p.name || '', 'group_root');
+                });
+                openRow.appendChild(gBtn);
+            }
+
+            // 🏢 制作部
+            if (p.production_path) {
+                var pBtn = document.createElement('button');
+                pBtn.type = 'button';
+                pBtn.className = 'prg-open-btn';
+                pBtn.textContent = '🏢 制作部';
+                pBtn.title = '打开制作部项目目录';
+                pBtn.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    openProjFolder(p.name || '', 'prod');
+                });
+                openRow.appendChild(pBtn);
+            }
+
             var scriptBtn = document.createElement('button');
             scriptBtn.type = 'button';
             scriptBtn.className = 'prg-open-btn prg-open-main';
@@ -290,6 +407,215 @@
 
             el.activeList.appendChild(item);
         });
+    }
+
+    // 单个项目刷新进度（扫描磁盘，更新本卡片进度条）
+    function refreshProject(projectName) {
+        var btn = null;
+        var items = el.activeList.querySelectorAll('.prg-item');
+        for (var i = 0; i < items.length; i++) {
+            if ((items[i].getAttribute('data-proj') || '') === projectName) {
+                btn = items[i].querySelector('.prg-refresh-btn');
+                break;
+            }
+        }
+        if (btn) { btn.disabled = true; btn.textContent = '扫描中…'; }
+        var url = '/api/project/' + encodeURIComponent(projectName) + '/episodes_status';
+        apiGet(url, function (err, data) {
+            if (btn) { btn.disabled = false; btn.textContent = '🔄 刷新'; }
+            if (err) {
+                el.statusText.textContent = '刷新失败：' + err.message;
+                return;
+            }
+            applyScanToCard(projectName, data);
+            el.statusText.textContent = '已刷新：' + projectName;
+        });
+    }
+
+    // 把磁盘实扫结果应用到对应卡片（进度条 + 文字）
+    function applyScanToCard(projectName, data) {
+        if (!data || !data.ok) return;
+        var total = parseInt(data.total, 10) || 0;
+        var cur = parseInt(data.current_count, 10) || 0;
+        var pct = total > 0 ? Math.min(100, Math.round(cur / total * 100)) : 0;
+        var items = el.activeList.querySelectorAll('.prg-item');
+        var item = null;
+        for (var i = 0; i < items.length; i++) {
+            if ((items[i].getAttribute('data-proj') || '') === projectName) { item = items[i]; break; }
+        }
+        if (!item) return;
+        var fill = item.querySelector('.prg-bar-fill');
+        if (fill) {
+            fill.style.width = pct + '%';
+            fill.className = 'prg-bar-fill' + (pct >= 100 && total > 0 ? ' prg-done' : '');
+        }
+        var epTxt = item.querySelector('.prg-ep-text');
+        if (epTxt) {
+            epTxt.textContent = total > 0 ? (cur + ' / ' + total + ' 集 · ' + pct + '%') : '未设总集数';
+            // 缺集提示
+            var missing = (data.missing || []).length;
+            if (total > 0 && missing > 0) {
+                epTxt.title = '缺 ' + missing + ' 集：' + (data.missing || []).join(', ');
+            }
+        }
+    }
+
+    // 批量扫描全部剪辑中项目（进入页面时用），用实扫值覆盖 DB 缓存值
+    function batchScanClipProjects() {
+        var names = [];
+        allActiveProjects.forEach(function (p) {
+            if ((p.custom_status || '').indexOf('剪辑') >= 0) names.push(p.name);
+        });
+        if (names.length === 0) return;
+        apiPost('/api/projects/episodes_status_batch', { names: names }, function (err, data) {
+            if (err) return;
+            var results = (data && data.results) || {};
+            names.forEach(function (n) {
+                if (results[n] && results[n].ok) applyScanToCard(n, results[n]);
+            });
+            el.statusText.textContent = '剪辑中进度已扫描 · ' + new Date().toLocaleTimeString();
+        });
+    }
+
+    // 打开项目目录（which: group_root=组内NAS / prod=制作部）
+    function openProjFolder(projectName, which) {
+        apiPost('/api/project/' + encodeURIComponent(projectName) + '/open_folder', { which: which }, function (err, data) {
+            if (err) { el.statusText.textContent = '打开失败：' + err.message; return; }
+            if (data && data.ok) {
+                el.statusText.textContent = '已打开：' + (data.message || projectName);
+            } else {
+                el.statusText.textContent = (data && data.message) || '打开失败';
+            }
+        });
+    }
+
+    // 查剪辑浮层：输入集号查该集剪辑师；点剪辑师名反查其负责集数
+    var _epSearchOverlay = null;
+    function openEpSearch(p) {
+        var projectName = p.name || '';
+        if (_epSearchOverlay) { _epSearchOverlay.remove(); _epSearchOverlay = null; }
+        var planStr = p.episode_plan || p.episodes_plan || '{}';
+        var plan = {};
+        try { plan = typeof planStr === 'string' ? JSON.parse(planStr) : planStr; } catch (e) { plan = {}; }
+        if (!plan || typeof plan !== 'object' || Array.isArray(plan)) plan = {};
+
+        var overlay = document.createElement('div');
+        overlay.className = 'prg-modal-mask';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        var box = document.createElement('div');
+        box.className = 'prg-modal';
+        box.style.cssText = 'background:var(--panel,#1e1e1e);border:1px solid var(--border,#3a3a3a);border-radius:10px;width:340px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.4);';
+        var totalCnt = Object.keys(plan).length;
+        var head = document.createElement('div');
+        head.style.cssText = 'padding:10px 14px;background:var(--panel2,#242424);border-bottom:1px solid var(--border,#333);display:flex;align-items:center;gap:6px;';
+        var title = document.createElement('span');
+        title.style.cssText = 'flex:1;font-size:12px;font-weight:600;color:var(--text,#e8e8e8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        title.textContent = '🔍 查剪辑 · ' + projectName;
+        title.title = projectName;
+        var xBtn = document.createElement('button');
+        xBtn.type = 'button';
+        xBtn.textContent = '✕';
+        xBtn.style.cssText = 'background:none;border:none;color:var(--muted,#999);font-size:14px;cursor:pointer;padding:2px 6px;';
+        head.appendChild(title);
+        head.appendChild(xBtn);
+        box.appendChild(head);
+
+        var body = document.createElement('div');
+        body.style.cssText = 'padding:12px 14px;overflow-y:auto;';
+        var info = document.createElement('div');
+        info.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:8px;word-break:break-all;';
+        info.textContent = totalCnt > 0 ? ('已登记 ' + totalCnt + ' 集') : '未登记分集数据';
+        body.appendChild(info);
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;gap:6px;margin-bottom:10px;';
+        var inp = document.createElement('input');
+        inp.type = 'number';
+        inp.min = '1';
+        inp.placeholder = '输入集号，如 12';
+        inp.style.cssText = 'flex:1;min-width:0;background:var(--bg,#111);color:var(--text,#ddd);border:1px solid var(--border,#444);border-radius:4px;padding:5px 8px;font-size:12px;';
+        var goBtn = document.createElement('button');
+        goBtn.type = 'button';
+        goBtn.textContent = '查询';
+        goBtn.style.cssText = 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;';
+        row.appendChild(inp);
+        row.appendChild(goBtn);
+        body.appendChild(row);
+        var res = document.createElement('div');
+        res.style.cssText = 'font-size:12px;min-height:20px;line-height:1.7;';
+        body.appendChild(res);
+
+        function doQuery() {
+            var n = String(inp.value || '').trim();
+            if (!n || isNaN(parseInt(n, 10))) {
+                res.innerHTML = '<div style="color:#ff9a9a;font-size:11px">请输入有效的集号</div>';
+                return;
+            }
+            var key = String(parseInt(n, 10));
+            var editor = plan[key];
+            if (editor) {
+                res.innerHTML = '<div style="padding:8px 10px;background:#1e3a2a;border-radius:6px">第 <b>' + esc(key) + '</b> 集 → 剪辑师 <b style="color:#7fd68b">' + esc(editor) + '</b></div>';
+            } else {
+                res.innerHTML = '<div style="padding:8px 10px;background:#3a2f1e;border-radius:6px">⚠️ 未找到第 <b>' + esc(key) + '</b> 集的剪辑师登记</div>';
+            }
+        }
+        function showByEditor(editorName) {
+            var eps = [];
+            Object.keys(plan).forEach(function (k) {
+                if (plan[k] === editorName) eps.push(parseInt(k, 10));
+            });
+            eps.sort(function (a, b) { return a - b; });
+            res.innerHTML = eps.length
+                ? '<div style="padding:8px 10px;background:#1e3a2a;border-radius:6px">剪辑师 <b style="color:#7fd68b">' + esc(editorName) + '</b> 负责：第 ' + esc(eps.join('、')) + ' 集</div>'
+                : '<div style="padding:8px 10px;background:#3a2f1e;border-radius:6px">未找到剪辑师 <b>' + esc(editorName) + '</b> 的分集记录</div>';
+        }
+        goBtn.addEventListener('click', doQuery);
+        inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') doQuery(); });
+        // 剪辑师快捷标签（按剪辑师反查）
+        var byEditor = {};
+        Object.keys(plan).forEach(function (k) {
+            var ed = plan[k];
+            if (!ed) return;
+            if (!byEditor[ed]) byEditor[ed] = [];
+            byEditor[ed].push(parseInt(k, 10));
+        });
+        var edNames = Object.keys(byEditor);
+        if (edNames.length) {
+            var tip = document.createElement('div');
+            tip.style.cssText = 'margin-top:8px;border-top:1px solid var(--border,#333);padding-top:8px;';
+            var tipT = document.createElement('div');
+            tipT.style.cssText = 'font-size:10px;color:var(--muted);margin-bottom:4px;';
+            tipT.textContent = '按剪辑师反查：';
+            tip.appendChild(tipT);
+            var chips = document.createElement('div');
+            chips.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
+            edNames.forEach(function (ed) {
+                var c = document.createElement('span');
+                c.style.cssText = 'background:var(--panel2,#2a2a2a);border:1px solid var(--border,#444);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;color:var(--text,#ccc);';
+                c.textContent = ed + ':' + byEditor[ed].join(',');
+                c.title = '点我查看 ' + ed + ' 负责哪些集';
+                c.addEventListener('click', function () { showByEditor(ed); });
+                chips.appendChild(c);
+            });
+            tip.appendChild(chips);
+            body.appendChild(tip);
+        }
+        box.appendChild(body);
+        var foot = document.createElement('div');
+        foot.style.cssText = 'padding:8px 14px;border-top:1px solid var(--border,#333);text-align:right;';
+        var cls = document.createElement('button');
+        cls.type = 'button';
+        cls.textContent = '关闭';
+        cls.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 12px;cursor:pointer;font-size:12px;';
+        foot.appendChild(cls);
+        box.appendChild(foot);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        _epSearchOverlay = overlay;
+        var closeAll = function () { if (overlay.parentNode) overlay.remove(); if (_epSearchOverlay === overlay) _epSearchOverlay = null; };
+        xBtn.addEventListener('click', closeAll);
+        cls.addEventListener('click', closeAll);
+        overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) closeAll(); });
+        setTimeout(function () { try { inp.focus(); } catch (e) {} }, 30);
     }
 
     // 请求视频工作台跳转定位（通过 SSE jump 事件）；服务离线则先启动再跳
@@ -1444,6 +1770,7 @@
             setOnline(true, '视频工作台在线 · ' + new Date().toLocaleTimeString());
             renderOverview(data.overview_stats || {});
             renderActive(data.sections || []);
+            autoScanAfterRender();
         });
     }
 
@@ -1488,10 +1815,20 @@
     el.filterState.addEventListener('change', function () { renderFilteredList(); });
     el.filterProgress.addEventListener('change', function () { renderFilteredList(); });
 
-    // 暴露给 main.js：切到 progress tab 时自动刷新一次
+    // 暴露给 main.js：切到 progress tab 时自动刷新一次，并对剪辑中项目批量实扫
     window.__progressOnShow = function () {
         refresh(true);
     };
+
+    // refresh 拉回数据渲染完后，自动对「剪辑中」项目批量实扫（磁盘准）
+    var _autoScanDone = false;
+    function autoScanAfterRender() {
+        if (_autoScanDone) return;
+        _autoScanDone = true;
+        setTimeout(function () {
+            if (el.activeList.children.length) batchScanClipProjects();
+        }, 300);
+    }
 
     // 初始化：先探测在线状态
     refresh(true);

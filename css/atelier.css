@@ -1905,4 +1905,18 @@
             background: var(--panel); border: 1px dashed var(--border); border-radius: 8px;
             padding: 14px; text-align: center; font-size: 12px; color: var(--muted);
         }
+        /* 进度条完成态（绿色） */
+        #panel-progress .prg-bar-fill.prg-done { background: #3d9a50; }
+        /* 刷新进度按钮：剪辑中专属，加高亮 */
+        #panel-progress .prg-refresh-btn {
+            background: #234a2a; color: #7fd68b; border-color: #2a5a3a;
+        }
+        #panel-progress .prg-refresh-btn:hover { background: #2a5a3a; color: #fff; }
+        #panel-progress .prg-refresh-btn:disabled { opacity: .6; cursor: wait; }
+        /* 操作行可换行，按钮不要挤爆 */
+        #panel-progress .prg-open-row { flex-wrap: wrap; }
+        /* 查剪辑浮层：隐藏 number 输入框的上下箭头 */
+        .prg-modal input::-webkit-outer-spin-button,
+        .prg-modal input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .prg-modal input[type=number] { -moz-appearance: textfield; }
     
