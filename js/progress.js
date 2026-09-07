@@ -50,6 +50,23 @@
     var lastData = null;
     var allActiveProjects = [];   // 最近一次拉到的 group_active 全量（供筛选/排序）
 
+    // ===== 可视诊断：把点击/播放链路每步状态写进面板顶部，不再静默 =====
+    function dbg(msg) {
+        try {
+            el.statusText.textContent = msg;
+        } catch (e) {}
+        try { console.log('[vh-dbg] ' + msg); } catch (e) {}
+    }
+    // 全局错误捕获：任何未捕获异常都显示出来
+    try {
+        window.addEventListener('error', function (ev) {
+            try {
+                var m = (ev && ev.message) || 'unknown';
+                dbg('⚠️ 脚本错误: ' + m + (ev && ev.filename ? ' @' + ev.filename.split('/').pop() + ':' + ev.lineno : ''));
+            } catch (e) {}
+        });
+    } catch (e) {}
+
     // 工作流状态排序权重（越小越靠前 = 越接近交付越优先展示）
     var STATE_ORDER = ['剪辑中', '分集中', '制作中', '审核中', '修改中', '交付中', '质检中', '已完成'];
     function stateWeight(st) {
@@ -727,6 +744,7 @@
 
     // ==================== 项目明细浮层：缺集 / 成片 / 修改 三合一 ====================
     var _detailOverlay = null;
+    var _videoOverlay = null;   // 播放器浮层（showVideoPlayer / closeVideoPlayer 共用）
     // 连续集区间压缩：1,2,3,5 -> 1-3,5
     function compactEpList(nums) {
         if (!nums || !nums.length) return '';
@@ -1017,6 +1035,7 @@
                 onClick: function () {
                     try {
                         // 点击反馈：状态栏提示 + 行高亮，确保用户知道点击被接收
+                        dbg('① 收到点击：' + nm + '（mode=' + mode + ' subpath=' + (subpath || '') + '）');
                         try { el.statusText.textContent = '点击：' + nm; } catch (e) {}
                         var rc = container.lastChild;
                         if (rc && rc.style) {
@@ -1024,10 +1043,13 @@
                             rc.style.background = 'rgba(139,92,246,.25)';
                             setTimeout(function () { try { rc.style.background = origBg || ''; } catch (e) {} }, 250);
                         }
+                        if (typeof playVideo !== 'function') { dbg('② 出错：playVideo 未定义（脚本加载异常）'); throw new Error('playVideo undefined'); }
+                        dbg('② 调 playVideo…');
                         playVideo(projectName, nm, mode, subpath || '');
                     }
                     catch (err) {
-                        el.statusText.textContent = '播放失败：' + (err && err.message);
+                        try { el.statusText.textContent = '播放失败：' + (err && err.message); } catch (e) {}
+                        dbg('✗ 播放异常：' + (err && err.message));
                         try { console.error('[vh播放]', err); } catch (e2) {}
                     }
                 },
@@ -1124,9 +1146,11 @@
 
     // 播放视频
     function playVideo(proj, fileName, mode, subpath) {
+        dbg('③ playVideo 构造 URL…');
         var url = WB_BASE + '/api/preview/' + encodeURIComponent(proj) + '/' + encodeURIComponent(fileName)
             + '?mode=' + encodeURIComponent(mode);
         if (subpath) url += '&subpath=' + encodeURIComponent(subpath);
+        dbg('④ 弹出播放器 → ' + fileName);
         showVideoPlayer(proj, fileName, url, mode, subpath);
     }
 
@@ -1146,6 +1170,8 @@
 
 
     function showVideoPlayer(proj, fileName, url, mode, subpath) {
+        dbg('⑤ showVideoPlayer 入口：' + fileName);
+        try { if (!_videoOverlay) _videoOverlay = null; } catch (e) {}
         if (_videoOverlay) closeVideoPlayer();
         // 状态栏即时反馈，确认点击已生效
         try { el.statusText.textContent = '正在打开播放器：' + fileName + '…'; } catch (e) {}
