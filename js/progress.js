@@ -1130,10 +1130,13 @@
             crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;';
             var backBtn = document.createElement('button');
             backBtn.type = 'button';
-            backBtn.textContent = '← 返回';
-            backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:1px 8px;cursor:pointer;font-size:11px;';
+            backBtn.textContent = '← 返回修改列表';
+            backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:2px 10px;cursor:pointer;font-size:11px;flex:0 0 auto;';
             backBtn.addEventListener('click', function () {
-                revSub = revStack.length ? revStack.pop() : '';
+                dbg('← 修改返回：回根列表');
+                revSub = '';
+                revStack = [];
+                revFilesCache = [];
                 fetchRevSub();
             });
             crumb.appendChild(backBtn);
@@ -1155,6 +1158,7 @@
 
     var revReqId = 0;
     function fetchRevSub() {
+        dbg('📂 修改 fetch subpath=' + (revSub || '(根)'));
         if (!revSub) { renderRev(dom.body); return; }
         var myId = ++revReqId;
         var q = '/api/output_files/' + enc + '?mode=revising&subpath=' + encodeURIComponent(revSub);
@@ -1165,6 +1169,7 @@
                 return;
             }
             revFilesCache = (d && d.files) || [];
+            dbg('修改列表已载：' + revFilesCache.length + ' 个文件');
             if (curTab === 'rev' && revSub) {
                 if (dom.body) { dom.body.innerHTML = ''; renderRev(dom.body); }
             }
@@ -1172,6 +1177,7 @@
     }
 
     function enterRevFolder(fname) {
+        dbg('→ 进入修改文件夹：' + fname);
         revStack.push(revSub);
         revSub = revSub ? (revSub + '/' + fname) : fname;
         revFilesCache = [];
@@ -1180,10 +1186,11 @@
 
     // ===== 交付 Tab（000交付 目录树，与桌面端一致） =====
     var delReqId = 0;
+    // 交付根若只有唯一「000交付」虚拟文件夹：自动进入它，直接展示各版本文件夹（与桌面端一致）
+    var delAutoRooted = false;
     function renderDel(container) {
         container.innerHTML = '';
         if (!delSub) {
-            // 交付根：齐套提示 + 版本文件夹 + 根目录散文件
             var data = got.del || {};
             var folders = data.folders || [];
             var files = data.files || [];
@@ -1204,12 +1211,30 @@
                         sub.style.cssText = 'margin-top:4px;color:#c9a86a;font-size:10px;line-height:1.6;';
                         bads.forEach(function (f) {
                             var missing = (f.missing_episodes || []);
-                            sub.textContent += '· ' + f.name + '：' + f.actual + '/' + f.expected + (missing.length ? '（缺 ' + compactEpList(missing) + '）' : '') + '\n';
+                            // 每项可能是 {episode:65, editor:'xx'} 或纯数字，统一提取集号
+                            var epNums = missing.map(function (x) {
+                                if (x == null) return null;
+                                if (typeof x === 'object') {
+                                    var v = x.episode != null ? x.episode : x.ep;
+                                    return v != null ? parseInt(v, 10) : null;
+                                }
+                                return parseInt(x, 10);
+                            }).filter(function (v) { return v != null && !isNaN(v); });
+                            sub.textContent += '· ' + f.name + '：' + f.actual + '/' + f.expected + (epNums.length ? '（缺 ' + compactEpList(epNums) + ' 集）' : '') + '\n';
                         });
                         okBanner.appendChild(sub);
                     }
                 }
                 container.appendChild(okBanner);
+            }
+            // 若根只有唯一 000交付 且尚未自动进入 → 立即自动进入（否则用户看到的是空壳"000交付"行）
+            var onlyRoot = folders.length === 1 && folders[0].name === '000交付' && !delAutoRooted;
+            if (onlyRoot) {
+                delAutoRooted = true;
+                dbg('📦 自动进入 000交付 …');
+                enterDelFolder('000交付');
+                container.innerHTML += '<div style="padding:14px;text-align:center;color:var(--muted,#888);font-size:12px">⏳ 加载 000交付 …</div>';
+                return;
             }
             if (!folders.length && !files.length) {
                 container.innerHTML += '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">暂无交付文件夹（项目未建 000交付？）</div>';
@@ -1235,13 +1260,23 @@
             // 已进入交付子文件夹：面包屑 + 内容
             var crumb = document.createElement('div');
             crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;flex-wrap:wrap;';
+            var crumb = document.createElement('div');
+            crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;flex-wrap:wrap;';
             var backBtn = document.createElement('button');
             backBtn.type = 'button';
-            backBtn.textContent = '← 返回';
-            backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:1px 8px;cursor:pointer;font-size:11px;';
+            // 在 000交付 版本列表层（刚自动进入）不显示返回；更深层才需要回退
+            var isRootLevel = (delSub === '000交付');
+            if (isRootLevel) {
+                backBtn.style.display = 'none';
+            }
+            backBtn.textContent = '← 返回版本列表';
+            backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:2px 10px;cursor:pointer;font-size:11px;flex:0 0 auto;';
             backBtn.addEventListener('click', function () {
-                delSub = delStack.length ? delStack.pop() : '';
+                dbg('← 交付返回：回 000交付 版本列表');
+                delStack = [];
                 delFilesCache = [];
+                // 直接回到 000交付 版本列表层（省一次根请求）
+                delSub = '000交付';
                 fetchDelSub();
             });
             crumb.appendChild(backBtn);
@@ -1289,6 +1324,7 @@
     }
 
     function enterDelFolder(fname) {
+        dbg('→ 进入交付文件夹：' + fname + '（当前 delSub=' + delSub + '）');
         delStack.push(delSub);
         delSub = delSub ? (delSub + '/' + fname) : fname;
         delFilesCache = [];
@@ -1296,6 +1332,7 @@
     }
 
     function fetchDelSub() {
+        dbg('📦 交付 fetch subpath=' + (delSub || '(根)'));
         var q = '/api/output_files/' + enc + '?mode=delivery';
         if (delSub) q += '&subpath=' + encodeURIComponent(delSub);
         var myId = ++delReqId;

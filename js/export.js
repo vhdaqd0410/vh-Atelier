@@ -26,6 +26,8 @@
   var btnGo = document.getElementById('btn-go');
   var btnStop = document.getElementById('btn-stop');
   var btnRefresh = document.getElementById('btn-refresh');
+  var btnRefreshSeq = document.getElementById('btn-refresh-seq');
+  var btnOpenOut = document.getElementById('btn-open-out');
   var statusDot = document.getElementById('status-dot');
   var progressArea = document.getElementById('progress-area');
   var progressFill = document.getElementById('progress-fill');
@@ -54,6 +56,7 @@
   var versions = [];     // 交付版本列表（每个版本独立配置）
   var uidSeq = 0;
   var manifest = [];    // 交付清单（运行期收集，导出完生成 CSV）  
+  var lastOutputDir = '';  // 最近一次成功导出的输出目录（供「打开输出目录」按钮用）
   // ── 交付模板状态 ──
   var templates = [];        // [{ id, name, updatedAt, snapshot }]  snapshot = { deliveryRoot, manifest, subtitleEnabled, subtitleDir, versions }
   var activeTplId = '';      // 当前套用的模板 id；'' = 自由配置
@@ -1038,6 +1041,11 @@
         var allOk = (doneSeq === totalSeq && totalSeq > 0);
         setLog('════ 批量结束：成功 ' + doneSeq + ' / 失败 ' + (totalSeq - doneSeq) + ' ════', allOk ? 'success' : 'warn');
         if (chkManifest.checked) writeManifest(manifest);
+        // 导出全部成功：记录首个启用版本输出目录，供「打开输出目录」按钮用
+        try {
+          var evsDone = enabledVersions();
+          if (evsDone.length && evsDone[0].outDir) lastOutputDir = evsDone[0].outDir;
+        } catch (_) {}
       }
     } catch (e) {
       setLog('流程中断：' + e.message, 'error');
@@ -1192,6 +1200,38 @@
     await refreshAudioTracks();
     renderVersions();
   });
+
+  // 「🔄 刷新序列」：只刷新序列列表（不影响其它配置）
+  if (btnRefreshSeq) {
+    btnRefreshSeq.addEventListener('click', async function () {
+      setLog('刷新序列列表…');
+      try { await refreshSequences(); setLog('序列已刷新：' + allSeqs.length + ' 个', 'success'); }
+      catch (e) { setLog('刷新序列失败：' + e.message, true); }
+    });
+  }
+
+  // 「📂 打开输出目录」：打开最近一次导出的输出目录；未导出过则打开当前启用的第一个版本目录
+  function openOutputDir() {
+    var dir = lastOutputDir;
+    if (!dir) {
+      try {
+        var evs0 = enabledVersions();
+        if (evs0.length) dir = evs0[0].outDir || '';
+      } catch (_) {}
+    }
+    if (!dir) { setLog('还没有输出目录（先配置版本输出目录，或完成一次导出）', true); return; }
+    if (!fs.existsSync(dir)) { setLog('输出目录不存在：' + dir, true); return; }
+    try {
+      var cp = require('child_process');
+      cp.exec('explorer "' + dir + '"', { windowsHide: true }, function () {});
+      setLog('已打开输出目录：' + dir, 'success');
+    } catch (e) {
+      setLog('打开失败：' + e.message, true);
+    }
+  }
+  if (btnOpenOut) {
+    btnOpenOut.addEventListener('click', openOutputDir);
+  }
 
   // 版本卡片内部 input/change 实时同步到 versions
   versionsWrap.addEventListener('input', function (e) {
