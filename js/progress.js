@@ -6,6 +6,7 @@
     var path = require('path');
     var os = require('os');
     var child_process = require('child_process');
+    var csInterface = (typeof window.__adobe_cep__ !== 'undefined') ? new CSInterface() : null;
 
     var WB_PORT = 8089;
     var WB_BASE = 'http://127.0.0.1:' + WB_PORT;
@@ -430,6 +431,16 @@
                 openScriptForProject(p.name || '');
             });
             openRow.appendChild(scriptBtn);
+            var impBtn = document.createElement('button');
+            impBtn.type = 'button';
+            impBtn.className = 'prg-open-btn prg-open-main';
+            impBtn.textContent = '📥 导入素材';
+            impBtn.title = '把该项目的本地素材(01原素材)一键导入当前 PR 工程素材箱';
+            impBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                importMaterialsForProject(p.name || '');
+            });
+            openRow.appendChild(impBtn);
             var openBtn = document.createElement('button');
             openBtn.type = 'button';
             openBtn.className = 'prg-open-btn';
@@ -610,6 +621,40 @@
             } else {
                 el.statusText.textContent = (data && data.message) || '打开失败';
             }
+        });
+    }
+
+    // 导入素材到当前 PR 工程素材箱（复用 host.jsx 的 wsImportToBinStr）
+    function importMaterialsForProject(projectName) {
+        if (!csInterface) {
+            el.statusText.textContent = '当前非 PR 环境，无法导入素材箱';
+            return;
+        }
+        el.statusText.textContent = '正在获取「' + projectName + '」的本地素材...';
+        apiGet('/api/project/' + encodeURIComponent(projectName) + '/local_materials', function (err, d) {
+            if (err) { el.statusText.textContent = '获取素材失败：' + err.message; return; }
+            var files = (d && d.files) || [];
+            if (!files.length) {
+                el.statusText.textContent = '该项目暂无本地素材（可能尚未创建本地项目）';
+                return;
+            }
+            el.statusText.textContent = '正在导入 ' + files.length + ' 个素材到 PR 素材箱...';
+            var payloadJson = JSON.stringify(files);
+            csInterface.evalScript('wsImportToBinPayload = ' + payloadJson + ';', function () {
+                csInterface.evalScript('wsImportToBinStr("原素材")', function (result) {
+                    try {
+                        var r = JSON.parse(result);
+                        if (r && r.ok) {
+                            var names = r.imported || [];
+                            el.statusText.textContent = '✅ 已导入 ' + names.length + ' 个素材到「原素材」素材箱';
+                        } else {
+                            el.statusText.textContent = (r && r.error) || '导入失败';
+                        }
+                    } catch (e) {
+                        el.statusText.textContent = '导入解析失败: ' + result;
+                    }
+                });
+            });
         });
     }
 
