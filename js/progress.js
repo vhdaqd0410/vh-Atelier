@@ -1162,7 +1162,7 @@
         ttl.style.cssText = 'flex:1;font-size:12px;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         ttl.textContent = '▶ ' + (mode === 'revising' ? '📝 ' : '🎬 ') + fileName;
         head.appendChild(ttl);
-        // 本地播放器按钮
+        // 本地播放器按钮（手动，不自动跳）
         var localBtn = document.createElement('button');
         localBtn.type = 'button';
         localBtn.textContent = '📺 本地播放器';
@@ -1177,28 +1177,60 @@
         head.appendChild(xBtn);
         box.appendChild(head);
 
-        // 提示条
+        // 提示条：加载状态实时可见
         var loadTip = document.createElement('div');
         loadTip.style.cssText = 'text-align:center;padding:5px;font-size:11px;color:#aaa;background:#151515;border-bottom:1px solid #222;min-height:16px;';
-        loadTip.textContent = '⏳ 正在加载视频流…';
+        loadTip.textContent = '⏳ 正在加载视频流（NAS 首帧较慢，请稍候）…';
         box.appendChild(loadTip);
 
         // 视频
         var video = document.createElement('video');
         video.controls = true;
+        video.preload = 'auto';
         video.style.cssText = 'display:block;width:100%;max-height:52vh;background:#000;';
         box.appendChild(video);
+
+        // 进度提示（实时反映加载进度，避免“看起来没反应”）
+        var slowTimer = null;
+        var lastLoaded = 0;
+        function showLoadState(force) {
+            if (openedLocal) return;
+            var ready = 0, net = 0, loaded = 0, total = 0;
+            try { ready = video.readyState; net = video.networkState; } catch (e) {}
+            try { loaded = video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0; } catch (e) {}
+            try { total = video.duration || 0; } catch (e) {}
+            if (force || (ready < 2 && net !== 3)) {
+                var sec = total > 0 ? Math.round(loaded) + 's/' + Math.round(total) + 's' : (loaded > 0 ? '已缓冲 ' + Math.round(loaded) + 's' : '等待首帧…');
+                loadTip.textContent = '⏳ 加载中… ' + sec + '（网络盘首次较慢，一般 5~15 秒）';
+                lastLoaded = loaded;
+            }
+        }
+        // 每 800ms 刷新一次加载状态
+        slowTimer = setInterval(function () { showLoadState(false); }, 800);
 
         overlay.appendChild(box);
         document.body.appendChild(overlay);
         _videoOverlay = overlay;
         var fallbackTimer = null;
         var openedLocal = false;
+        var pendingPlay = false;
+
+        function clearTimers() {
+            if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+            if (slowTimer) { clearInterval(slowTimer); slowTimer = null; }
+        }
+
+        function tryPlay() {
+            try {
+                var pp = video.play();
+                if (pp && pp.catch) pp.catch(function (e) { pendingPlay = true; });
+            } catch (e) { pendingPlay = true; }
+        }
 
         function openInLocalPlayer() {
             if (openedLocal) return;
             openedLocal = true;
-            if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+            clearTimers();
             try { video.pause(); } catch (e) {}
             try { el.statusText.textContent = '正在用本地播放器打开：' + fileName; } catch (e) {}
             apiPost('/api/preview/open_local', { project_name: proj, filename: fileName, mode: mode, subpath: subpath }, function (err, d) {
@@ -1216,32 +1248,66 @@
         // 视频加载成功
         video.addEventListener('loadeddata', function () {
             if (openedLocal) return;
-            if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
-            loadTip.textContent = '';
+            clearTimers();
+            loadTip.textContent = '✅ 已就绪';
             try { el.statusText.textContent = '播放中：' + fileName; } catch (e) {}
-            try { var pp = video.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) {}
+            tryPlay();
         });
-        // 视频加载失败 → 明确提示并给本地播放器兜底
+        video.addEventListener('canplay', function () {
+            if (openedLocal) return;
+            if (pendingPlay) { pendingPlay = false; tryPlay(); }
+        });
+        // 加载失败：明确展示错误码，保留重试与本地播放器选项（不自动跳走）
         video.addEventListener('error', function () {
             if (openedLocal) return;
-            loadTip.textContent = '⚠️ 内嵌播放失败（错误码 ' + (video.error ? video.error.code : '?') + '），自动用本地播放器打开…';
-            openInLocalPlayer();
+            clearTimers();
+            var code = video.error ? video.error.code : '?';
+            var hint = code === 2 ? '（网络中断/连接被拒）' : code === 3 ? '（解码失败：文件可能损坏或编码不支持）' : code === 4 ? '（该地址不支持播放：格式或跨域受限）' : '';
+            loadTip.textContent = '⚠️ 内嵌播放失败（错误码 ' + code + '）' + hint + '，可点右侧「重试」，或「📺 本地播放器」直接播';
+            try { el.statusText.textContent = '内嵌播放失败（' + code + '）：' + fileName; } catch (e) {}
         });
+        // 开始加载（手势后显式 play）
         video.src = url;
-        try { var pp = video.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) {}
+        video.load();
+        tryPlay();
 
-        // 超时兜底：4 秒没加载出画面 → 自动转本地播放器
+        // 超时兜底：NAS 首次加载慢，放宽到 15 秒；仍没就绪 → 只提示不自动跳，附手动重试
         fallbackTimer = setTimeout(function () {
             if (openedLocal) return;
             var rs = 0; try { rs = video.readyState; } catch (e) {}
-            if (rs < 2) {  // 还没 enough data
-                loadTip.textContent = '⏱ 内嵌加载超时，自动用本地播放器打开…';
-                openInLocalPlayer();
+            if (rs < 2) {
+                clearTimers();
+                loadTip.textContent = '⏱ 15 秒仍未就绪（网络盘慢或服务繁忙）。点「重试」再试，或「📺 本地播放器」直接播。';
             }
-        }, 4000);
+        }, 15000);
+
+        // 重试按钮：重新加载同一地址
+        var retryBtn = document.createElement('button');
+        retryBtn.type = 'button';
+        retryBtn.textContent = '🔄 重试';
+        retryBtn.title = '重新加载视频流（首次连接慢时可多点几次）';
+        retryBtn.style.cssText = 'background:none;border:1px solid #444;color:#d9a05b;border-radius:4px;padding:1px 8px;cursor:pointer;font-size:11px;';
+        retryBtn.addEventListener('click', function () {
+            clearTimers();
+            openedLocal = false;
+            loadTip.textContent = '⏳ 重新加载中…';
+            try { video.pause(); } catch (e) {}
+            try { video.removeAttribute('src'); video.load(); } catch (e) {}
+            slowTimer = setInterval(function () { showLoadState(false); }, 800);
+            fallbackTimer = setTimeout(function () {
+                if (openedLocal) return;
+                var rs = 0; try { rs = video.readyState; } catch (e) {}
+                if (rs < 2) {
+                    clearTimers();
+                    loadTip.textContent = '⏱ 仍未就绪。点「重试」再试，或「📺 本地播放器」直接播。';
+                }
+            }, 15000);
+            try { video.src = url; video.load(); tryPlay(); } catch (e) { loadTip.textContent = '重试失败：' + (e && e.message); }
+        });
+        head.insertBefore(retryBtn, xBtn);
 
         var closeIt = function () {
-            if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+            clearTimers();
             closeVideoPlayer();
         };
         xBtn.addEventListener('click', closeIt);
