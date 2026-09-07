@@ -744,393 +744,391 @@
     }
 
     function openProjectDetail(p) {
-        var projectName = p.name || '';
-        if (_detailOverlay) { _detailOverlay.remove(); _detailOverlay = null; }
+    var projectName = p.name || '';
+    if (_detailOverlay) { _detailOverlay.remove(); _detailOverlay = null; }
 
-        var overlay = document.createElement('div');
-        overlay.className = 'prg-modal-mask';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
-        var box = document.createElement('div');
-        box.style.cssText = 'background:var(--panel,#1e1e1e);border:1px solid var(--border,#3a3a3a);border-radius:10px;width:400px;max-width:94vw;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.4);';
+    var overlay = document.createElement('div');
+    overlay.className = 'prg-modal-mask';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--panel,#1e1e1e);border:1px solid var(--border,#3a3a3a);border-radius:10px;width:400px;max-width:94vw;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.4);';
 
-        // 头部
-        var head = document.createElement('div');
-        head.style.cssText = 'padding:9px 12px;background:var(--panel2,#242424);border-bottom:1px solid var(--border,#333);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
-        var title = document.createElement('span');
-        title.style.cssText = 'flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--text,#e8e8e8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-        title.textContent = projectName;
-        title.title = projectName;
-        head.appendChild(title);
-        var stateTag = document.createElement('span');
-        stateTag.className = 'prg-state ' + stateClass(p.custom_status || '');
-        stateTag.textContent = p.custom_status || '';
-        head.appendChild(stateTag);
-        box.appendChild(head);
+    // 头部
+    var head = document.createElement('div');
+    head.style.cssText = 'padding:9px 12px;background:var(--panel2,#242424);border-bottom:1px solid var(--border,#333);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+    var title = document.createElement('span');
+    title.style.cssText = 'flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--text,#e8e8e8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    title.textContent = projectName;
+    title.title = projectName;
+    head.appendChild(title);
+    var stateTag = document.createElement('span');
+    stateTag.className = 'prg-state ' + stateClass(p.custom_status || '');
+    stateTag.textContent = p.custom_status || '';
+    head.appendChild(stateTag);
+    box.appendChild(head);
 
-        // 内容（tab + 列表）
-        var content = document.createElement('div');
-        content.style.cssText = 'flex:1;overflow-y:auto;min-height:0;padding:10px 12px;';
-        content.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted,#999);font-size:12px">⏳ 加载中…</div>';
-        box.appendChild(content);
+    // 内容（tab + 列表）
+    var content = document.createElement('div');
+    content.style.cssText = 'flex:1;overflow-y:auto;min-height:0;padding:10px 12px;';
+    content.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted,#999);font-size:12px">⏳ 加载中…</div>';
+    box.appendChild(content);
 
-        // 底部
-        var foot = document.createElement('div');
-        foot.style.cssText = 'padding:8px 12px;border-top:1px solid var(--border,#333);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;';
-        var openG = document.createElement('button');
-        openG.type = 'button';
-        openG.textContent = '📁 组内NAS';
-        openG.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;';
-        if (p.group_path) {
-            openG.addEventListener('click', function () { openProjFolder(projectName, 'group_root'); });
-            foot.appendChild(openG);
+    // 底部
+    var foot = document.createElement('div');
+    foot.style.cssText = 'padding:8px 12px;border-top:1px solid var(--border,#333);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;';
+    var openG = document.createElement('button');
+    openG.type = 'button';
+    openG.textContent = '📁 组内NAS';
+    openG.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;';
+    if (p.group_path) {
+        openG.addEventListener('click', function () { openProjFolder(projectName, 'group_root'); });
+        foot.appendChild(openG);
+    }
+    var openP = document.createElement('button');
+    openP.type = 'button';
+    openP.textContent = '🏢 制作部';
+    openP.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;';
+    if (p.production_path) {
+        openP.addEventListener('click', function () { openProjFolder(projectName, 'prod'); });
+        foot.appendChild(openP);
+    }
+    var cls = document.createElement('button');
+    cls.type = 'button';
+    cls.textContent = '关闭';
+    cls.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 12px;cursor:pointer;font-size:12px;margin-left:auto;';
+    foot.appendChild(cls);
+    box.appendChild(foot);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    _detailOverlay = overlay;
+    var closeAll = function () { if (overlay.parentNode) overlay.remove(); if (_detailOverlay === overlay) _detailOverlay = null; };
+    cls.addEventListener('click', closeAll);
+    overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) closeAll(); });
+
+    // ===== 数据与状态（函数顶层，不随渲染重建） =====
+    var enc = encodeURIComponent(projectName);
+    var got = { ep: null, edit: null, rev: null };   // null=未返回，[] / {}=空结果
+    var curTab = 'miss';          // 当前 tab
+    var revSub = '';              // 修改子路径（空=修改根）
+    var revStack = [];            // 导航栈
+    var revFilesCache = [];       // 当前修改文件夹内文件缓存
+
+    // DOM 引用（renderContent 构建后赋值）
+    var dom = { ov: null, tabMiss: null, tabEdit: null, tabRev: null, body: null };
+
+    // ===== 工具 =====
+    function fileCount(d) {
+        if (!d) return 0;
+        if (Array.isArray(d)) return d.length;
+        return (d.files || []).length + (d.folders || []).length;
+    }
+
+    // 数据就绪后统一入口：首次建骨架；数据各自到达刷新对应 tab 内容
+    function dataReady() {
+        var isFirst = !dom.body;
+        if (isFirst) {
+            if (got.ep) renderContent();   // ep 就绪即可建骨架
         }
-        var openP = document.createElement('button');
-        openP.type = 'button';
-        openP.textContent = '🏢 制作部';
-        openP.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;';
-        if (p.production_path) {
-            openP.addEventListener('click', function () { openProjFolder(projectName, 'prod'); });
-            foot.appendChild(openP);
-        }
-        var cls = document.createElement('button');
-        cls.type = 'button';
-        cls.textContent = '关闭';
-        cls.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 12px;cursor:pointer;font-size:12px;margin-left:auto;';
-        foot.appendChild(cls);
-        box.appendChild(foot);
-        overlay.appendChild(box);
-        document.body.appendChild(overlay);
-        _detailOverlay = overlay;
-        var closeAll = function () { if (overlay.parentNode) overlay.remove(); if (_detailOverlay === overlay) _detailOverlay = null; };
-        cls.addEventListener('click', closeAll);
-        overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) closeAll(); });
+        if (!dom.body) return;
+        updateTabCounts();
+        // 当前 tab：数据变化时刷新。miss 只依赖 ep（首次已渲染，跳过）；edit/rev 各自依赖自身数据
+        if (curTab === 'miss') return;
+        if (curTab === 'edit' && got.edit !== null) renderCurrent();
+        else if (curTab === 'rev' && got.rev !== null) renderCurrent();
+    }
 
-        // 并行拉数据
-        var enc = encodeURIComponent(projectName);
-        var got = { ep: null, edit: null, rev: null };
-        var curTabKey = 'miss';   // 当前激活 tab（提升到本层，供 edit/rev 迟到时判断补渲染）
-        // ep 就绪先渲染主内容（缺集），edit/rev 后到则按需补渲染对应 tab
-        function maybeRender() {
-            if (!got.ep) return;
-            renderContent();
+    function updateTabCounts() {
+        if (!dom.tabMiss || !dom.tabEdit || !dom.tabRev) return;
+        var missingN = got.ep && got.ep.ok ? (got.ep.missing || []).length : 0;
+        dom.tabMiss.textContent = '缺集 ' + missingN;
+        dom.tabEdit.textContent = '🎬 成片 ' + fileCount(got.edit);
+        dom.tabRev.textContent = '📝 修改 ' + fileCount(got.rev);
+    }
+
+    function renderCurrent() {
+        if (!dom.body) return;
+        if (curTab === 'miss') { dom.body.innerHTML = ''; renderMiss(dom.body); }
+        else if (curTab === 'edit') { dom.body.innerHTML = ''; renderEditFiles(dom.body); }
+        else { dom.body.innerHTML = ''; renderRev(dom.body); }
+    }
+
+    function renderContent() {
+        var epData = got.ep;
+        content.innerHTML = '';
+        if (!epData || !epData.ok) {
+            content.innerHTML = '<div style="padding:18px;text-align:center;color:#ff9a9a;font-size:12px">读取失败（工作台未运行？）</div>';
+            return;
         }
-        apiGet('/api/project/' + enc + '/episodes_status', function (err, d) { got.ep = err ? { ok: false } : d; maybeRender(); });
-        apiGet('/api/output_files/' + enc + '?mode=editing', function (err, d) {
-            got.edit = err ? [] : d;
-            if (got.ep && curTabKey === 'edit') renderContent();  // 正在看成片：补渲染
+        var total = parseInt(epData.total, 10) || 0;
+        var cur = parseInt(epData.current_count, 10) || 0;
+        var pct = total > 0 ? Math.min(100, Math.round(cur / total * 100)) : 0;
+
+        // 概览条
+        var ov = document.createElement('div');
+        ov.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--text,#ddd);';
+        var barWrap = document.createElement('div');
+        barWrap.style.cssText = 'flex:1;height:6px;background:#1a1a1a;border-radius:3px;overflow:hidden;';
+        var bar = document.createElement('div');
+        bar.style.cssText = 'height:100%;width:' + pct + '%;background:' + (pct >= 100 ? '#3d9a50' : 'var(--accent,#537d96)') + ';border-radius:3px;';
+        barWrap.appendChild(bar);
+        ov.appendChild(barWrap);
+        var ovTxt = document.createElement('span');
+        ovTxt.style.cssText = 'flex:0 0 auto;font-weight:600;';
+        ovTxt.textContent = cur + '/' + total + ' 集 · ' + pct + '%';
+        ov.appendChild(ovTxt);
+        content.appendChild(ov);
+
+        // tab 条
+        var tabs = document.createElement('div');
+        tabs.style.cssText = 'display:flex;gap:4px;border-bottom:1px solid var(--border,#333);margin-bottom:8px;';
+        function mkTab(txt) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = txt;
+            b.style.cssText = 'background:none;border:none;border-bottom:2px solid transparent;color:var(--muted,#999);padding:4px 10px;cursor:pointer;font-size:12px;';
+            return b;
+        }
+        dom.tabMiss = mkTab('缺集 0');
+        dom.tabEdit = mkTab('🎬 成片 0');
+        dom.tabRev = mkTab('📝 修改 0');
+        tabs.appendChild(dom.tabMiss);
+        tabs.appendChild(dom.tabEdit);
+        tabs.appendChild(dom.tabRev);
+        content.appendChild(tabs);
+
+        var body = document.createElement('div');
+        body.style.cssText = 'min-height:120px;max-height:46vh;overflow-y:auto;';
+        content.appendChild(body);
+        dom.body = body;
+        dom.ov = ov;
+
+        dom.tabMiss.addEventListener('click', function () { switchTab('miss'); });
+        dom.tabEdit.addEventListener('click', function () { switchTab('edit'); });
+        dom.tabRev.addEventListener('click', function () { switchTab('rev'); });
+
+        updateTabCounts();
+        renderCurrent();
+    }
+
+    function switchTab(key) {
+        curTab = key;
+        var map = { miss: dom.tabMiss, edit: dom.tabEdit, rev: dom.tabRev };
+        var keys = ['miss', 'edit', 'rev'];
+        for (var i = 0; i < 3; i++) {
+            var b = map[keys[i]];
+            if (!b) continue;
+            b.style.borderBottomColor = (keys[i] === key) ? 'var(--accent,#537d96)' : 'transparent';
+            b.style.color = (keys[i] === key) ? 'var(--text,#e8e8e8)' : 'var(--muted,#999)';
+        }
+        if (!dom.body) return;
+        dom.body.innerHTML = '';
+        if (key === 'miss') renderMiss(dom.body);
+        else if (key === 'edit') renderEditFiles(dom.body);
+        else renderRev(dom.body);
+    }
+
+    // ===== 缺集 =====
+    function renderMiss(container) {
+        var epData = got.ep;
+        var missing = (epData && epData.missing) || [];
+        var editorPlan = (epData && epData.editor_plan) || {};
+        if (missing.length === 0) {
+            container.innerHTML = '<div style="padding:16px;text-align:center;color:#7fd68b;font-size:12px">✅ 已全部完成，无缺集</div>';
+            return;
+        }
+        var groups = {};
+        missing.forEach(function (ep) {
+            var ed = editorPlan[String(ep)] || editorPlan[ep] || '未分配';
+            if (!groups[ed]) groups[ed] = [];
+            groups[ed].push(parseInt(ep, 10));
         });
-        apiGet('/api/output_files/' + enc + '?mode=revising', function (err, d) {
-            got.rev = err ? { files: [], folders: [] } : d;
-            if (got.ep && curTabKey === 'rev') renderContent();  // 正在看修改：补渲染
+        var keys = Object.keys(groups);
+        container.innerHTML = '';
+        keys.forEach(function (ed) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:baseline;gap:8px;padding:4px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;';
+            var name = document.createElement('span');
+            name.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-weight:600;';
+            name.textContent = ed;
+            var eps = document.createElement('span');
+            eps.style.cssText = 'flex:1;color:var(--text,#ccc);word-break:break-all;';
+            eps.textContent = '缺 ' + compactEpList(groups[ed]);
+            row.appendChild(name);
+            row.appendChild(eps);
+            container.appendChild(row);
         });
+    }
 
-        function renderContent() {
-            var epData = got.ep;
-            if (!epData || !epData.ok) {
-                content.innerHTML = '<div style="padding:18px;text-align:center;color:#ff9a9a;font-size:12px">读取失败（工作台未运行？）</div>';
+    // ===== 行构建 =====
+    function mkFileRow(container, cfg) {
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;cursor:pointer;';
+        if (cfg.title) row.title = cfg.title;
+        if (cfg.onClick) row.addEventListener('click', cfg.onClick);
+        var ic = document.createElement('span');
+        ic.style.cssText = 'flex:0 0 auto;';
+        ic.textContent = cfg.icon || '📄';
+        row.appendChild(ic);
+        var nmEl = document.createElement('span');
+        nmEl.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text,#ddd);';
+        nmEl.textContent = cfg.name;
+        nmEl.title = cfg.name;
+        row.appendChild(nmEl);
+        var metaEl = document.createElement('span');
+        metaEl.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-size:11px;';
+        if (cfg.meta) { metaEl.textContent = cfg.meta; metaEl.title = cfg.meta; }
+        row.appendChild(metaEl);
+        var szEl = document.createElement('span');
+        szEl.style.cssText = 'flex:0 0 auto;color:var(--muted,#777);font-size:10px;';
+        if (cfg.size) szEl.textContent = cfg.size;
+        row.appendChild(szEl);
+        if (cfg.openDir) {
+            var ob = document.createElement('button');
+            ob.type = 'button';
+            ob.textContent = '📂';
+            ob.title = '在文件管理器中打开所在目录';
+            ob.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border,#555);border-radius:3px;color:var(--accent,#7aa7c7);font-size:10px;padding:0 5px;cursor:pointer;line-height:16px;';
+            ob.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (cfg.openDir) cfg.openDir();
+            });
+            row.appendChild(ob);
+        }
+        container.appendChild(row);
+    }
+
+    function renderVideoRows(container, files, mode, subpath) {
+        if (!files || !files.length) {
+            var t = mode === 'revising'
+                ? (subpath ? '「' + subpath + '」内暂无视频文件' : '修改根目录暂无散文件')
+                : '暂无成片文件';
+            container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">' + t + '</div>';
+            return;
+        }
+        container.innerHTML = '';
+        files.forEach(function (f) {
+            var nm = f.name || f;
+            mkFileRow(container, {
+                icon: mode === 'revising' ? '✏️' : '🎬',
+                name: nm,
+                title: (f.path || '') + '\n点击播放，📂 打开所在目录',
+                meta: f.editor || '',
+                size: f.size_mb ? Math.round(f.size_mb) + 'MB' : '',
+                onClick: function () { playVideo(projectName, nm, mode, subpath || ''); },
+                openDir: function () {
+                    var target = f.path || '';
+                    if (target) openFolderPath(target);
+                }
+            });
+        });
+    }
+
+    // ===== 成片 Tab =====
+    function renderEditFiles(container) {
+        var files = Array.isArray(got.edit) ? got.edit : ((got.edit && got.edit.files) || []);
+        renderVideoRows(container, files, 'editing', '');
+    }
+
+    // ===== 修改 Tab =====
+    function renderRev(container) {
+        container.innerHTML = '';
+        if (!revSub) {
+            // 修改根：列文件夹
+            var folders = (got.rev && got.rev.folders) || [];
+            var files = (got.rev && got.rev.files) || [];
+            if (!folders.length && !files.length) {
+                container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">暂无修改文件夹</div>';
                 return;
             }
-            var total = parseInt(epData.total, 10) || 0;
-            var cur = parseInt(epData.current_count, 10) || 0;
-            var pct = total > 0 ? Math.min(100, Math.round(cur / total * 100)) : 0;
-            var missing = epData.missing || [];
-            var editorPlan = epData.editor_plan || {};
-
-            // 概览条
-            var ov = document.createElement('div');
-            ov.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--text,#ddd);';
-            var barWrap = document.createElement('div');
-            barWrap.style.cssText = 'flex:1;height:6px;background:#1a1a1a;border-radius:3px;overflow:hidden;';
-            var bar = document.createElement('div');
-            bar.style.cssText = 'height:100%;width:' + pct + '%;background:' + (pct >= 100 ? '#3d9a50' : 'var(--accent,#537d96)') + ';border-radius:3px;';
-            barWrap.appendChild(bar);
-            ov.appendChild(barWrap);
-            var ovTxt = document.createElement('span');
-            ovTxt.style.cssText = 'flex:0 0 auto;font-weight:600;';
-            ovTxt.textContent = cur + '/' + total + ' 集 · ' + pct + '%';
-            ov.appendChild(ovTxt);
-            content.appendChild(ov);
-
-            // tab 条
-            var tabs = document.createElement('div');
-            tabs.style.cssText = 'display:flex;gap:4px;border-bottom:1px solid var(--border,#333);margin-bottom:8px;';
-            var mkTab = function (txt, key) {
-                var b = document.createElement('button');
-                b.type = 'button';
-                b.textContent = txt;
-                b.style.cssText = 'background:none;border:none;border-bottom:2px solid transparent;color:var(--muted,#999);padding:4px 10px;cursor:pointer;font-size:12px;';
-                return b;
-            };
-            var tabMiss = mkTab('缺集 ' + missing.length, 'miss');
-            var tabEdit = mkTab('🎬 成片 ' + fileCount(got.edit), 'edit');
-            var tabRev = mkTab('📝 修改 ' + fileCount(got.rev), 'rev');
-            tabs.appendChild(tabMiss);
-            tabs.appendChild(tabEdit);
-            tabs.appendChild(tabRev);
-            content.appendChild(tabs);
-
-            var body = document.createElement('div');
-            body.style.cssText = 'min-height:120px;max-height:46vh;overflow-y:auto;';
-            content.appendChild(body);
-
-            tabMiss.addEventListener('click', function () { show('miss'); });
-            tabEdit.addEventListener('click', function () { show('edit'); });
-            tabRev.addEventListener('click', function () { show('rev'); });
-
-            function fileCount(d) {
-                if (!d) return 0;
-                if (Array.isArray(d)) return d.length;
-                return (d.files || []).length + (d.folders || []).length;
-            }
-            function listFiles(d) {
-                if (!d) return [];
-                if (Array.isArray(d)) return d;
-                return (d.files || []).concat(d.folders || []);
-            }
-            // 缺集：按剪辑师分组
-            function renderMiss(container) {
-                if (missing.length === 0) {
-                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#7fd68b;font-size:12px">✅ 已全部完成，无缺集</div>';
-                    return;
-                }
-                var groups = {};
-                missing.forEach(function (ep) {
-                    var ed = editorPlan[String(ep)] || editorPlan[ep] || '未分配';
-                    if (!groups[ed]) groups[ed] = [];
-                    groups[ed].push(parseInt(ep, 10));
+            folders.forEach(function (fd) {
+                var fname = fd.name || '';
+                mkFileRow(container, {
+                    icon: '📁',
+                    name: fname,
+                    title: (fd.abs_path || '') + '\n点击进入查看集数，📂 打开目录',
+                    onClick: function () { enterRevFolder(fname); },
+                    openDir: function () { if (fd.abs_path) openFolderPath(fd.abs_path); }
                 });
-                var keys = Object.keys(groups);
-                container.innerHTML = '';
-                keys.forEach(function (ed) {
-                    var row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:baseline;gap:8px;padding:4px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;';
-                    var name = document.createElement('span');
-                    name.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-weight:600;';
-                    name.textContent = ed;
-                    var eps = document.createElement('span');
-                    eps.style.cssText = 'flex:1;color:var(--text,#ccc);word-break:break-all;';
-                    eps.textContent = '缺 ' + compactEpList(groups[ed]);
-                    row.appendChild(name);
-                    row.appendChild(eps);
-                    container.appendChild(row);
-                });
+            });
+            // 修改根下的散文件（罕见）——仅在有值时追加，空时不显示误导性空态
+            if (files.length) renderVideoRows(container, files, 'revising', '');
+        } else {
+            // 已进入修改文件夹：面包屑 + 集数视频
+            var crumb = document.createElement('div');
+            crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;';
+            var backBtn = document.createElement('button');
+            backBtn.type = 'button';
+            backBtn.textContent = '← 返回';
+            backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:1px 8px;cursor:pointer;font-size:11px;';
+            backBtn.addEventListener('click', function () {
+                revSub = revStack.length ? revStack.pop() : '';
+                fetchRevSub();
+            });
+            crumb.appendChild(backBtn);
+            var crumbTxt = document.createElement('span');
+            crumbTxt.style.cssText = 'color:var(--muted,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            crumbTxt.textContent = '📁 ' + revSub;
+            crumbTxt.title = revSub;
+            crumb.appendChild(crumbTxt);
+            container.appendChild(crumb);
+            if (revFilesCache.length) {
+                renderVideoRows(container, revFilesCache, 'revising', revSub);
+            } else {
+                // 还没有缓存（刚进入/返回）：先显示加载中并拉取
+                container.innerHTML += '<div style="padding:14px;text-align:center;color:var(--muted,#888);font-size:12px">⏳ 加载集数…</div>';
+                fetchRevSub();
             }
-            // ---- 状态：修改文件夹导航 ----------------
-            var revSub = '';          // 当前修改子路径（空 = 修改根）
-            var revStack = [];        // 进入过的子路径栈
-
-            function show(key) {
-                curTabKey = key;
-                var tabs2 = [tabMiss, tabEdit, tabRev];
-                var keys = ['miss', 'edit', 'rev'];
-                for (var i = 0; i < 3; i++) {
-                    tabs2[i].style.borderBottomColor = (keys[i] === key) ? 'var(--accent,#537d96)' : 'transparent';
-                    tabs2[i].style.color = (keys[i] === key) ? 'var(--text,#e8e8e8)' : 'var(--muted,#999)';
-                }
-                body.innerHTML = '';
-                if (key === 'miss') renderMiss(body);
-                else if (key === 'edit') renderEditFiles(body);
-                else renderRev(body);
-            }
-            tabMiss.addEventListener('click', function () { show('miss'); });
-            tabEdit.addEventListener('click', function () { show('edit'); });
-            tabRev.addEventListener('click', function () { show('rev'); });
-
-            function fileCount(d) {
-                if (!d) return 0;
-                if (Array.isArray(d)) return d.length;
-                return (d.files || []).length + (d.folders || []).length;
-            }
-            function listFiles(d) {
-                if (!d) return [];
-                if (Array.isArray(d)) return d;
-                return (d.files || []).concat(d.folders || []);
-            }
-            // 缺集：按剪辑师分组
-            function renderMiss(container) {
-                if (missing.length === 0) {
-                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#7fd68b;font-size:12px">✅ 已全部完成，无缺集</div>';
-                    return;
-                }
-                var groups = {};
-                missing.forEach(function (ep) {
-                    var ed = editorPlan[String(ep)] || editorPlan[ep] || '未分配';
-                    if (!groups[ed]) groups[ed] = [];
-                    groups[ed].push(parseInt(ep, 10));
-                });
-                var keys = Object.keys(groups);
-                container.innerHTML = '';
-                keys.forEach(function (ed) {
-                    var row = document.createElement('div');
-                    row.style.cssText = 'display:flex;align-items:baseline;gap:8px;padding:4px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;';
-                    var name = document.createElement('span');
-                    name.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-weight:600;';
-                    name.textContent = ed;
-                    var eps = document.createElement('span');
-                    eps.style.cssText = 'flex:1;color:var(--text,#ccc);word-break:break-all;';
-                    eps.textContent = '缺 ' + compactEpList(groups[ed]);
-                    row.appendChild(name);
-                    row.appendChild(eps);
-                    container.appendChild(row);
-                });
-            }
-
-            // 构造一行：图标 + 名称 + 右侧信息 + 可选尾按钮；整行点击回调 onClick
-            function mkFileRow(container, cfg) {
-                var row = document.createElement('div');
-                row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;cursor:pointer;';
-                if (cfg.title) row.title = cfg.title;
-                if (cfg.onClick) row.addEventListener('click', cfg.onClick);
-                var ic = document.createElement('span');
-                ic.style.cssText = 'flex:0 0 auto;';
-                ic.textContent = cfg.icon || '📄';
-                row.appendChild(ic);
-                var nmEl = document.createElement('span');
-                nmEl.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text,#ddd);';
-                nmEl.textContent = cfg.name;
-                nmEl.title = cfg.name;
-                row.appendChild(nmEl);
-                var edEl = document.createElement('span');
-                edEl.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-size:11px;';
-                if (cfg.meta) { edEl.textContent = cfg.meta; edEl.title = cfg.meta; }
-                row.appendChild(edEl);
-                var szEl = document.createElement('span');
-                szEl.style.cssText = 'flex:0 0 auto;color:var(--muted,#777);font-size:10px;';
-                if (cfg.size) szEl.textContent = cfg.size;
-                row.appendChild(szEl);
-                // 尾按钮：打开文件管理目录（不触发整行点击）
-                if (cfg.openDir) {
-                    var ob = document.createElement('button');
-                    ob.type = 'button';
-                    ob.textContent = '📂';
-                    ob.title = '在文件管理器中打开所在目录';
-                    ob.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border,#555);border-radius:3px;color:var(--accent,#7aa7c7);font-size:10px;padding:0 5px;cursor:pointer;line-height:16px;';
-                    ob.addEventListener('click', function (e) {
-                        e.stopPropagation();
-                        if (cfg.openDir) cfg.openDir();
-                    });
-                    row.appendChild(ob);
-                }
-                container.appendChild(row);
-            }
-
-            // 视频行（成片或修改内文件）：点行播放，尾按钮开目录
-            function renderVideoRows(container, files, mode, subpath) {
-                if (!files.length) {
-                    var t = mode === 'revising' ? '该修改文件夹暂无视频' : '暂无成片文件';
-                    container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">' + t + '</div>';
-                    return;
-                }
-                container.innerHTML = '';
-                files.forEach(function (f) {
-                    var nm = f.name || f;
-                    mkFileRow(container, {
-                        icon: mode === 'revising' ? '✏️' : '🎬',
-                        name: nm,
-                        title: (f.path || '') + '\n点击播放，📂 打开所在目录',
-                        meta: f.editor || '',
-                        size: f.size_mb ? Math.round(f.size_mb) + 'MB' : '',
-                        onClick: function () { playVideo(projectName, nm, mode, subpath || ''); },
-                        openDir: function () {
-                            var target = f.path || '';
-                            if (target) openFolderPath(target);
-                        }
-                    });
-                });
-            }
-
-            // 成片 Tab（editing，无子目录导航）
-            function renderEditFiles(container) {
-                var files = Array.isArray(got.edit) ? got.edit : ((got.edit && got.edit.files) || []);
-                renderVideoRows(container, files, 'editing', '');
-            }
-
-            // 修改 Tab：根=修改文件夹列表（点行进），子路径=集数视频（点行播放）
-            function renderRev(container) {
-                container.innerHTML = '';
-                if (!revSub) {
-                    // 修改根：列文件夹
-                    var folders = (got.rev && got.rev.folders) || [];
-                    var files = (got.rev && got.rev.files) || [];
-                    if (!folders.length && !files.length) {
-                        container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">暂无修改文件夹</div>';
-                        return;
-                    }
-                    folders.forEach(function (fd) {
-                        var fname = fd.name || '';
-                        mkFileRow(container, {
-                            icon: '📁',
-                            name: fname,
-                            title: (fd.abs_path || '') + '\n点击进入查看集数，📂 打开目录',
-                            onClick: function () { enterRevFolder(fname); },
-                            openDir: function () { if (fd.abs_path) openFolderPath(fd.abs_path); }
-                        });
-                    });
-                    // 修改根下可能有散文件（罕见）
-                    renderVideoRows(container, files, 'revising', '');
-                } else {
-                    // 已进入修改文件夹：面包屑 + 集数视频
-                    var crumb = document.createElement('div');
-                    crumb.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;';
-                    var backBtn = document.createElement('button');
-                    backBtn.type = 'button';
-                    backBtn.textContent = '← 返回';
-                    backBtn.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--accent,#7aa7c7);border-radius:3px;padding:1px 8px;cursor:pointer;font-size:11px;';
-                    backBtn.addEventListener('click', function () {
-                        revSub = revStack.length ? revStack.pop() : '';
-                        fetchRevSub(container);
-                    });
-                    crumb.appendChild(backBtn);
-                    var crumbTxt = document.createElement('span');
-                    crumbTxt.style.cssText = 'color:var(--muted,#999);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-                    crumbTxt.textContent = '📁 ' + revSub;
-                    crumbTxt.title = revSub;
-                    crumb.appendChild(crumbTxt);
-                    container.appendChild(crumb);
-                    renderVideoRows(container, revFilesCache || [], 'revising', revSub);
-                }
-            }
-
-            var revFilesCache = [];
-            function fetchRevSub(container) {
-                if (!revSub) { renderRev(container); return; }
-                var q = '/api/output_files/' + enc + '?mode=revising&subpath=' + encodeURIComponent(revSub);
-                apiGet(q, function (err, d) {
-                    if (err) {
-                        container.innerHTML = '<div style="padding:14px;color:#ff9a9a;font-size:12px">加载失败：' + err.message + '</div>';
-                        return;
-                    }
-                    revFilesCache = (d && d.files) || [];
-                    renderRev(container);
-                });
-            }
-            function enterRevFolder(fname) {
-                revStack.push(revSub);
-                revSub = revSub ? (revSub + '/' + fname) : fname;
-                fetchRevSub(body);
-            }
-
-            // 播放视频：内嵌 video 浮层，源走工作台流式端点
-            function playVideo(proj, fileName, mode, subpath) {
-                var url = WB_BASE + '/api/preview/' + encodeURIComponent(proj) + '/' + encodeURIComponent(fileName)
-                    + '?mode=' + encodeURIComponent(mode);
-                if (subpath) url += '&subpath=' + encodeURIComponent(subpath);
-                showVideoPlayer(proj, fileName, url, mode, subpath);
-            }
-
-            // 打开文件管理目录（独立尾按钮）
-            function openFolderPath(target) {
-                apiPost('/api/project/' + enc + '/open_folder', { which: 'path', path: target }, function (err2, d2) {
-                    if (!err2 && d2 && d2.ok) el.statusText.textContent = '已打开目录';
-                    else el.statusText.textContent = '打开失败：' + ((err2 && err2.message) || (d2 && d2.message) || '');
-                });
-            }
-            show('miss');
         }
     }
 
-    // ==================== 内嵌视频播放器浮层 ====================
-    var _videoOverlay = null;
+    var revReqId = 0;
+    function fetchRevSub() {
+        if (!revSub) { renderRev(dom.body); return; }
+        var myId = ++revReqId;
+        var q = '/api/output_files/' + enc + '?mode=revising&subpath=' + encodeURIComponent(revSub);
+        apiGet(q, function (err, d) {
+            if (myId !== revReqId) return;  // 已有更新的请求，丢弃过期响应
+            if (err) {
+                if (dom.body) dom.body.innerHTML = '<div style="padding:14px;color:#ff9a9a;font-size:12px">加载失败：' + err.message + '</div>';
+                return;
+            }
+            revFilesCache = (d && d.files) || [];
+            if (curTab === 'rev' && revSub) {
+                if (dom.body) { dom.body.innerHTML = ''; renderRev(dom.body); }
+            }
+        });
+    }
+
+    function enterRevFolder(fname) {
+        revStack.push(revSub);
+        revSub = revSub ? (revSub + '/' + fname) : fname;
+        revFilesCache = [];
+        fetchRevSub();
+    }
+
+    // 播放视频
+    function playVideo(proj, fileName, mode, subpath) {
+        var url = WB_BASE + '/api/preview/' + encodeURIComponent(proj) + '/' + encodeURIComponent(fileName)
+            + '?mode=' + encodeURIComponent(mode);
+        if (subpath) url += '&subpath=' + encodeURIComponent(subpath);
+        showVideoPlayer(proj, fileName, url, mode, subpath);
+    }
+
+    // 打开文件管理目录
+    function openFolderPath(target) {
+        apiPost('/api/project/' + enc + '/open_folder', { which: 'path', path: target }, function (err2, d2) {
+            if (!err2 && d2 && d2.ok) el.statusText.textContent = '已打开目录';
+            else el.statusText.textContent = '打开失败：' + ((err2 && err2.message) || (d2 && d2.message) || '');
+        });
+    }
+
+    // 并行拉数据（各自就绪后更新，不整体重建）
+    apiGet('/api/project/' + enc + '/episodes_status', function (err, d) { got.ep = err ? { ok: false } : d; dataReady(); });
+    apiGet('/api/output_files/' + enc + '?mode=editing', function (err, d) { got.edit = err ? [] : d; dataReady(); });
+    apiGet('/api/output_files/' + enc + '?mode=revising', function (err, d) { got.rev = err ? { files: [], folders: [] } : d; dataReady(); });
+}
+
+
     function showVideoPlayer(proj, fileName, url, mode, subpath) {
         if (_videoOverlay) closeVideoPlayer();
         var overlay = document.createElement('div');
