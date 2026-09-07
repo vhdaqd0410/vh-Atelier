@@ -10,10 +10,6 @@ models/spleeter/
 bin/whisper/
 bin/sherpa/
 
-# 大二进制（ffmpeg / yt-dlp 不入仓，部署时手动拷贝到 bin/）
-bin/ffmpeg-win32-x64.exe
-bin/yt-dlp.exe
-
 # 系统文件
 Thumbs.db
 Desktop.ini
@@ -26,17 +22,3 @@ ncm/node_modules/
 video/.video_cookie
 video/.video_cookies.txt
 collect/video/
-
-# 用户运行时数据（替换字典/热键映射/备份等，绝不入仓，否则会覆盖用户真实数据）
-collect/replace_dict.json
-collect/hotkey.json
-collect/backup/
-collect/*.log
-collect/index.json
-collect/searchIndex.json
-collect/musiclib_tree.json
-collect/musiclib.log
-collect/opentab.json
-collect/search.log
-collect/sfx.log
-collect/keyhook.log

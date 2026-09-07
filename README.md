@@ -20,7 +20,7 @@ Adobe Premiere Pro 本地工作台扩展。按「进度 / 字幕 / 声音 / 交�
 ```
 com.vh.atelier/
 ├── CSXS/manifest.xml       扩展清单（2 个 Extension：主面板 + 后台桥）
-├── index.html              主面板 UI（工作台导航 + 各功能面板）
+├── index.html              主面板 UI（4 工作台导航 + 各功能面板）
 ├── js/
 │   ├── main.js             两级导航切换（工作台 → 子功能）
 │   ├── utils.js            共享工具（SRT 解析/生成、HTML 转义、Python 探测）
@@ -29,27 +29,23 @@ com.vh.atelier/
 │   ├── check.js            字幕校对 + 翻译入口
 │   ├── clone.js            语音克隆
 │   ├── sfx.js              音效库
-│   ├── musiclib.js         音乐库
 │   ├── music.js            网易云音乐
-│   ├── export.js           多版本导出
+│   ├── export.js           多版本导出（含交付模板）
 │   ├── video.js            视频下载
-│   ├── progress.js         项目进度（联动视频工作台）
-│   ├── wavesurfer.js       波形播放（第三方）
-│   └── CSInterface.js      CEP 桥接库（Adobe 提供）
-├── jsx/host.jsx            ExtendScript 宿主（ws/vc/sfx/music/video/ck/me 前缀函数）
-├── jsx/folderpicker.ps1    多版本导出的目录选择（PowerShell）
-├── bg/                     后台桥（拉起网易云本地服务）
-├── bin/
-│   ├── ffmpeg-win32-x64.exe
-│   └── yt-dlp.exe
+│   ├── progress.js         项目进度（视频工作台联动）
+│   ├── wavesurfer.js       波形预览
+│   └── CSInterface.js      CEP 桥接库
+├── jsx/host.jsx            ExtendScript 宿主（ws/vc/sfx/me/music/video/ck 前缀函数）
+├── bg/                     后台桥隐藏面板（负责拉起网易云本地服务）
+├── keyhook/                全局热键钩子源码（已退役，无代码引用，保留备用）
+├── bin/ffmpeg-win32-x64.exe
 ├── py/
 │   ├── funasr_cli.py       中文识别 CLI
 │   ├── cosyvoice_cli.py    语音克隆 CLI
-│   ├── docx_read.py        docx 解析
-│   ├── identify_record.py  听歌识曲录音（WASAPI loopback）
 │   └── subtitle_check.py   字幕校对引擎（docx 解析 + 词级对齐）
-├── stubs/torio_stub/       torch 导入桩（CosyVoice 运行时）
-├── ncm/                    网易云本地服务（NeteaseCloudMusicApi）
+├── models/                 大模型（不入 git，运行时本地回退）
+├── stubs/torio_stub/       torchaudio 精简桩（语音克隆依赖）
+├── ncm/                    网易云本地服务
 ├── video/                  yt-dlp 下载服务
 └── collect/                运行时数据（替换字典/日志等，用户数据，勿镜像覆盖）
 ```
@@ -60,14 +56,14 @@ com.vh.atelier/
 
 ### 源码目录 vs PR 安装目录
 
-- **源码目录**：`plugins/vh-Atelier/com.vh.atelier/`（开发改这里）
+- **源码目录**：`outputs\vh-Atelier\com.vh.atelier\`（开发改这里）
 - **安装目录**：`%APPDATA%\Adobe\CEP\extensions\com.vh.atelier\`（PR 实际加载这里）
 - 改完源码**必须同步**到安装目录，否则 PR 里看不到改动。一键同步脚本：
-  - `sync-to-pr.py`（命令行）或 `sync-to-pr.pyw`（双击弹窗），位于 `plugins/vh-Atelier/`
+  - `sync-to-pr.py`（命令行）或 `sync-to-pr.pyw`（双击弹窗），位于 `outputs\vh-Atelier\`
   - 镜像同步，排除 `.git/_tmp/_releases/ncm-server/collect` 与 `.log/.pyc`
   - **collect/ 是运行时用户数据**（替换字典等），绝不镜像覆盖，否则用户数据会被源码样板冲掉
   - 运行中被 PR 占用的 exe/dll 会跳过，不影响功能更新
-  - **同步方向以源码为准**：安装目录里多余的文件会被删除，勿在安装目录直接改代码
+  - **同步方向以源码为准**：安装目录里源码没有的文件会被删除，勿在安装目录直接改代码
 
 ### 共享模块
 
@@ -75,11 +71,9 @@ com.vh.atelier/
 - `js/translate.js`（`window.__translateBridge`）：英译中翻译引擎，识别/校对两板块共用
 - 新增跨板块共享代码时优先放这里；各板块内部函数保持 IIFE 私有
 
-### 脚本加载顺序
+### 脚本加载顺序（index.html 底部）
 
-```
-CSInterface.js → main.js → utils.js → translate.js → subtitle.js → clone.js → wavesurfer.js → sfx.js → musiclib.js → music.js → export.js → check.js → video.js → progress.js
-```
+`CSInterface.js → main.js → utils.js → translate.js → subtitle.js → clone.js → wavesurfer.js → sfx.js → music.js → export.js → check.js → video.js → progress.js`
 
 依赖关系：utils/translate 必须先于使用它们的板块加载；main.js 先于各板块（它们调用 `__atSwitchTab`）。
 
@@ -112,8 +106,7 @@ CSInterface.js → main.js → utils.js → translate.js → subtitle.js → clo
 - **人声分离**：时间轴选中含人声+伴奏的音频块 → 分离（Spleeter 本地）。实时读当前活动序列
 - **语音克隆**：参考音色 + 任意文字合成（CosyVoice3）
 - **音效库**：本地音效扫描/收藏/试听/拖拽插入
-- **音乐库**：本地音乐文件的目录树浏览/试听/拖拽
-- **音乐**：网易云扫码登录/歌单/搜索/试听/下载/听歌识曲（本地 ncm 服务，由后台桥拉起）
+- **音乐**：网易云扫码登录/歌单/搜索/试听/下载（本地 ncm 服务，由后台桥拉起）
 
 ### 交付
 
