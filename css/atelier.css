@@ -1925,4 +1925,9 @@
         .prg-modal input::-webkit-outer-spin-button,
         .prg-modal input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .prg-modal input[type=number] { -moz-appearance: textfield; }
+        /* 分秒帧按钮：紫色系区分 */
+        #panel-progress .prg-open-row .prg-fm-btn {
+            background: transparent; color: #b39ddb; border-color: #7e57c2;
+        }
+        #panel-progress .prg-open-row .prg-fm-btn:hover { background: #7e57c2; color: #fff; }
     

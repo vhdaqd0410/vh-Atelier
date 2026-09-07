@@ -31,6 +31,7 @@
         dot: document.getElementById('prgDot'),
         statusText: document.getElementById('prgStatusText'),
         refresh: document.getElementById('prgRefresh'),
+        scanAll: document.getElementById('prgScanAll'),
         overview: document.getElementById('prgOverview'),
         mProducing: document.getElementById('prgMProducing'),
         mActive: document.getElementById('prgMActive'),
@@ -422,10 +423,64 @@
                 openInWorkbench(p.name || '');
             });
             openRow.appendChild(openBtn);
+
+            // 🔗 分秒帧：点开该项目的分秒帧审核页（无链接先填）
+            var fmBtn = document.createElement('button');
+            fmBtn.type = 'button';
+            fmBtn.className = 'prg-open-btn prg-fm-btn';
+            fmBtn.textContent = '🔗 分秒帧';
+            fmBtn.title = '打开该项目的分秒帧审核页；Shift+点击可修改链接';
+            fmBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openFenmiaozhen(p.name || '', ev.shiftKey);
+            });
+            openRow.appendChild(fmBtn);
             item.appendChild(openRow);
 
             el.activeList.appendChild(item);
         });
+    }
+
+    // 分秒帧：读取链接 → 有则切审片板块并导航；无则提示填写后保存再导航
+    function openFenmiaozhen(projectName, forceEdit) {
+        var enc = encodeURIComponent(projectName);
+        apiGet('/api/fenmiaozhen/link/' + enc, function (err, d) {
+            if (err) {
+                el.statusText.textContent = '读取分秒帧链接失败：' + err.message;
+                return;
+            }
+            var cur = (d && d.url) || '';
+            if (cur && !forceEdit) {
+                gotoFm(projectName, cur);
+                return;
+            }
+            // 无链接或强制修改：填/改链接
+            var entered = window.prompt(cur ? '修改该项目分秒帧审核链接：' : '填写该项目分秒帧审核链接：', cur || 'https://app.mediatrack.cn/');
+            if (!entered) return;
+            entered = String(entered).trim();
+            if (!entered) return;
+            apiPost('/api/fenmiaozhen/link/' + enc, { url: entered }, function (err2, d2) {
+                if (err2) { el.statusText.textContent = '保存链接失败：' + err2.message; return; }
+                if (d2 && d2.ok) {
+                    el.statusText.textContent = '✅ 分秒帧链接已保存';
+                    gotoFm(projectName, d2.url || entered);
+                } else {
+                    el.statusText.textContent = '保存失败：' + ((d2 && d2.msg) || '');
+                }
+            });
+        });
+    }
+
+    // 切到审片板块并导航 iframe 到分秒帧项目页
+    function gotoFm(projectName, url) {
+        try {
+            var fr = document.getElementById('spFrame');
+            if (fr) fr.src = url;   // 先设 src，避免切 tab 时 __spAutoLoad 用首页覆盖
+            if (window.__atSwitchTab) window.__atSwitchTab('shenpian');
+        } catch (e) {
+            // CEP 里跨域 iframe 导航失败则提示手动打开
+            el.statusText.textContent = '已保存，请到审片板块查看：' + url;
+        }
     }
 
     // 单个项目刷新进度（扫描磁盘，更新本卡片进度条）
@@ -503,20 +558,29 @@
         }
     }
 
-    // 批量扫描全部剪辑中项目（进入页面时用），用实扫值覆盖 DB 缓存值
-    function batchScanClipProjects() {
+    // 批量扫描全部剪辑中项目，用实扫值覆盖 DB 缓存值；showUi 时带按钮反馈
+    function batchScanClipProjects(showUi) {
         var names = [];
         allActiveProjects.forEach(function (p) {
             if ((p.custom_status || '').indexOf('剪辑') >= 0) names.push(p.name);
         });
-        if (names.length === 0) return;
+        if (names.length === 0) {
+            if (showUi) el.statusText.textContent = '没有剪辑中的项目可扫描';
+            return;
+        }
+        if (showUi && el.scanAll) { el.scanAll.disabled = true; el.scanAll.textContent = '扫描中…'; }
         apiPost('/api/projects/episodes_status_batch', { names: names }, function (err, data) {
-            if (err) return;
+            if (showUi && el.scanAll) { el.scanAll.disabled = false; el.scanAll.textContent = '⚡ 一键刷新进度'; }
+            if (err) {
+                if (showUi) el.statusText.textContent = '扫描失败：' + err.message;
+                return;
+            }
             var results = (data && data.results) || {};
+            var okN = 0;
             names.forEach(function (n) {
-                if (results[n] && results[n].ok) applyScanToCard(n, results[n]);
+                if (results[n] && results[n].ok) { applyScanToCard(n, results[n]); okN++; }
             });
-            el.statusText.textContent = '剪辑中进度已扫描 · ' + new Date().toLocaleTimeString();
+            el.statusText.textContent = '已刷新 ' + okN + '/' + names.length + ' 个剪辑中项目 · ' + new Date().toLocaleTimeString();
         });
     }
 
@@ -744,13 +808,21 @@
         // 并行拉数据
         var enc = encodeURIComponent(projectName);
         var got = { ep: null, edit: null, rev: null };
-        function render() {
-            if (!got.ep) return;  // 缺集数据是主内容，等它
+        var curTabKey = 'miss';   // 当前激活 tab（提升到本层，供 edit/rev 迟到时判断补渲染）
+        // ep 就绪先渲染主内容（缺集），edit/rev 后到则按需补渲染对应 tab
+        function maybeRender() {
+            if (!got.ep) return;
             renderContent();
         }
-        apiGet('/api/project/' + enc + '/episodes_status', function (err, d) { got.ep = err ? null : d; render(); });
-        apiGet('/api/output_files/' + enc + '?mode=editing', function (err, d) { got.edit = err ? null : d; render(); });
-        apiGet('/api/output_files/' + enc + '?mode=revising', function (err, d) { got.rev = err ? null : d; render(); });
+        apiGet('/api/project/' + enc + '/episodes_status', function (err, d) { got.ep = err ? { ok: false } : d; maybeRender(); });
+        apiGet('/api/output_files/' + enc + '?mode=editing', function (err, d) {
+            got.edit = err ? [] : d;
+            if (got.ep && curTabKey === 'edit') renderContent();  // 正在看成片：补渲染
+        });
+        apiGet('/api/output_files/' + enc + '?mode=revising', function (err, d) {
+            got.rev = err ? { files: [], folders: [] } : d;
+            if (got.ep && curTabKey === 'rev') renderContent();  // 正在看修改：补渲染
+        });
 
         function renderContent() {
             var epData = got.ep;
@@ -801,18 +873,6 @@
             body.style.cssText = 'min-height:120px;max-height:46vh;overflow-y:auto;';
             content.appendChild(body);
 
-            function show(key) {
-                var tabs2 = [tabMiss, tabEdit, tabRev];
-                var keys = ['miss', 'edit', 'rev'];
-                for (var i = 0; i < 3; i++) {
-                    tabs2[i].style.borderBottomColor = (keys[i] === key) ? 'var(--accent,#537d96)' : 'transparent';
-                    tabs2[i].style.color = (keys[i] === key) ? 'var(--text,#e8e8e8)' : 'var(--muted,#999)';
-                }
-                body.innerHTML = '';
-                if (key === 'miss') renderMiss(body);
-                else if (key === 'edit') renderFiles(body, got.edit, 'editing');
-                else renderFiles(body, got.rev, 'revising');
-            }
             tabMiss.addEventListener('click', function () { show('miss'); });
             tabEdit.addEventListener('click', function () { show('edit'); });
             tabRev.addEventListener('click', function () { show('rev'); });
@@ -858,7 +918,6 @@
             // ---- 状态：修改文件夹导航 ----------------
             var revSub = '';          // 当前修改子路径（空 = 修改根）
             var revStack = [];        // 进入过的子路径栈
-            var curTabKey = 'miss';
 
             function show(key) {
                 curTabKey = key;
@@ -2284,7 +2343,10 @@
             setOnline(true, '视频工作台在线 · ' + new Date().toLocaleTimeString());
             renderOverview(data.overview_stats || {});
             renderActive(data.sections || []);
-            autoScanAfterRender();
+            // 每次拉取渲染后都自动批量实扫剪辑中项目（避免卡片卡在"待扫描…"）
+            setTimeout(function () {
+                if (el.activeList.children.length) batchScanClipProjects(false);
+            }, 200);
         });
     }
 
@@ -2322,27 +2384,24 @@
     }
 
     // 事件
+    // 顶部「刷新」：重新拉取项目列表并自动实扫剪辑中项目进度
     el.refresh.addEventListener('click', function () { refresh(true); });
+    // 「⚡ 一键刷新进度」：不重新拉列表，只批量扫描当前所有剪辑中项目
+    if (el.scanAll) {
+        el.scanAll.addEventListener('click', function () {
+            batchScanClipProjects(true);
+        });
+    }
     el.launch.addEventListener('click', launchWB);
     el.retry.addEventListener('click', function () { refresh(true); });
     // 筛选：状态 / 只看有进度 → 重渲染当前列表
     el.filterState.addEventListener('change', function () { renderFilteredList(); });
     el.filterProgress.addEventListener('change', function () { renderFilteredList(); });
 
-    // 暴露给 main.js：切到 progress tab 时自动刷新一次，并对剪辑中项目批量实扫
+    // 暴露给 main.js：切到 progress tab 时自动刷新一次（刷新会自动实扫剪辑中项目）
     window.__progressOnShow = function () {
         refresh(true);
     };
-
-    // refresh 拉回数据渲染完后，自动对「剪辑中」项目批量实扫（磁盘准）
-    var _autoScanDone = false;
-    function autoScanAfterRender() {
-        if (_autoScanDone) return;
-        _autoScanDone = true;
-        setTimeout(function () {
-            if (el.activeList.children.length) batchScanClipProjects();
-        }, 300);
-    }
 
     // 初始化：先探测在线状态
     refresh(true);
