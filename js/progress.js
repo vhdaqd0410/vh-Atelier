@@ -325,7 +325,13 @@
             foot.appendChild(meta);
             item.appendChild(foot);
 
-            // 操作行：查剪辑 / 刷新进度（剪辑中）/ 组内NAS / 制作部 / 剧本 / 在工作台打开
+            // 缺集摘要行（刷新后填充，剪辑中项目实扫后显示谁缺哪几集）
+            var missRow = document.createElement('div');
+            missRow.className = 'prg-miss-row';
+            missRow.style.display = 'none';
+            item.appendChild(missRow);
+
+            // 操作行：查剪辑 / 缺集明细 / 刷新进度（剪辑中）/ 组内NAS / 制作部 / 剧本 / 在工作台打开
             var openRow = document.createElement('div');
             openRow.className = 'prg-open-row';
 
@@ -340,6 +346,19 @@
                 openEpSearch(p);
             });
             openRow.appendChild(searchBtn);
+
+            // 📋 缺集/成片/修改 明细浮层
+            var detBtn = document.createElement('button');
+            detBtn.type = 'button';
+            detBtn.className = 'prg-open-btn';
+            detBtn.textContent = '📋 明细';
+            detBtn.title = '缺集明细 + 成片列表 + 修改文件';
+            detBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openProjectDetail(p);
+            });
+            openRow.appendChild(detBtn);
+
 
             // 🔄 刷新进度：仅剪辑中项目，扫描磁盘实算已剪集数
             if (isClip) {
@@ -456,6 +475,30 @@
             var missing = (data.missing || []).length;
             if (total > 0 && missing > 0) {
                 epTxt.title = '缺 ' + missing + ' 集：' + (data.missing || []).join(', ');
+            }
+        }
+        // 缺集摘要行：谁缺哪几集（分组显示）
+        var missRow = item.querySelector('.prg-miss-row');
+        if (missRow) {
+            var missArr = data.missing || [];
+            if (total > 0 && missArr.length > 0) {
+                var planMap = data.editor_plan || {};
+                var mgroups = {};
+                missArr.forEach(function (ep) {
+                    var ed = planMap[String(ep)] || planMap[ep] || '未分配';
+                    if (!mgroups[ed]) mgroups[ed] = [];
+                    mgroups[ed].push(parseInt(ep, 10));
+                });
+                var parts = [];
+                Object.keys(mgroups).forEach(function (ed) {
+                    parts.push(esc(ed) + ' 缺 ' + compactEpList(mgroups[ed]));
+                });
+                missRow.innerHTML = '⚠️ ' + parts.join('　');
+                missRow.style.display = 'block';
+                missRow.title = '点「📋 明细」看完整缺集 + 成片 + 修改';
+            } else {
+                missRow.style.display = 'none';
+                missRow.innerHTML = '';
             }
         }
     }
@@ -616,6 +659,247 @@
         cls.addEventListener('click', closeAll);
         overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) closeAll(); });
         setTimeout(function () { try { inp.focus(); } catch (e) {} }, 30);
+    }
+
+    // ==================== 项目明细浮层：缺集 / 成片 / 修改 三合一 ====================
+    var _detailOverlay = null;
+    // 连续集区间压缩：1,2,3,5 -> 1-3,5
+    function compactEpList(nums) {
+        if (!nums || !nums.length) return '';
+        var arr = nums.slice().sort(function (a, b) { return a - b; });
+        var parts = [], start = arr[0], prev = arr[0];
+        for (var k = 1; k < arr.length; k++) {
+            if (arr[k] === prev + 1) { prev = arr[k]; }
+            else {
+                parts.push(start === prev ? String(start) : start + '-' + prev);
+                start = prev = arr[k];
+            }
+        }
+        parts.push(start === prev ? String(start) : start + '-' + prev);
+        return parts.join(',');
+    }
+
+    function openProjectDetail(p) {
+        var projectName = p.name || '';
+        if (_detailOverlay) { _detailOverlay.remove(); _detailOverlay = null; }
+
+        var overlay = document.createElement('div');
+        overlay.className = 'prg-modal-mask';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        var box = document.createElement('div');
+        box.style.cssText = 'background:var(--panel,#1e1e1e);border:1px solid var(--border,#3a3a3a);border-radius:10px;width:400px;max-width:94vw;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.4);';
+
+        // 头部
+        var head = document.createElement('div');
+        head.style.cssText = 'padding:9px 12px;background:var(--panel2,#242424);border-bottom:1px solid var(--border,#333);display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+        var title = document.createElement('span');
+        title.style.cssText = 'flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--text,#e8e8e8);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        title.textContent = projectName;
+        title.title = projectName;
+        head.appendChild(title);
+        var stateTag = document.createElement('span');
+        stateTag.className = 'prg-state ' + stateClass(p.custom_status || '');
+        stateTag.textContent = p.custom_status || '';
+        head.appendChild(stateTag);
+        box.appendChild(head);
+
+        // 内容（tab + 列表）
+        var content = document.createElement('div');
+        content.style.cssText = 'flex:1;overflow-y:auto;min-height:0;padding:10px 12px;';
+        content.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted,#999);font-size:12px">⏳ 加载中…</div>';
+        box.appendChild(content);
+
+        // 底部
+        var foot = document.createElement('div');
+        foot.style.cssText = 'padding:8px 12px;border-top:1px solid var(--border,#333);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;';
+        var openG = document.createElement('button');
+        openG.type = 'button';
+        openG.textContent = '📁 组内NAS';
+        openG.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;';
+        if (p.group_path) {
+            openG.addEventListener('click', function () { openProjFolder(projectName, 'group_root'); });
+            foot.appendChild(openG);
+        }
+        var openP = document.createElement('button');
+        openP.type = 'button';
+        openP.textContent = '🏢 制作部';
+        openP.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;';
+        if (p.production_path) {
+            openP.addEventListener('click', function () { openProjFolder(projectName, 'prod'); });
+            foot.appendChild(openP);
+        }
+        var cls = document.createElement('button');
+        cls.type = 'button';
+        cls.textContent = '关闭';
+        cls.style.cssText = 'background:none;border:1px solid var(--border,#555);color:var(--text,#ccc);border-radius:4px;padding:3px 12px;cursor:pointer;font-size:12px;margin-left:auto;';
+        foot.appendChild(cls);
+        box.appendChild(foot);
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+        _detailOverlay = overlay;
+        var closeAll = function () { if (overlay.parentNode) overlay.remove(); if (_detailOverlay === overlay) _detailOverlay = null; };
+        cls.addEventListener('click', closeAll);
+        overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) closeAll(); });
+
+        // 并行拉数据
+        var enc = encodeURIComponent(projectName);
+        var got = { ep: null, edit: null, rev: null };
+        function render() {
+            if (!got.ep) return;  // 缺集数据是主内容，等它
+            renderContent();
+        }
+        apiGet('/api/project/' + enc + '/episodes_status', function (err, d) { got.ep = err ? null : d; render(); });
+        apiGet('/api/output_files/' + enc + '?mode=editing', function (err, d) { got.edit = err ? null : d; render(); });
+        apiGet('/api/output_files/' + enc + '?mode=revising', function (err, d) { got.rev = err ? null : d; render(); });
+
+        function renderContent() {
+            var epData = got.ep;
+            if (!epData || !epData.ok) {
+                content.innerHTML = '<div style="padding:18px;text-align:center;color:#ff9a9a;font-size:12px">读取失败（工作台未运行？）</div>';
+                return;
+            }
+            var total = parseInt(epData.total, 10) || 0;
+            var cur = parseInt(epData.current_count, 10) || 0;
+            var pct = total > 0 ? Math.min(100, Math.round(cur / total * 100)) : 0;
+            var missing = epData.missing || [];
+            var editorPlan = epData.editor_plan || {};
+
+            // 概览条
+            var ov = document.createElement('div');
+            ov.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--text,#ddd);';
+            var barWrap = document.createElement('div');
+            barWrap.style.cssText = 'flex:1;height:6px;background:#1a1a1a;border-radius:3px;overflow:hidden;';
+            var bar = document.createElement('div');
+            bar.style.cssText = 'height:100%;width:' + pct + '%;background:' + (pct >= 100 ? '#3d9a50' : 'var(--accent,#537d96)') + ';border-radius:3px;';
+            barWrap.appendChild(bar);
+            ov.appendChild(barWrap);
+            var ovTxt = document.createElement('span');
+            ovTxt.style.cssText = 'flex:0 0 auto;font-weight:600;';
+            ovTxt.textContent = cur + '/' + total + ' 集 · ' + pct + '%';
+            ov.appendChild(ovTxt);
+            content.appendChild(ov);
+
+            // tab 条
+            var tabs = document.createElement('div');
+            tabs.style.cssText = 'display:flex;gap:4px;border-bottom:1px solid var(--border,#333);margin-bottom:8px;';
+            var mkTab = function (txt, key) {
+                var b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = txt;
+                b.style.cssText = 'background:none;border:none;border-bottom:2px solid transparent;color:var(--muted,#999);padding:4px 10px;cursor:pointer;font-size:12px;';
+                return b;
+            };
+            var tabMiss = mkTab('缺集 ' + missing.length, 'miss');
+            var tabEdit = mkTab('🎬 成片 ' + fileCount(got.edit), 'edit');
+            var tabRev = mkTab('📝 修改 ' + fileCount(got.rev), 'rev');
+            tabs.appendChild(tabMiss);
+            tabs.appendChild(tabEdit);
+            tabs.appendChild(tabRev);
+            content.appendChild(tabs);
+
+            var body = document.createElement('div');
+            body.style.cssText = 'min-height:120px;max-height:46vh;overflow-y:auto;';
+            content.appendChild(body);
+
+            function show(key) {
+                var tabs2 = [tabMiss, tabEdit, tabRev];
+                var keys = ['miss', 'edit', 'rev'];
+                for (var i = 0; i < 3; i++) {
+                    tabs2[i].style.borderBottomColor = (keys[i] === key) ? 'var(--accent,#537d96)' : 'transparent';
+                    tabs2[i].style.color = (keys[i] === key) ? 'var(--text,#e8e8e8)' : 'var(--muted,#999)';
+                }
+                body.innerHTML = '';
+                if (key === 'miss') renderMiss(body);
+                else if (key === 'edit') renderFiles(body, got.edit, 'editing');
+                else renderFiles(body, got.rev, 'revising');
+            }
+            tabMiss.addEventListener('click', function () { show('miss'); });
+            tabEdit.addEventListener('click', function () { show('edit'); });
+            tabRev.addEventListener('click', function () { show('rev'); });
+
+            function fileCount(d) {
+                if (!d) return 0;
+                if (Array.isArray(d)) return d.length;
+                return (d.files || []).length + (d.folders || []).length;
+            }
+            function listFiles(d) {
+                if (!d) return [];
+                if (Array.isArray(d)) return d;
+                return (d.files || []).concat(d.folders || []);
+            }
+            // 缺集：按剪辑师分组
+            function renderMiss(container) {
+                if (missing.length === 0) {
+                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#7fd68b;font-size:12px">✅ 已全部完成，无缺集</div>';
+                    return;
+                }
+                var groups = {};
+                missing.forEach(function (ep) {
+                    var ed = editorPlan[String(ep)] || editorPlan[ep] || '未分配';
+                    if (!groups[ed]) groups[ed] = [];
+                    groups[ed].push(parseInt(ep, 10));
+                });
+                var keys = Object.keys(groups);
+                container.innerHTML = '';
+                keys.forEach(function (ed) {
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:baseline;gap:8px;padding:4px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;';
+                    var name = document.createElement('span');
+                    name.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-weight:600;';
+                    name.textContent = ed;
+                    var eps = document.createElement('span');
+                    eps.style.cssText = 'flex:1;color:var(--text,#ccc);word-break:break-all;';
+                    eps.textContent = '缺 ' + compactEpList(groups[ed]);
+                    row.appendChild(name);
+                    row.appendChild(eps);
+                    container.appendChild(row);
+                });
+            }
+            // 文件列表（成片/修改），每条可打开所在目录
+            function renderFiles(container, d, mode) {
+                var files = listFiles(d);
+                if (files.length === 0) {
+                    var t = mode === 'revising' ? '暂无修改文件' : '暂无成片文件';
+                    container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">' + t + '</div>';
+                    return;
+                }
+                container.innerHTML = '';
+                files.forEach(function (f) {
+                    var nm = f.name || f;
+                    var isFolder = f.folder === true || !f.ext;
+                    var row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;cursor:pointer;';
+                    row.title = f.path || f.name || '';
+                    var ic = document.createElement('span');
+                    ic.textContent = isFolder ? '📁' : (mode === 'revising' ? '✏️' : '🎬');
+                    row.appendChild(ic);
+                    var nmEl = document.createElement('span');
+                    nmEl.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text,#ddd);';
+                    nmEl.textContent = nm;
+                    nmEl.title = f.path || nm;
+                    row.appendChild(nmEl);
+                    var edEl = document.createElement('span');
+                    edEl.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-size:11px;';
+                    if (f.editor) edEl.textContent = f.editor;
+                    row.appendChild(edEl);
+                    var szEl = document.createElement('span');
+                    szEl.style.cssText = 'flex:0 0 auto;color:var(--muted,#777);font-size:10px;';
+                    if (f.size_mb) szEl.textContent = Math.round(f.size_mb) + 'MB';
+                    row.appendChild(szEl);
+                    // 点行打开所在目录（修改文件夹用 abs_path，成片文件用 path）
+                    row.addEventListener('click', function () {
+                        var target = f.abs_path || f.path || '';
+                        if (!target) return;
+                        apiPost('/api/project/' + enc + '/open_folder', { which: 'path', path: target }, function (err2, d2) {
+                            if (!err2 && d2 && d2.ok) el.statusText.textContent = '已打开目录';
+                            else el.statusText.textContent = '打开失败：' + ((err2 && err2.message) || (d2 && d2.message) || '');
+                        });
+                    });
+                    container.appendChild(row);
+                });
+            }
+            show('miss');
+        }
     }
 
     // 请求视频工作台跳转定位（通过 SSE jump 事件）；服务离线则先启动再跳

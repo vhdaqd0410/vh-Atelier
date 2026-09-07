@@ -1891,6 +1891,12 @@
             display: flex; justify-content: space-between; font-size: 10px; color: var(--muted);
         }
         #panel-progress .prg-item-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+        /* 缺集摘要行 */
+        #panel-progress .prg-miss-row {
+            margin: 2px 0 4px; font-size: 11px; line-height: 1.6;
+            color: #ffb84d; background: #2a2416; border: 1px solid #4a3f1e;
+            border-radius: 4px; padding: 3px 8px; word-break: break-all;
+        }
         #panel-progress .prg-open-row { margin-top: 6px; display: flex; justify-content: flex-start; gap: 6px; }
         #panel-progress .prg-open-main { background: var(--accent); color: #fff; border-color: var(--accent); }
         #panel-progress .prg-open-main:hover { background: var(--accent-hover); }
