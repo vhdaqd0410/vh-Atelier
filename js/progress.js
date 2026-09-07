@@ -1125,9 +1125,10 @@
                 container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">暂无修改文件夹</div>';
                 return;
             }
+            var fRoot = document.createElement('div');
             folders.forEach(function (fd) {
                 var fname = fd.name || '';
-                mkFileRow(container, {
+                mkFileRow(fRoot, {
                     icon: '📁',
                     name: fname,
                     title: (fd.abs_path || '') + '\n点击进入查看集数，📂 打开目录',
@@ -1137,12 +1138,14 @@
                     openDir: function () { if (fd.abs_path) openFolderPath(fd.abs_path); }
                 });
             });
-            // 修改根下的散文件（罕见）——仅在有值时追加，空时不显示误导性空态
+            container.appendChild(fRoot);
+            // 修改根下的散文件（罕见）——渲染到独立子容器，避免清掉上面文件夹
             if (files.length) renderVideoRows(container, files, 'revising', '');
         } else {
-            // 已进入修改文件夹：醒目导航条（返回）+ 集数视频
+            // 已进入修改文件夹：顶部固定导航条（返回）+ 下方独立列表区（不会被清空）
+            container.innerHTML = '';
             var nav = document.createElement('div');
-            nav.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 8px;background:var(--panel2,#242424);border:1px solid var(--border,#444);border-radius:6px;';
+            nav.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 8px;background:var(--panel2,#242424);border:1px solid var(--border,#444);border-radius:6px;position:sticky;top:0;z-index:5;';
             var backBtn = document.createElement('button');
             backBtn.type = 'button';
             backBtn.textContent = '← 返回修改列表';
@@ -1162,11 +1165,13 @@
             crumbTxt.title = revSub;
             nav.appendChild(crumbTxt);
             container.appendChild(nav);
+            // 独立列表子容器：renderVideoRows 只清这块，不影响上方导航
+            var listBox = document.createElement('div');
+            container.appendChild(listBox);
             if (revFilesCache.length) {
-                renderVideoRows(container, revFilesCache, 'revising', revSub);
+                renderVideoRows(listBox, revFilesCache, 'revising', revSub);
             } else {
-                // 还没有缓存（刚进入/返回）：先显示加载中并拉取
-                container.innerHTML += '<div style="padding:14px;text-align:center;color:var(--muted,#888);font-size:12px">⏳ 加载集数…</div>';
+                listBox.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted,#888);font-size:12px">⏳ 加载集数…</div>';
                 fetchRevSub();
             }
         }
@@ -1256,11 +1261,12 @@
                 container.innerHTML += '<div style="padding:16px;text-align:center;color:var(--muted,#888);font-size:12px">暂无交付文件夹（项目未建 000交付？）</div>';
                 return;
             }
+            var fRoot = document.createElement('div');
             folders.forEach(function (fd) {
                 var fname = fd.name || '';
                 var fcnt = fd.file_count != null && fd.file_count > 0 ? '（' + fd.file_count + '）' : '';
                 var isRootV = (fname === '000交付');
-                mkFileRow(container, {
+                mkFileRow(fRoot, {
                     icon: '📁',
                     name: fname + (isRootV ? '' : fcnt),
                     title: isRootV ? '000交付 文件夹：点击进入查看各版本交付内容' : '点击进入查看交付内容，📂 打开目录',
@@ -1273,25 +1279,28 @@
                     }
                 });
             });
+            container.appendChild(fRoot);
+            // 根下散文件（罕见）渲染到独立子容器，避免清掉文件夹
             if (files.length) renderVideoRows(container, files, 'delivery', '');
         } else {
-            // 已进入交付子文件夹：醒目导航条（返回）+ 内容
+            // 已进入交付子文件夹：顶部固定导航条（返回）+ 下方独立列表区
+            container.innerHTML = '';
             var crumb = document.createElement('div');
-            crumb.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 8px;background:var(--panel2,#242424);border:1px solid var(--border,#444);border-radius:6px;';
+            crumb.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 8px;background:var(--panel2,#242424);border:1px solid var(--border,#444);border-radius:6px;position:sticky;top:0;z-index:5;';
             var backBtn = document.createElement('button');
             backBtn.type = 'button';
-            // 在 000交付 版本列表层（顶层）不显示返回；更深层才显示
+            // 在 000交付 版本列表层（交付预览顶层）无上级，不显示返回；更深的集数/子目录层显示
             var isRootLevel = (delSub === '000交付');
-            if (isRootLevel) {
-                backBtn.style.display = 'none';
-            }
             backBtn.textContent = '← 返回';
             backBtn.title = isRootLevel ? '' : '回到上一级目录';
             backBtn.style.cssText = 'flex:0 0 auto;background:var(--accent,#537d96);color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;font-weight:600;';
+            if (isRootLevel) {
+                backBtn.style.visibility = 'hidden';
+            }
             backBtn.addEventListener('click', function () {
                 dbg('← 交付返回：上一级');
                 var prev = delStack.length ? delStack.pop() : '';
-                if (!prev) { prev = '000交付'; }  // 若已到根则回 000交付 版本列表
+                if (!prev) { prev = '000交付'; }
                 delSub = prev;
                 delFilesCache = [];
                 fetchDelSub();
@@ -1303,10 +1312,13 @@
             crumbTxt.title = delSub;
             crumb.appendChild(crumbTxt);
             container.appendChild(crumb);
+            // 独立列表子容器：renderDelContent/renderVideoRows 只清这块
+            var listBox = document.createElement('div');
+            container.appendChild(listBox);
             if (delFilesCache.length) {
-                renderDelContent(container);
+                renderDelContent(listBox);
             } else {
-                container.innerHTML += '<div style="padding:14px;text-align:center;color:var(--muted,#888);font-size:12px">⏳ 加载交付内容…</div>';
+                listBox.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted,#888);font-size:12px">⏳ 加载交付内容…</div>';
                 fetchDelSub();
             }
         }
