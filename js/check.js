@@ -105,6 +105,7 @@
     // 替换字典状态 + 持久化（全局：所有项目共用一份，存磁盘 JSON 文件）
     var dict = [];   // [{ from, to }]
     var dictFile = path.join(extRoot, 'collect', 'replace_dict.json');
+    var dictBackupDir = path.join(extRoot, 'collect', 'backup');
 
     function loadDict() {
         // 兼容旧 localStorage 数据（迁移）
@@ -113,6 +114,17 @@
         try {
             if (fs.existsSync(dictFile)) {
                 dict = JSON.parse(fs.readFileSync(dictFile, 'utf8')) || [];
+                // 损坏保护：主文件被冲成「只有 2 条样板」或空，且存在更丰富的备份时，自动从备份恢复
+                if (!Array.isArray(dict)) dict = [];
+                dict = dict.filter(function (d) { return d && d.from; });
+                if (dict.length <= 2) {
+                    var restored = restoreFromBackup();
+                    if (restored && restored.length > dict.length) {
+                        dict = restored;
+                        try { fs.writeFileSync(dictFile, JSON.stringify(dict, null, 2), 'utf8'); } catch (e) {}
+                    }
+                }
+                return;
             } else if (legacyRaw) {
                 dict = JSON.parse(legacyRaw) || [];
                 try { localStorage.removeItem('vh_check_dict_v1'); } catch (e) {}
@@ -122,12 +134,54 @@
         } catch (e) { dict = []; }
         if (!Array.isArray(dict)) dict = [];
         dict = dict.filter(function (d) { return d && d.from; });
+        // 主文件不存在时，也尝试从备份恢复
+        if (dict.length === 0) {
+            var restored2 = restoreFromBackup();
+            if (restored2 && restored2.length > 0) dict = restored2;
+        }
     }
+
+    // 从备份目录找最新的备份文件（内容条数最多的那份）
+    function restoreFromBackup() {
+        try {
+            if (!fs.existsSync(dictBackupDir)) return null;
+            var files = fs.readdirSync(dictBackupDir).filter(function (f) { return f.indexOf('replace_dict_') === 0 && f.indexOf('.json') >= 0; });
+            if (files.length === 0) return null;
+            var best = null;
+            var bestLen = -1;
+            files.forEach(function (f) {
+                try {
+                    var p = path.join(dictBackupDir, f);
+                    var arr = JSON.parse(fs.readFileSync(p, 'utf8')) || [];
+                    if (!Array.isArray(arr)) return;
+                    arr = arr.filter(function (d) { return d && d.from; });
+                    if (arr.length > bestLen) { bestLen = arr.length; best = arr; }
+                } catch (e) {}
+            });
+            return best;
+        } catch (e) { return null; }
+    }
+
     function saveDict() {
         try {
             var dir = path.join(extRoot, 'collect');
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(dictFile, JSON.stringify(dict, null, 2), 'utf8');
+            // 自动备份：每次保存都额外备份一份带时间戳（防主文件被同步/覆盖冲掉）
+            try {
+                if (!fs.existsSync(dictBackupDir)) fs.mkdirSync(dictBackupDir, { recursive: true });
+                var stamp = new Date();
+                var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+                var name = 'replace_dict_' + stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) + '_' + pad(stamp.getHours()) + pad(stamp.getMinutes()) + pad(stamp.getSeconds()) + '.json';
+                fs.writeFileSync(path.join(dictBackupDir, name), JSON.stringify(dict, null, 2), 'utf8');
+                // 只保留最近 20 份备份
+                try {
+                    var files = fs.readdirSync(dictBackupDir).filter(function (f) { return f.indexOf('replace_dict_') === 0 && f.indexOf('.json') >= 0; }).sort().reverse();
+                    for (var i = 20; i < files.length; i++) {
+                        try { fs.unlinkSync(path.join(dictBackupDir, files[i])); } catch (e2) {}
+                    }
+                } catch (e2) {}
+            } catch (e) {}
         } catch (e) {}
     }
     function renderDict() {
