@@ -1015,7 +1015,17 @@
                 meta: f.editor || '',
                 size: f.size_mb ? Math.round(f.size_mb) + 'MB' : '',
                 onClick: function () {
-                    try { playVideo(projectName, nm, mode, subpath || ''); }
+                    try {
+                        // 点击反馈：状态栏提示 + 行高亮，确保用户知道点击被接收
+                        try { el.statusText.textContent = '点击：' + nm; } catch (e) {}
+                        var rc = container.lastChild;
+                        if (rc && rc.style) {
+                            var origBg = rc.style.background;
+                            rc.style.background = 'rgba(139,92,246,.25)';
+                            setTimeout(function () { try { rc.style.background = origBg || ''; } catch (e) {} }, 250);
+                        }
+                        playVideo(projectName, nm, mode, subpath || '');
+                    }
                     catch (err) {
                         el.statusText.textContent = '播放失败：' + (err && err.message);
                         try { console.error('[vh播放]', err); } catch (e2) {}
@@ -1137,11 +1147,13 @@
 
     function showVideoPlayer(proj, fileName, url, mode, subpath) {
         if (_videoOverlay) closeVideoPlayer();
+        // 状态栏即时反馈，确认点击已生效
+        try { el.statusText.textContent = '正在打开播放器：' + fileName + '…'; } catch (e) {}
         var overlay = document.createElement('div');
         overlay.className = 'prg-modal-mask';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10001;display:flex;align-items:center;justify-content:center;';
         var box = document.createElement('div');
-        box.style.cssText = 'background:#000;border:1px solid var(--border,#333);border-radius:10px;width:560px;max-width:95vw;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.6);';
+        box.style.cssText = 'background:#000;border:1px solid var(--border,#333);border-radius:10px;width:600px;max-width:95vw;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.6);';
 
         // 标题条
         var head = document.createElement('div');
@@ -1150,19 +1162,13 @@
         ttl.style.cssText = 'flex:1;font-size:12px;color:#ddd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         ttl.textContent = '▶ ' + (mode === 'revising' ? '📝 ' : '🎬 ') + fileName;
         head.appendChild(ttl);
-        // 用本地播放器打开
+        // 本地播放器按钮
         var localBtn = document.createElement('button');
         localBtn.type = 'button';
         localBtn.textContent = '📺 本地播放器';
-        localBtn.title = '用 PotPlayer / 系统默认播放器打开（全屏、倍速更强）';
+        localBtn.title = '用 PotPlayer / 系统默认播放器打开';
         localBtn.style.cssText = 'background:none;border:1px solid #444;color:#7aa7c7;border-radius:4px;padding:1px 8px;cursor:pointer;font-size:11px;';
-        localBtn.addEventListener('click', function () {
-            apiPost('/api/preview/open_local', { project_name: proj, filename: fileName, mode: mode, subpath: subpath }, function (err, d) {
-                if (err) { ttl.textContent = '打开失败：' + err.message; return; }
-                if (d && d.ok) ttl.textContent = '📺 已用本地播放器打开：' + fileName;
-                else ttl.textContent = (d && d.message) || '打开失败';
-            });
-        });
+        localBtn.addEventListener('click', function () { openInLocalPlayer(); });
         head.appendChild(localBtn);
         var xBtn = document.createElement('button');
         xBtn.type = 'button';
@@ -1171,34 +1177,77 @@
         head.appendChild(xBtn);
         box.appendChild(head);
 
+        // 提示条
+        var loadTip = document.createElement('div');
+        loadTip.style.cssText = 'text-align:center;padding:5px;font-size:11px;color:#aaa;background:#151515;border-bottom:1px solid #222;min-height:16px;';
+        loadTip.textContent = '⏳ 正在加载视频流…';
+        box.appendChild(loadTip);
+
         // 视频
         var video = document.createElement('video');
         video.controls = true;
-        video.style.cssText = 'display:block;width:100%;max-height:56vh;background:#000;';
-        var loadTip = document.createElement('div');
-        loadTip.style.cssText = 'text-align:center;padding:6px;font-size:11px;color:#888;background:#111;border-bottom:1px solid #222;';
-        loadTip.textContent = '⏳ 加载视频流…（若长时间黑屏，点右上「📺 本地播放器」）';
-        box.appendChild(loadTip);
+        video.style.cssText = 'display:block;width:100%;max-height:52vh;background:#000;';
         box.appendChild(video);
-        // 流加载失败时明确提示（CEP 环境偶发跨域拦截）
-        video.addEventListener('error', function () {
-            loadTip.textContent = '⚠️ 内嵌播放失败（' + (video.error ? video.error.code : '未知') + '）。可点「📺 本地播放器」用 PotPlayer 打开。';
-        });
-        video.addEventListener('loadeddata', function () {
-            loadTip.textContent = '';
-            try { var pp = video.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) {}
-        });
-        video.src = url;
-        // 显式触发加载（部分环境需用户手势后才允许 autoplay）
-        try { var pp = video.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) {}
 
         overlay.appendChild(box);
         document.body.appendChild(overlay);
         _videoOverlay = overlay;
-        var closeIt = function () { closeVideoPlayer(); };
+        var fallbackTimer = null;
+        var openedLocal = false;
+
+        function openInLocalPlayer() {
+            if (openedLocal) return;
+            openedLocal = true;
+            if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+            try { video.pause(); } catch (e) {}
+            try { el.statusText.textContent = '正在用本地播放器打开：' + fileName; } catch (e) {}
+            apiPost('/api/preview/open_local', { project_name: proj, filename: fileName, mode: mode, subpath: subpath }, function (err, d) {
+                if (err) { loadTip.textContent = '打开本地播放器失败：' + err.message; openedLocal = false; return; }
+                if (d && d.ok) {
+                    loadTip.textContent = '📺 已调起本地播放器（可关闭本窗口）';
+                    ttl.textContent = '📺 ' + fileName;
+                } else {
+                    loadTip.textContent = '打开失败：' + ((d && d.message) || '未知错误');
+                    openedLocal = false;
+                }
+            });
+        }
+
+        // 视频加载成功
+        video.addEventListener('loadeddata', function () {
+            if (openedLocal) return;
+            if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+            loadTip.textContent = '';
+            try { el.statusText.textContent = '播放中：' + fileName; } catch (e) {}
+            try { var pp = video.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) {}
+        });
+        // 视频加载失败 → 明确提示并给本地播放器兜底
+        video.addEventListener('error', function () {
+            if (openedLocal) return;
+            loadTip.textContent = '⚠️ 内嵌播放失败（错误码 ' + (video.error ? video.error.code : '?') + '），自动用本地播放器打开…';
+            openInLocalPlayer();
+        });
+        video.src = url;
+        try { var pp = video.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) {}
+
+        // 超时兜底：4 秒没加载出画面 → 自动转本地播放器
+        fallbackTimer = setTimeout(function () {
+            if (openedLocal) return;
+            var rs = 0; try { rs = video.readyState; } catch (e) {}
+            if (rs < 2) {  // 还没 enough data
+                loadTip.textContent = '⏱ 内嵌加载超时，自动用本地播放器打开…';
+                openInLocalPlayer();
+            }
+        }, 4000);
+
+        var closeIt = function () {
+            if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+            closeVideoPlayer();
+        };
         xBtn.addEventListener('click', closeIt);
         overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) closeIt(); });
     }
+
     function closeVideoPlayer() {
         if (_videoOverlay) {
             var v = _videoOverlay.querySelector('video');
