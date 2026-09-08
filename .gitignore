@@ -40,3 +40,7 @@ collect/opentab.json
 collect/search.log
 collect/sfx.log
 collect/keyhook.log
+
+# 超分站登录 token（用户凭证，绝不入仓）
+collect/_enhance_*.json
+py/_enhance_*.json
