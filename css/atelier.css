@@ -38,14 +38,16 @@
             display: flex;
             gap: 4px;
             margin-bottom: 6px;
+            flex-wrap: wrap;
         }
         .ws-group {
-            flex: 1;
+            flex: 1 1 auto;
+            white-space: nowrap;
             background: transparent;
             color: var(--muted);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 7px 12px;
+            padding: 7px 10px;
             font-size: 13px;
             cursor: pointer;
             transition: background .15s, color .15s, border-color .15s;
