@@ -1962,8 +1962,9 @@
             height: calc(100vh - 130px); overflow: hidden;
         }
         #panel-upscale .en-box {
-            flex: 0 0 auto; background: var(--panel); border: 1px solid var(--border);
+            flex: 0 1 auto; background: var(--panel); border: 1px solid var(--border);
             border-radius: 8px; padding: 8px 10px; margin-bottom: 4px;
+            max-height: 55%; overflow-y: auto; min-height: 0;
         }
         #panel-upscale .en-sec-title {
             font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px;

@@ -21,6 +21,9 @@
   var enStop = document.getElementById('enStop');
   var enLog = document.getElementById('enLog');
   var enActHint = document.getElementById('enActHint');
+  var enTaskRefresh = document.getElementById('enTaskRefresh');
+  var enTaskList = document.getElementById('enTaskList');
+  var enTaskHint = document.getElementById('enTaskHint');
 
   // 超分站固定参数（用户/密码来自 client 默认）
   var ENHANCE_FOLDER = '14086';
@@ -439,6 +442,7 @@
       log('════ 全部结束：成功 ' + doneCount + ' / 失败 ' + failCount + ' ════', failCount ? 'warn' : 'ok');
       cleanupTmp();
       log('🧹 临时导出件已清理（超分结果已保存在 ' + resultDir + '）');
+      try { refreshTaskList(); } catch (e) {}
     } catch (e) {
       log('✗ ' + e.message, 'err');
     } finally {
@@ -473,6 +477,99 @@
     })();
   }
 
+  // ===== 超分任务记录列表 =====
+  function taskStateLabel(st) {
+    var map = { pending: '待处理', queued: '排队中', running: '超分中', succeeded: '✅ 完成', failed: '❌ 失败' };
+    return map[st] || st || '';
+  }
+  function taskColor(st) {
+    if (st === 'succeeded') return '#7fd68b';
+    if (st === 'failed') return '#ff9a9a';
+    if (st === 'running') return '#ffd76a';
+    return '#9a9a9a';
+  }
+  function prettyName(fn) {
+    var n = String(fn || '');
+    n = n.replace(/_nosub\.mp4$/i, '.mp4');
+    return n;
+  }
+  var taskDownloading = {};  // taskId -> true（防重复下载）
+
+  async function refreshTaskList() {
+    if (!enTaskList) return;
+    var list = await queryTasks();
+    if (enTaskHint) enTaskHint.textContent = list.length ? '共 ' + list.length + ' 条' : '';
+    enTaskList.innerHTML = '';
+    if (!list.length) { enTaskList.innerHTML = '<div class="hint" style="padding:8px;">暂无任务</div>'; return; }
+    list.forEach(function (t) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:11px;border-bottom:1px dashed var(--border);';
+      var nm = document.createElement('span');
+      nm.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);';
+      nm.textContent = prettyName(t.sourceFileName);
+      nm.title = (t.sourceFileName || '') + ' · 任务ID ' + t.ID + (t.resultFileName ? '\n结果: ' + t.resultFileName : '');
+      row.appendChild(nm);
+      var res = document.createElement('span');
+      res.style.cssText = 'flex:0 0 auto;color:#888;font-size:10px;';
+      res.textContent = (t.resolution || '') + ' · ' + (t.costCents != null ? ('¥' + (t.costCents / 100).toFixed(2)) : '');
+      row.appendChild(res);
+      var st = document.createElement('span');
+      st.style.cssText = 'flex:0 0 auto;font-weight:600;color:' + taskColor(t.status) + ';';
+      st.textContent = taskStateLabel(t.status);
+      row.appendChild(st);
+      // 已完成 → 下载按钮
+      if (t.status === 'succeeded' && !taskDownloading[t.ID]) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = '⬇ 下载到项目';
+        btn.title = '下载到当前 PR 项目的「超分结果」目录并导入素材箱';
+        btn.style.cssText = 'flex:0 0 auto;background:#1e3a2a;color:#7fd68b;border:1px solid #2a5a3a;border-radius:4px;padding:1px 8px;cursor:pointer;font-size:10px;';
+        btn.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          downloadTaskToProject(t.ID, t.sourceFileName || '');
+        });
+        row.appendChild(btn);
+      } else if (taskDownloading[t.ID]) {
+        var dl = document.createElement('span');
+        dl.style.cssText = 'flex:0 0 auto;color:#b39ddb;font-size:10px;';
+        dl.textContent = '下载中…';
+        row.appendChild(dl);
+      }
+      enTaskList.appendChild(row);
+    });
+  }
+
+  // 下载某已完成任务到项目根/超分结果 + 导入素材箱
+  function downloadTaskToProject(taskId, srcName) {
+    if (taskDownloading[taskId]) return;
+    taskDownloading[taskId] = true;
+    log('⬇ 下载任务 ' + taskId + ' 到项目…');
+    refreshTaskList();  // 立即刷新显示“下载中”
+    (async function () {
+      try {
+        var dir = resultDir || (await resolveResultDir());
+        var srcBase = String(srcName || 'task_' + taskId).replace(/\.mp4$/i, '').replace(/_nosub$/i, '');
+        var saveName = srcBase + '_720p.mp4';
+        var dlFile = await downloadTask(taskId, dir, saveName);
+        if (dlFile && fs.existsSync(dlFile)) {
+          log('📥 已下载：' + dlFile, 'ok');
+          // 导入素材箱：优先用源文件名去扩展做箱名
+          var binName = srcBase;
+          var imp = await importToBin([dlFile], binName);
+          if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
+          else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
+        } else {
+          log('⚠ 下载失败（任务 ' + taskId + '），请重试', 'err');
+        }
+      } catch (e) {
+        log('✗ 下载异常：' + e.message, 'err');
+      } finally {
+        delete taskDownloading[taskId];
+        refreshTaskList();
+      }
+    })();
+  }
+
   function init() {
     if (!enGo || !enSeqList) return;  // 元素不存在（其它面板被禁用时）
     fillPresets();
@@ -480,11 +577,13 @@
     enRefSeq.addEventListener('click', function () { refreshSeqs(); });
     enGo.addEventListener('click', runAll);
     enStop.addEventListener('click', function () { stopFlag = true; log('⏹ 停止请求已发送…', 'warn'); });
+    if (enTaskRefresh) enTaskRefresh.addEventListener('click', function () { refreshTaskList(); });
     // 默认加载
     refreshSeqs();
+    refreshTaskList();
   }
 
   // 面板显示钩子（main.js 切换时调用）
-  window.__enhanceOnShow = function () { refreshSeqs(); };
+  window.__enhanceOnShow = function () { refreshSeqs(); refreshTaskList(); };
   init();
 })();
