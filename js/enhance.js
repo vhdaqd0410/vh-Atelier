@@ -28,6 +28,7 @@
   // 超分站固定参数（用户/密码来自 client 默认）
   var ENHANCE_FOLDER = '14086';
   var ENHANCE_RES = '720p';
+  var folderMap = {};   // folderId -> {name, description}（供任务列表显示文件夹名）
 
   var seqs = [];           // 全量序列
   var checked = [];        // 勾选序列名
@@ -127,8 +128,10 @@
       try {
         var arr = JSON.parse(String(stdout || '').trim().split(/\r?\n/).pop());
         if (!Array.isArray(arr)) throw new Error('not array');
+        folderMap = {};
         enFolder.innerHTML = '';
         arr.forEach(function (f) {
+          folderMap[String(f.ID)] = { name: f.name || '', description: f.description || '' };
           var o = document.createElement('option');
           o.value = String(f.ID);
           var desc = f.description ? (' - ' + f.description) : '';
@@ -137,6 +140,7 @@
           enFolder.appendChild(o);
         });
         if (!enFolder.value && arr.length) enFolder.value = String(arr[0].ID);
+        try { refreshTaskList(); } catch (e) {}   // 映射更新后刷新任务列表（显示文件夹名）
       } catch (e) {
         enFolder.innerHTML = '<option value="14086">超分（默认 49-58）</option>';
       }
@@ -493,6 +497,14 @@
     n = n.replace(/_nosub\.mp4$/i, '.mp4');
     return n;
   }
+  function fmtTime(iso) {
+    try {
+      var d = new Date(String(iso || '').replace('T', ' ').replace(/\+08:00$/, ''));
+      if (isNaN(d.getTime())) return iso ? String(iso).slice(5, 16) : '';
+      function p(x) { return x < 10 ? '0' + x : '' + x; }
+      return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    } catch (e) { return ''; }
+  }
   var taskDownloading = {};  // taskId -> true（防重复下载）
 
   async function refreshTaskList() {
@@ -503,20 +515,19 @@
     if (!list.length) { enTaskList.innerHTML = '<div class="hint" style="padding:8px;">暂无任务</div>'; return; }
     list.forEach(function (t) {
       var row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:11px;border-bottom:1px dashed var(--border);';
+      row.style.cssText = 'display:flex;flex-direction:column;padding:4px 6px;border-bottom:1px dashed var(--border);';
+      // 主行：文件名 + 状态 + 下载按钮
+      var mainRow = document.createElement('div');
+      mainRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
       var nm = document.createElement('span');
-      nm.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);';
+      nm.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:600;font-size:11px;';
       nm.textContent = prettyName(t.sourceFileName);
       nm.title = (t.sourceFileName || '') + ' · 任务ID ' + t.ID + (t.resultFileName ? '\n结果: ' + t.resultFileName : '');
-      row.appendChild(nm);
-      var res = document.createElement('span');
-      res.style.cssText = 'flex:0 0 auto;color:#888;font-size:10px;';
-      res.textContent = (t.resolution || '') + ' · ' + (t.costCents != null ? ('¥' + (t.costCents / 100).toFixed(2)) : '');
-      row.appendChild(res);
+      mainRow.appendChild(nm);
       var st = document.createElement('span');
-      st.style.cssText = 'flex:0 0 auto;font-weight:600;color:' + taskColor(t.status) + ';';
+      st.style.cssText = 'flex:0 0 auto;font-weight:600;font-size:11px;color:' + taskColor(t.status) + ';';
       st.textContent = taskStateLabel(t.status);
-      row.appendChild(st);
+      mainRow.appendChild(st);
       // 已完成 → 下载按钮
       if (t.status === 'succeeded' && !taskDownloading[t.ID]) {
         var btn = document.createElement('button');
@@ -528,13 +539,30 @@
           ev.stopPropagation();
           downloadTaskToProject(t.ID, t.sourceFileName || '');
         });
-        row.appendChild(btn);
+        mainRow.appendChild(btn);
       } else if (taskDownloading[t.ID]) {
         var dl = document.createElement('span');
         dl.style.cssText = 'flex:0 0 auto;color:#b39ddb;font-size:10px;';
         dl.textContent = '下载中…';
-        row.appendChild(dl);
+        mainRow.appendChild(dl);
       }
+      row.appendChild(mainRow);
+      // meta 行：时间 · 文件夹 · 分辨率/费用
+      var metaRow = document.createElement('div');
+      metaRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:1px;font-size:10px;color:#9a9a9a;';
+      var tm = document.createElement('span');
+      tm.textContent = '🕐 ' + fmtTime(t.CreatedAt);
+      metaRow.appendChild(tm);
+      var fmap = folderMap[String(t.folderId)];
+      var fd = document.createElement('span');
+      fd.style.cssText = 'max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7fb3d9;';
+      fd.textContent = '📁 ' + ((fmap ? fmap.name : ('文件夹' + t.folderId)) + (fmap && fmap.description ? ('·' + fmap.description) : ''));
+      fd.title = fmap ? (fmap.name + ' ' + fmap.description) : '';
+      metaRow.appendChild(fd);
+      if (t.resolution) { var rs = document.createElement('span'); rs.textContent = '🎚 ' + t.resolution; metaRow.appendChild(rs); }
+      if (t.costCents) { var cs = document.createElement('span'); cs.textContent = '💰 ¥' + (t.costCents / 100).toFixed(2); metaRow.appendChild(cs); }
+      if (t.outputDurationSeconds) { var ds = document.createElement('span'); ds.textContent = '⏱ ' + Math.round(t.outputDurationSeconds) + 's'; metaRow.appendChild(ds); }
+      row.appendChild(metaRow);
       enTaskList.appendChild(row);
     });
   }
