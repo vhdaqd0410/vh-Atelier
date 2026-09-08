@@ -680,6 +680,54 @@ function sfxGetPlayerPosition() {
 
 // 把一个音效文件插入到激活序列（插入语义，不覆盖后续片段）
 // 从全局变量 sfxInsertPayload 读 { path, positionSec }
+
+// 通用：导入文件并插入当前序列（素材面板用）——按扩展名选轨
+// payload: { path, positionSec?, seqName? }  seqName 可选（缺省用激活序列）
+function meInsertMediaToTimeline() {
+    try {
+        var pl = meInsertPayload;
+        if (!pl || !pl.path) return JSON.stringify({ error: '无插入数据' });
+        var filePath = pl.path;
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: '没有激活的序列' });
+        var f = new File(filePath);
+        if (!f.exists) return JSON.stringify({ error: '文件不存在: ' + filePath });
+
+        // 1. 导入项目根
+        var ok = app.project.importFiles([f.fsName], true, app.project.rootItem, false);
+        if (!ok) return JSON.stringify({ error: '导入失败' });
+        // 2. 找回 ProjectItem
+        var projectItem = null;
+        try {
+            var found = app.project.rootItem.findItemsMatchingMediaPath(f.fsName, 1);
+            if (found && found.length !== undefined && found.length > 0) projectItem = found[0];
+            else if (found && found.length === undefined) projectItem = found;
+        } catch (e) {}
+        if (!projectItem) return JSON.stringify({ error: '未找到 ProjectItem' });
+
+        var lower = filePath.toLowerCase();
+        var isAudio = /\.(wav|mp3|aiff|aac|flac|ogg|m4a|wma)$/i.test(lower);
+        var isVideo = /\.(mp4|mov|mxf|avi|m4v|webm|mts|m2ts)$/i.test(lower);
+        var trackIndex = -1;
+        var ticks = Math.round((pl.positionSec || 0) * 254016000000);
+        if (isAudio) {
+            if (seq.audioTracks.numTracks < 1) return JSON.stringify({ error: '序列没有音轨' });
+            trackIndex = seq.audioTracks.numTracks - 1;   // 默认最末音轨
+            seq.audioTracks[trackIndex].insertClip(projectItem, String(ticks), -1, trackIndex);
+            return JSON.stringify({ ok: true, trackIndex: trackIndex, trackType: 'audio', positionSec: pl.positionSec || 0, name: f.name });
+        }
+        // 视频/图片：找第一个可用的视频轨（优先有片段的最后一条，否则第一条）
+        if (isVideo || /\.(png|jpg|jpeg)$/i.test(lower)) {
+            if (seq.videoTracks.numTracks < 1) return JSON.stringify({ error: '序列没有视频轨' });
+            // 用最后一条视频轨（多数项目 V1 在最底，最末可能 V3/V4 空轨）——选最底非锁定视频轨：从 0 向上找有素材的，否则用 0
+            trackIndex = 0;
+            seq.videoTracks[trackIndex].insertClip(projectItem, String(ticks), -1, trackIndex);
+            return JSON.stringify({ ok: true, trackIndex: trackIndex, trackType: 'video', positionSec: pl.positionSec || 0, name: f.name });
+        }
+        return JSON.stringify({ error: '不支持的文件类型（需音/视频）: ' + filePath });
+    } catch (e) { return JSON.stringify({ error: '插入时间线失败: ' + e }); }
+}
+
 function sfxInsertToTimelineStr() {
     try {
         var payload = sfxInsertPayload;

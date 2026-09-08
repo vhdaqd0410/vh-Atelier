@@ -281,6 +281,16 @@
       row.innerHTML = '<span class="md-ic">' + icon + '</span><span class="md-fn"></span><span class="md-check"></span>';
       row.querySelector('.md-fn').textContent = f;
       row.title = full;
+      // CEP DnD：拖到 PR 项目面板/时间线（Adobe 专用 MIME）
+      row.draggable = true;
+      row.addEventListener('dragstart', function (ev) {
+        try {
+          ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', full);
+          ev.dataTransfer.setData('text/plain', full);
+          ev.dataTransfer.effectAllowed = 'copy';
+        } catch (e) {}
+      });
+      row.addEventListener('dragend', function () { closePreview(); });
       // 动作按钮：媒体=👁预览；docx/pdf=📖打开；prproj/预设/psd/aep=▶打开
       var actBtn = document.createElement('button');
       actBtn.type = 'button';
@@ -304,6 +314,17 @@
       }
       actBtn.addEventListener('dblclick', function (ev2) { ev2.stopPropagation(); });
       row.appendChild(actBtn);
+      // 插入时间线按钮（媒体）
+      if (isMedia) {
+        var insBtn = document.createElement('button');
+        insBtn.type = 'button';
+        insBtn.textContent = '⏩';
+        insBtn.title = '插入当前序列时间线（播放头处）';
+        insBtn.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border);border-radius:3px;color:#6db3ff;font-size:10px;padding:0 4px;cursor:pointer;line-height:15px;';
+        insBtn.addEventListener('click', function (ev2) { ev2.stopPropagation(); insertToTimeline(full, f); });
+        insBtn.addEventListener('dblclick', function (ev2) { ev2.stopPropagation(); });
+        row.appendChild(insBtn);
+      }
 
       row.addEventListener('click', function (ev) {
         if (ev.ctrlKey || ev.metaKey || ev.shiftKey) {
@@ -335,6 +356,31 @@
     el.files.appendChild(listWrap);
     updateSelCount();
   }
+  // 插入当前序列时间线（播放头处）
+  function insertToTimeline(full, name) {
+    try {
+      csInterface.evalScript('sfxGetPlayerPosition()', function (posResult) {
+        var posSec = 0;
+        try { var pr = JSON.parse(posResult); posSec = pr.positionSec || 0; } catch (e) {}
+        var payload = JSON.stringify({ path: full, positionSec: posSec });
+        csInterface.evalScript('meInsertPayload = ' + payload + ';', function () {
+          csInterface.evalScript('meInsertMediaToTimeline()', function (result) {
+            try {
+              var d = JSON.parse(result);
+              if (d && d.ok) {
+                var who = path.basename(full);
+                flash('⏩ 已插入时间线 @ ' + Math.round(posSec) + 's：' + who);
+                window.__copyFlash ? window.__copyFlash('已插入时间线：' + who) : null;
+              } else {
+                flash('插入失败：' + ((d && d.error) || result));
+              }
+            } catch (e) { flash('插入失败：' + result); }
+          });
+        });
+      });
+    } catch (e) { flash('插入异常：' + e.message); }
+  }
+
   function openWithSystem(full) {
     try { require('child_process').exec('start "" "' + full + '"', { windowsHide: true }); }
     catch (e) { flash('打开失败'); }
