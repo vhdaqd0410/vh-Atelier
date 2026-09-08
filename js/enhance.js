@@ -15,12 +15,14 @@
   var enSeqList = document.getElementById('enSeqList');
   var enRefSeq = document.getElementById('enRefSeq');
   var enPreset = document.getElementById('enPreset');
+  var enFolder = document.getElementById('enFolder');
+  var enRes = document.getElementById('enRes');
   var enGo = document.getElementById('enGo');
   var enStop = document.getElementById('enStop');
   var enLog = document.getElementById('enLog');
   var enActHint = document.getElementById('enActHint');
 
-  // 超分站固定参数
+  // 超分站固定参数（用户/密码来自 client 默认）
   var ENHANCE_FOLDER = '14086';
   var ENHANCE_RES = '720p';
 
@@ -29,8 +31,17 @@
   var stopFlag = false;
   var busy = false;
 
-  // 临时导出目录（过程文件，导出完可留可清）
+  // 目录规划：
+  // tmpRoot   = 无字幕导出过程件（跑完清空，仅此目录被清）
+  // resultDir = 超分结果下载位置（持久保留，PR 素材箱引用它，不清理）
   var tmpRoot = path.join(os.homedir(), 'Documents', 'vhAtelier_enhance_tmp');
+  var resultDir = (function () {
+    var r = '';
+    try { r = csInterface.getSystemPath('extension'); } catch (_) {}
+    var base = r ? path.join(r, 'collect', 'enhance_results') : path.join(tmpRoot, 'results');
+    try { fs.mkdirSync(base, { recursive: true }); } catch (e) {}
+    return base;
+  })();
 
   function log(msg, cls) {
     if (!enLog) return;
@@ -103,6 +114,47 @@
       enPreset.appendChild(o);
     });
     return hits;
+  }
+
+  // 拉取超分站文件夹列表填充下拉（调 python folders --json，登录态自动）
+  function loadFolders() {
+    if (!enFolder) return;
+    var py = findPy();
+    var root = locateExtRoot();
+    var script = root ? path.join(root, 'py', 'enhance_client.py') : '';
+    if (!script || !fs.existsSync(script)) return;
+    var cp = require('child_process');
+    var cur = enFolder.value;
+    enFolder.innerHTML = '<option value="">加载中…</option>';
+    cp.exec('"' + py + '" "' + script + '" folders --json', { windowsHide: true, maxBuffer: 8 * 1024 * 1024, encoding: 'utf8' }, function (err, stdout) {
+      try {
+        var arr = JSON.parse(String(stdout || '').trim().split(/\r?\n/).pop());
+        if (!Array.isArray(arr)) throw new Error('not array');
+        enFolder.innerHTML = '';
+        arr.forEach(function (f) {
+          var o = document.createElement('option');
+          o.value = String(f.ID);
+          var desc = f.description ? (' - ' + f.description) : '';
+          o.textContent = f.name + desc + '（ID ' + f.ID + '）';
+          if (String(f.ID) === cur || String(f.ID) === '14086') o.selected = true;
+          enFolder.appendChild(o);
+        });
+        if (!enFolder.value && arr.length) enFolder.value = String(arr[0].ID);
+      } catch (e) {
+        enFolder.innerHTML = '<option value="14086">超分（默认 49-58）</option>';
+      }
+    });
+  }
+
+  // 清理临时目录（过程文件）
+  function cleanupTmp() {
+    try {
+      if (fs.existsSync(tmpRoot)) {
+        fs.readdirSync(tmpRoot).forEach(function (f) {
+          try { fs.unlinkSync(path.join(tmpRoot, f)); } catch (e) {}
+        });
+      }
+    } catch (e) {}
   }
 
   // 序列列表
@@ -182,16 +234,16 @@
   }
 
   // 上传超分 + 等待 + 下载（调 python）
-  function uploadOne(file, outDir) {
+  function uploadOne(file, outDir, folderId, resolution) {
     return new Promise(function (resolve, reject) {
       var py = findPy();
       var root = locateExtRoot();
       var script = root ? path.join(root, 'py', 'enhance_client.py') : '';
       if (!script || !fs.existsSync(script)) return reject(new Error('找不到 enhance_client.py'));
       var cp = require('child_process');
-      var args = [script, 'upload', '--file', file, '--folder', ENHANCE_FOLDER,
-                  '--resolution', ENHANCE_RES, '--wait', '--download-to', outDir];
-      log('🚀 上传超分：' + path.basename(file) + '（720p，验证码自动识别）');
+      var args = [script, 'upload', '--file', file, '--folder', String(folderId),
+                  '--resolution', String(resolution), '--wait', '--download-to', outDir];
+      log('🚀 上传超分：' + path.basename(file) + '（' + resolution + '，验证码自动识别）');
       var child = cp.spawn(py, args, { windowsHide: true });
       var buf = '';
       child.stdout.on('data', function (d) { buf += d.toString(); });
@@ -233,6 +285,8 @@
     stopFlag = false;
     enGo.disabled = true; enStop.disabled = false;
     log('════ 开始导出并超分 ════');
+    // 开始前清一次残留导出件（防上次异常中断遗留）
+    cleanupTmp();
     try {
       if (!checked.length) { log('请先勾选要超分的序列', 'err'); return; }
       // 预设：手动选 > 自动无字幕
@@ -254,10 +308,12 @@
         try { if (fs.existsSync(outFile)) fs.unlinkSync(outFile); } catch (e) {}
         var exported = await exportOne(seqName, presetPath, outFile);
         if (exported === '__STOPPED__') break;
-        // 上传（下载回 outDir=tmpRoot）
-        var j = await uploadOne(outFile, tmpRoot);
-        // 下载成功后文件 = tmpRoot/<seq>_720p.mp4（enhance_client 会存为 源名_720p.mp4）
-        var dlFile = path.join(tmpRoot, safe + '_nosub_720p.mp4');
+        // 上传（下载到 resultDir 持久目录，PR 素材箱引用它不会被清理）
+        var folderId = enFolder && enFolder.value ? enFolder.value : '14086';
+        var resolution = enRes ? (enRes.value || '720p') : '720p';
+        var j = await uploadOne(outFile, resultDir, folderId, resolution);
+        // 下载成功后文件在 resultDir：enhance_client 存为 源名_720p.mp4
+        var dlFile = path.join(resultDir, safe + '_nosub_720p.mp4');
         if (j.result && j.result.downloaded) dlFile = j.result.downloaded;
         if (fs.existsSync(dlFile)) {
           // 导入素材箱（素材箱名=序列名，方便对应）
@@ -269,6 +325,8 @@
         }
       }
       log('════ 全部结束 ════', 'ok');
+      cleanupTmp();
+      log('🧹 临时文件已清理（导出/超分过程文件）');
     } catch (e) {
       log('✗ ' + e.message, 'err');
     } finally {
@@ -280,6 +338,7 @@
   function init() {
     if (!enGo || !enSeqList) return;  // 元素不存在（其它面板被禁用时）
     fillPresets();
+    loadFolders();
     enRefSeq.addEventListener('click', function () { refreshSeqs(); });
     enGo.addEventListener('click', runAll);
     enStop.addEventListener('click', function () { stopFlag = true; log('⏹ 停止请求已发送…', 'warn'); });

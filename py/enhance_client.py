@@ -223,6 +223,12 @@ def list_tasks(username, password, page=1, page_size=10):
 
 # ---------- CLI ----------
 def main():
+    # stdout 统一 UTF-8（Windows 控制台默认 GBK，管道场景 JS 解析需 UTF-8）
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
     ap = argparse.ArgumentParser(description='超分站客户端')
     ap.add_argument('cmd', choices=['login', 'upload', 'tasks', 'folders', 'download'])
     ap.add_argument('--user', default='张大强')
@@ -233,17 +239,26 @@ def main():
     ap.add_argument('--wait', action='store_true', help='上传后等待完成')
     ap.add_argument('--download-to', default='', help='完成后下载到目录')
     ap.add_argument('--task', default='', help='任务 ID（download 命令用）')
+    ap.add_argument('--json', action='store_true', help='folders/tasks 以 JSON 输出（供插件解析）')
     args = ap.parse_args()
 
     if args.cmd == 'login':
         tok = login(args.user, args.pwd)
         out('登录成功 token: ' + tok[:30] + '...')
     elif args.cmd == 'folders':
-        for f in list_folders(args.user, args.pwd):
-            out(f.get('ID'), f.get('name'), f.get('description'), f.get('ownerName'))
+        fl = list_folders(args.user, args.pwd)
+        if args.json:
+            out(json.dumps(fl, ensure_ascii=False, default=str))
+        else:
+            for f in fl:
+                out(f.get('ID'), f.get('name'), f.get('description'), f.get('ownerName'))
     elif args.cmd == 'tasks':
-        for t in list_tasks(args.user, args.pwd):
-            out(t.get('ID'), t.get('status'), t.get('sourceFileName'), 'cost=' + str(t.get('costCents')))
+        tl = list_tasks(args.user, args.pwd)
+        if args.json:
+            out(json.dumps(tl, ensure_ascii=False, default=str))
+        else:
+            for t in tl:
+                out(t.get('ID'), t.get('status'), t.get('sourceFileName'), 'cost=' + str(t.get('costCents')))
     elif args.cmd == 'upload':
         if not args.file:
             out('需要 --file'); sys.exit(1)

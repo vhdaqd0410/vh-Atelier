@@ -776,6 +776,16 @@
                 <select id="enPreset" style="flex:1;min-width:0;"><option value="">自动查找（含「无字幕」的 .epr）</option></select>
             </div>
             <div class="en-row" style="margin-top:6px;">
+                <label style="font-size:11px;color:var(--muted);flex:0 0 auto;">上传文件夹</label>
+                <select id="enFolder" style="flex:1;min-width:0;"><option value="14086">超分（默认 49-58）</option></select>
+                <label style="font-size:11px;color:var(--muted);flex:0 0 auto;">分辨率</label>
+                <select id="enRes" style="flex:0 0 auto;">
+                    <option value="720p" selected>720P ¥2.5/分</option>
+                    <option value="1080p">1080P ¥5/分</option>
+                    <option value="2k">2K ¥10/分</option>
+                </select>
+            </div>
+            <div class="en-row" style="margin-top:6px;">
                 <button id="enGo" style="background:#7e57c2;">🚀 导出并超分</button>
                 <button id="enStop" class="danger mini" disabled>停止</button>
             </div>
