@@ -765,18 +765,16 @@
     <div class="tab-panel" id="panel-upscale" style="display:none;">
         <!-- 操作区卡片（滚动） -->
         <div class="en-scroll">
-            <!-- 卡1：序列 -->
+            <!-- 卡1：序列 + 设置 合栏紧凑 -->
             <div class="en-card">
-                <div class="en-card-head"><span>① 选择要超分的序列</span><button id="enRefSeq" class="secondary mini" style="margin-left:auto;">🔄 刷新</button></div>
-                <div id="enSeqList" class="en-seqs"><div class="hint" style="padding:6px 8px;">点「刷新」加载序列，默认选当前活动序列</div></div>
-                <div class="en-act-hint" id="enActHint"></div>
-            </div>
-            <!-- 卡2：设置+执行 -->
-            <div class="en-card">
-                <div class="en-card-head"><span>② 超分设置</span></div>
-                <div class="en-grid">
+                <div class="en-card-head">
+                    <span>🎞 选择序列 · 设置</span>
+                    <button id="enRefSeq" class="secondary mini" style="margin-left:auto;">🔄 刷新</button>
+                </div>
+                <div id="enSeqList" class="en-seqs"><div class="hint" style="padding:4px 6px;">点「刷新」加载序列，默认选当前活动序列</div></div>
+                <div class="en-row2">
                     <label class="en-f"><span>导出预设</span>
-                        <select id="enPreset"><option value="">自动（无字幕 .epr）</option></select>
+                        <select id="enPreset"><option value="">自动（无字幕）</option></select>
                     </label>
                     <label class="en-f"><span>上传文件夹</span>
                         <select id="enFolder"><option value="14086">超分（默认）</option></select>
@@ -798,15 +796,19 @@
                     <div class="en-prog-bar"><div id="enProgFill" class="en-prog-fill"></div></div>
                     <div class="en-prog-meta"><span id="enProgText"></span><span id="enProgPct"></span></div>
                 </div>
-                <details class="en-log-wrap">
-                    <summary>📋 运行日志</summary>
-                    <div class="en-log" id="enLog"></div>
-                </details>
+                <div class="en-act-hint" id="enActHint"></div>
             </div>
-            <!-- 卡3：任务记录 -->
-            <div class="en-card">
-                <div class="en-card-head"><span>③ 超分任务</span><button id="enTaskRefresh" class="secondary mini" style="margin-left:auto;">🔄 刷新任务</button><span class="en-task-hint" id="enTaskHint"></span></div>
-                <div id="enTaskList" class="en-tasks"><div class="hint" style="padding:8px;">点「刷新任务」拉取云端最近任务，完成的点「下载到项目」</div></div>
+            <!-- 卡2：任务(左) + 日志(右) 并排 -->
+            <div class="en-split">
+                <div class="en-card en-col">
+                    <div class="en-card-head"><span>📥 超分任务</span><button id="enTaskRefresh" class="secondary mini" style="margin-left:auto;">🔄</button></div>
+                    <div class="en-task-hint" id="enTaskHint"></div>
+                    <div id="enTaskList" class="en-tasks"><div class="hint" style="padding:6px;">暂无</div></div>
+                </div>
+                <div class="en-card en-col">
+                    <div class="en-card-head"><span>📋 运行日志</span></div>
+                    <div class="en-log" id="enLog"></div>
+                </div>
             </div>
         </div>
         <!-- 超分站内嵌 -->
