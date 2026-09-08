@@ -32,6 +32,21 @@
   var CUR_KEY = 'vh_media_cur';
   var PROJ_KEY = 'vh_media_lastproj';
   var MEDIA_EXT = /\.(mp4|mov|mxf|avi|m4v|webm|mts|m2ts|wav|aiff|mp3|aac|flac|png|jpg|jpeg|webp|gif|bmp|srt)$/i;
+  var DOC_EXT = /\.(prproj|docx|pdf|epr|prel|psd|txt|json|aep|pproj|aepx|mogrt|prfpset)$/i;   // 文档/工程/预设类（提供打开动作）
+  function fileKind(name) {
+    var e = path.extname(name || '').toLowerCase().slice(1);
+    if (/^(mp4|mov|mxf|avi|m4v|webm|mts|m2ts)$/i.test(e)) return 'video';
+    if (/^(wav|mp3|aiff|aac|flac)$/i.test(e)) return 'audio';
+    if (/^(png|jpg|jpeg|webp|gif|bmp)$/i.test(e)) return 'image';
+    if (/^(prproj|pproj)$/i.test(e)) return 'prproj';
+    if (/^docx$/i.test(e)) return 'docx';
+    if (/^pdf$/i.test(e)) return 'pdf';
+    if (/^(epr|prel|prfpset|mogrt)$/i.test(e)) return 'preset';
+    if (/^(aep|aepx)$/i.test(e)) return 'ae';
+    if (/^psd$/i.test(e)) return 'psd';
+    if (/^(srt|txt|json)$/i.test(e)) return 'text';
+    return '';
+  }
 
   var currentRoot = '';
   var browseDir = '';
@@ -176,7 +191,7 @@
       return fs.readdirSync(p, { withFileTypes: true })
         .filter(function (e) { return e.isFile(); })
         .map(function (e) { return e.name; })
-        .filter(function (n) { return MEDIA_EXT.test(n); })
+        .filter(function (n) { return MEDIA_EXT.test(n) || DOC_EXT.test(n); })
         .sort(function (a, b) { return a.localeCompare(b, 'zh-CN'); });
     } catch (e) { return []; }
   }
@@ -244,13 +259,13 @@
     var files = listFiles(dir);
     el.files.innerHTML = '';
     if (!files.length) {
-      el.files.innerHTML = '<div class="hint" style="padding:10px;">该目录无媒体文件</div>';
+      el.files.innerHTML = '<div class="hint" style="padding:10px;">该目录无文件</div>';
       updateSelCount();
       return;
     }
     var cap = document.createElement('div');
     cap.className = 'md-fcap';
-    cap.textContent = files.length + ' 个媒体 · 点选导入 / 双击定位';
+    cap.textContent = files.length + ' 个文件';
     el.files.appendChild(cap);
 
     var listWrap = document.createElement('div');
@@ -258,51 +273,71 @@
     files.forEach(function (f) {
       var full = path.join(dir, f);
       var ext = path.extname(f).toLowerCase().slice(1);
-      var icon = { mp4: '🎬', mov: '🎬', mxf: '🎬', avi: '🎬', m4v: '🎬', webm: '🎬', mts: '🎬', m2ts: '🎬', wav: '🔊', mp3: '🎵', aiff: '🔊', aac: '🎵', flac: '🎵', png: '🖼', jpg: '🖼', jpeg: '🖼', webp: '🖼', gif: '🖼', srt: '📝' }[ext] || '📄';
+      var kind = fileKind(f);
+      var icon = { mp4: '🎬', mov: '🎬', mxf: '🎬', avi: '🎬', m4v: '🎬', webm: '🎬', mts: '🎬', m2ts: '🎬', wav: '🔊', mp3: '🎵', aiff: '🔊', aac: '🎵', flac: '🎵', png: '🖼', jpg: '🖼', jpeg: '🖼', webp: '🖼', gif: '🖼', srt: '📝' }[ext] || (kind === 'prproj' ? '🎬PR' : kind === 'docx' ? '📄' : kind === 'pdf' ? '📕' : kind === 'preset' ? '⚙️' : kind === 'psd' ? '🎨' : kind === 'ae' ? '✨' : kind === 'text' ? '📝' : '📄');
+      var isMedia = ['video', 'audio', 'image'].indexOf(kind) >= 0;
       var row = document.createElement('div');
       row.className = 'md-file' + (selFiles[full] ? ' sel' : '');
       row.innerHTML = '<span class="md-ic">' + icon + '</span><span class="md-fn"></span><span class="md-check"></span>';
       row.querySelector('.md-fn').textContent = f;
       row.title = full;
-      // 预览按钮（视频/音频/图片）
-      if (/^(mp4|mov|mxf|avi|m4v|webm|wav|mp3|aiff|aac|flac|png|jpg|jpeg|webp|gif)$/i.test(ext)) {
-        var pb = document.createElement('button');
-        pb.type = 'button';
-        pb.textContent = '👁';
-        pb.title = '预览';
-        pb.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border);border-radius:3px;color:#7fd68b;font-size:10px;padding:0 4px;cursor:pointer;line-height:15px;';
-        pb.addEventListener('click', function (ev2) {
+      // 动作按钮：媒体=👁预览；docx/pdf=📖打开；prproj/预设/psd/aep=▶打开
+      var actBtn = document.createElement('button');
+      actBtn.type = 'button';
+      actBtn.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border);border-radius:3px;color:#7fd68b;font-size:10px;padding:0 4px;cursor:pointer;line-height:15px;';
+      if (isMedia) {
+        actBtn.textContent = '👁';
+        actBtn.title = '预览';
+        actBtn.addEventListener('click', function (ev2) { ev2.stopPropagation(); openPreview(full, f); });
+      } else if (kind === 'docx' || kind === 'pdf') {
+        actBtn.textContent = '📖';
+        actBtn.title = '用剧本阅读器打开';
+        actBtn.addEventListener('click', function (ev2) {
           ev2.stopPropagation();
-          openPreview(full, f);
+          if (window.__openDocxByPath) window.__openDocxByPath(full);
+          else openWithSystem(full);
         });
-        pb.addEventListener('dblclick', function (ev2) { ev2.stopPropagation(); });
-        row.appendChild(pb);
+      } else {
+        actBtn.textContent = '▶';
+        actBtn.title = '用系统默认程序打开';
+        actBtn.addEventListener('click', function (ev2) { ev2.stopPropagation(); openWithSystem(full); });
       }
+      actBtn.addEventListener('dblclick', function (ev2) { ev2.stopPropagation(); });
+      row.appendChild(actBtn);
+
       row.addEventListener('click', function (ev) {
         if (ev.ctrlKey || ev.metaKey || ev.shiftKey) {
           if (selFiles[full]) delete selFiles[full]; else selFiles[full] = true;
           row.classList.toggle('sel', !!selFiles[full]);
           updateSelCount();
         } else {
-          // 单击：预览/播放（仅选中自己，不导入）
           Object.keys(selFiles).forEach(function (k) { delete selFiles[k]; });
           selFiles[full] = true;
           var rows2 = listWrap.querySelectorAll('.md-file');
           rows2.forEach(function (r2) { r2.classList.remove('sel'); });
           row.classList.add('sel');
           updateSelCount();
-          openPreview(full, f);
+          if (isMedia) openPreview(full, f);
+          else if (kind === 'docx' || kind === 'pdf') { if (window.__openDocxByPath) window.__openDocxByPath(full); else openWithSystem(full); }
+          else openWithSystem(full);
         }
       });
       row.addEventListener('dblclick', function () {
-        // 双击：导入到素材箱
-        var bin = (el.binName.value || '').trim() || '素材';
-        if (confirmProject()) importList([full], bin, '导入 ' + f);
+        if (isMedia) {
+          var bin = (el.binName.value || '').trim() || '素材';
+          if (confirmProject()) importList([full], bin, '导入 ' + f);
+        } else {
+          openWithSystem(full);
+        }
       });
       listWrap.appendChild(row);
     });
     el.files.appendChild(listWrap);
     updateSelCount();
+  }
+  function openWithSystem(full) {
+    try { require('child_process').exec('start "" "' + full + '"', { windowsHide: true }); }
+    catch (e) { flash('打开失败'); }
   }
 
   function updateSelCount() {

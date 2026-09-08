@@ -2931,4 +2931,13 @@
 
     // 初始化：先探测在线状态
     refresh(true);
+
+    // 供素材面板等打开任意剧本文件（内部走剧本阅读器）
+    window.__openDocxByPath = function (docxPath) {
+        try {
+            if (!docxPath || !fs.existsSync(docxPath)) return false;
+            loadScriptDocx(docxPath, '');
+            return true;
+        } catch (e) { return false; }
+    };
 })();
