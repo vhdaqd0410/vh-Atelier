@@ -1096,3 +1096,19 @@ function meSeqInfo() {
         return "OK:" + JSON.stringify({ durationSec: Math.round(dur * 100) / 100, width: w, height: h });
     } catch (e) { return "ERR:" + e; }
 }
+
+// 获取当前 PR 工程文件所在目录（供超分结果落位）
+function meProjectDir() {
+    try {
+        var p = app.project;
+        if (!p) return "ERR:无打开工程";
+        var dir = "";
+        try { dir = p.path; } catch (e) {}
+        if (!dir) {
+            // path 可能为空（未保存过）或返回文件全路径
+            var doc = p.document;
+            try { if (doc && doc.path) dir = doc.path; } catch (e) {}
+        }
+        return "OK:" + dir;
+    } catch (e) { return "ERR:" + e; }
+}

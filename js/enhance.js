@@ -33,15 +33,9 @@
 
   // 目录规划：
   // tmpRoot   = 无字幕导出过程件（跑完清空，仅此目录被清）
-  // resultDir = 超分结果下载位置（持久保留，PR 素材箱引用它，不清理）
+  // resultDir = 超分结果下载位置（默认工程目录/超分结果 子目录；拿不到工程路径时用 collect/enhance_results）
   var tmpRoot = path.join(os.homedir(), 'Documents', 'vhAtelier_enhance_tmp');
-  var resultDir = (function () {
-    var r = '';
-    try { r = csInterface.getSystemPath('extension'); } catch (_) {}
-    var base = r ? path.join(r, 'collect', 'enhance_results') : path.join(tmpRoot, 'results');
-    try { fs.mkdirSync(base, { recursive: true }); } catch (e) {}
-    return base;
-  })();
+  var resultDir = '';   // 运行时确定（async 初始化）
 
   function log(msg, cls) {
     if (!enLog) return;
@@ -155,6 +149,31 @@
         });
       }
     } catch (e) {}
+  }
+
+  // 确定超分结果落盘目录：工程目录/超分结果（拿不到就 collect/enhance_results）
+  async function resolveResultDir() {
+    var dir = '';
+    try {
+      var r = await evalHost('meProjectDir()');
+      if (r && r.indexOf('OK:') === 0) {
+        var pd = r.slice(3).trim();
+        if (pd) {
+          var target = path.join(pd, '超分结果');
+          try { fs.mkdirSync(target, { recursive: true }); } catch (e) {}
+          if (fs.existsSync(target)) dir = target;
+        }
+      }
+    } catch (e) {}
+    if (!dir) {
+      var ext = '';
+      try { ext = csInterface.getSystemPath('extension'); } catch (e2) {}
+      dir = ext ? path.join(ext, 'collect', 'enhance_results') : path.join(tmpRoot, 'results');
+      try { fs.mkdirSync(dir, { recursive: true }); } catch (e2) {}
+    }
+    resultDir = dir;
+    log('结果将保存到：' + resultDir);
+    return dir;
   }
 
   // 序列列表
@@ -299,6 +318,8 @@
       }
       // 输出目录
       if (!fs.existsSync(tmpRoot)) { try { fs.mkdirSync(tmpRoot, { recursive: true }); } catch (e) {} }
+      // 确定超分结果目录（工程目录/超分结果）
+      var resultDirNow = await resolveResultDir();
 
       for (var i = 0; i < checked.length; i++) {
         if (stopFlag) break;
@@ -311,9 +332,9 @@
         // 上传（下载到 resultDir 持久目录，PR 素材箱引用它不会被清理）
         var folderId = enFolder && enFolder.value ? enFolder.value : '14086';
         var resolution = enRes ? (enRes.value || '720p') : '720p';
-        var j = await uploadOne(outFile, resultDir, folderId, resolution);
-        // 下载成功后文件在 resultDir：enhance_client 存为 源名_720p.mp4
-        var dlFile = path.join(resultDir, safe + '_nosub_720p.mp4');
+        var j = await uploadOne(outFile, resultDirNow, folderId, resolution);
+        // 下载成功后文件在 resultDirNow：enhance_client 存为 源名_720p.mp4
+        var dlFile = path.join(resultDirNow, safe + '_nosub_720p.mp4');
         if (j.result && j.result.downloaded) dlFile = j.result.downloaded;
         if (fs.existsSync(dlFile)) {
           // 导入素材箱（素材箱名=序列名，方便对应）
