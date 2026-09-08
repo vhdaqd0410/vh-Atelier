@@ -12,11 +12,11 @@
     <div class="ws-groups">
         <button class="ws-group" data-group="script">📖 剧本</button>
         <button class="ws-group active" data-group="progress">进度</button>
+        <button class="ws-group" data-group="upscale">✨ 超分</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
-        <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
-        <button class="ws-group" data-group="upscale">✨ 超分</button>
+        <button class="ws-group" data-group="deliver">交付</button>
     </div>
 
     <div class="tabs ws-subtabs" data-group="progress">
@@ -571,7 +571,6 @@
             <button id="btn-go">一键导出</button>
             <button id="btn-stop" disabled>停止</button>
             <button id="btn-refresh">刷新</button>
-            <button id="btn-export-enhance" title="导出成片版本后自动上传超分站，完成后下载结果并提示" style="background:#7e57c2;">🚀 导出并超分</button>
             <button id="btn-open-out" title="导出完成后用文件管理器打开输出文件夹">📂 打开输出目录</button>
         </div>
 
@@ -762,20 +761,36 @@
         </div>
     </div>
 
-    <!-- ==================== 超分（外站工具：去字幕/超分，上传处理用） ==================== -->
+    <!-- ==================== 超分（一键导出并超分 + 外站工具） ==================== -->
     <div class="tab-panel" id="panel-upscale" style="display:none;">
-        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
-            <div class="wb-nav">
-                <button class="wb-nav-btn" id="upBack" title="后退（站内跳转后回到上一个地址）">←</button>
-                <button class="wb-nav-btn" id="upFwd" title="前进">→</button>
-                <button class="wb-nav-btn" id="upReload" title="刷新当前页">↻</button>
-                <button class="wb-nav-btn" id="btnUpscaleHome" title="回到首页">🏠</button>
-                <button class="wb-nav-btn wb-nav-ext" id="upExternal" title="在外部浏览器打开">↗</button>
-                <input type="text" class="wb-nav-url" id="upUrl" placeholder="输入网址回车跳转">
+        <!-- 上半：一键导出并超分（粗剪完成后直接在这处理，结果导回 PR 继续加音乐音效） -->
+        <div class="en-box">
+            <div class="en-sec-title">🎞 一键导出并超分<span style="font-weight:400;color:var(--muted);font-size:10px;margin-left:6px;">粗剪完成 → 导出无字幕版 → 自动上传超分（720p）→ 完成后导入 PR 素材箱</span></div>
+            <div class="en-row">
+                <button id="enRefSeq" class="secondary mini">刷新序列</button>
+                <span style="font-size:11px;color:var(--muted);" id="enActHint"></span>
             </div>
-            <div style="flex:0 0 auto;padding:2px 4px;font-size:10px;color:var(--muted);" id="upscaleHint">首次使用需在站内登录一次；站内点击跳转时，用「↻」回到当前页，用「←/→」回到本导航栏访问过的地址</div>
-            <iframe id="upscaleFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+            <div id="enSeqList" style="max-height:96px;overflow-y:auto;background:var(--panel2);border-radius:6px;padding:4px;margin-top:4px;"><div class="hint" style="padding:6px 8px;">点「刷新序列」加载项目序列，勾选要超分的（默认当前活动序列）</div></div>
+            <div class="en-row" style="margin-top:6px;">
+                <label style="font-size:11px;color:var(--muted);flex:0 0 auto;">无字幕导出预设</label>
+                <select id="enPreset" style="flex:1;min-width:0;"><option value="">自动查找（含「无字幕」的 .epr）</option></select>
+            </div>
+            <div class="en-row" style="margin-top:6px;">
+                <button id="enGo" style="background:#7e57c2;">🚀 导出并超分</button>
+                <button id="enStop" class="danger mini" disabled>停止</button>
+            </div>
+            <div class="en-log" id="enLog"></div>
         </div>
+        <!-- 下半：超分站（上传/任务管理在站内做也行） -->
+        <div class="wb-nav" style="margin-top:4px;">
+            <button class="wb-nav-btn" id="upBack" title="后退（站内跳转后回到上一个地址）">←</button>
+            <button class="wb-nav-btn" id="upFwd" title="前进">→</button>
+            <button class="wb-nav-btn" id="upReload" title="刷新当前页">↻</button>
+            <button class="wb-nav-btn" id="btnUpscaleHome" title="回到首页">🏠</button>
+            <button class="wb-nav-btn wb-nav-ext" id="upExternal" title="在外部浏览器打开">↗</button>
+            <input type="text" class="wb-nav-url" id="upUrl" placeholder="输入网址回车跳转">
+        </div>
+        <iframe id="upscaleFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
     </div>
 
     <!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
@@ -792,6 +807,7 @@
     <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
     <script src="js/export.js"></script>
+    <script src="js/enhance.js"></script>
     <script src="js/check.js"></script>
     <script src="js/video.js"></script>
     <script src="js/progress.js"></script>

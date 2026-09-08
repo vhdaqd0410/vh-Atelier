@@ -92,6 +92,10 @@
         if (name === 'upscale' && window.__upscaleAutoLoad) {
             try { window.__upscaleAutoLoad(); } catch (e) {}
         }
+        // 超分面板：切到时刷新序列列表
+        if (name === 'upscale' && window.__enhanceOnShow) {
+            try { window.__enhanceOnShow(); } catch (e) {}
+        }
     }
 
     // 切到某个 tab（面板 + 组条 + 高亮同步）

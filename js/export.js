@@ -889,127 +889,6 @@
     });
   }
 
-  // ── 超分：导出完成后自动上传 subtitle.zztianqiao.com ──
-  var ENHANCE_FOLDER = '14086';        // 默认「超分 49-58」文件夹
-  var ENHANCE_RES = '720p';
-  var enhanceRunning = false;
-  var enhanceStop = false;
-
-  // 定位 python：优先插件 runtime，其次系统 python
-  function findPy() {
-    try {
-      var root = '';
-      try { root = csInterface.getSystemPath('extension'); } catch (_) {}
-      if (root && fs.existsSync(path.join(root, 'runtime', 'python.exe'))) return path.join(root, 'runtime', 'python.exe');
-      var cands = [
-        path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
-        path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python311', 'python.exe'),
-        path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python312', 'python.exe'),
-        path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe')
-      ];
-      for (var i = 0; i < cands.length; i++) if (fs.existsSync(cands[i])) return cands[i];
-    } catch (e) {}
-    return 'python';
-  }
-
-  // 定位插件根目录（enhance_client.py 所在）
-  function findExtRoot() {
-    var r = '';
-    try { r = csInterface.getSystemPath('extension'); } catch (_) {}
-    if (r && fs.existsSync(path.join(r, 'py', 'enhance_client.py'))) return r;
-    try {
-      var d = (typeof __dirname !== 'undefined') ? __dirname : '';
-      if (d) {
-        var root2 = (path.basename(d).toLowerCase() === 'js') ? path.dirname(d) : d;
-        if (fs.existsSync(path.join(root2, 'py', 'enhance_client.py'))) return root2;
-      }
-    } catch (_) {}
-    return '';
-  }
-
-  // 导出全部完成后：挑成片文件 → 上传超分 → 轮询 → 下载 → 提示
-  async function runEnhanceAfterExport(pend) {
-    var candidates = (pend && pend.files) || [];
-    if (!candidates.length) {
-      var evsX = enabledVersions();
-      if (evsX.length) {
-        var seq0 = (pend && pend.seqs && pend.seqs[0]) || (getCheckedSeqs()[0] || '');
-        if (seq0) {
-          var o0 = buildOutputs(seq0)[0];
-          if (o0 && fs.existsSync(path.join(o0.dir, o0.file))) candidates.push({ seq: seq0, file: path.join(o0.dir, o0.file) });
-        }
-      }
-    }
-    if (!candidates.length) { setLog('未找到可上传的成片文件', true); return; }
-    // 只保留真实存在的文件，逐个上传
-    var targets = candidates.filter(function (c) { return fs.existsSync(c.file); });
-    if (!targets.length) { setLog('成片文件不存在（导出可能未成功？）', true); return; }
-
-    for (var ti = 0; ti < targets.length; ti++) {
-      if (enhanceStop) { setLog('⏹ 已停止超分流程'); return; }
-      var target = targets[ti];
-      var file = target.file;
-      var outDir = path.dirname(file);
-      setLog('🚀 上传超分 (' + (ti + 1) + '/' + targets.length + ')：' + path.basename(file));
-      var ok = await doEnhanceOne(file, outDir);
-      if (!ok && enhanceStop) return;
-    }
-    setLog('════ 超分流程全部结束 ════', 'success');
-  }
-
-  function doEnhanceOne(file, outDir) {
-    return new Promise(function (resolve) {
-      enhanceRunning = true;
-      enhanceStop = false;
-      var py = findPy();
-      var root = findExtRoot();
-      var script = root ? path.join(root, 'py', 'enhance_client.py') : '';
-      if (!script || !fs.existsSync(script)) { setLog('找不到 enhance_client.py（扩展根=' + root + '）', true); enhanceRunning = false; resolve(false); return; }
-      var cp = require('child_process');
-      var args = [script, 'upload', '--file', file, '--folder', ENHANCE_FOLDER, '--resolution', ENHANCE_RES,
-                  '--wait', '--download-to', outDir];
-      setLog('执行超分上传（验证码自动识别，可能重试几次）…');
-      var child = cp.spawn(py, args, { windowsHide: true });
-      var buf = '';
-      var timer = setInterval(function () {
-        setLog('超分处理中…（云端任务，完成自动下载到 ' + outDir + '）');
-      }, 60000);
-      child.stdout.on('data', function (d) { buf += d.toString(); });
-      child.stderr.on('data', function (d) { buf += d.toString(); });
-      child.on('error', function (e) { clearInterval(timer); enhanceRunning = false; setLog('启动超分进程失败：' + e.message, true); resolve(false); });
-      child.on('close', function (code) {
-        clearInterval(timer);
-        enhanceRunning = false;
-        try {
-          var lines = buf.split(/\r?\n/).filter(Boolean);
-          var last = lines[lines.length - 1] || '';
-          var j = null;
-          try { j = JSON.parse(last); } catch (e) {}
-          if (j && j.ok && j.result && j.result.downloaded) {
-            setLog('✅ 超分完成已下载：' + path.basename(j.result.downloaded), 'success');
-            try {
-              var notif = new Notification('vh-Atelier 超分完成', { body: path.basename(j.result.downloaded) + ' 已下载到输出目录' });
-              setTimeout(function () { try { notif.close(); } catch (e) {} }, 8000);
-            } catch (e) {}
-            try { cp.exec('explorer /select,"' + j.result.downloaded + '"', { windowsHide: true }, function () {}); } catch (e) {}
-            resolve(true);
-          } else if (j && j.ok) {
-            setLog('✅ 超分任务已提交 ID=' + j.task_id + '（wait 模式下应等待并下载）', 'success');
-            resolve(true);
-          } else {
-            var hint = '';
-            lines.forEach(function (l) { if (!hint && /失败|错误|❌|⚠/.test(l)) hint = l; });
-            setLog('超分失败：' + (hint || last || ('退出码 ' + code)), true);
-            resolve(false);
-          }
-        } catch (e) {
-          setLog('解析超分结果失败：' + e.message, true);
-          resolve(false);
-        }
-      });
-    });
-  }
-
   // ── 单个序列：按版本列表依次导出 ──────────────
   async function exportOneSequence(seqName, onProgress) {
     var evs = enabledVersions();
@@ -1168,11 +1047,7 @@
           if (evsDone.length && evsDone[0].outDir) lastOutputDir = evsDone[0].outDir;
         } catch (_) {}
         // 若本次导出是「导出并超分」触发，交给超分流程
-        if (allOk && window.__enhancePendingExport) {
-          var pend = window.__enhancePendingExport;
-          window.__enhancePendingExport = null;
-          try { setTimeout(function () { runEnhanceAfterExport(pend); }, 300); } catch (e) { setLog('超分流程启动失败：' + e.message, true); }
-        }
+
       }
     } catch (e) {
       setLog('流程中断：' + e.message, 'error');
@@ -1302,37 +1177,7 @@
     }
   });
 
-  // 🚀 导出并超分：先跑批量导出（成片版落盘），完成后自动上传超分站
-  var btnExportEnhance = document.getElementById('btn-export-enhance');
-  if (btnExportEnhance) {
-    btnExportEnhance.addEventListener('click', function () {
-      var seqs = getCheckedSeqs();
-      if (seqs.length === 0) { setLog('请至少勾选一个序列', true); return; }
-      var evs = enabledVersions();
-      if (evs.length === 0) { setLog('请至少启用一个版本', true); return; }
-      // 预收集将产出的文件（每个序列第一个启用版本产物），超分只传一份成片
-      var pendFiles = [];
-      seqs.forEach(function (sq) {
-        var outs = buildOutputs(sq);
-        // 优先名含「成片」，否则第一个
-        var pick = null;
-        evs.forEach(function (v, i) {
-          var o = outs[i];
-          if (!o) return;
-          if (v.name.indexOf('成片') >= 0) { if (!pick) pick = { seq: sq, file: path.join(o.dir, o.file) }; }
-        });
-        if (!pick) { var o0 = outs[0]; if (o0) pick = { seq: sq, file: path.join(o0.dir, o0.file) }; }
-        if (pick) pendFiles.push(pick);
-      });
-      if (!pendFiles.length) { setLog('无法确定要超分的成片文件', true); return; }
-      window.__enhancePendingExport = { seqs: seqs, files: pendFiles };
-      setLog('🚀 导出并超分：先导出，完成后自动上传 ' + pendFiles.length + ' 个成片');
-      runExport();
-    });
-  }
-
-
-  btnAddVersion.addEventListener('click', addVersion);
+    btnAddVersion.addEventListener('click', addVersion);
 
   btnBrowseRoot.addEventListener('click', function () {
     browseFolder(deliveryRoot, function (p) { setDeliveryRoot(p); });

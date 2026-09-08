@@ -1956,6 +1956,33 @@
         }
         #panel-progress .prg-ops-more .prg-open-btn:hover { background: var(--panel2); color: var(--text); }
         /* 刷新/分秒帧专属配色沿用上方旧规则 */
+        /* ===== 超分面板：上操作区 + 下站点 iframe ===== */
+        #panel-upscale {
+            display: flex; flex-direction: column;
+            height: calc(100vh - 130px); overflow: hidden;
+        }
+        #panel-upscale .en-box {
+            flex: 0 0 auto; background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; padding: 8px 10px; margin-bottom: 4px;
+        }
+        #panel-upscale .en-sec-title {
+            font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px;
+        }
+        #panel-upscale .en-row { display: flex; align-items: center; gap: 8px; }
+        #panel-upscale .en-row + .en-row { margin-top: 6px; }
+        #panel-upscale .en-log {
+            margin-top: 6px; max-height: 80px; overflow-y: auto;
+            font: 11px/1.5 Consolas, monospace; background: #141414;
+            border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
+            color: var(--muted); user-select: text; -webkit-user-select: text;
+            white-space: pre-wrap; word-break: break-all;
+        }
+        #panel-upscale .en-log .ok { color: #7fd68b; }
+        #panel-upscale .en-log .err { color: #ff9a9a; }
+        #panel-upscale .en-log .warn { color: #ffd76a; }
+        #panel-upscale .en-seq-item {
+            display: flex; align-items: center; gap: 6px; padding: 2px 6px; font-size: 12px;
+        }
         /* ===== 外站内嵌导航栏（审片/超分通用） ===== */
         .wb-nav {
             flex: 0 0 auto; display: flex; align-items: center; gap: 5px;
