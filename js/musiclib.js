@@ -191,6 +191,8 @@
                 renderTree();
                 // 默认选中根目录
                 selectDir(dirPath);
+                // 后台刷新完成后：把上次浏览的子目录找回来（缓存加载时可能因树未完整失败）
+                restoreMlCurDir();
                 setStatus('扫描完成：' + allDirs.length + ' 个文件夹，' + slim.music.length + ' 首音乐', 'ok');
             } catch (e) {
                 setStatus('扫描出错: ' + e.message, 'err');
@@ -317,6 +319,27 @@
     }
 
     // ================= 目录选择 =================
+    // 恢复上次浏览的目录（sfx 同款逻辑）：大小写不敏感 + 找不到时逐级向上找最近存在的祖先
+    function restoreMlCurDir() {
+        var savedCur = '';
+        try { savedCur = localStorage.getItem('mllibCurDir') || ''; } catch (e) {}
+        if (!savedCur || !rootDir) return;
+        var normRoot = path.normalize(rootDir).toLowerCase();
+        var probe = path.normalize(savedCur);
+        if (probe.toLowerCase().indexOf(normRoot) !== 0) return;
+        if (probe.toLowerCase() === normRoot) return;
+        var node = null;
+        while (probe && probe.length >= path.normalize(rootDir).length) {
+            var n = findNode(probe);
+            if (n) { node = n; break; }
+            var parentDir = path.dirname(probe);
+            if (parentDir === probe) break;
+            probe = parentDir;
+        }
+        if (node) {
+            selectDir(node.abs);
+        }
+    }
     function selectDir(abs) {
         if (!abs) return;
         curDir = abs;
@@ -992,6 +1015,7 @@
         if (!forceScan && loadTreeCache(dirPath)) {
             renderTree();
             selectDir(dirPath);
+            restoreMlCurDir();
             setStatus('已加载缓存，后台刷新中...', 'ok');
             setTimeout(function () { scanAndCache(dirPath); }, 100);
             return;
@@ -1090,21 +1114,7 @@
         var savedDir = localStorage.getItem('mllibDir');
         if (savedDir && fs.existsSync(savedDir)) {
             el.dir.value = savedDir;
-            doLoad(savedDir, false);
-            // 恢复左侧树上次选中的子目录（轮询直到树包含该节点）
-            var savedCur = '';
-            try { savedCur = localStorage.getItem('mllibCurDir') || ''; } catch (e) {}
-            if (savedCur && savedCur.indexOf(savedDir) === 0 && fs.existsSync(savedCur)) {
-                var tries = 0;
-                var tmr = setInterval(function () {
-                    tries++;
-                    try {
-                        var found = findNode(savedCur);
-                        if (found) { clearInterval(tmr); selectDir(savedCur); return; }
-                    } catch (e) { clearInterval(tmr); return; }
-                    if (tries > 30) clearInterval(tmr);   // 5s 上限
-                }, 200);
-            }
+            doLoad(savedDir, false);   // 内部（缓存/全扫完成点）会恢复上次浏览子目录
         }
     } catch (e) {}
 

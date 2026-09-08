@@ -246,6 +246,27 @@
     }
     if (dir === currentRoot) {
       pushCrumb(dirName(currentRoot) || currentRoot, currentRoot, true);
+    } else if (currentRoot === 'COMPUTER') {
+      // 从「我的电脑」进入盘/目录：面包屑 = 我的电脑 › 盘符 › 逐级真实目录
+      pushCrumb('我的电脑', 'COMPUTER', false);
+      var driveM = /^([A-Za-z]):[\\/]?/.exec(dir);
+      if (driveM) {
+        var driveRoot = driveM[1].toUpperCase() + ':/';
+        var restPath = dir.slice(driveM[0].length).replace(/[\\/]+$/, '');
+        if (!restPath) {
+          pushCrumb(driveRoot, driveRoot, true);
+        } else {
+          pushCrumb(driveRoot, driveRoot, false);
+          var acc2 = driveRoot;
+          var parts2 = restPath.split(/[\\/]+/);
+          parts2.forEach(function (pp, idx) {
+            acc2 = path.join(acc2, pp);
+            pushCrumb(pp, acc2, idx === parts2.length - 1);
+          });
+        }
+      } else {
+        pushCrumb(dirName(dir) || dir, dir, true);
+      }
     } else {
       pushCrumb(dirName(currentRoot), currentRoot, false);
       var rel = path.relative(currentRoot, dir);
@@ -295,7 +316,8 @@
     var caret = document.createElement('span');
     caret.className = 'caret';
     caret.textContent = subCnt ? '▸' : '';
-    caret.style.cssText = 'display:inline-block;width:14px;text-align:center;color:var(--accent);cursor:pointer;';
+    caret.style.cssText = 'display:inline-block;width:22px;height:20px;line-height:18px;text-align:center;color:var(--accent);cursor:pointer;border-radius:4px;font-size:13px;flex:0 0 auto;';
+    caret.title = subCnt ? '展开/收起' : '';
     var ico = document.createElement('span');
     ico.textContent = '📁 ';
     var lbl = document.createElement('span');
@@ -386,18 +408,37 @@
     // 异步读卷标：VolumeName（资源管理器式盘符显示）
     loadDriveLabels(driveRows);
   }
-  // 用 PowerShell 一次拿全部盘符卷标（避免逐盘 spawn 慢）；拿不到就保留原样
+  // 用 PowerShell 临时脚本一次拿全部盘符卷标（内联引号易碎，写 ps1 文件最稳）；拿不到就保留盘符
   function loadDriveLabels(rows) {
     try {
+      var os = require('os');
+      var stamp = Date.now();
+      var tmpPs = path.join(os.tmpdir(), 'vh_drivelabel_' + stamp + '.ps1');
+      var tmpOut = path.join(os.tmpdir(), 'vh_drivelabel_' + stamp + '.txt');
+      var script = [
+        '$out = @()',
+        '$fso = New-Object -ComObject Scripting.FileSystemObject',
+        'foreach ($drv in $fso.Drives) {',
+        '  $v = ""',
+        '  try { $v = $drv.VolumeName } catch { $v = "" }',
+        '  $out += ($drv.DriveLetter + ":|" + $v)',
+        '}',
+        '[System.IO.File]::WriteAllLines("' + tmpOut + '", $out, [System.Text.Encoding]::UTF8)'
+      ].join('\r\n');
+      fs.writeFileSync(tmpPs, script, 'utf8');
       var cp = require('child_process');
-      var ps = 'powershell -NoProfile -Command "Get-CimInstance Win32_LogicalDisk -Filter \'DriveType=3\' | ForEach-Object { $_.DeviceID + '|' + $_.VolumeName }"';
-      cp.exec(ps, { windowsHide: true, timeout: 8000, encoding: 'utf8' }, function (err, stdout) {
-        if (err || !stdout) return;
+      var ps = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + tmpPs + '"';
+      cp.exec(ps, { windowsHide: true, timeout: 12000 }, function (err) {
+        try { fs.unlinkSync(tmpPs); } catch (e) {}
         var map = {};
-        String(stdout).split(/[\r\n]+/).forEach(function (line) {
-          var p2 = line.indexOf('|');
-          if (p2 > 0) { map[line.slice(0, p2).trim().toUpperCase()] = line.slice(p2 + 1).trim(); }
-        });
+        try {
+          var txt = fs.readFileSync(tmpOut, 'utf8');
+          String(txt).split(/[\r\n]+/).forEach(function (line) {
+            var p2 = line.indexOf('|');
+            if (p2 > 0) { map[line.slice(0, p2).trim().toUpperCase()] = line.slice(p2 + 1).trim(); }
+          });
+        } catch (e) {}
+        try { fs.unlinkSync(tmpOut); } catch (e) {}
         rows.forEach(function (row) {
           var d = (row.dataset.drive || '').toUpperCase();
           var vol = map[d];

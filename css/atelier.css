@@ -2103,7 +2103,9 @@
         #panel-media .md-crumb-item { cursor: pointer; }
         #panel-media .md-crumb-item:hover { text-decoration: underline; }
         #panel-media .md-crumb-item.cur { color: var(--muted); cursor: default; }
-        #panel-media .md-tree-item { font-size: 12px; padding: 4px 6px; cursor: pointer; border-radius: 4px; }
+        #panel-media .md-tree-item { font-size: 12px; padding: 4px 6px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 2px; }
+        #panel-media .md-tree-item .caret:hover { background: #3d3d3d; }
+        #panel-media .md-tree-item .caret { user-select: none; -webkit-user-select: none; }
         #panel-media .md-tree-item:hover { background: #3a3a3a; }
         #panel-media .md-tree-item.md-up { color: var(--accent); }
         #panel-media .md-fcap { font-size: 10px; color: var(--muted); padding: 2px 4px 6px; }
