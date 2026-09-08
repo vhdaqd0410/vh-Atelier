@@ -280,22 +280,22 @@
       }
       row.addEventListener('click', function (ev) {
         if (ev.ctrlKey || ev.metaKey || ev.shiftKey) {
-          if (ev.shiftKey) { flash('Shift 多选暂用 Ctrl 逐个'); return; }
           if (selFiles[full]) delete selFiles[full]; else selFiles[full] = true;
           row.classList.toggle('sel', !!selFiles[full]);
           updateSelCount();
         } else {
-          // 单击：清空其它，仅选当前（防止误导入）——单击不导入，需点「导入选中」或双击
-          // 为保留旧习惯「单击即导入」，此处改为单击选中，双击导入+定位
+          // 单击：预览/播放（仅选中自己，不导入）
           Object.keys(selFiles).forEach(function (k) { delete selFiles[k]; });
           selFiles[full] = true;
-          var rows = listWrap.querySelectorAll('.md-file');
-          rows.forEach(function (r2) { r2.classList.remove('sel'); });
+          var rows2 = listWrap.querySelectorAll('.md-file');
+          rows2.forEach(function (r2) { r2.classList.remove('sel'); });
           row.classList.add('sel');
           updateSelCount();
+          openPreview(full, f);
         }
       });
       row.addEventListener('dblclick', function () {
+        // 双击：导入到素材箱
         var bin = (el.binName.value || '').trim() || '素材';
         if (confirmProject()) importList([full], bin, '导入 ' + f);
       });
@@ -398,31 +398,79 @@
     previewOverlay = null;
   }
 
-  // ===== 进度条 =====
-  function setProg(pct, txt) {
-    if (!el.progWrap) return;
-    el.progWrap.style.display = 'block';
-    el.progFill.style.width = Math.max(0, Math.min(100, pct)) + '%';
-    if (el.progText) el.progText.textContent = txt || '';
-    if (el.progPct) el.progPct.textContent = Math.round(pct) + '%';
+  // ===== 导入弹窗（进度模态 + 结果模态）=====
+  var importModal = null;
+  function showImportModal(title, showBar) {
+    closeImportModal();
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10010;display:flex;align-items:center;justify-content:center;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--panel,#242424);border:1px solid var(--border,#444);border-radius:10px;width:340px;max-width:90vw;padding:16px 18px;box-shadow:0 8px 30px rgba(0,0,0,.5);';
+    var ttl = document.createElement('div');
+    ttl.style.cssText = 'font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;';
+    ttl.textContent = title || '';
+    box.appendChild(ttl);
+    var barWrap = document.createElement('div');
+    if (showBar) {
+      barWrap.style.cssText = 'height:10px;background:#1a1a1a;border-radius:5px;overflow:hidden;margin:6px 0;';
+      var bar = document.createElement('div');
+      bar.style.cssText = 'height:100%;width:0%;background:linear-gradient(90deg,#3d9a50,#7fd68b);border-radius:5px;transition:width .2s;';
+      barWrap.appendChild(bar);
+    }
+    box.appendChild(barWrap);
+    var txt = document.createElement('div');
+    txt.style.cssText = 'font-size:12px;color:var(--muted);line-height:1.7;margin-top:6px;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;user-select:text;';
+    box.appendChild(txt);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    importModal = { ov: ov, box: box, bar: barWrap.firstChild, txt: txt };
+    return importModal;
   }
-  function hideProg() {
-    if (el.progWrap) { setTimeout(function () { el.progWrap.style.display = 'none'; }, 2500); }
+  function setModalProgress(pct, text) {
+    if (!importModal) return;
+    try { if (importModal.bar) importModal.bar.style.width = Math.max(0, Math.min(100, pct)) + '%'; } catch (e) {}
+    if (text) importModal.txt.textContent = text;
+  }
+  function showResultModal(title, detail) {
+    if (importModal) { try { importModal.ov.parentNode && importModal.ov.parentNode.removeChild(importModal.ov); } catch (e) {} importModal = null; }
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10011;display:flex;align-items:center;justify-content:center;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--panel,#242424);border:1px solid var(--border,#444);border-radius:10px;width:360px;max-width:90vw;padding:16px 18px;box-shadow:0 8px 30px rgba(0,0,0,.5);';
+    var ttl = document.createElement('div');
+    ttl.style.cssText = 'font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;';
+    ttl.textContent = title || '';
+    box.appendChild(ttl);
+    var txt = document.createElement('div');
+    txt.style.cssText = 'font-size:12px;color:var(--muted);line-height:1.7;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;user-select:text;';
+    txt.textContent = detail || '';
+    box.appendChild(txt);
+    var okBtn = document.createElement('button');
+    okBtn.type = 'button';
+    okBtn.textContent = '知道了';
+    okBtn.style.cssText = 'display:block;margin:12px auto 0;background:var(--accent,#7e57c2);color:#fff;border:none;border-radius:6px;padding:6px 26px;cursor:pointer;font-size:12px;';
+    okBtn.addEventListener('click', function () { if (ov.parentNode) ov.parentNode.removeChild(ov); });
+    box.appendChild(okBtn);
+    ov.appendChild(box);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) { if (ov.parentNode) ov.parentNode.removeChild(ov); } });
+    document.body.appendChild(ov);
+  }
+  function closeImportModal() {
+    if (importModal) { try { if (importModal.ov.parentNode) importModal.ov.parentNode.removeChild(importModal.ov); } catch (e) {} importModal = null; }
   }
 
-  // ===== 导入 =====
-  // 逐文件导入（分小批避免单次 eval 过大），带进度
+  // 逐文件导入（分批调 host，模态进度）
   function importList(filePaths, binName, label) {
     if (importing) { flash('正在导入中…'); return; }
     if (!filePaths.length) return;
     importing = true;
-    setProg(0, label + '…');
+    var md = showImportModal(label || '导入中…', true);
     var done = 0, okN = 0, failN = 0, fails = [];
     var BATCH = 20;
+    setModalProgress(0, '准备中…');
     function nextBatch() {
       var batch = filePaths.slice(done, done + BATCH);
       if (!batch.length) { finish(); return; }
-      // 分批调 host meImportFilesToBinStr
       var payload = JSON.stringify({ files: batch, binName: binName });
       csInterface.evalScript('meImportPayload = ' + payload + ';', function () {
         csInterface.evalScript('meImportFilesToBinStr()', function (r) {
@@ -435,52 +483,80 @@
           } catch (e) { failN += batch.length; fails.push('解析失败'); }
           done += batch.length;
           var pct = Math.min(100, Math.round(done / filePaths.length * 100));
-          setProg(pct, label + ' ' + done + '/' + filePaths.length);
+          setModalProgress(pct, '已处理 ' + done + '/' + filePaths.length);
           setTimeout(nextBatch, 60);
         });
       });
     }
     function finish() {
       importing = false;
-      hideProg();
+      closeImportModal();
       clearSel();
-      var msg = '✅ 导入完成：成功 ' + okN + '，失败 ' + failN;
-      flash(msg);
-      // 汇总详情
-      var detail = fails.slice(0, 8).join('\n');
-      window.confirm(msg + (detail ? '\n\n' + detail + (fails.length > 8 ? '\n…' : '') : ''));
+      var det = fails.length ? '失败明细：\n' + fails.slice(0, 10).join('\n') + (fails.length > 10 ? '\n…共 ' + fails.length + ' 个失败' : '') : '全部成功';
+      showResultModal('✅ 导入完成', '成功 ' + okN + ' 个\n失败 ' + failN + ' 个\n\n' + det);
     }
     nextBatch();
   }
 
-  // 整个文件夹递归导入（保留结构）
+  // 文件夹递归导入（前端算 plan → host meImportTreePlanStr，保留 UTF-8 目录结构）
   function importFolderTree(folderPath, binName) {
     if (importing) { flash('正在导入中…'); return; }
     importing = true;
-    setProg(5, '扫描并导入文件夹…');
-    var payload = JSON.stringify({ folderPath: folderPath, binName: binName });
-    csInterface.evalScript('meImportPayload = ' + payload + ';', function () {
-      csInterface.evalScript('meImportFolderTreeStr()', function (r) {
-        importing = false;
-        hideProg();
-        try {
-          var j = JSON.parse(r);
-          if (j && j.ok) {
-            var s = j.stats || {};
-            var msg = '✅ 文件夹导入完成：成功 ' + s.ok + ' / ' + s.files + (s.fail ? '，失败 ' + s.fail : '');
-            flash(msg);
-            var det = (j.failed || []).slice(0, 8).join('\n');
-            window.confirm(msg + (det ? '\n\n' + det : ''));
-          } else {
-            flash('⚠ 导入失败：' + ((j && j.error) || '未知'));
-            window.confirm('文件夹导入失败：' + ((j && j.error) || '未知'));
+    var md = showImportModal('导入文件夹：' + path.basename(folderPath), true);
+    setModalProgress(2, '扫描目录…');
+    // 前端递归收集：groups = [{ relPath:[子目录...], files:[绝对路径] }]
+    var groups = [];
+    function walk(dir, relArr) {
+      var files = [], subDirs = [];
+      try {
+        var ents = fs.readdirSync(dir, { withFileTypes: true });
+        ents.forEach(function (en) {
+          if (en.name.charAt(0) === '.') return;
+          var full = path.join(dir, en.name);
+          if (en.isDirectory()) subDirs.push(en.name);
+          else if (MEDIA_EXT.test(en.name)) files.push(full);
+        });
+      } catch (e) {}
+      if (files.length) groups.push({ relPath: relArr.slice(), files: files });
+      subDirs.forEach(function (sd) { walk(path.join(dir, sd), relArr.concat([sd])); });
+    }
+    walk(folderPath, []);
+    setModalProgress(8, '扫描完成，共 ' + groups.length + ' 组，开始导入…');
+    if (!groups.length) { importing = false; closeImportModal(); showResultModal('导入完成', '该目录没有可导入的媒体文件'); return; }
+    var totalFiles = 0;
+    groups.forEach(function (g) { totalFiles += g.files.length; });
+    var doneF = 0, okN = 0, failN = 0, fails = [];
+    var BATCH = 15;
+    function pushBatch() {
+      // 组装 plan 中未处理的部分（分批太细会多次 host 调用建 bin 重复）
+      // 简化：整个 plan 一次交给 host（目录/文件多时可分批按组）
+      var payload = JSON.stringify({ binName: binName, groups: groups });
+      csInterface.evalScript('meImportPayload = ' + payload + ';', function () {
+        csInterface.evalScript('meImportTreePlanStr()', function (r) {
+          importing = false;
+          try {
+            var j = JSON.parse(r);
+            if (j && j.ok) {
+              var s = j.stats || {};
+              okN = s.ok || 0; failN = s.fail || 0; fails = j.failed || [];
+              setModalProgress(100, '');
+              setTimeout(function () {
+                closeImportModal();
+                var det = fails.length ? '失败明细：\n' + fails.slice(0, 10).join('\n') + (fails.length > 10 ? '\n…共 ' + fails.length + ' 个失败' : '') : '全部成功';
+                showResultModal('✅ 文件夹导入完成', '成功 ' + okN + ' 个\n失败 ' + failN + ' 个\n\n' + det);
+              }, 300);
+            } else {
+              closeImportModal();
+              showResultModal('⚠ 导入失败', (j && j.error) || '未知错误');
+            }
+          } catch (e) {
+            closeImportModal();
+            showResultModal('⚠ 导入失败', e.message);
           }
-        } catch (e) {
-          flash('⚠ 导入失败');
-          window.confirm('导入失败：' + e.message);
-        }
+        });
       });
-    });
+    }
+    pushBatch();
   }
 
   // ===== 事件 =====

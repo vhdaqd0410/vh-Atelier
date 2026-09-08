@@ -658,7 +658,7 @@
         });
     }
 
-    // 导入素材到当前 PR 工程素材箱（复用 host.jsx 的 wsImportToBinStr）
+    // 导入素材到当前 PR 工程素材箱（保留目录结构：按相对根目录分组 → meImportTreePlanStr）
     function importMaterialsForProject(projectName) {
         if (!csInterface) {
             el.statusText.textContent = '当前非 PR 环境，无法导入素材箱';
@@ -672,15 +672,34 @@
                 el.statusText.textContent = '该项目暂无本地素材（可能尚未创建本地项目）';
                 return;
             }
-            el.statusText.textContent = '正在导入 ' + files.length + ' 个素材到 PR 素材箱...';
-            var payloadJson = JSON.stringify(files);
-            csInterface.evalScript('wsImportToBinPayload = ' + payloadJson + ';', function () {
-                csInterface.evalScript('wsImportToBinStr("原素材")', function (result) {
+            el.statusText.textContent = '正在导入 ' + files.length + ' 个素材（保留目录结构）...';
+            // 根目录 = material_dir（后端返回），其余文件路径相对它分组
+            var matRoot = (d && d.material_dir) || '';
+            var groups = [];
+            var byRel = {};
+            if (matRoot && fs.existsSync(matRoot)) {
+                files.forEach(function (fp) {
+                    if (!fp) return;
+                    var rel = path.relative(matRoot, fp);
+                    var parts = rel.split(path.sep);
+                    parts.pop();  // 去掉文件名
+                    var key = parts.join('/');
+                    if (!byRel[key]) byRel[key] = { relPath: parts.filter(Boolean), files: [] };
+                    byRel[key].files.push(fp);
+                });
+                Object.keys(byRel).forEach(function (k) { groups.push(byRel[k]); });
+            } else {
+                // 无根目录信息：全部平铺到根
+                groups = [{ relPath: [], files: files }];
+            }
+            var payload = JSON.stringify({ binName: '原素材', groups: groups });
+            csInterface.evalScript('meImportPayload = ' + payload + ';', function () {
+                csInterface.evalScript('meImportTreePlanStr()', function (result) {
                     try {
                         var r = JSON.parse(result);
                         if (r && r.ok) {
-                            var names = r.imported || [];
-                            el.statusText.textContent = '✅ 已导入 ' + names.length + ' 个素材到「原素材」素材箱';
+                            var s = r.stats || {};
+                            el.statusText.textContent = '✅ 已导入 ' + (s.ok || 0) + ' 个素材到「原素材」（保留目录结构）' + ((s.fail || 0) ? '，失败 ' + s.fail : '');
                         } else {
                             el.statusText.textContent = (r && r.error) || '导入失败';
                         }

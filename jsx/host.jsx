@@ -1209,6 +1209,63 @@ function meImportFolderTreeStr() {
 
 // 单个/多个文件导入目标 bin（带逐文件进度回报到 stderr 不可行，ExtendScript 无流；
 // 改为前端分批调用：每次导入一批，进度由前端控制）
+
+// 按前端算好的目录树 plan 导入（目录名/文件路径由 JS 端 UTF-8 提供，绕开 ExtendScript 中文目录读取编码坑）
+// plan: { binName, groups: [ { relPath: [dir1, dir2...], files: [abs路径...] }, ... ] }
+function meImportTreePlanStr() {
+    try {
+        var pl = meImportPayload;
+        if (!pl || !pl.binName || !pl.groups) return JSON.stringify({ error: '缺参数' });
+        var root = app.project.rootItem;
+        var bin = null;
+        for (var bi = 0; bi < root.children.numItems; bi++) {
+            var cc = root.children[bi];
+            try { if (cc.name === pl.binName) { bin = cc; break; } } catch (e) {}
+        }
+        if (!bin) { try { bin = root.createBin(pl.binName); } catch (e) { return JSON.stringify({ error: '创建素材箱失败: ' + e }); } }
+
+        var stats = { files: 0, ok: 0, fail: 0 };
+        var failed = [];
+
+        function findOrCreateBin(parentBin, name) {
+            var target = null;
+            for (var i = 0; i < parentBin.children.numItems; i++) {
+                var c = parentBin.children[i];
+                try { if (c.name === name) { target = c; break; } } catch (e) {}
+            }
+            if (!target) { try { target = parentBin.createBin(name); } catch (e) { target = null; } }
+            return target;
+        }
+
+        for (var gi = 0; gi < pl.groups.length; gi++) {
+            var g = pl.groups[gi];
+            var cur = bin;
+            // 沿 relPath 建/找 bin 层级
+            var rel = g.relPath || [];
+            var okPath = true;
+            for (var rj = 0; rj < rel.length; rj++) {
+                var sub = findOrCreateBin(cur, rel[rj]);
+                if (!sub) { okPath = false; break; }
+                cur = sub;
+            }
+            if (!okPath) continue;
+            // 导入该层文件
+            var files = g.files || [];
+            for (var fj = 0; fj < files.length; fj++) {
+                var fp = files[fj];
+                var fobj = new File(fp);
+                stats.files++;
+                if (!fobj.exists) { stats.fail++; failed.push(fp + '(不存在)'); continue; }
+                try {
+                    var ok = app.project.importFiles([fobj.fsName], true, cur, false);
+                    if (ok) stats.ok++; else { stats.fail++; failed.push(fobj.name + '(失败)'); }
+                } catch (e) { stats.fail++; failed.push(fobj.name + '(异常:' + e + ')'); }
+            }
+        }
+        return JSON.stringify({ ok: true, bin: pl.binName, stats: stats, failed: failed });
+    } catch (e) { return JSON.stringify({ error: '导入异常: ' + e }); }
+}
+
 function meImportFilesToBinStr() {
     try {
         var pl = meImportPayload;
