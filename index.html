@@ -749,8 +749,13 @@
     <!-- ==================== 审片（内嵌分秒帧，看批注不切出 PR） ==================== -->
     <div class="tab-panel" id="panel-shenpian" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
-            <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11px;">
-                <button id="btnSpHome" class="tbtn" style="padding:3px 10px;font-size:11px;" title="回到分秒帧首页">🏠 首页</button>
+            <div class="wb-nav">
+                <button class="wb-nav-btn" id="spBack" title="后退（站内跳转后回到上一个地址）">←</button>
+                <button class="wb-nav-btn" id="spFwd" title="前进">→</button>
+                <button class="wb-nav-btn" id="spReload" title="刷新当前页">↻</button>
+                <button class="wb-nav-btn" id="btnSpHome" title="回到分秒帧首页">🏠</button>
+                <button class="wb-nav-btn wb-nav-ext" id="spExternal" title="在外部浏览器打开">↗</button>
+                <input type="text" class="wb-nav-url" id="spUrl" placeholder="输入网址回车跳转">
             </div>
             <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
         </div>
@@ -759,10 +764,15 @@
     <!-- ==================== 超分（外站工具：去字幕/超分，上传处理用） ==================== -->
     <div class="tab-panel" id="panel-upscale" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
-            <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11px;">
-                <button id="btnUpscaleHome" class="tbtn" style="padding:3px 10px;font-size:11px;" title="回到首页">🏠 首页</button>
-                <span style="color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="upscaleHint">首次使用需在站内登录一次（用户名/密码/验证码）</span>
+            <div class="wb-nav">
+                <button class="wb-nav-btn" id="upBack" title="后退（站内跳转后回到上一个地址）">←</button>
+                <button class="wb-nav-btn" id="upFwd" title="前进">→</button>
+                <button class="wb-nav-btn" id="upReload" title="刷新当前页">↻</button>
+                <button class="wb-nav-btn" id="btnUpscaleHome" title="回到首页">🏠</button>
+                <button class="wb-nav-btn wb-nav-ext" id="upExternal" title="在外部浏览器打开">↗</button>
+                <input type="text" class="wb-nav-url" id="upUrl" placeholder="输入网址回车跳转">
             </div>
+            <div style="flex:0 0 auto;padding:2px 4px;font-size:10px;color:var(--muted);" id="upscaleHint">首次使用需在站内登录一次；站内点击跳转时，用「↻」回到当前页，用「←/→」回到本导航栏访问过的地址</div>
             <iframe id="upscaleFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
         </div>
     </div>
@@ -785,57 +795,105 @@
     <script src="js/video.js"></script>
     <script src="js/progress.js"></script>
     <script>
-    // ==== 审片：内嵌分秒帧（自动加载，首页/刷新控制） ====
-    (function () {
-        var fr = document.getElementById('spFrame');
-        var btnHome = document.getElementById('btnSpHome');
+    // ===== 外站内嵌通用导航（审片/超分）：后退/前进基于本导航栏历史，刷新/首页/外开可用 =====
+    function makeNavBar(cfg) {
+        var fr = document.getElementById(cfg.frame);
+        var HOME = cfg.home;
         function tryLoad(url) {
-            if (!fr) return;
+            if (!fr || !url) return;
             fr.src = url;
+            push(url);
         }
-        // 切到审片面板时自动加载分秒帧（仅首次/空白时）
-        window.__spAutoLoad = function () {
-            if (!fr) return;
-            if (!fr.src || fr.src === 'about:blank') {
-                tryLoad('https://app.mediatrack.cn/');
-            }
-        };
-        if (btnHome) btnHome.addEventListener('click', function () {
-            // 优先刷新当前页（若在项目详情/批注页，刷新=看最新批注）；跨域受限则回首页
+        // 历史栈（只记录通过本导航栏访问过的地址；站内点击跳转父页无法感知）
+        var stack = [];
+        var idx = -1;
+        function push(url) {
+            if (url === stack[idx]) return;
+            stack = stack.slice(0, idx + 1);
+            stack.push(url);
+            idx = stack.length - 1;
+            syncUrl();
+        }
+        function go(step) {
+            var ni = idx + step;
+            if (ni < 0 || ni >= stack.length) return;
+            idx = ni;
+            fr.src = stack[idx];
+            syncUrl();
+        }
+        function syncUrl() {
+            if (!cfg.urlInput) return;
+            cfg.urlInput.value = stack[idx] || '';
+        }
+        function normalize(u) {
+            u = (u || '').trim();
+            if (!u) return '';
+            if (!/^[a-zA-Z]+:\/\//.test(u)) u = 'http://' + u;
+            return u;
+        }
+        if (cfg.back) cfg.back.addEventListener('click', function () { go(-1); });
+        if (cfg.fwd) cfg.fwd.addEventListener('click', function () { go(1); });
+        if (cfg.reload) cfg.reload.addEventListener('click', function () {
+            try { if (fr && fr.contentWindow && fr.contentWindow.location) { fr.contentWindow.location.reload(); return; } } catch (e) {}
+            if (stack[idx]) fr.src = stack[idx];
+        });
+        if (cfg.btnHome) cfg.btnHome.addEventListener('click', function () {
+            if (HOME !== stack[idx]) { tryLoad(HOME); }
+            else { try { if (fr && fr.contentWindow) fr.contentWindow.location.reload(); } catch (e) { fr.src = HOME; } }
+        });
+        if (cfg.external) cfg.external.addEventListener('click', function () {
+            var target = stack[idx] || HOME;
             try {
-                if (fr && fr.contentWindow && fr.contentWindow.location) {
-                    fr.contentWindow.location.reload();
-                    return;
+                var cp = require('child_process');
+                cp.exec('start "" "' + target + '"');
+            } catch (e) {
+                try { window.open(target, '_blank'); } catch (e2) {}
+            }
+        });
+        if (cfg.urlInput) {
+            cfg.urlInput.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') {
+                    var u = normalize(cfg.urlInput.value);
+                    if (u) tryLoad(u);
                 }
-            } catch (e) {}
-            tryLoad('https://app.mediatrack.cn/');
+            });
+        }
+        window[cfg.autoFn] = function () {
+            if (!fr) return;
+            if (!fr.src || fr.src === 'about:blank') tryLoad(HOME);
+        };
+        return { go: go, tryLoad: tryLoad };
+    }
+
+    // ==== 审片：分秒帧（自动加载）====
+    (function () {
+        makeNavBar({
+            frame: 'spFrame',
+            home: 'https://app.mediatrack.cn/',
+            back: document.getElementById('spBack'),
+            fwd: document.getElementById('spFwd'),
+            reload: document.getElementById('spReload'),
+            btnHome: document.getElementById('btnSpHome'),
+            external: document.getElementById('spExternal'),
+            urlInput: document.getElementById('spUrl'),
+            autoFn: '__spAutoLoad'
         });
     })();
-    // ==== 超分：内嵌去字幕/超分站（subtitle.zztianqiao.com） ====
+
+    // ==== 超分：去字幕/超分站（自动加载）====
     (function () {
-        var fr = document.getElementById('upscaleFrame');
-        var btnHome = document.getElementById('btnUpscaleHome');
-        var UP_URL = 'http://subtitle.zztianqiao.com/#/layout/eraseFolders';
-        function tryLoad(url) {
-            if (!fr) return;
-            fr.src = url;
-        }
-        window.__upscaleAutoLoad = function () {
-            if (!fr) return;
-            if (!fr.src || fr.src === 'about:blank') {
-                tryLoad(UP_URL);
-            }
-        };
-        if (btnHome) btnHome.addEventListener('click', function () {
-            try {
-                if (fr && fr.contentWindow && fr.contentWindow.location) {
-                    fr.contentWindow.location.reload();
-                    return;
-                }
-            } catch (e) {}
-            tryLoad(UP_URL);
+        makeNavBar({
+            frame: 'upscaleFrame',
+            home: 'http://subtitle.zztianqiao.com/#/layout/eraseFolders',
+            back: document.getElementById('upBack'),
+            fwd: document.getElementById('upFwd'),
+            reload: document.getElementById('upReload'),
+            btnHome: document.getElementById('btnUpscaleHome'),
+            external: document.getElementById('upExternal'),
+            urlInput: document.getElementById('upUrl'),
+            autoFn: '__upscaleAutoLoad'
         });
     })();
-    </script>
+</script>
 </body>
 </html>

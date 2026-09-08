@@ -1956,6 +1956,26 @@
         }
         #panel-progress .prg-ops-more .prg-open-btn:hover { background: var(--panel2); color: var(--text); }
         /* 刷新/分秒帧专属配色沿用上方旧规则 */
+        /* ===== 外站内嵌导航栏（审片/超分通用） ===== */
+        .wb-nav {
+            flex: 0 0 auto; display: flex; align-items: center; gap: 5px;
+            padding: 4px 4px; margin-bottom: 4px;
+            background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+        }
+        .wb-nav-btn {
+            flex: 0 0 auto; background: transparent; color: var(--text);
+            border: 1px solid var(--border); border-radius: 4px;
+            min-width: 24px; height: 22px; padding: 0 5px; cursor: pointer;
+            font-size: 12px; line-height: 1; text-align: center;
+        }
+        .wb-nav-btn:hover { background: var(--panel2); }
+        .wb-nav-btn.wb-nav-ext { color: var(--accent); }
+        .wb-nav-url {
+            flex: 1; min-width: 60px; height: 22px; padding: 0 6px;
+            background: var(--bg); color: var(--text); border: 1px solid var(--border);
+            border-radius: 4px; font-size: 11px;
+            user-select: text; -webkit-user-select: text;
+        }
         .prg-modal input::-webkit-outer-spin-button,
         .prg-modal input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .prg-modal input[type=number] { -moz-appearance: textfield; }
