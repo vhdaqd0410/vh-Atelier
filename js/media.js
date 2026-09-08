@@ -15,17 +15,19 @@
     addSubRoot: document.getElementById('mdAddSubRoot'),
     binName: document.getElementById('mdBinName'),
     projInfo: document.getElementById('mdProjInfo'),
-    selAll: document.getElementById('mdSelAll'),
-    selNone: document.getElementById('mdSelNone'),
+    selAll: null,
+    selNone: null,
     impSel: document.getElementById('mdImpSel'),
     impFolder: document.getElementById('mdImpFolder'),
-    progWrap: document.getElementById('mdProgWrap'),
-    progFill: document.getElementById('mdProgFill'),
-    progText: document.getElementById('mdProgText'),
-    progPct: document.getElementById('mdProgPct'),
+    progWrap: null,
+    progFill: null,
+    progText: null,
+    progPct: null,
     tree: document.getElementById('mdTree'),
-    files: document.getElementById('mdFiles')
+    files: document.getElementById('mdDetail'),
+    detail: document.getElementById('mdDetail')
   };
+  el.files = el.detail;
   if (!el.tree) return;
 
   var ROOTS_KEY = 'vh_media_roots';
@@ -132,13 +134,10 @@
   function renderRootSel() {
     var roots = loadRoots();
     el.rootSel.innerHTML = '';
-    if (!roots.length) {
-      var o0 = document.createElement('option');
-      o0.value = '';
-      o0.textContent = '（未设置路径，点设根）';
-      el.rootSel.appendChild(o0);
-      return;
-    }
+    var oPC = document.createElement('option');
+    oPC.value = 'COMPUTER';
+    oPC.textContent = '💻 我的电脑（全部磁盘）';
+    el.rootSel.appendChild(oPC);
     roots.forEach(function (r) {
       var o = document.createElement('option');
       o.value = r;
@@ -146,13 +145,15 @@
       el.rootSel.appendChild(o);
     });
     var cur = loadCur();
-    if (cur && roots.indexOf(cur) >= 0) el.rootSel.value = cur;
-    else el.rootSel.value = roots[0];
-    currentRoot = el.rootSel.value || '';
-    if (currentRoot) { browseDir = currentRoot; renderNav(); renderFiles(browseDir); }
+    if (cur === 'COMPUTER' || !cur || roots.indexOf(cur) < 0) el.rootSel.value = 'COMPUTER';
+    else el.rootSel.value = cur;
+    currentRoot = el.rootSel.value || 'COMPUTER';
+    if (currentRoot === 'COMPUTER') { browseDir = 'COMPUTER'; renderNav(); if (el.detail) el.detail.innerHTML = '<div class="hint" style="padding:10px;">选择磁盘开始浏览</div>'; }
+    else { browseDir = currentRoot; renderNav(); showDirDetail(browseDir); }
   }
   function setRoot(p) {
-    if (!p || !fs.existsSync(p)) return;
+    if (!p || p === 'COMPUTER') return;
+    if (!fs.existsSync(p)) return;
     var roots = loadRoots();
     if (roots.indexOf(p) < 0) roots.push(p);
     saveRoots(roots);
@@ -161,6 +162,8 @@
     saveCur(p);
     renderRootSel();
     el.rootSel.value = p;
+    renderNav();
+    showDirDetail(p);
   }
 
   el.addRoot.addEventListener('click', function () {
@@ -171,9 +174,10 @@
     else flash('当前无浏览目录');
   });
   el.rootSel.addEventListener('change', function () {
-    currentRoot = el.rootSel.value || '';
-    if (currentRoot) { saveCur(currentRoot); browseDir = currentRoot; renderNav(); renderFiles(browseDir); }
-    else { el.tree.innerHTML = '<div class="hint" style="padding:8px;">设根后浏览</div>'; el.files.innerHTML = ''; }
+    currentRoot = el.rootSel.value || 'COMPUTER';
+    saveCur(currentRoot);
+    if (currentRoot === 'COMPUTER') { browseDir = 'COMPUTER'; renderNav(); if (el.detail) el.detail.innerHTML = '<div class="hint" style="padding:10px;">选择磁盘开始浏览</div>'; }
+    else if (currentRoot) { browseDir = currentRoot; renderNav(); showDirDetail(browseDir); }
   });
 
   // ===== 目录 =====
@@ -203,6 +207,8 @@
   function renderNav() {
     var dir = browseDir;
     el.tree.innerHTML = '';
+    if (dir === 'COMPUTER') { renderComputerNav(); return; }
+    if (dir) { try { localStorage.setItem('mdCurDir', dir); } catch (e) {} }
     // 面包屑
     var crumb = document.createElement('div');
     crumb.className = 'md-crumb';
@@ -239,124 +245,170 @@
       el.tree.appendChild(upRow);
     }
     var subs = listDirs(dir);
+    var files = listFiles(dir);
     var wrap = document.createElement('div');
     wrap.className = 'md-subwrap';
-    if (!subs.length) wrap.innerHTML = '<div style="padding:6px 4px;font-size:11px;color:var(--muted);">无子目录</div>';
+    if (!subs.length && !files.length) wrap.innerHTML = '<div style="padding:6px 4px;font-size:11px;color:var(--muted);">空目录</div>';
     subs.forEach(function (s) {
       var full = path.join(dir, s);
       var row = document.createElement('div');
       row.className = 'md-tree-item md-subdir';
       row.textContent = '📁 ' + s;
       row.title = full + '\n点击进入';
-      row.addEventListener('click', function () { browseDir = full; renderNav(); renderFiles(full); });
+      row.addEventListener('click', function () { browseDir = full; renderNav(); showDirDetail(full); });
       wrap.appendChild(row);
+    });
+    files.forEach(function (fn) {
+      var full = path.join(dir, fn);
+      var leaf = makeFileLeaf(full, fn, dir);
+      if (leaf) wrap.appendChild(leaf);
     });
     el.tree.appendChild(wrap);
   }
+  // 「我的电脑」虚拟浏览：列本机盘符
+  function listDrives() {
+    var out = [];
+    for (var i = 0; i < 26; i++) {
+      var d = String.fromCharCode(65 + i) + ':/';
+      try { if (fs.existsSync(d)) out.push(d); } catch (e) {}
+    }
+    return out;
+  }
+  function renderComputerNav() {
+    if (!el.tree) return;
+    el.tree.innerHTML = '';
+    var crumb = document.createElement('div');
+    crumb.className = 'md-crumb';
+    var sp = document.createElement('span');
+    sp.className = 'md-crumb-item cur';
+    sp.textContent = '💻 我的电脑';
+    crumb.appendChild(sp);
+    el.tree.appendChild(crumb);
+    var drives = listDrives();
+    var wrap = document.createElement('div');
+    wrap.className = 'md-subwrap';
+    if (!drives.length) wrap.innerHTML = '<div style="padding:6px;font-size:11px;color:var(--muted);">未检测到磁盘</div>';
+    drives.forEach(function (d) {
+      var row = document.createElement('div');
+      row.className = 'md-tree-item md-subdir';
+      row.textContent = '💽 ' + d;
+      row.title = d;
+      row.addEventListener('click', function () { browseDir = d; renderNav(); showDirDetail(d); });
+      wrap.appendChild(row);
+    });
+    el.tree.appendChild(wrap);
+    if (el.detail) el.detail.innerHTML = '<div class="hint" style="padding:10px;">选择磁盘开始浏览</div>';
+  }
 
   // ===== 文件列表（支持多选）=====
-  function renderFiles(dir) {
+  // 右侧：目录详情（左树点目录时）
+  function showDirDetail(dir) {
+    if (!el.detail) return;
+    el.detail.innerHTML = '';
     var files = listFiles(dir);
-    el.files.innerHTML = '';
-    if (!files.length) {
-      el.files.innerHTML = '<div class="hint" style="padding:10px;">该目录无文件</div>';
-      updateSelCount();
+    var subs = listDirs(dir);
+    var ttl = document.createElement('div');
+    ttl.className = 'md-fcap';
+    ttl.textContent = (subs.length ? subs.length + ' 文件夹 · ' : '') + files.length + ' 文件';
+    el.detail.appendChild(ttl);
+    var info = document.createElement('div');
+    info.style.cssText = 'font-size:10px;color:var(--muted);word-break:break-all;padding:2px 4px 6px;';
+    info.textContent = dir;
+    el.detail.appendChild(info);
+    if (!files.length && !subs.length) {
+      el.detail.innerHTML += '<div class="hint" style="padding:8px;">空目录</div>';
       return;
     }
-    var cap = document.createElement('div');
-    cap.className = 'md-fcap';
-    cap.textContent = files.length + ' 个文件';
-    el.files.appendChild(cap);
-
-    var listWrap = document.createElement('div');
-    listWrap.style.cssText = 'overflow-y:auto;flex:1;min-height:0;';
-    files.forEach(function (f) {
-      var full = path.join(dir, f);
-      var ext = path.extname(f).toLowerCase().slice(1);
-      var kind = fileKind(f);
-      var icon = { mp4: '🎬', mov: '🎬', mxf: '🎬', avi: '🎬', m4v: '🎬', webm: '🎬', mts: '🎬', m2ts: '🎬', wav: '🔊', mp3: '🎵', aiff: '🔊', aac: '🎵', flac: '🎵', png: '🖼', jpg: '🖼', jpeg: '🖼', webp: '🖼', gif: '🖼', srt: '📝' }[ext] || (kind === 'prproj' ? '🎬PR' : kind === 'docx' ? '📄' : kind === 'pdf' ? '📕' : kind === 'preset' ? '⚙️' : kind === 'psd' ? '🎨' : kind === 'ae' ? '✨' : kind === 'text' ? '📝' : '📄');
-      var isMedia = ['video', 'audio', 'image'].indexOf(kind) >= 0;
-      var row = document.createElement('div');
-      row.className = 'md-file' + (selFiles[full] ? ' sel' : '');
-      row.innerHTML = '<span class="md-ic">' + icon + '</span><span class="md-fn"></span><span class="md-check"></span>';
-      row.querySelector('.md-fn').textContent = f;
-      row.title = full;
-      // CEP DnD：拖到 PR 项目面板/时间线（Adobe 专用 MIME）
-      row.draggable = true;
-      row.addEventListener('dragstart', function (ev) {
-        try {
-          ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', full);
-          ev.dataTransfer.setData('text/plain', full);
-          ev.dataTransfer.effectAllowed = 'copy';
-        } catch (e) {}
-      });
-      row.addEventListener('dragend', function () { closePreview(); });
-      // 动作按钮：媒体=👁预览；docx/pdf=📖打开；prproj/预设/psd/aep=▶打开
-      var actBtn = document.createElement('button');
-      actBtn.type = 'button';
-      actBtn.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border);border-radius:3px;color:#7fd68b;font-size:10px;padding:0 4px;cursor:pointer;line-height:15px;';
-      if (isMedia) {
-        actBtn.textContent = '👁';
-        actBtn.title = '预览';
-        actBtn.addEventListener('click', function (ev2) { ev2.stopPropagation(); openPreview(full, f); });
-      } else if (kind === 'docx' || kind === 'pdf') {
-        actBtn.textContent = '📖';
-        actBtn.title = '用剧本阅读器打开';
-        actBtn.addEventListener('click', function (ev2) {
-          ev2.stopPropagation();
-          if (window.__openDocxByPath) window.__openDocxByPath(full);
-          else openWithSystem(full);
-        });
-      } else {
-        actBtn.textContent = '▶';
-        actBtn.title = '用系统默认程序打开';
-        actBtn.addEventListener('click', function (ev2) { ev2.stopPropagation(); openWithSystem(full); });
-      }
-      actBtn.addEventListener('dblclick', function (ev2) { ev2.stopPropagation(); });
-      row.appendChild(actBtn);
-      // 插入时间线按钮（媒体）
-      if (isMedia) {
-        var insBtn = document.createElement('button');
-        insBtn.type = 'button';
-        insBtn.textContent = '⏩';
-        insBtn.title = '插入当前序列时间线（播放头处）';
-        insBtn.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border);border-radius:3px;color:#6db3ff;font-size:10px;padding:0 4px;cursor:pointer;line-height:15px;';
-        insBtn.addEventListener('click', function (ev2) { ev2.stopPropagation(); insertToTimeline(full, f); });
-        insBtn.addEventListener('dblclick', function (ev2) { ev2.stopPropagation(); });
-        row.appendChild(insBtn);
-      }
-
-      row.addEventListener('click', function (ev) {
-        if (ev.ctrlKey || ev.metaKey || ev.shiftKey) {
-          if (selFiles[full]) delete selFiles[full]; else selFiles[full] = true;
-          row.classList.toggle('sel', !!selFiles[full]);
-          updateSelCount();
-        } else {
-          Object.keys(selFiles).forEach(function (k) { delete selFiles[k]; });
-          selFiles[full] = true;
-          var rows2 = listWrap.querySelectorAll('.md-file');
-          rows2.forEach(function (r2) { r2.classList.remove('sel'); });
-          row.classList.add('sel');
-          updateSelCount();
-          if (isMedia) openPreview(full, f);
-          else if (kind === 'docx' || kind === 'pdf') { if (window.__openDocxByPath) window.__openDocxByPath(full); else openWithSystem(full); }
-          else openWithSystem(full);
-        }
-      });
-      row.addEventListener('dblclick', function () {
-        if (isMedia) {
-          var bin = (el.binName.value || '').trim() || '素材';
-          if (confirmProject()) importList([full], bin, '导入 ' + f);
-        } else {
-          openWithSystem(full);
-        }
-      });
-      listWrap.appendChild(row);
-    });
-    el.files.appendChild(listWrap);
-    updateSelCount();
+    var tip = document.createElement('div');
+    tip.style.cssText = 'font-size:10px;color:var(--muted);padding:2px 4px;';
+    tip.textContent = '💡 左侧点选文件看详情；拖拽文件可直接放入 PR 项目/时间线。';
+    el.detail.appendChild(tip);
+    var bf = document.createElement('button');
+    bf.type = 'button';
+    bf.textContent = '📁 导入整个目录';
+    bf.className = 'secondary mini';
+    bf.style.cssText = 'margin-top:6px;color:#7fd68b;border-color:#2a5a3a;';
+    bf.addEventListener('click', function () { if (confirmProject()) importFolderTree(dir, (el.binName.value || '').trim() || '素材'); });
+    el.detail.appendChild(bf);
   }
-  // 插入当前序列时间线（播放头处）
+  // 左树文件叶子：构建一个可拖拽/可点的文件行（缩进样式由 CSS .md-leaf 控制）
+  function makeFileLeaf(full, name, dir) {
+    var ext = path.extname(name).toLowerCase().slice(1);
+    var kind = fileKind(name);
+    var icon = { mp4: '🎬', mov: '🎬', mxf: '🎬', avi: '🎬', m4v: '🎬', webm: '🎬', mts: '🎬', m2ts: '🎬', wav: '🔊', mp3: '🎵', aiff: '🔊', aac: '🎵', flac: '🎵', png: '🖼', jpg: '🖼', jpeg: '🖼', webp: '🖼', gif: '🖼', srt: '📝' }[ext] || (kind === 'prproj' ? '🎬PR' : kind === 'docx' ? '📄' : kind === 'pdf' ? '📕' : kind === 'preset' ? '⚙️' : kind === 'psd' ? '🎨' : kind === 'ae' ? '✨' : kind === 'text' ? '📝' : '📄');
+    var isMedia = ['video', 'audio', 'image'].indexOf(kind) >= 0;
+    var row = document.createElement('div');
+    row.className = 'md-file md-leaf' + (selFiles[full] ? ' sel' : '');
+    row.innerHTML = '<span class="md-ic">' + icon + '</span><span class="md-fn"></span>';
+    row.querySelector('.md-fn').textContent = name;
+    row.title = full;
+    row.draggable = true;
+    row.addEventListener('dragstart', function (ev) {
+      try { ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', full); ev.dataTransfer.setData('text/plain', full); ev.dataTransfer.effectAllowed = 'copy'; } catch (e) {}
+    });
+    row.addEventListener('dragend', function () { closePreview(); });
+    row.addEventListener('click', function (ev) {
+      if (ev.ctrlKey || ev.metaKey || ev.shiftKey) {
+        if (selFiles[full]) delete selFiles[full]; else selFiles[full] = true;
+        row.classList.toggle('sel', !!selFiles[full]);
+        updateSelCount();
+        return;
+      }
+      Object.keys(selFiles).forEach(function (k) { delete selFiles[k]; });
+      selFiles[full] = true;
+      var all = el.tree.querySelectorAll('.md-file');
+      all.forEach(function (r) { r.classList.remove('sel'); });
+      row.classList.add('sel');
+      updateSelCount();
+      showFileDetail(full, name, kind, isMedia);
+      if (isMedia) openPreview(full, name);
+    });
+    row.addEventListener('dblclick', function () {
+      if (isMedia) { var bin = (el.binName.value || '').trim() || '素材'; if (confirmProject()) importList([full], bin, '导入 ' + name); }
+      else { openWithSystem(full); }
+    });
+    return row;
+  }
+  // 右侧：文件详情
+  function showFileDetail(full, name, kind, isMedia) {
+    if (!el.detail) return;
+    el.detail.innerHTML = '';
+    var ttl = document.createElement('div');
+    ttl.className = 'md-fcap';
+    ttl.textContent = name;
+    el.detail.appendChild(ttl);
+    try {
+      var st = fs.statSync(full);
+      var sz = st.size;
+      var szTxt = sz < 1048576 ? Math.round(sz / 1024) + ' KB' : (sz / 1048576).toFixed(2) + ' MB';
+      var meta = document.createElement('div');
+      meta.style.cssText = 'font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all;line-height:1.6;padding:2px 4px;';
+      meta.textContent = '类型: ' + (kind || '未知') + '\n大小: ' + szTxt + '\n修改: ' + (st.mtime ? st.mtime.toLocaleString() : '') + '\n路径: ' + full;
+      el.detail.appendChild(meta);
+    } catch (e) {}
+    var btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;';
+    if (isMedia) {
+      var b1 = document.createElement('button'); b1.type='button'; b1.textContent='👁 预览'; b1.className='secondary mini';
+      b1.addEventListener('click', function () { openPreview(full, name); }); btns.appendChild(b1);
+      var b2 = document.createElement('button'); b2.type='button'; b2.textContent='⬇ 导入素材箱'; b2.className='secondary mini';
+      b2.style.cssText='color:#7fd68b;border-color:#2a5a3a;';
+      b2.addEventListener('click', function () { var bin=(el.binName.value||'').trim()||'素材'; if(confirmProject()) importList([full],bin,'导入 '+name); }); btns.appendChild(b2);
+    } else if (kind === 'docx' || kind === 'pdf') {
+      var bd = document.createElement('button'); bd.type='button'; bd.textContent='📖 剧本阅读'; bd.className='secondary mini';
+      bd.addEventListener('click', function () { if (window.__openDocxByPath) window.__openDocxByPath(full); else openWithSystem(full); }); btns.appendChild(bd);
+    } else {
+      var bo = document.createElement('button'); bo.type='button'; bo.textContent='▶ 打开'; bo.className='secondary mini';
+      bo.addEventListener('click', function () { openWithSystem(full); }); btns.appendChild(bo);
+    }
+    var b3 = document.createElement('button'); b3.type='button'; b3.textContent='📂 定位'; b3.className='secondary mini';
+    b3.addEventListener('click', function () { try { require('child_process').exec('explorer /select,"' + full + '"', { windowsHide: true }); } catch (e) {} });
+    btns.appendChild(b3);
+    el.detail.appendChild(btns);
+  }
+  // 兼容旧调用：renderFiles(dir) → 显示目录详情
+  function renderFiles(dir) { showDirDetail(dir); }
+
   function insertToTimeline(full, name) {
     try {
       csInterface.evalScript('sfxGetPlayerPosition()', function (posResult) {
@@ -648,13 +700,12 @@
   }
 
   // ===== 事件 =====
-  el.selAll.addEventListener('click', function () {
+  if (el.selAll) el.selAll.addEventListener('click', function () {
     var rows = el.files.querySelectorAll('.md-file');
-    var cbs = el.files.querySelectorAll('.md-fn');
-    cbs.forEach(function (fn, idx) { var row = rows[idx]; if (row) { var full = row.title; selFiles[full] = true; row.classList.add('sel'); } });
+    rows.forEach(function (row) { var full = row.title || ''; if (full) { selFiles[full] = true; row.classList.add('sel'); } });
     updateSelCount();
   });
-  el.selNone.addEventListener('click', clearSel);
+  if (el.selNone) el.selNone.addEventListener('click', clearSel);
   el.impSel.addEventListener('click', function () {
     var paths = Object.keys(selFiles);
     if (!paths.length) { flash('请先勾选文件'); return; }
@@ -669,8 +720,16 @@
     importFolderTree(browseDir, bin);
   });
 
+  // 恢复上次浏览目录（切面板/重开后保持）
+  function restoreLastDir() {
+    try {
+      var last = localStorage.getItem('mdCurDir') || '';
+      if (last && fs.existsSync(last)) { browseDir = last; renderNav(); showDirDetail(last); }
+      else if (browseDir && browseDir !== 'COMPUTER') { renderNav(); showDirDetail(browseDir); }
+    } catch (e) {}
+  }
   // ===== 初始化 =====
-  window.__mediaOnShow = function () { refreshProjInfo(); if (!el.tree.innerHTML.trim() || !currentRoot) renderRootSel(); };
+  window.__mediaOnShow = function () { refreshProjInfo(); if (!el.tree.innerHTML.trim() || !currentRoot) renderRootSel(); restoreLastDir(); };
   renderRootSel();
   refreshProjInfo();
 })();

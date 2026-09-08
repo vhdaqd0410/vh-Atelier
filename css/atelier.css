@@ -2114,4 +2114,10 @@
         #panel-media .md-file .md-fn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
         #panel-media .md-file .md-check { flex: 0 0 14px; text-align: center; color: #6db3ff; font-size: 11px; }
         #panel-media .md-file.sel .md-check::after { content: '✓'; }
-    
+        /* 素材库 v2：左树(宽) + 右详情(窄) */
+        #panel-media .md-tree { flex: 1 1 auto; min-width: 0; overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; }
+        #panel-media .md-detail { flex: 0 0 30%; min-width: 120px; max-width: 40%; overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+        #panel-media .md-leaf { margin-left: 12px; padding: 3px 6px; }
+        #panel-media .md-leaf .md-fn { font-size: 11.5px; }
+        #panel-media .md-tree-item.md-up, #panel-media .md-subdir { padding: 4px 6px; }
+        #panel-media .md-files { flex: 1; }

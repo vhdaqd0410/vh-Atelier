@@ -1091,13 +1091,19 @@
         if (savedDir && fs.existsSync(savedDir)) {
             el.dir.value = savedDir;
             doLoad(savedDir, false);
-            // 恢复左侧树上次选中的子目录（等树构建完）
+            // 恢复左侧树上次选中的子目录（轮询直到树包含该节点）
             var savedCur = '';
             try { savedCur = localStorage.getItem('mllibCurDir') || ''; } catch (e) {}
             if (savedCur && savedCur.indexOf(savedDir) === 0 && fs.existsSync(savedCur)) {
-                setTimeout(function () {
-                    try { if (typeof selectDir === 'function') selectDir(savedCur); } catch (e) {}
-                }, 800);
+                var tries = 0;
+                var tmr = setInterval(function () {
+                    tries++;
+                    try {
+                        var found = findNode(savedCur);
+                        if (found) { clearInterval(tmr); selectDir(savedCur); return; }
+                    } catch (e) { clearInterval(tmr); return; }
+                    if (tries > 30) clearInterval(tmr);   // 5s 上限
+                }, 200);
             }
         }
     } catch (e) {}
