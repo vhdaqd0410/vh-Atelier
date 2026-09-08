@@ -30,8 +30,8 @@
     <div class="tabs ws-subtabs" data-group="audio" style="display:none;">
         <button class="tab" data-tab="separate">人声分离</button>
         <button class="tab" data-tab="clone">语音克隆</button>
-        <button class="tab" data-tab="sfx">音效库</button>
         <button class="tab" data-tab="musiclib">音乐库</button>
+        <button class="tab" data-tab="sfx">音效库</button>
         <button class="tab" data-tab="music">网易云</button>
     </div>
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
@@ -739,6 +739,7 @@
         <div class="prg-sec" id="prgActiveWrap" style="display:none;">
             <div class="prg-sec-head"><span>组内进行中</span><span class="prg-count" id="prgActiveCount"></span></div>
             <div class="prg-filters">
+                <input type="text" id="prgSearch" class="prg-filter" placeholder="🔍 搜项目名/编号…" style="flex:1;min-width:0;">
                 <select id="prgFilterState" class="prg-filter" title="按状态筛选">
                     <option value="">全部状态</option>
                 </select>

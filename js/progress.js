@@ -45,7 +45,8 @@
         activeCount: document.getElementById('prgActiveCount'),
         activeList: document.getElementById('prgActiveList'),
         filterState: document.getElementById('prgFilterState'),
-        filterProgress: document.getElementById('prgFilterProgress')
+        filterProgress: document.getElementById('prgFilterProgress'),
+        search: document.getElementById('prgSearch')
     };
 
     var busy = false;
@@ -268,7 +269,14 @@
     function renderFilteredList() {
         var fState = el.filterState.value;
         var fProgress = el.filterProgress.checked;
+        var kw = (el.search && (el.search.value || '').trim().toLowerCase()) || '';
         var list = allActiveProjects.filter(function (p) {
+            if (kw) {
+                var hay = String(p.name || '').toLowerCase();
+                var kws = kw.split(/[\s,，]+/).filter(Boolean);
+                var allHit = kws.every(function (k) { return hay.indexOf(k) >= 0; });
+                if (!allHit) return false;
+            }
             if (fState && stateGroup(p.custom_status || '') !== fState) return false;
             if (fProgress) {
                 var cur = parseInt(p.current_episodes, 10) || 0;
@@ -2879,6 +2887,11 @@
     // 筛选：状态 / 只看有进度 → 重渲染当前列表
     el.filterState.addEventListener('change', function () { renderFilteredList(); });
     el.filterProgress.addEventListener('change', function () { renderFilteredList(); });
+    if (el.search) {
+        var _st = 0;
+        el.search.addEventListener('input', function () { renderFilteredList(); });
+        el.search.addEventListener('keydown', function (e) { if (e.key === 'Escape') { el.search.value = ''; renderFilteredList(); } });
+    }
 
     // 暴露给 main.js：切到 progress tab 时自动刷新一次（刷新会自动实扫剪辑中项目）
     window.__progressOnShow = function () {
