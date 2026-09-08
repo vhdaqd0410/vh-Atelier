@@ -1097,7 +1097,9 @@ function meSeqInfo() {
     } catch (e) { return "ERR:" + e; }
 }
 
-// 获取当前 PR 工程文件所在目录（供超分结果落位）
+// 获取当前 PR 工程对应“项目根目录”（超分结果落位）
+// 逻辑：工程文件通常位于 <项目根>/工程文件/xxx.prproj；
+// 若工程目录的父目录含 01原素材/剧本 等项目特征目录，返回父目录（项目根），否则返回工程目录本身。
 function meProjectDir() {
     try {
         var p = app.project;
@@ -1105,10 +1107,37 @@ function meProjectDir() {
         var dir = "";
         try { dir = p.path; } catch (e) {}
         if (!dir) {
-            // path 可能为空（未保存过）或返回文件全路径
-            var doc = p.document;
-            try { if (doc && doc.path) dir = doc.path; } catch (e) {}
+            try { if (p.document && p.document.path) dir = p.document.path; } catch (e) {}
         }
+        if (!dir) return "OK:";
+        // 防御：若 path 返回的是工程文件全路径（含 .prproj），取其所在目录
+        if (/\.prproj$/i.test(dir)) {
+            var psep = -1, pi;
+            for (pi = dir.length - 1; pi >= 0; pi--) {
+                if (dir.charAt(pi) === "/" || dir.charAt(pi) === "\\") { psep = pi; break; }
+            }
+            if (psep > 0) dir = dir.slice(0, psep);
+        }
+        // 工程文件通常在 <项目根>/工程文件 下；父目录含项目特征目录则视为项目根
+        try {
+            var sep = -1, i;
+            for (i = dir.length - 1; i >= 0; i--) {
+                if (dir.charAt(i) === "/" || dir.charAt(i) === "\\") { sep = i; break; }
+            }
+            if (sep > 0) {
+                var up = dir.slice(0, sep);
+                var fso = new Folder(up);
+                if (fso.exists) {
+                    var entries = fso.getFiles();
+                    var hasSig = false;
+                    for (i = 0; i < entries.length; i++) {
+                        var nm = entries[i].name;
+                        if (nm.indexOf("01原素材") >= 0 || nm.indexOf("剧本") >= 0 || nm.indexOf("工程文件") >= 0) { hasSig = true; break; }
+                    }
+                    if (hasSig) return "OK:" + up;
+                }
+            }
+        } catch (e) {}
         return "OK:" + dir;
     } catch (e) { return "ERR:" + e; }
 }
