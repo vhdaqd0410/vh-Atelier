@@ -312,11 +312,28 @@
             var nm = document.createElement('div');
             nm.className = 'prg-item-name';
             nm.textContent = p.name || '';
-            nm.title = p.name || '';
+            nm.title = p.name || '（点 📋 复制全名）';
+            nm.dataset.fullname = p.name || '';
+            var cpBtn = document.createElement('button');
+            cpBtn.type = 'button';
+            cpBtn.className = 'prg-copy-name';
+            cpBtn.textContent = '📋';
+            cpBtn.title = '复制项目全名';
+            cpBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                var full = (nm.dataset.fullname || '');
+                window.__copyText ? window.__copyText(full) : null;
+                if (window.__copyFlash) {
+                    try { window.__copyFlash(full ? '已复制项目名' : ''); } catch (e) {}
+                } else {
+                    try { el.statusText.textContent = full ? '已复制：' + full : ''; } catch (e) {}
+                }
+            });
             var tag = document.createElement('span');
             tag.className = 'prg-state ' + stateClass(state);
             tag.textContent = state || '待同步';
             head.appendChild(nm);
+            head.appendChild(cpBtn);
             head.appendChild(tag);
             item.appendChild(head);
 
