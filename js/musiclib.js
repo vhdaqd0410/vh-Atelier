@@ -27,7 +27,9 @@
     var visibleIdx = {};
     var renderedMap = {};
     var favSet = {};
-    var playingPath = null;   // 当前播放文件 fullPath
+    var playingPath = null;
+    var ML_MEM_KEY = 'vh_musiclib_lastplay';   // {path,name,dir,sec}
+    var _mlTick = 0;   // 当前播放文件 fullPath
     var curWs = null;         // 当前活动 wavesurfer（只在播放项上建）
     var curWsPath = null;
     var activeItem = null;    // 当前播放对应的行 DOM
@@ -460,7 +462,12 @@
         playBtn.addEventListener('click', function (ev) {
             ev.stopPropagation();
             if (playingPath === f.fullPath && curPlaying()) { pausePlayback(); }
-            else playFrom(f, 0);
+            else {
+                var m0 = mlLoad();
+                var startSec = 0;
+                if (m0 && m0.path === f.fullPath && m0.sec > 1) startSec = m0.sec;
+                playFrom(f, startSec);
+            }
         });
 
         var waveEl = document.createElement('div');
@@ -734,6 +741,7 @@
             } catch (e) {}
             syncPlayUI(f);
             setProgressUI();
+            mlRemember(f, 0);
         });
     }
 
@@ -747,7 +755,13 @@
     }
 
     function stopPlayback() {
-        if (curWs) { try { curWs.pause(); curWs.seekTo(0); } catch (e) {} }
+        if (curWs) {
+            try {
+                var t0 = curWs.getCurrentTime ? curWs.getCurrentTime() : 0;
+                if (playingPath && t0 >= 0) mlSave(playingPath, t0);
+            } catch (e) {}
+            try { curWs.pause(); curWs.seekTo(0); } catch (e) {}
+        }
         curWs = null;
         curWsPath = null;
         playingPath = null;
@@ -756,7 +770,13 @@
         setPlayerUI();
     }
     function pausePlayback() {
-        if (curWs) { try { curWs.pause(); } catch (e) {} }
+        if (curWs) {
+            try {
+                curWs.pause();
+                var t = curWs.getCurrentTime ? curWs.getCurrentTime() : 0;
+                if (playingPath && t >= 0) mlSave(playingPath, t);
+            } catch (e) {}
+        }
         updatePlayStates();
         setPlayerUI();
     }
@@ -821,8 +841,35 @@
     function startProgressTick() {
         clearInterval(progressTimer);
         progressTimer = setInterval(function () {
-            if (playingPath && curWs && curPlaying()) setProgressUI();
+            if (playingPath && curWs && curPlaying()) {
+                setProgressUI();
+                _mlTick++;
+                if (_mlTick % 8 === 0) {
+                    try {
+                        var t = curWs.getCurrentTime ? curWs.getCurrentTime() : 0;
+                        if (t >= 0 && playingPath) mlSave(playingPath, t);
+                    } catch (e) {}
+                }
+            }
         }, 250);
+    }
+
+    function mlSave(pathStr, sec) {
+        try {
+            var f = fileByPath[pathStr] || {};
+            localStorage.setItem(ML_MEM_KEY, JSON.stringify({ path: pathStr, name: f.name || path.basename(pathStr || ''), dir: f.dir || '', sec: Math.round(sec) }));
+        } catch (e) {}
+    }
+    function mlRemember(f, sec) {
+        try { localStorage.setItem(ML_MEM_KEY, JSON.stringify({ path: f.fullPath, name: f.name, dir: f.dir || '', sec: Math.round(sec || 0) })); } catch (e) {}
+    }
+    function mlLoad() {
+        try {
+            var raw = localStorage.getItem(ML_MEM_KEY);
+            if (!raw) return null;
+            var m = JSON.parse(raw);
+            return (m && m.path) ? m : null;
+        } catch (e) { return null; }
     }
     var progressTimer = null;
 
@@ -1170,5 +1217,20 @@
         } catch (e) {
             log('musiclibAddFiles 错误: ' + e.message);
         }
+    };
+
+    // 自动续播：重进面板时若有记忆且文件存在 → 从记忆位置播放
+    window.__musiclibAutoResume = function () {
+        try {
+            var mm = mlLoad();
+            if (!mm || !mm.path) return false;
+            if (!fs.existsSync(mm.path)) return false;
+            var f = fileByPath[mm.path];
+            if (!f) {
+                f = { fullPath: mm.path, name: mm.name || path.basename(mm.path), dir: mm.dir || path.dirname(mm.path), ext: path.extname(mm.path).slice(1).toLowerCase() };
+            }
+            playFrom(f, mm.sec || 0);
+            return true;
+        } catch (e) { return false; }
     };
 })();

@@ -27,6 +27,11 @@
     var filterFav = false;    // 收藏视图
     var playingPath = null;
     var busy = false;
+    var SFX_MEM_KEY = 'vh_sfx_lastplay';   // {path,name,dir,sec,dirOf}
+    var _memTimer = 0;
+    var _memSec = 0;
+    var _memPath = null;
+    var _memDirOf = '';
     var rootDir = '';
     // ---- 目录树浏览状态 ----
     var sfxTreeRoot = null;   // 目录树根 {abs,name,depth,children,music[],files}
@@ -453,7 +458,13 @@
         playBtn.addEventListener('click', function (ev) {
             ev.stopPropagation();
             if (playingPath === f.fullPath && curPlaying()) { pausePlayback(); }
-            else playFrom(f, 0);
+            else {
+                // 若该文件是上次播放记忆且之前听到一半，从记忆位置续播
+                var m0 = sfxLoadMem();
+                var startSec = 0;
+                if (m0 && m0.path === f.fullPath && m0.sec > 1) startSec = m0.sec;
+                playFrom(f, startSec);
+            }
         });
 
         var waveEl = document.createElement('div');
@@ -651,6 +662,7 @@
                 curWs.play();
             } catch (e) {}
             syncPlayUI(f);
+            rememberPlay(f, sec || 0);
             return;
         }
         stopPlayback();
@@ -667,11 +679,18 @@
             } catch (e) {}
             syncPlayUI(f);
             setProgressUI();
+            rememberPlay(f, 0);
         });
     }
 
     function stopPlayback() {
-        if (curWs) { try { curWs.pause(); curWs.seekTo(0); } catch (e) {} }
+        if (curWs) {
+            try {
+                var t0 = curWs.getCurrentTime ? curWs.getCurrentTime() : 0;
+                if (playingPath && t0 >= 0) savePlayMem(playingPath, t0, curWsPathDir() || '');
+            } catch (e) {}
+            try { curWs.pause(); curWs.seekTo(0); } catch (e) {}
+        }
         curWs = null;
         curWsPath = null;
         playingPath = null;
@@ -680,7 +699,13 @@
         setPlayerUI();
     }
     function pausePlayback() {
-        if (curWs) { try { curWs.pause(); } catch (e) {} }
+        if (curWs) {
+            try {
+                curWs.pause();
+                var t = curWs.getCurrentTime ? curWs.getCurrentTime() : 0;
+                if (playingPath && t >= 0) savePlayMem(playingPath, t, curWsPathDir() || '');
+            } catch (e) {}
+        }
         updatePlayState();
         setPlayerUI();
     }
@@ -752,8 +777,49 @@
     function startProgressTick() {
         clearInterval(progressTimer);
         progressTimer = setInterval(function () {
-            if (playingPath && curWs && curPlaying()) setProgressUI();
+            if (playingPath && curWs && curPlaying()) {
+                setProgressUI();
+                // 每 ~2s 存一次位置（节流）
+                _memTimer++;
+                if (_memTimer % 8 === 0) {
+                    try {
+                        var t = curWs.getCurrentTime ? curWs.getCurrentTime() : 0;
+                        if (t >= 0 && playingPath) {
+                            savePlayMem(playingPath, t, curWsPathDir() || _memDirOf);
+                        }
+                    } catch (e) {}
+                }
+            }
         }, 250);
+    }
+
+    // 当前播放文件的所属目录（列表文件的 dir 字段；wav 在本地根时用空）
+    function curWsPathDir() {
+        try {
+            var f = fileByPath[playingPath];
+            return f ? (f.dir || '') : '';
+        } catch (e) { return ''; }
+    }
+
+    function savePlayMem(pathStr, sec, dirOf) {
+        try {
+            var f = fileByPath[pathStr] || {};
+            var mem = { path: pathStr, name: f.name || path.basename(pathStr || ''), dir: f.dir || '', sec: Math.round(sec), dirOf: dirOf || '' };
+            localStorage.setItem(SFX_MEM_KEY, JSON.stringify(mem));
+        } catch (e) {}
+    }
+    function rememberPlay(f, sec) {
+        try { localStorage.setItem(SFX_MEM_KEY, JSON.stringify({ path: f.fullPath, name: f.name, dir: f.dir || '', sec: Math.round(sec || 0), dirOf: '' })); } catch (e) {}
+    }
+    function sfxLoadMem() { return loadPlayMem(); }
+    function loadPlayMem() {
+        try {
+            var raw = localStorage.getItem(SFX_MEM_KEY);
+            if (!raw) return null;
+            var m = JSON.parse(raw);
+            if (!m || !m.path) return null;
+            return m;
+        } catch (e) { return null; }
     }
 
     // ---------- 导入 PR 项目面板 ----------
@@ -995,6 +1061,9 @@
         }
     });
 
+    // 页面就绪后尝试标记上次播放（若初始目录已扫出）
+    setTimeout(function () { try { window.__sfxRestorePlay && window.__sfxRestorePlay(); } catch (e) {} }, 1500);
+
     // 切到音效库 tab 时自动聚焦搜索框
     var sfxTab = document.querySelector('.tab[data-tab="sfx"]');
     if (sfxTab) {
@@ -1003,10 +1072,47 @@
         });
     }
 
+    // 扫描/刷新完成后尝试恢复上次播放位置（仅标记，不自动播放）
+    function tryRestoreAfterScan() {
+        try {
+            var mem = loadPlayMem();
+            if (!mem || !mem.path) return;
+            // 若文件在当前可见列表，仅做标记
+            var item = renderedMap[mem.path];
+            if (!item) return;
+            markPlayedItem(item, mem);
+        } catch (e) {}
+    }
+    function markPlayedItem(item, mem) {
+        try {
+            var nm = item.querySelector('.nm') || item.querySelector('.sfx-name');
+            if (nm) {
+                nm.textContent = (nm.textContent || '').replace(/^\u25b6\s*/, '') + (mem.sec > 0 ? ' ▶' + mem.sec + 's' : ' ▶');
+                nm.title = (nm.title || '') + '\n上次播放位置 ' + mem.sec + 's';
+            }
+        } catch (e) {}
+    }
+
     // ---------- 初始化 ----------
     loadFavs();
     registerShortcutInterest();
     startProgressTick();
+    // 恢复播放记忆提示（放在 doScan 完成后，由扫描回调调用 tryRestoreAfterScan）
+    window.__sfxRestorePlay = tryRestoreAfterScan;
+    // 自动续播：重进面板时若有记忆且文件存在 → 从记忆位置播放
+    window.__sfxAutoResume = function () {
+        try {
+            var mm = sfxLoadMem();
+            if (!mm || !mm.path) return false;
+            if (!fs.existsSync(mm.path)) return false;
+            var f = fileByPath[mm.path];
+            if (!f) {
+                f = { fullPath: mm.path, name: mm.name || path.basename(mm.path), dir: mm.dir || path.dirname(mm.path), ext: path.extname(mm.path).slice(1).toLowerCase() };
+            }
+            playFrom(f, mm.sec || 0);
+            return true;
+        } catch (e) { return false; }
+    };
     try {
         var savedDir = localStorage.getItem('sfxDir');
         if (savedDir) {
