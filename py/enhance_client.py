@@ -213,7 +213,7 @@ def list_folders(username, password):
         raise RuntimeError(str(d.get('msg')))
     return (d.get('data') or {}).get('list') or []
 
-def list_tasks(username, password, page=1, page_size=10):
+def list_tasks(username, password, page=1, page_size=50):
     token = get_token(username, password)
     st, d = _req('GET', '/api/enhance/getTaskList?' + urllib.parse.urlencode({'page': page, 'pageSize': page_size}),
                  headers_extra={'x-token': token})
@@ -240,6 +240,7 @@ def main():
     ap.add_argument('--download-to', default='', help='完成后下载到目录')
     ap.add_argument('--task', default='', help='任务 ID（download 命令用）')
     ap.add_argument('--json', action='store_true', help='folders/tasks 以 JSON 输出（供插件解析）')
+    ap.add_argument('--save-name', default='', help='download 命令：结果保存的文件名（默认从 URL 推断）')
     args = ap.parse_args()
 
     if args.cmd == 'login':
@@ -269,8 +270,11 @@ def main():
         if not args.task:
             out('需要 --task'); sys.exit(1)
         tok = get_token(args.user, args.pwd)
-        dest = download_task(tok, args.task, args.download_to or os.getcwd())
-        out('已下载: ' + dest)
+        dest = download_task(tok, args.task, args.download_to or os.getcwd(), args.save_name)
+        if args.json:
+            out(json.dumps({'ok': True, 'path': dest}, ensure_ascii=False))
+        else:
+            out('已下载: ' + dest)
 
 if __name__ == '__main__':
     main()

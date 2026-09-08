@@ -252,8 +252,8 @@
     });
   }
 
-  // 上传超分 + 等待 + 下载（调 python）
-  function uploadOne(file, outDir, folderId, resolution) {
+  // 上传超分（只提交建任务，不等待）→ 返回 task_id
+  function submitOne(file, folderId, resolution) {
     return new Promise(function (resolve, reject) {
       var py = findPy();
       var root = locateExtRoot();
@@ -261,28 +261,61 @@
       if (!script || !fs.existsSync(script)) return reject(new Error('找不到 enhance_client.py'));
       var cp = require('child_process');
       var args = [script, 'upload', '--file', file, '--folder', String(folderId),
-                  '--resolution', String(resolution), '--wait', '--download-to', outDir];
-      log('🚀 上传超分：' + path.basename(file) + '（' + resolution + '，验证码自动识别）');
+                  '--resolution', String(resolution)];   // 不带 --wait → 提交后立即返回 task_id
       var child = cp.spawn(py, args, { windowsHide: true });
       var buf = '';
       child.stdout.on('data', function (d) { buf += d.toString(); });
       child.stderr.on('data', function (d) { buf += d.toString(); });
       child.on('error', function (e) { reject(new Error('启动 python 失败：' + e.message)); });
       child.on('close', function (code) {
-        var lines = buf.split(/\r?\n/).filter(Boolean);
-        lines.forEach(function (l) { log(l); });
-        var last = lines[lines.length - 1] || '';
+        var last = buf.split(/\r?\n/).filter(Boolean).pop() || '';
         var j = null;
         try { j = JSON.parse(last); } catch (e) {}
-        if (j && j.ok) {
-          if (j.result && j.result.downloaded) { log('✅ 超分完成已下载：' + j.result.downloaded, 'ok'); resolve(j); }
-          else { log('✅ 超分任务已提交 ID=' + j.task_id + '（等待轮询）', 'ok'); resolve(j); }
-        } else {
-          reject(new Error(last || ('退出码 ' + code)));
-        }
+        if (j && j.ok && j.task_id) { resolve(j.task_id); }
+        else { reject(new Error((j && j.msg) || last || ('退出码 ' + code))); }
       });
     });
   }
+
+  // 拉最近任务状态（python tasks --json）
+  function queryTasks() {
+    return new Promise(function (resolve) {
+      var py = findPy();
+      var root = locateExtRoot();
+      var script = root ? path.join(root, 'py', 'enhance_client.py') : '';
+      if (!script || !fs.existsSync(script)) { resolve([]); return; }
+      var cp = require('child_process');
+      cp.exec('"' + py + '" "' + script + '" tasks --json', { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, function (err, stdout) {
+        try {
+          var out = String(stdout || '').trim();
+          var arr = JSON.parse(out.split(/\r?\n/).pop());
+          resolve(Array.isArray(arr) ? arr : []);
+        } catch (e) { resolve([]); }
+      });
+    });
+  }
+
+  // 下载指定任务结果到目录
+  function downloadTask(taskId, dir, saveName) {
+    return new Promise(function (resolve) {
+      var py = findPy();
+      var root = locateExtRoot();
+      var script = root ? path.join(root, 'py', 'enhance_client.py') : '';
+      if (!script || !fs.existsSync(script)) { resolve(''); return; }
+      var cp = require('child_process');
+      var args = [script, 'download', '--task', String(taskId), '--download-to', dir, '--json'];
+      if (saveName) { args.push('--save-name'); args.push(saveName); }
+      cp.exec('"' + py + '" "' + args.join('" "') + '"', { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, function (err, stdout) {
+        try {
+          var out = String(stdout || '').trim().split(/\r?\n/).filter(Boolean).pop() || '';
+          var j = JSON.parse(out);
+          var p = (j && j.path) || '';
+          resolve(p && fs.existsSync(p) ? p : '');
+        } catch (e) { resolve(''); }
+      });
+    });
+  }
+
 
   // 导入 PR 素材箱
   function importToBin(files, binName) {
@@ -297,18 +330,27 @@
     });
   }
 
-  // 主流程
+  // 主流程：阶段1 逐序列 导出→立即提交（不等超分）；阶段2 并行轮询所有任务 → 逐个下载导入
   async function runAll() {
     if (busy) return;
     busy = true;
     stopFlag = false;
     enGo.disabled = true; enStop.disabled = false;
     log('════ 开始导出并超分 ════');
-    // 开始前清一次残留导出件（防上次异常中断遗留）
     cleanupTmp();
+    var progWrap = document.getElementById('enProgWrap');
+    var progFill = document.getElementById('enProgFill');
+    var progText = document.getElementById('enProgText');
+    var progPct = document.getElementById('enProgPct');
+    function setProg(pct, txt) {
+      if (!progWrap || !progFill) return;
+      progWrap.style.display = 'block';
+      progFill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (progText) progText.textContent = txt || '';
+      if (progPct) progPct.textContent = Math.round(pct) + '%';
+    }
     try {
       if (!checked.length) { log('请先勾选要超分的序列', 'err'); return; }
-      // 预设：手动选 > 自动无字幕
       var presetPath = enPreset.value;
       if (!presetPath) {
         var auto = findNoSubtitlePreset();
@@ -316,44 +358,119 @@
         presetPath = auto[0].full;
         log('自动使用预设：' + path.basename(presetPath));
       }
-      // 输出目录
       if (!fs.existsSync(tmpRoot)) { try { fs.mkdirSync(tmpRoot, { recursive: true }); } catch (e) {} }
-      // 确定超分结果目录（工程目录/超分结果）
-      var resultDirNow = await resolveResultDir();
+      var folderId = enFolder && enFolder.value ? enFolder.value : '14086';
+      var resolution = enRes ? (enRes.value || '720p') : '720p';
+      // 结果目录（项目根/超分结果）
+      await resolveResultDir();
 
-      for (var i = 0; i < checked.length; i++) {
-        if (stopFlag) break;
+      // ===== 阶段1：逐集 导出 → 提交任务（导出串行，因为 AME 一次一个） =====
+      var totalN = checked.length;
+      var tasks = [];   // { seqName, taskId, status }
+      for (var i = 0; i < totalN; i++) {
+        if (stopFlag) { log('⏹ 已停止', 'warn'); break; }
         var seqName = checked[i];
         var safe = String(seqName).replace(/[\\/:*?"<>|]/g, '_');
         var outFile = path.join(tmpRoot, safe + '_nosub.mp4');
         try { if (fs.existsSync(outFile)) fs.unlinkSync(outFile); } catch (e) {}
-        var exported = await exportOne(seqName, presetPath, outFile);
-        if (exported === '__STOPPED__') break;
-        // 上传（下载到 resultDir 持久目录，PR 素材箱引用它不会被清理）
-        var folderId = enFolder && enFolder.value ? enFolder.value : '14086';
-        var resolution = enRes ? (enRes.value || '720p') : '720p';
-        var j = await uploadOne(outFile, resultDirNow, folderId, resolution);
-        // 下载成功后文件在 resultDirNow：enhance_client 存为 源名_720p.mp4
-        var dlFile = path.join(resultDirNow, safe + '_nosub_720p.mp4');
-        if (j.result && j.result.downloaded) dlFile = j.result.downloaded;
-        if (fs.existsSync(dlFile)) {
-          // 导入素材箱（素材箱名=序列名，方便对应）
-          var imp = await importToBin([dlFile], seqName);
-          if (imp && imp.ok) log('📥 已导入 PR 素材箱「' + seqName + '」：' + (imp.imported || []).join('、'), 'ok');
-          else log('⚠ 导入素材箱：' + ((imp && (imp.error || imp.imported)) || '未知'), 'warn');
-        } else {
-          log('⚠ 未找到超分结果文件：' + dlFile, 'warn');
+        setProg((i / totalN) * 55, '[' + (i + 1) + '/' + totalN + '] 导出 ' + seqName + ' …');
+        log('▶ [' + (i + 1) + '/' + totalN + '] 导出（无字幕）：' + seqName);
+        try { await exportOne(seqName, presetPath, outFile); } catch (e) {
+          if (e && e.message === '__STOPPED__') break;
+          log('✗ 导出失败 ' + seqName + '：' + e.message, 'err');
+          continue;
+        }
+        setProg(((i + 0.6) / totalN) * 55, '[' + (i + 1) + '/' + totalN + '] 上传 ' + seqName + ' …');
+        log('🚀 上传超分：' + path.basename(outFile) + '（' + resolution + '）');
+        try {
+          var tid = await submitOne(outFile, folderId, resolution);
+          log('✅ 已提交任务 ID=' + tid + '（' + seqName + '，超分在云端进行，继续下一集）', 'ok');
+          tasks.push({ seqName: seqName, taskId: tid, status: 'queued', outFile: outFile });
+        } catch (e) {
+          log('✗ 上传失败 ' + seqName + '：' + e.message, 'err');
         }
       }
-      log('════ 全部结束 ════', 'ok');
+      if (stopFlag) { log('⏹ 阶段1 已停止（已提交 ' + tasks.length + ' 个任务）', 'warn'); }
+
+      // ===== 阶段2：轮询所有任务 → 完成就下载+导入 =====
+      if (!tasks.length) { log('没有任何任务提交', 'err'); return; }
+      log('════ 全部 ' + tasks.length + ' 集已提交，进入超分等待阶段（云端处理中） ════', 'ok');
+      var doneCount = 0;
+      var failCount = 0;
+      var seenDone = {};
+      var pollTicks = 0;
+      // 每 20s 查一次全量任务，匹配我们的 taskId
+      while (doneCount + failCount < tasks.length) {
+        if (stopFlag) { log('⏹ 已停止等待，已完成的仍会下载', 'warn'); break; }
+        pollTicks++;
+        var list = await queryTasks();
+        var byId = {};
+        list.forEach(function (t) { byId[t.ID] = t; });
+        var changed = false;
+        tasks.forEach(function (tk) {
+          if (seenDone[tk.taskId]) return;
+          var t = byId[tk.taskId];
+          if (!t) return;
+          var st = t.status;
+          tk.status = st;
+          if (st === 'succeeded' || st === 'failed') {
+            seenDone[tk.taskId] = true;
+            changed = true;
+            if (st === 'succeeded') {
+              doneCount++;
+              setProg(55 + (doneCount / tasks.length) * 45, '超分完成：' + tk.seqName + ' → 下载中…');
+              log('✅ 超分完成：' + tk.seqName + '（任务 ' + tk.taskId + '），下载中…', 'ok');
+              downloadAndImport(tk, resultDir);
+            } else {
+              failCount++;
+              log('✗ 超分失败：' + tk.seqName + '（任务 ' + tk.taskId + '）：' + (t.errorMessage || '未知'), 'err');
+            }
+          }
+        });
+        if (changed) {
+          var remain = tasks.length - doneCount - failCount;
+          log('⏳ 进度：完成 ' + doneCount + ' / 失败 ' + failCount + ' / 等待 ' + remain);
+        }
+        if (doneCount + failCount >= tasks.length) break;
+        // 等待下一轮（最后一轮短等即可）
+        await sleep(20000);
+      }
+      setProg(100, '全部结束：完成 ' + doneCount + '，失败 ' + failCount);
+      log('════ 全部结束：成功 ' + doneCount + ' / 失败 ' + failCount + ' ════', failCount ? 'warn' : 'ok');
       cleanupTmp();
-      log('🧹 临时文件已清理（导出/超分过程文件）');
+      log('🧹 临时导出件已清理（超分结果已保存在 ' + resultDir + '）');
     } catch (e) {
       log('✗ ' + e.message, 'err');
     } finally {
       busy = false;
       enGo.disabled = false; enStop.disabled = true;
+      if (progWrap) setTimeout(function () { try { progWrap.style.display = 'none'; } catch (e) {} }, 3000);
     }
+  }
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // 下载并导入素材箱（异步后台执行）
+  function downloadAndImport(tk, dir) {
+    (async function () {
+      try {
+        var dlFile = '';
+        try {
+          var srcBase = path.basename(tk.outFile).replace(/\.mp4$/i, '');
+          dlFile = await downloadTask(tk.taskId, dir, srcBase + '_720p.mp4');
+        } catch (e) {}
+        if (dlFile && fs.existsSync(dlFile)) {
+          log('📥 已下载：' + dlFile);
+          var imp = await importToBin([dlFile], tk.seqName);
+          if (imp && imp.ok) log('📥 已导入素材箱「' + tk.seqName + '」：' + (imp.imported || []).join('、'), 'ok');
+          else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
+        } else {
+          log('⚠ 下载失败（任务 ' + tk.taskId + '），可稍后到超分站手动下载', 'warn');
+        }
+      } catch (e) {
+        log('⚠ 下载/导入异常：' + e.message, 'warn');
+      }
+    })();
   }
 
   function init() {

@@ -789,6 +789,10 @@
                 <button id="enGo" style="background:#7e57c2;">🚀 导出并超分</button>
                 <button id="enStop" class="danger mini" disabled>停止</button>
             </div>
+            <div id="enProgWrap" style="display:none;margin-top:8px;">
+                <div style="height:8px;background:#1a1a1a;border-radius:4px;overflow:hidden;"><div id="enProgFill" style="height:100%;width:0%;background:linear-gradient(90deg,#7e57c2,#b39ddb);border-radius:4px;transition:width .4s;"></div></div>
+                <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:10px;color:var(--muted);"><span id="enProgText"></span><span id="enProgPct"></span></div>
+            </div>
             <div class="en-log" id="enLog"></div>
         </div>
         <!-- 下半：超分站（上传/任务管理在站内做也行） -->
