@@ -458,6 +458,13 @@
   function closeImportModal() {
     if (importModal) { try { if (importModal.ov.parentNode) importModal.ov.parentNode.removeChild(importModal.ov); } catch (e) {} importModal = null; }
   }
+  // 共享给其它板块（progress 面板导入等）
+  window.__vhImportModal = {
+    progress: function (pct, text) { setModalProgress(pct, text); },
+    open: function (title) { showImportModal(title, true); },
+    result: function (title, detail) { showResultModal(title, detail); },
+    close: function () { closeImportModal(); }
+  };
 
   // 逐文件导入（分批调 host，模态进度）
   function importList(filePaths, binName, label) {

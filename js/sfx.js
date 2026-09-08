@@ -228,6 +228,7 @@
                 }
                 sfxViewMode = 'tree';
                 curSfxDir = n.abs;
+                try { localStorage.setItem('sfxCurDir', n.abs); } catch (e) {}
                 syncSfxViewBtns();
                 if (n.children.length && !n.__open) n.__open = true;
                 collapseSfxTree();
@@ -363,6 +364,19 @@
         sfxViewMode = 'tree';
         syncSfxViewBtns();
         renderSfxTree();
+        // 恢复上次左侧选中的子目录（若是当前根目录下的子级）
+        try {
+            var savedCurSfx = localStorage.getItem('sfxCurDir') || '';
+            if (savedCurSfx && rootDir && savedCurSfx.indexOf(rootDir) === 0 && savedCurSfx !== rootDir) {
+                var node = findSfxNode(savedCurSfx);
+                if (node) {
+                    curSfxDir = node.abs;
+                    var pp = node.parent;
+                    while (pp) { pp.__open = true; pp = pp.parent; }
+                    collapseSfxTree();
+                }
+            }
+        } catch (e) {}
         applyView();
     }
 

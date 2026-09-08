@@ -692,6 +692,10 @@
                 // 无根目录信息：全部平铺到根
                 groups = [{ relPath: [], files: files }];
             }
+            // 进度弹窗（共享素材面板的模态）
+            var M = window.__vhImportModal;
+            var totalN = groups.reduce(function (n, g) { return n + (g.files || []).length; }, 0);
+            try { if (M) M.open('正在导入素材到「原素材」素材箱…'); if (M) M.progress(5, '准备导入 ' + totalN + ' 个文件（保留目录结构）…'); } catch (e) {}
             var payload = JSON.stringify({ binName: '原素材', groups: groups });
             csInterface.evalScript('meImportPayload = ' + payload + ';', function () {
                 csInterface.evalScript('meImportTreePlanStr()', function (result) {
@@ -699,12 +703,20 @@
                         var r = JSON.parse(result);
                         if (r && r.ok) {
                             var s = r.stats || {};
-                            el.statusText.textContent = '✅ 已导入 ' + (s.ok || 0) + ' 个素材到「原素材」（保留目录结构）' + ((s.fail || 0) ? '，失败 ' + s.fail : '');
+                            var okN = s.ok || 0, failN = s.fail || 0;
+                            if (M) M.progress(100, '');
+                            var fails = (r.failed || []).slice(0, 10).join('\n');
+                            var det = failN ? '失败明细：\n' + fails + (failN > 10 ? '\n…共 ' + failN + ' 个失败' : '') : '全部成功';
+                            if (M) { M.result('✅ 导入完成', '成功 ' + okN + ' 个\n失败 ' + failN + ' 个\n\n' + det); }
+                            el.statusText.textContent = '✅ 已导入 ' + okN + ' 个素材到「原素材」（保留目录结构）' + (failN ? '，失败 ' + failN : '');
                         } else {
-                            el.statusText.textContent = (r && r.error) || '导入失败';
+                            if (M) M.close();
+                            var msg = (r && r.error) || '导入失败';
+                            if (M) M.result('⚠ 导入失败', msg); else el.statusText.textContent = msg;
                         }
                     } catch (e) {
-                        el.statusText.textContent = '导入解析失败: ' + result;
+                        if (M) M.close();
+                        if (M) M.result('⚠ 导入失败', e.message); else el.statusText.textContent = '导入解析失败: ' + result;
                     }
                 });
             });

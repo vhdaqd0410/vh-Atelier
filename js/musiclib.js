@@ -320,6 +320,7 @@
     function selectDir(abs) {
         if (!abs) return;
         curDir = abs;
+        try { localStorage.setItem('mllibCurDir', abs); } catch (e) {}
         // 展开祖先
         var n = findNode(abs);
         if (n) { var p = n.parent; while (p) { p.__open = true; p = p.parent; } }
@@ -1090,6 +1091,14 @@
         if (savedDir && fs.existsSync(savedDir)) {
             el.dir.value = savedDir;
             doLoad(savedDir, false);
+            // 恢复左侧树上次选中的子目录（等树构建完）
+            var savedCur = '';
+            try { savedCur = localStorage.getItem('mllibCurDir') || ''; } catch (e) {}
+            if (savedCur && savedCur.indexOf(savedDir) === 0 && fs.existsSync(savedCur)) {
+                setTimeout(function () {
+                    try { if (typeof selectDir === 'function') selectDir(savedCur); } catch (e) {}
+                }, 800);
+            }
         }
     } catch (e) {}
 
