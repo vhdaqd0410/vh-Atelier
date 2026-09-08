@@ -1961,9 +1961,9 @@
             display: flex; flex-direction: column;
             height: calc(100vh - 130px); overflow: hidden;
         }
-        /* 操作卡片滚动区（最多占上部 62%，让 iframe 有空间） */
+        /* 操作卡片区：弹性占满面板上部，日志/任务区吃掉剩余空间 */
         #panel-upscale .en-scroll {
-            flex: 0 1 auto; max-height: 62%; overflow-y: auto; min-height: 0;
+            flex: 1 1 auto; min-height: 0; overflow-y: auto;
             display: flex; flex-direction: column; gap: 6px; padding-right: 2px;
         }
         #panel-upscale .en-card {
@@ -2029,13 +2029,7 @@
         }
         /* 日志：默认折叠 */
         
-        #panel-upscale .en-log {
-            margin-top: 4px; max-height: 90px; overflow-y: auto;
-            font: 11px/1.5 Consolas, monospace; background: #141414;
-            border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
-            color: var(--muted); user-select: text; -webkit-user-select: text;
-            white-space: pre-wrap; word-break: break-all;
-        }
+        
         #panel-upscale .en-log .ok { color: #7fd68b; }
         #panel-upscale .en-log .err { color: #ff9a9a; }
         #panel-upscale .en-log .warn { color: #ffd76a; }
@@ -2045,18 +2039,20 @@
             display: flex; gap: 6px; margin-top: 6px; align-items: flex-end;
         }
         #panel-upscale .en-row2 .en-f { flex: 1; min-width: 0; }
-        /* 任务 + 日志 左右并排 */
+        /* 任务 + 日志 左右并排，弹性占满 */
         #panel-upscale .en-split {
-            display: flex; gap: 6px; flex: 0 0 auto; min-height: 0;
+            display: flex; gap: 6px; flex: 1 1 auto; min-height: 0;
         }
-        #panel-upscale .en-split .en-card { flex: 1 1 0; min-width: 0; }
+        #panel-upscale .en-split .en-col {
+            flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+        }
+        #panel-upscale .en-split .en-col .en-card-head { flex: 0 0 auto; }
         #panel-upscale .en-tasks {
-            max-height: none; overflow-y: auto;
+            flex: 1 1 auto; min-height: 0; overflow-y: auto;
             background: var(--panel2); border-radius: 6px; padding: 4px;
-            height: 150px;
         }
         #panel-upscale .en-log {
-            margin-top: 4px; height: 150px; overflow-y: auto;
+            flex: 1 1 auto; min-height: 0; overflow-y: auto;
             font: 11px/1.5 Consolas, monospace; background: #141414;
             border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
             color: var(--muted); user-select: text; -webkit-user-select: text;
