@@ -481,8 +481,8 @@
         } catch (e) {}
         if (dlFile && fs.existsSync(dlFile)) {
           log('📥 已下载：' + dlFile);
-          var imp = await importToBin([dlFile], tk.seqName);
-          if (imp && imp.ok) log('📥 已导入素材箱「' + tk.seqName + '」：' + (imp.imported || []).join('、'), 'ok');
+          var imp = await importToBin([dlFile], '超分');
+          if (imp && imp.ok) log('📥 已导入素材箱「超分」：' + (imp.imported || []).join('、'), 'ok');
           else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
         } else {
           log('⚠ 下载失败（任务 ' + tk.taskId + '），可稍后到超分站手动下载', 'warn');
@@ -598,9 +598,9 @@
         if (progEl) progEl.textContent = '下载完成，导入中…';
         if (dlFile && fs.existsSync(dlFile)) {
           log('📥 已下载：' + dlFile, 'ok');
-          var binName = srcBase;
-          var imp = await importToBin([dlFile], binName);
-          if (imp && imp.ok) { log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok'); if (progEl) progEl.textContent = '✅ 已导入'; }
+          // 统一导入到「超分」素材箱（不存在自动创建，存在直接放入）
+          var imp = await importToBin([dlFile], '超分');
+          if (imp && imp.ok) { log('📥 已导入素材箱「超分」：' + (imp.imported || []).join('、'), 'ok'); if (progEl) progEl.textContent = '✅ 已导入超分素材箱'; }
           else { log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn'); if (progEl) progEl.textContent = '下载OK·导入失败'; }
         } else {
           log('⚠ 下载失败（任务 ' + taskId + '），请重试', 'err');
