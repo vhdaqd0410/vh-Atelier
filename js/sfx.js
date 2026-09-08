@@ -194,6 +194,37 @@
         return rootNode;
     }
 
+    // 恢复上次浏览的子目录：大小写不敏感匹配 + 找不到时逐级向上找最近存在的祖先
+    function restoreSfxCurDir() {
+        var savedCurSfx = '';
+        try { savedCurSfx = localStorage.getItem('sfxCurDir') || ''; } catch (e) {}
+        if (!savedCurSfx || !rootDir) return;
+        var normRoot = path.normalize(rootDir);
+        var normSaved = path.normalize(savedCurSfx);
+        // 大小写不敏感判断是否在根下
+        if (normSaved.toLowerCase().indexOf(normRoot.toLowerCase()) !== 0) return;
+        if (normSaved.toLowerCase() === normRoot.toLowerCase()) return;
+        var node = null;
+        var probe = normSaved;
+        var tries = [];
+        while (probe && probe.length >= normRoot.length) {
+            tries.push(probe);
+            var n = findSfxNode(probe);
+            if (n) { node = n; break; }
+            var parentDir = path.dirname(probe);
+            if (parentDir === probe) break;
+            probe = parentDir;
+        }
+        if (node) {
+            curSfxDir = node.abs;
+            var pp = node.parent;
+            while (pp) { pp.__open = true; pp = pp.parent; }
+            collapseSfxTree();
+        } else {
+            curSfxDir = '';
+        }
+    }
+
     // 渲染左目录树
     function renderSfxTree() {
         if (!el.tree) return;
@@ -366,18 +397,11 @@
         renderSfxTree();
         // 恢复上次左侧选中的子目录（若是当前根目录下的子级）
         try {
-            var savedCurSfx = localStorage.getItem('sfxCurDir') || '';
-            if (savedCurSfx && rootDir && savedCurSfx.indexOf(rootDir) === 0 && savedCurSfx !== rootDir) {
-                var node = findSfxNode(savedCurSfx);
-                if (node) {
-                    curSfxDir = node.abs;
-                    var pp = node.parent;
-                    while (pp) { pp.__open = true; pp = pp.parent; }
-                    collapseSfxTree();
-                }
-            }
+            restoreSfxCurDir();
         } catch (e) {}
         applyView();
+        // 扫描/重建完成后：重标上次播放的文件（切 tab 回来也不丢标记）
+        try { tryRestoreAfterScan(); } catch (e) {}
     }
 
     // ---------- 虚拟列表渲染 ----------
@@ -1077,6 +1101,11 @@
 
     // 页面就绪后尝试标记上次播放（若初始目录已扫出）
     setTimeout(function () { try { window.__sfxRestorePlay && window.__sfxRestorePlay(); } catch (e) {} }, 1500);
+
+    // 切到音效库 tab 时（由 main.js lazyInit 调用）：目录树/列表已就绪时重新标记上次播放位置
+    window.__sfxOnShow = function () {
+        try { tryRestoreAfterScan(); } catch (e) {}
+    };
 
     // 切到音效库 tab 时自动聚焦搜索框
     var sfxTab = document.querySelector('.tab[data-tab="sfx"]');

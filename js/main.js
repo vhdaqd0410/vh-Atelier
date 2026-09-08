@@ -79,6 +79,9 @@
         if (name === 'video' && window.__videoOnShow) {
             try { window.__videoOnShow(); } catch (e) {}
         }
+        if (name === 'sfx' && window.__sfxOnShow) {
+            try { window.__sfxOnShow(); } catch (e) {}
+        }
         if (name === 'progress' && window.__progressOnShow) {
             try { window.__progressOnShow(); } catch (e) {}
         }

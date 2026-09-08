@@ -181,13 +181,36 @@
   });
 
   // ===== 目录 =====
+  // 自然排序：1.mp4 < 2.mp4 < 10.mp4（数字段按数值比较，其余按字符）
+  function natCmp(a, b) {
+    var ra = String(a).split(/(\d+)/);
+    var rb = String(b).split(/(\d+)/);
+    var n = Math.max(ra.length, rb.length);
+    for (var i = 0; i < n; i++) {
+      var x = ra[i], y = rb[i];
+      if (x === undefined) return -1;
+      if (y === undefined) return 1;
+      var nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
+      if (nx && ny) {
+        var diff = parseInt(x, 10) - parseInt(y, 10);
+        if (diff !== 0) return diff;
+        if (x.length !== y.length) return x.length - y.length;
+      } else if (nx !== ny) {
+        return nx ? -1 : 1;
+      } else {
+        var c = x.localeCompare(y, 'zh-CN');
+        if (c !== 0) return c;
+      }
+    }
+    return 0;
+  }
   function listDirs(p) {
     try {
       return fs.readdirSync(p, { withFileTypes: true })
         .filter(function (e) { return e.isDirectory(); })
         .map(function (e) { return e.name; })
         .filter(function (n) { return n.charAt(0) !== '.'; })
-        .sort(function (a, b) { return a.localeCompare(b, 'zh-CN'); });
+        .sort(natCmp);
     } catch (e) { return []; }
   }
   function listFiles(p) {
@@ -196,7 +219,7 @@
         .filter(function (e) { return e.isFile(); })
         .map(function (e) { return e.name; })
         .filter(function (n) { return MEDIA_EXT.test(n) || DOC_EXT.test(n); })
-        .sort(function (a, b) { return a.localeCompare(b, 'zh-CN'); });
+        .sort(natCmp);
     } catch (e) { return []; }
   }
   function dirName(p) {
@@ -217,7 +240,7 @@
       sp.className = 'md-crumb-item' + (isLast ? ' cur' : '');
       sp.textContent = label;
       sp.title = full;
-      if (!isLast) sp.addEventListener('click', function () { browseDir = full; renderNav(); renderFiles(full); });
+      if (!isLast) sp.addEventListener('click', function () { browseDir = full; renderNav(); showDirDetail(full); });
       crumb.appendChild(sp);
       if (!isLast) { var sep = document.createElement('span'); sep.textContent = ' › '; crumb.appendChild(sep); }
     }
@@ -241,9 +264,10 @@
       upRow.className = 'md-tree-item md-up';
       upRow.textContent = '⬆ 上级';
       upRow.title = parent;
-      upRow.addEventListener('click', function () { if (fs.existsSync(parent)) { browseDir = parent; renderNav(); renderFiles(parent); } });
+      upRow.addEventListener('click', function () { if (fs.existsSync(parent)) { browseDir = parent; renderNav(); showDirDetail(parent); } });
       el.tree.appendChild(upRow);
     }
+    // 当前目录：渲染一个可展开的目录树（文件不随展开重复，进目录看）
     var subs = listDirs(dir);
     var files = listFiles(dir);
     var wrap = document.createElement('div');
@@ -251,19 +275,75 @@
     if (!subs.length && !files.length) wrap.innerHTML = '<div style="padding:6px 4px;font-size:11px;color:var(--muted);">空目录</div>';
     subs.forEach(function (s) {
       var full = path.join(dir, s);
-      var row = document.createElement('div');
-      row.className = 'md-tree-item md-subdir';
-      row.textContent = '📁 ' + s;
-      row.title = full + '\n点击进入';
-      row.addEventListener('click', function () { browseDir = full; renderNav(); showDirDetail(full); });
-      wrap.appendChild(row);
+      wrap.appendChild(makeDirRow(full, s, 0));
     });
+    // 当前目录直接文件叶子（平铺在目录下方，缩进与子目录一致以便阅读）
     files.forEach(function (fn) {
       var full = path.join(dir, fn);
       var leaf = makeFileLeaf(full, fn, dir);
       if (leaf) wrap.appendChild(leaf);
     });
     el.tree.appendChild(wrap);
+  }
+
+  // 生成一个目录行：点击箭头/行身进入（进目录浏览），Shift/右键保留。箭头 ▸ 显示下级数
+  function makeDirRow(full, name, depth) {
+    var row = document.createElement('div');
+    row.className = 'md-tree-item md-subdir';
+    row.style.paddingLeft = (6 + depth * 12) + 'px';
+    var subCnt = listDirs(full).length;
+    var caret = document.createElement('span');
+    caret.className = 'caret';
+    caret.textContent = subCnt ? '▸' : '';
+    caret.style.cssText = 'display:inline-block;width:14px;text-align:center;color:var(--accent);cursor:pointer;';
+    var ico = document.createElement('span');
+    ico.textContent = '📁 ';
+    var lbl = document.createElement('span');
+    lbl.textContent = name;
+    lbl.title = full;
+    row.appendChild(caret); row.appendChild(ico); row.appendChild(lbl);
+    // 行身点击：进入该目录
+    row.addEventListener('click', function (ev) {
+      if (ev.target === caret) { toggleDirExpand(full, row, depth + 1); return; }
+      browseDir = full; renderNav(); showDirDetail(full);
+    });
+    return row;
+  }
+  // 展开/收起某目录的子级（懒加载）
+  function toggleDirExpand(full, row, depth) {
+    var existed = row.__expanded;
+    var subWrap = row.__sub;
+    if (existed) {
+      row.__expanded = false;
+      var c = row.querySelector('.caret');
+      if (c) c.textContent = listDirs(full).length ? '▸' : '';
+      subWrap.style.display = 'none';
+      return;
+    }
+    if (!subWrap) {
+      subWrap = document.createElement('div');
+      subWrap.className = 'md-subwrap';
+      row.__sub = subWrap;
+      var kids = listDirs(full);
+      var fkids = listFiles(full);
+      if (!kids.length && !fkids.length) {
+        var empty = document.createElement('div');
+        empty.style.cssText = 'padding:2px 4px 2px ' + (22 + depth * 12) + 'px;font-size:10px;color:var(--muted);';
+        empty.textContent = '（空）';
+        subWrap.appendChild(empty);
+      } else {
+        kids.forEach(function (ks) { subWrap.appendChild(makeDirRow(path.join(full, ks), ks, depth)); });
+        fkids.forEach(function (fk) {
+          var leaf = makeFileLeaf(path.join(full, fk), fk, full);
+          if (leaf) { leaf.style.paddingLeft = (22 + depth * 12) + 'px'; subWrap.appendChild(leaf); }
+        });
+      }
+      row.parentNode.insertBefore(subWrap, row.nextSibling);
+    }
+    row.__expanded = true;
+    var c2 = row.querySelector('.caret');
+    if (c2) c2.textContent = listDirs(full).length ? '▾' : '▸';
+    subWrap.style.display = '';
   }
   // 「我的电脑」虚拟浏览：列本机盘符
   function listDrives() {
@@ -288,16 +368,48 @@
     var wrap = document.createElement('div');
     wrap.className = 'md-subwrap';
     if (!drives.length) wrap.innerHTML = '<div style="padding:6px;font-size:11px;color:var(--muted);">未检测到磁盘</div>';
+    var driveRows = [];
     drives.forEach(function (d) {
       var row = document.createElement('div');
       row.className = 'md-tree-item md-subdir';
-      row.textContent = '💽 ' + d;
+      row.dataset.drive = d;
+      row.textContent = '💽 ' + d + '（读取卷标…）';
       row.title = d;
+      row.style.cursor = 'pointer';
+      // 点击盘符：进盘根浏览
       row.addEventListener('click', function () { browseDir = d; renderNav(); showDirDetail(d); });
       wrap.appendChild(row);
+      driveRows.push(row);
     });
     el.tree.appendChild(wrap);
     if (el.detail) el.detail.innerHTML = '<div class="hint" style="padding:10px;">选择磁盘开始浏览</div>';
+    // 异步读卷标：VolumeName（资源管理器式盘符显示）
+    loadDriveLabels(driveRows);
+  }
+  // 用 PowerShell 一次拿全部盘符卷标（避免逐盘 spawn 慢）；拿不到就保留原样
+  function loadDriveLabels(rows) {
+    try {
+      var cp = require('child_process');
+      var ps = 'powershell -NoProfile -Command "Get-CimInstance Win32_LogicalDisk -Filter \'DriveType=3\' | ForEach-Object { $_.DeviceID + '|' + $_.VolumeName }"';
+      cp.exec(ps, { windowsHide: true, timeout: 8000, encoding: 'utf8' }, function (err, stdout) {
+        if (err || !stdout) return;
+        var map = {};
+        String(stdout).split(/[\r\n]+/).forEach(function (line) {
+          var p2 = line.indexOf('|');
+          if (p2 > 0) { map[line.slice(0, p2).trim().toUpperCase()] = line.slice(p2 + 1).trim(); }
+        });
+        rows.forEach(function (row) {
+          var d = (row.dataset.drive || '').toUpperCase();
+          var vol = map[d];
+          if (vol) {
+            row.textContent = '💽 ' + d + ' [' + vol + ']';
+            row.title = d + '  (' + vol + ')';
+          } else if (d) {
+            row.textContent = '💽 ' + d;
+          }
+        });
+      });
+    } catch (e) {}
   }
 
   // ===== 文件列表（支持多选）=====
