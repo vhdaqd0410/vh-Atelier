@@ -831,27 +831,39 @@
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
     <div class="tab-panel" id="panel-media" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
-            <!-- 顶部：根路径 + 落点 -->
+            <!-- 根路径 + 设根(浏览) -->
             <div class="md-bar">
                 <select id="mdRootSel" style="flex:1;min-width:0;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;padding:4px;"></select>
-                <button id="mdAddRoot" class="secondary mini" title="添加/修改当前浏览根路径">📂 设根</button>
+                <button id="mdAddRoot" class="secondary mini">📂 设根…</button>
+                <button id="mdAddSubRoot" class="secondary mini" title="把当前浏览目录加入根列表">📌 存当前</button>
             </div>
+            <!-- 工程信息 + 导入目标 -->
+            <div class="md-bar" style="flex-wrap:wrap;">
+                <span id="mdProjInfo" style="font-size:10px;color:#9fd0ff;flex:1 1 auto;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="">工程：检测中…</span>
+                <input id="mdBinName" type="text" value="素材" placeholder="素材箱名" style="flex:0 1 90px;min-width:60px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;padding:3px 6px;" title="导入到哪个素材箱（不存在自动创建）">
+            </div>
+            <!-- 工具条 -->
             <div class="md-bar">
-                <span style="font-size:10px;color:var(--muted);flex:0 0 auto;">导入到</span>
-                <select id="mdTarget" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;padding:3px;">
-                    <option value="bin">📁 素材箱</option>
-                </select>
-                <input id="mdBinName" type="text" value="素材" placeholder="素材箱名" style="flex:1;min-width:0;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;padding:3px 6px;">
+                <button id="mdSelAll" class="secondary mini">☑ 全选</button>
+                <button id="mdSelNone" class="secondary mini">清空</button>
+                <button id="mdImpSel" class="secondary mini" style="color:#7fd68b;border-color:#2a5a3a;">⬇ 导入选中(N)</button>
+                <button id="mdImpFolder" class="secondary mini" title="导入当前浏览的整个文件夹（保留目录层级）">📁 导入文件夹</button>
+            </div>
+            <!-- 进度条 -->
+            <div id="mdProgWrap" style="display:none;">
+                <div style="height:8px;background:#1a1a1a;border-radius:4px;overflow:hidden;"><div id="mdProgFill" style="height:100%;width:0%;background:linear-gradient(90deg,#3d9a50,#7fd68b);border-radius:4px;transition:width .3s;"></div></div>
+                <div style="display:flex;justify-content:space-between;margin-top:2px;font-size:10px;color:var(--muted);"><span id="mdProgText"></span><span id="mdProgPct"></span></div>
             </div>
             <!-- 主体：左目录树 / 右文件 -->
             <div style="flex:1;display:flex;gap:6px;min-height:0;">
-                <div class="md-tree" id="mdTree"><div class="hint" style="padding:8px;">设置根路径后浏览目录</div></div>
-                <div class="md-files" id="mdFiles"><div class="hint" style="padding:8px;">← 选择目录查看文件</div></div>
+                <div class="md-tree" id="mdTree"><div class="hint" style="padding:8px;">设根后浏览目录</div></div>
+                <div class="md-files" id="mdFiles"><div class="hint" style="padding:8px;">← 选择目录查看文件<br><br>单击文件导入素材箱<br>双击文件在资源管理器定位<br>Ctrl+单击 / Shift+单击 多选</div></div>
             </div>
         </div>
     </div>
 
-    <!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
+    
+<!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
     <div class="tab-panel" id="panel-script" style="display:none;"></div>
 
     <script src="js/CSInterface.js"></script>

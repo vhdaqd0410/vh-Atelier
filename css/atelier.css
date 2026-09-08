@@ -2107,11 +2107,11 @@
         #panel-media .md-tree-item:hover { background: #3a3a3a; }
         #panel-media .md-tree-item.md-up { color: var(--accent); }
         #panel-media .md-fcap { font-size: 10px; color: var(--muted); padding: 2px 4px 6px; }
-        #panel-media .md-file {
-            display: flex; align-items: center; gap: 6px; padding: 4px 6px;
-            font-size: 12px; cursor: pointer; border-bottom: 1px dashed #2e2e2e; border-radius: 3px;
-        }
+        #panel-media .md-file { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 12px; cursor: pointer; border-bottom: 1px dashed #2e2e2e; border-radius: 3px; }
         #panel-media .md-file:hover { background: #333; }
+        #panel-media .md-file.sel { background: #23415e; box-shadow: inset 2px 0 0 #6db3ff; }
         #panel-media .md-file .md-ic { flex: 0 0 auto; }
         #panel-media .md-file .md-fn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+        #panel-media .md-file .md-check { flex: 0 0 14px; text-align: center; color: #6db3ff; font-size: 11px; }
+        #panel-media .md-file.sel .md-check::after { content: '✓'; }
     

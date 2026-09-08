@@ -1141,3 +1141,94 @@ function meProjectDir() {
         return "OK:" + dir;
     } catch (e) { return "ERR:" + e; }
 }
+
+// 获取当前工程信息（供导入前确认目标工程，避免多工程误导入）
+function meProjectInfo() {
+    try {
+        var p = app.project;
+        if (!p) return JSON.stringify({ error: '无打开工程' });
+        var name = '', dir = '', saved = false, seqName = '';
+        try { name = p.name; } catch (e) {}
+        try { dir = p.path; } catch (e) {}
+        try { saved = p.saved; } catch (e) {}
+        try { if (app.project.activeSequence) seqName = app.project.activeSequence.name; } catch (e) {}
+        return JSON.stringify({ name: name, dir: dir, saved: !!saved, seq: seqName });
+    } catch (e) { return JSON.stringify({ error: e.toString() }); }
+}
+
+// 递归导入文件夹（保留目录层级结构到 targetBin）
+// 入参：folderPath(绝对路径), binName(目标素材箱名)，通过全局 meImportPayload 传路径
+function meImportFolderTreeStr() {
+    try {
+        var pl = meImportPayload;
+        if (!pl || !pl.folderPath || !pl.binName) return JSON.stringify({ error: '缺参数' });
+        var root = app.project.rootItem;
+        var srcDir = new Folder(pl.folderPath);
+        if (!srcDir.exists) return JSON.stringify({ error: '源目录不存在: ' + pl.folderPath });
+        // 建目标 bin
+        var bin = null;
+        for (var bi = 0; bi < root.children.numItems; bi++) {
+            var cc = root.children[bi];
+            try { if (cc.name === pl.binName) { bin = cc; break; } } catch (e) {}
+        }
+        if (!bin) { try { bin = root.createBin(pl.binName); } catch (e) { return JSON.stringify({ error: '创建素材箱失败: ' + e }); } }
+
+        var imported = [];
+        var failed = [];
+        var stats = { files: 0, ok: 0, fail: 0 };
+
+        // 递归：目标 bin 下建同名子目录层级
+        function importDir(srcF, dstBin) {
+            var entries = srcF.getFiles();
+            for (var i = 0; i < entries.length; i++) {
+                var ent = entries[i];
+                if (ent instanceof Folder) {
+                    // 子文件夹：在 dstBin 下建同名 bin（若没有），递归
+                    var sub = null;
+                    for (var sbi = 0; sbi < dstBin.children.numItems; sbi++) {
+                        var sc = dstBin.children[sbi];
+                        try { if (sc.name === ent.name) { sub = sc; break; } } catch (e) {}
+                    }
+                    if (!sub) { try { sub = dstBin.createBin(ent.name); } catch (e) { sub = null; } }
+                    if (sub) importDir(ent, sub);
+                } else if (ent instanceof File) {
+                    var f = new File(ent.fsName);
+                    stats.files++;
+                    try {
+                        var ok = app.project.importFiles([f.fsName], true, dstBin, false);
+                        if (ok) { stats.ok++; imported.push(ent.name); }
+                        else { stats.fail++; failed.push(ent.name + '(导入失败)'); }
+                    } catch (e) { stats.fail++; failed.push(ent.name + '(异常:' + e + ')'); }
+                }
+            }
+        }
+        importDir(srcDir, bin);
+        return JSON.stringify({ ok: true, bin: pl.binName, imported: imported, failed: failed, stats: stats });
+    } catch (e) { return JSON.stringify({ error: '导入异常: ' + e }); }
+}
+
+// 单个/多个文件导入目标 bin（带逐文件进度回报到 stderr 不可行，ExtendScript 无流；
+// 改为前端分批调用：每次导入一批，进度由前端控制）
+function meImportFilesToBinStr() {
+    try {
+        var pl = meImportPayload;
+        if (!pl || !pl.files || !pl.binName) return JSON.stringify({ error: '缺参数' });
+        var root = app.project.rootItem;
+        var bin = null;
+        for (var i = 0; i < root.children.numItems; i++) {
+            var c = root.children[i];
+            try { if (c.name === pl.binName) { bin = c; break; } } catch (e) {}
+        }
+        if (!bin) { try { bin = root.createBin(pl.binName); } catch (e) { return JSON.stringify({ error: '创建素材箱失败: ' + e }); } }
+        var imported = [], failed = [];
+        for (var j = 0; j < pl.files.length; j++) {
+            var f = new File(pl.files[j]);
+            if (!f.exists) { failed.push(pl.files[j] + '(不存在)'); continue; }
+            try {
+                var ok = app.project.importFiles([f.fsName], true, bin, false);
+                if (ok) imported.push(f.name); else failed.push(f.name + '(失败)');
+            } catch (e) { failed.push(f.name + '(异常:' + e + ')'); }
+        }
+        return JSON.stringify({ ok: true, bin: pl.binName, imported: imported, failed: failed });
+    } catch (e) { return JSON.stringify({ error: '导入异常: ' + e }); }
+}
