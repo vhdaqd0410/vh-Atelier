@@ -183,8 +183,8 @@ def upload_and_create(folder_id, file_path, resolution='720p', username='', pass
                     raise RuntimeError('任务失败: ' + str(t.get('errorMessage')))
     raise RuntimeError('等待超时')
 
-def download_task(token, task_id, download_dir, save_name=''):
-    """下载超分结果到本地目录，返回保存路径"""
+def download_task(token, task_id, download_dir, save_name='', progress_cb=None):
+    """下载超分结果到本地目录，返回保存路径。progress_cb(pct) 可传进度回调。"""
     import urllib.error
     st, d = _req('GET', '/api/enhance/getDownloadURL?' + urllib.parse.urlencode({'ID': int(task_id)}), headers_extra={'x-token': token})
     if d.get('code') != 0:
@@ -197,12 +197,22 @@ def download_task(token, task_id, download_dir, save_name=''):
     os.makedirs(download_dir, exist_ok=True)
     dest = os.path.join(download_dir, fname)
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(req, timeout=3600) as r, open(dest, 'wb') as fp:
-        while True:
-            chunk = r.read(1 << 20)
-            if not chunk:
-                break
-            fp.write(chunk)
+    with urllib.request.urlopen(req, timeout=3600) as r:
+        total = int(r.headers.get('Content-Length') or 0)
+        got = 0
+        last_pct = -1
+        with open(dest, 'wb') as fp:
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                fp.write(chunk)
+                got += len(chunk)
+                if progress_cb and total > 0:
+                    pct = int(got * 100 / total)
+                    if pct != last_pct:
+                        last_pct = pct
+                        progress_cb(pct)
     return dest
 
 
@@ -270,7 +280,14 @@ def main():
         if not args.task:
             out('需要 --task'); sys.exit(1)
         tok = get_token(args.user, args.pwd)
-        dest = download_task(tok, args.task, args.download_to or os.getcwd(), args.save_name)
+        def _cb(pct):
+            # 进度行 DLP:xx，供前端 spawn 实时解析；同时 stderr 避免污染 stdout 最终 JSON
+            try:
+                sys.stderr.write('DLP:%d\n' % pct)
+                sys.stderr.flush()
+            except Exception:
+                pass
+        dest = download_task(tok, args.task, args.download_to or os.getcwd(), args.save_name, _cb)
         if args.json:
             out(json.dumps({'ok': True, 'path': dest}, ensure_ascii=False))
         else:

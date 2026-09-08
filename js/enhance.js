@@ -302,8 +302,8 @@
     });
   }
 
-  // 下载指定任务结果到目录
-  function downloadTask(taskId, dir, saveName) {
+  // 下载指定任务结果到目录；onProgress(pct) 实时回调进度（0-100）
+  function downloadTask(taskId, dir, saveName, onProgress) {
     return new Promise(function (resolve) {
       var py = findPy();
       var root = locateExtRoot();
@@ -312,9 +312,19 @@
       var cp = require('child_process');
       var args = [script, 'download', '--task', String(taskId), '--download-to', dir, '--json'];
       if (saveName) { args.push('--save-name'); args.push(saveName); }
-      cp.exec('"' + py + '" "' + args.join('" "') + '"', { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, function (err, stdout) {
+      var child = cp.spawn(py, args, { windowsHide: true });
+      var outBuf = '';
+      child.stdout.on('data', function (d) { outBuf += d.toString(); });
+      child.stderr.on('data', function (d) {
+        // 进度行 DLP:xx
+        var s = d.toString();
+        var m = s.match(/DLP:(\d+)/);
+        if (m && onProgress) onProgress(parseInt(m[1], 10));
+      });
+      child.on('error', function () { resolve(''); });
+      child.on('close', function () {
         try {
-          var out = String(stdout || '').trim().split(/\r?\n/).filter(Boolean).pop() || '';
+          var out = outBuf.trim().split(/\r?\n/).filter(Boolean).pop() || '';
           var j = JSON.parse(out);
           var p = (j && j.path) || '';
           resolve(p && fs.existsSync(p) ? p : '');
@@ -328,10 +338,12 @@
   function importToBin(files, binName) {
     return new Promise(function (resolve) {
       try {
-        // wsImportToBinPayload 全局变量，host.jsx 读取
-        window.wsImportToBinPayload = files;
-        csInterface.evalScript('wsImportToBinStr(' + JSON.stringify(binName) + ')', function (r) {
-          try { resolve(JSON.parse(r)); } catch (e) { resolve({ error: r }); }
+        // 必须通过 evalScript 在 ExtendScript 环境赋值 wsImportToBinPayload（JS window 变量传不过去）
+        var payloadJson = JSON.stringify(files || []);
+        csInterface.evalScript('wsImportToBinPayload = ' + payloadJson + ';', function () {
+          csInterface.evalScript('wsImportToBinStr(' + JSON.stringify(binName) + ')', function (r) {
+            try { resolve(JSON.parse(r)); } catch (e) { resolve({ error: r }); }
+          });
         });
       } catch (e) { resolve({ error: e.message }); }
     });
@@ -567,35 +579,52 @@
     });
   }
 
-  // 下载某已完成任务到项目根/超分结果 + 导入素材箱
+  // 下载某已完成任务到项目根/超分结果 + 导入素材箱（带进度显示）
+  var dlProgEls = {};   // taskId -> {row, mainRow, btn}
   function downloadTaskToProject(taskId, srcName) {
     if (taskDownloading[taskId]) return;
     taskDownloading[taskId] = true;
-    log('⬇ 下载任务 ' + taskId + ' 到项目…');
+    log('⬇ 开始下载任务 ' + taskId + ' 到项目…');
     refreshTaskList();  // 立即刷新显示“下载中”
+    var progEl = makeDlProgress(taskId);
     (async function () {
       try {
         var dir = resultDir || (await resolveResultDir());
         var srcBase = String(srcName || 'task_' + taskId).replace(/\.mp4$/i, '').replace(/_nosub$/i, '');
         var saveName = srcBase + '_720p.mp4';
-        var dlFile = await downloadTask(taskId, dir, saveName);
+        var dlFile = await downloadTask(taskId, dir, saveName, function (pct) {
+          if (progEl) { progEl.textContent = '下载中 ' + pct + '%'; progEl.style.color = '#b39ddb'; }
+        });
+        if (progEl) progEl.textContent = '下载完成，导入中…';
         if (dlFile && fs.existsSync(dlFile)) {
           log('📥 已下载：' + dlFile, 'ok');
-          // 导入素材箱：优先用源文件名去扩展做箱名
           var binName = srcBase;
           var imp = await importToBin([dlFile], binName);
-          if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
-          else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
+          if (imp && imp.ok) { log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok'); if (progEl) progEl.textContent = '✅ 已导入'; }
+          else { log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn'); if (progEl) progEl.textContent = '下载OK·导入失败'; }
         } else {
           log('⚠ 下载失败（任务 ' + taskId + '），请重试', 'err');
+          if (progEl) progEl.textContent = '下载失败';
         }
       } catch (e) {
         log('✗ 下载异常：' + e.message, 'err');
+        if (progEl) progEl.textContent = '下载异常';
       } finally {
         delete taskDownloading[taskId];
-        refreshTaskList();
+        setTimeout(function () { refreshTaskList(); }, 2500);  // 稍后刷新恢复按钮
       }
     })();
+  }
+
+  // 在日志区末尾显示该任务的下载进度行
+  function makeDlProgress(taskId) {
+    if (!enLog) return null;
+    var d = document.createElement('div');
+    d.style.cssText = 'color:#b39ddb;font-size:11px;';
+    d.textContent = '⬇ 下载任务 ' + taskId + '：准备中…';
+    enLog.appendChild(d);
+    enLog.scrollTop = enLog.scrollHeight;
+    return d;
   }
 
   function init() {
