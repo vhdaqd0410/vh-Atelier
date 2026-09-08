@@ -2,6 +2,7 @@
 // 工作台（组）→ 子功能（面板）。三组：字幕(字幕识别/字幕校对)、声音(人声分离/语音克隆/音效库/音乐)、交付(多版本导出/视频下载)
 (function () {
     var panels = {
+        media: document.getElementById('panel-media'),
         subtitle: document.getElementById('panel-subtitle'),
         check: document.getElementById('panel-check'),
         separate: document.getElementById('panel-sep'),
@@ -19,6 +20,7 @@
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
+        media: { members: ['media'], default: 'media' },
         progress: { members: ['progress'], default: 'progress' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music'], default: 'separate' },
@@ -87,6 +89,10 @@
         // 审片：切到时 iframe 若未加载则自动加载分秒帧
         if (name === 'shenpian' && window.__spAutoLoad) {
             try { window.__spAutoLoad(); } catch (e) {}
+        }
+        // 素材库：切到时自动刷新（保持目录状态）
+        if (name === 'media' && window.__mediaOnShow) {
+            try { window.__mediaOnShow(); } catch (e) {}
         }
         // 超分：切到时自动加载去字幕/超分站
         if (name === 'upscale' && window.__upscaleAutoLoad) {
