@@ -1956,23 +1956,87 @@
         }
         #panel-progress .prg-ops-more .prg-open-btn:hover { background: var(--panel2); color: var(--text); }
         /* 刷新/分秒帧专属配色沿用上方旧规则 */
-        /* ===== 超分面板：上操作区 + 下站点 iframe ===== */
+        /* ===== 超分面板：卡片操作区 + 下站点 iframe ===== */
         #panel-upscale {
             display: flex; flex-direction: column;
             height: calc(100vh - 130px); overflow: hidden;
         }
-        #panel-upscale .en-box {
-            flex: 0 1 auto; background: var(--panel); border: 1px solid var(--border);
-            border-radius: 8px; padding: 8px 10px; margin-bottom: 4px;
-            max-height: 55%; overflow-y: auto; min-height: 0;
+        /* 操作卡片滚动区（最多占上部 62%，让 iframe 有空间） */
+        #panel-upscale .en-scroll {
+            flex: 0 1 auto; max-height: 62%; overflow-y: auto; min-height: 0;
+            display: flex; flex-direction: column; gap: 6px; padding-right: 2px;
         }
-        #panel-upscale .en-sec-title {
+        #panel-upscale .en-card {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; padding: 8px 10px; flex: 0 0 auto;
+        }
+        #panel-upscale .en-card-head {
+            display: flex; align-items: center; gap: 6px;
             font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px;
         }
-        #panel-upscale .en-row { display: flex; align-items: center; gap: 8px; }
-        #panel-upscale .en-row + .en-row { margin-top: 6px; }
+        #panel-upscale .en-act-hint {
+            margin-top: 4px; font-size: 10px; color: var(--muted);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        /* 序列多选：紧凑多列 chips */
+        #panel-upscale .en-seqs {
+            display: flex; flex-wrap: wrap; gap: 4px;
+            max-height: 84px; overflow-y: auto;
+        }
+        #panel-upscale .en-seq-item {
+            display: flex; align-items: center; gap: 4px;
+            padding: 2px 7px; border: 1px solid var(--border); border-radius: 10px;
+            font-size: 11px; cursor: pointer; max-width: 100%;
+            background: var(--panel2); color: var(--text);
+            transition: background .15s, border-color .15s;
+        }
+        #panel-upscale .en-seq-item.checked {
+            background: #3a2e52; border-color: #7e57c2; color: #e6d9ff;
+        }
+        #panel-upscale .en-seq-item input { width: 13px; height: 13px; accent-color: #7e57c2; }
+        #panel-upscale .en-seq-item span {
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;
+        }
+        /* 设置 3 列 grid */
+        #panel-upscale .en-grid {
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px;
+        }
+        #panel-upscale .en-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        #panel-upscale .en-f span { font-size: 10px; color: var(--muted); }
+        #panel-upscale .en-f select {
+            width: 100%; background: var(--panel2); color: var(--text);
+            border: 1px solid var(--border); border-radius: 4px;
+            font-size: 11px; padding: 3px 2px; cursor: pointer;
+        }
+        #panel-upscale .en-actions { display: flex; gap: 8px; align-items: center; }
+        #panel-upscale .en-go {
+            flex: 1; background: linear-gradient(135deg, #7e57c2, #9c6ee0);
+            color: #fff; border: none; border-radius: 6px;
+            padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        #panel-upscale .en-go:hover { filter: brightness(1.1); }
+        #panel-upscale .en-go:disabled { filter: grayscale(.6); cursor: not-allowed; }
+        /* 进度 */
+        #panel-upscale .en-prog { margin-top: 8px; }
+        #panel-upscale .en-prog-bar {
+            height: 8px; background: #1a1a1a; border-radius: 4px; overflow: hidden;
+        }
+        #panel-upscale .en-prog-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #7e57c2, #b39ddb);
+            border-radius: 4px; transition: width .4s;
+        }
+        #panel-upscale .en-prog-meta {
+            display: flex; justify-content: space-between; margin-top: 3px;
+            font-size: 10px; color: var(--muted);
+        }
+        /* 日志：默认折叠 */
+        #panel-upscale .en-log-wrap { margin-top: 6px; }
+        #panel-upscale .en-log-wrap summary {
+            font-size: 11px; color: var(--muted); cursor: pointer; user-select: none;
+        }
         #panel-upscale .en-log {
-            margin-top: 6px; max-height: 80px; overflow-y: auto;
+            margin-top: 4px; max-height: 90px; overflow-y: auto;
             font: 11px/1.5 Consolas, monospace; background: #141414;
             border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
             color: var(--muted); user-select: text; -webkit-user-select: text;
@@ -1981,10 +2045,13 @@
         #panel-upscale .en-log .ok { color: #7fd68b; }
         #panel-upscale .en-log .err { color: #ff9a9a; }
         #panel-upscale .en-log .warn { color: #ffd76a; }
-        #panel-upscale .en-seq-item {
-            display: flex; align-items: center; gap: 6px; padding: 2px 6px; font-size: 12px;
+        /* 任务记录 */
+        #panel-upscale .en-task-hint { font-size: 10px; color: var(--muted); }
+        #panel-upscale .en-tasks {
+            max-height: 150px; overflow-y: auto;
+            background: var(--panel2); border-radius: 6px; padding: 4px;
         }
-        /* ===== 外站内嵌导航栏（审片/超分通用） ===== */
+/* ===== 外站内嵌导航栏（审片/超分通用） ===== */
         .wb-nav {
             flex: 0 0 auto; display: flex; align-items: center; gap: 5px;
             padding: 4px 4px; margin-bottom: 4px;

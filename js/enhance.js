@@ -202,6 +202,7 @@
       cb.addEventListener('change', function () {
         if (cb.checked) { if (checked.indexOf(cb.value) < 0) checked.push(cb.value); }
         else { checked = checked.filter(function (x) { return x !== cb.value; }); }
+        lab.className = 'en-seq-item' + (cb.checked ? ' checked' : '');
         updateHint();
       });
       lab.appendChild(cb);
@@ -209,6 +210,7 @@
       span.textContent = s.name;
       span.title = s.name;
       lab.appendChild(span);
+      lab.className = 'en-seq-item' + ((checked.indexOf(s.name) >= 0) ? ' checked' : '');
       enSeqList.appendChild(lab);
     });
     // 默认勾当前活动序列（第一个）
@@ -217,8 +219,14 @@
     updateHint();
   }
   function syncCheck() {
-    var cbs = enSeqList.querySelectorAll('input[type=checkbox]');
-    cbs.forEach(function (cb) { cb.checked = checked.indexOf(cb.value) >= 0; });
+    var items = enSeqList.querySelectorAll('.en-seq-item');
+    items.forEach(function (lab) {
+      var cb = lab.querySelector('input[type=checkbox]');
+      if (!cb) return;
+      var on = checked.indexOf(cb.value) >= 0;
+      cb.checked = on;
+      lab.className = 'en-seq-item' + (on ? ' checked' : '');
+    });
   }
   function updateHint() {
     if (enActHint) enActHint.textContent = checked.length ? ('将导出并超分：' + checked.join('、')) : '未勾选序列';
