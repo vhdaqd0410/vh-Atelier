@@ -2058,6 +2058,27 @@
             color: var(--muted); user-select: text; -webkit-user-select: text;
             white-space: pre-wrap; word-break: break-all;
         }
+/* ===== 超分面板：可拖拽分隔条 + 内嵌站展开态 ===== */
+        .en-splitter {
+            flex: 0 0 8px; height: 8px; margin: 2px 0; cursor: row-resize;
+            display: flex; align-items: center; justify-content: center;
+            background: transparent; border-radius: 4px;
+            transition: background .15s;
+            user-select: none; -webkit-user-select: none;
+        }
+        .en-splitter:hover { background: rgba(139,92,246,0.18); }
+        .en-splitter.active { background: rgba(139,92,246,0.30); }
+        .en-splitter-grip {
+            width: 46px; height: 3px; border-radius: 2px;
+            background: var(--border);
+            transition: background .15s, width .15s;
+        }
+        .en-splitter:hover .en-splitter-grip { background: var(--accent); width: 70px; }
+        /* 展开态：操作区收起，内嵌站占满整个面板 */
+        #panel-upscale.en-expanded .en-scroll { display: none; }
+        #panel-upscale.en-expanded .en-splitter { display: none; }
+        #panel-upscale.en-expanded #upscaleFrame { flex: 1 1 auto !important; }
+
 /* ===== 外站内嵌导航栏（审片/超分通用） ===== */
         .wb-nav {
             flex: 0 0 auto; display: flex; align-items: center; gap: 5px;

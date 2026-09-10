@@ -817,14 +817,19 @@
                 </div>
             </div>
         </div>
+        <!-- 拖拽分隔条：上下拖动调整内嵌站高度 -->
+        <div class="en-splitter" id="upSplitter" title="上下拖动调整内嵌网站高度；双击还原默认">
+            <span class="en-splitter-grip"></span>
+        </div>
         <!-- 超分站内嵌 -->
-        <div class="wb-nav" style="margin-top:4px;">
+        <div class="wb-nav" style="margin-top:4px;" id="upNav">
             <button class="wb-nav-btn" id="upBack" title="后退">←</button>
             <button class="wb-nav-btn" id="upFwd" title="前进">→</button>
             <button class="wb-nav-btn" id="upReload" title="刷新">↻</button>
             <button class="wb-nav-btn" id="btnUpscaleHome" title="首页">🏠</button>
             <button class="wb-nav-btn wb-nav-ext" id="upExternal" title="外部打开">↗</button>
             <input type="text" class="wb-nav-url" id="upUrl" placeholder="输入网址回车跳转">
+            <button class="wb-nav-btn" id="upExpand" title="展开：内嵌站占满整个面板（再点还原）">⤢</button>
         </div>
         <iframe id="upscaleFrame" style="flex:0 0 130px;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
     </div>

@@ -731,5 +731,89 @@
 
   // 面板显示钩子（main.js 切换时调用）
   window.__enhanceOnShow = function () { refreshSeqs(); refreshTaskList(); };
-  init();
+
+  // ===== 内嵌站（去字幕站）高度：拖拽分隔条 + 展开/还原 =====
+  (function () {
+    var panel = document.getElementById('panel-upscale');
+    var frame = document.getElementById('upscaleFrame');
+    var splitter = document.getElementById('upSplitter');
+    var expandBtn = document.getElementById('upExpand');
+    if (!panel || !frame || !splitter) { init(); return; }
+
+    var STORE_H = 'vh_upscale_frame_h';
+    var STORE_X = 'vh_upscale_expanded';
+    var DEFAULT_H = 130;
+    var MIN_TOP = 110;   // 操作区保底高度
+    var MIN_FRAME = 80;  // 内嵌站最小高度
+
+    function clampH(h) {
+      var total = panel.clientHeight || 600;
+      var max = Math.max(MIN_FRAME, total - MIN_TOP);
+      if (h < MIN_FRAME) { h = MIN_FRAME; }
+      if (h > max) { h = max; }
+      return Math.round(h);
+    }
+
+    function applyH(h, save) {
+      h = clampH(h);
+      frame.style.flex = '0 0 ' + h + 'px';
+      frame.style.height = h + 'px';
+      if (save) { try { localStorage.setItem(STORE_H, String(h)); } catch (e) {} }
+      return h;
+    }
+
+    function isExpanded() { return panel.classList.contains('en-expanded'); }
+
+    function setExpanded(on, save) {
+      if (on) { panel.classList.add('en-expanded'); expandBtn.textContent = '⤡'; expandBtn.title = '还原：恢复操作区（再点展开）'; }
+      else { panel.classList.remove('en-expanded'); expandBtn.textContent = '⤢'; expandBtn.title = '展开：内嵌站占满整个面板（再点还原）'; applyH(parseInt(localStorage.getItem(STORE_H) || DEFAULT_H, 10), false); }
+      if (save) { try { localStorage.setItem(STORE_X, on ? '1' : '0'); } catch (e) {} }
+    }
+
+    // 恢复上次状态
+    var savedH = parseInt(localStorage.getItem(STORE_H) || DEFAULT_H, 10);
+    if (isNaN(savedH)) { savedH = DEFAULT_H; }
+    applyH(savedH, false);
+    if (localStorage.getItem(STORE_X) === '1') { setExpanded(true, false); }
+
+    // 拖拽
+    var dragging = false, startY = 0, startH = 0;
+    function onDown(e) {
+      if (isExpanded()) { return; }
+      dragging = true;
+      startY = e.clientY;
+      startH = frame.getBoundingClientRect().height;
+      splitter.classList.add('active');
+      document.body.style.cursor = 'row-resize';
+      try { e.preventDefault(); } catch (_) {}
+      // 拖拽期间禁用 iframe 抢事件
+      frame.style.pointerEvents = 'none';
+    }
+    function onMove(e) {
+      if (!dragging) { return; }
+      var dy = startY - e.clientY;   // 往上拖 = 变大
+      applyH(startH + dy, false);
+      try { e.preventDefault(); } catch (_) {}
+    }
+    function onUp() {
+      if (!dragging) { return; }
+      dragging = false;
+      splitter.classList.remove('active');
+      document.body.style.cursor = '';
+      frame.style.pointerEvents = '';
+      try { localStorage.setItem(STORE_H, String(Math.round(frame.getBoundingClientRect().height))); } catch (e) {}
+    }
+
+    splitter.addEventListener('mousedown', onDown);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    // 双击分隔条：还原默认高度
+    splitter.addEventListener('dblclick', function () { applyH(DEFAULT_H, true); });
+
+    if (expandBtn) {
+      expandBtn.addEventListener('click', function () { setExpanded(!isExpanded(), true); });
+    }
+
+    init();
+  })();
 })();
