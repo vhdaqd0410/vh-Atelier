@@ -751,6 +751,33 @@
                     </div>
                     <div class="td-addrow">
                         <input type="text" id="tdInput" placeholder="加一条待办，回车即可">
+                    </div>
+                    <div class="td-pickrow">
+                        <div class="td-picker" id="tdProjPicker">
+                            <button type="button" class="td-pick-btn" id="tdProjBtn" title="关联项目（数据来自视频工作台）">
+                                <span class="td-pick-lab">项目</span>
+                                <span class="td-pick-val" id="tdProjVal">不限</span>
+                            </button>
+                            <div class="td-pick-panel" id="tdProjPanel" style="display:none;">
+                                <div class="td-pick-head">
+                                    <input type="text" class="td-pick-search" id="tdProjSearch" placeholder="搜索项目…">
+                                    <button type="button" class="td-pick-refresh" id="tdProjRefresh" title="重新从工作台拉取">↻</button>
+                                </div>
+                                <div class="td-pick-list" id="tdProjList"></div>
+                            </div>
+                        </div>
+                        <div class="td-picker" id="tdAsgPicker">
+                            <button type="button" class="td-pick-btn" id="tdAsgBtn" title="关联负责人（数据来自工作台人员配置）">
+                                <span class="td-pick-lab">负责人</span>
+                                <span class="td-pick-val" id="tdAsgVal">不限</span>
+                            </button>
+                            <div class="td-pick-panel" id="tdAsgPanel" style="display:none;">
+                                <div class="td-pick-head">
+                                    <input type="text" class="td-pick-search" id="tdAsgSearch" placeholder="搜索负责人…">
+                                </div>
+                                <div class="td-pick-list" id="tdAsgList"></div>
+                            </div>
+                        </div>
                         <button id="tdAdd" class="td-addbtn">加</button>
                     </div>
                     <div class="td-carry" id="tdCarry" style="display:none;">
@@ -773,6 +800,10 @@
                         <button id="tdCopy" class="secondary mini">复制</button>
                         <button id="tdSave" class="secondary mini">存为 .md</button>
                     </div>
+                </div>
+                <div class="td-card">
+                    <div class="td-sec-title">按项目 / 负责人汇总</div>
+                    <div class="td-group-sum" id="tdGroupSum"></div>
                 </div>
                 <div class="td-card">
                     <div class="td-sec-title">往期</div>

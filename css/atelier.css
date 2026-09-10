@@ -2464,3 +2464,130 @@
             border: 1px solid rgba(109,179,255,.35); border-radius: 3px;
             padding: 0 3px; line-height: 1.5;
         }
+
+        /* ===== 待办：项目/负责人选择器 + 标记 + 分组汇总 ===== */
+        #panel-todo .td-pickrow {
+            display: flex; gap: 6px; align-items: center; margin-top: 7px;
+            flex-wrap: wrap;
+        }
+        #panel-todo .td-picker { position: relative; }
+        #panel-todo .td-pick-btn {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: var(--gray-input); color: var(--muted);
+            border: 1px solid var(--border); border-radius: 5px;
+            padding: 4px 9px; font-size: 11px; cursor: pointer;
+            max-width: 210px;
+        }
+        #panel-todo .td-pick-btn:hover { border-color: var(--accent); color: var(--text); }
+        #panel-todo .td-pick-btn.has { border-color: var(--accent); color: var(--fg-link); }
+        #panel-todo .td-pick-btn:disabled { opacity: .5; cursor: not-allowed; }
+        #panel-todo .td-pick-lab { color: var(--muted); flex: 0 0 auto; }
+        #panel-todo .td-pick-val {
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            max-width: 140px;
+        }
+        #panel-todo .td-pick-panel {
+            position: absolute; z-index: 40; top: calc(100% + 4px); left: 0;
+            width: 268px; max-width: 78vw;
+            background: var(--panel2); border: 1px solid var(--border);
+            border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.45);
+            padding: 6px;
+        }
+        #panel-todo .td-pick-head { display: flex; gap: 5px; margin-bottom: 5px; }
+        #panel-todo .td-pick-search {
+            flex: 1 1 auto; min-width: 0;
+            background: var(--gray-input); color: var(--text);
+            border: 1px solid var(--border); border-radius: 4px;
+            padding: 4px 7px; font-size: 11.5px;
+        }
+        #panel-todo .td-pick-search:focus { outline: none; border-color: var(--accent); }
+        #panel-todo .td-pick-refresh {
+            flex: 0 0 auto; width: 24px;
+            background: var(--gray-input); color: var(--muted);
+            border: 1px solid var(--border); border-radius: 4px;
+            cursor: pointer; font-size: 11px;
+        }
+        #panel-todo .td-pick-refresh:hover { color: var(--accent); border-color: var(--accent); }
+        #panel-todo .td-pick-list { max-height: 240px; overflow-y: auto; }
+        #panel-todo .td-pk-item {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 6px; border-radius: 4px; cursor: pointer;
+            font-size: 11.5px; color: var(--text);
+        }
+        #panel-todo .td-pk-item:hover { background: var(--sel-blue2-bg); }
+        #panel-todo .td-pk-item.done { opacity: .55; }
+        #panel-todo .td-pk-nm {
+            flex: 1 1 auto; min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #panel-todo .td-pk-meta {
+            flex: 0 0 auto; font-size: 10px; color: var(--muted);
+            max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #panel-todo .td-pk-empty {
+            padding: 10px 6px; text-align: center;
+            color: var(--muted); font-size: 11px; line-height: 1.6;
+        }
+        /* 条目上的标签与标记 */
+        #panel-todo .td-badges {
+            flex: 0 0 auto; display: inline-flex; gap: 3px; align-items: center;
+            max-width: 46%;
+        }
+        #panel-todo .td-tag {
+            font-size: 9.5px; line-height: 1.5; padding: 0 4px;
+            border-radius: 3px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; max-width: 110px;
+        }
+        #panel-todo .td-tag-proj {
+            background: var(--sel-blue2-bg); color: var(--fg-link);
+            border: 1px solid rgba(109,179,255,.3);
+        }
+        #panel-todo .td-tag-asg {
+            background: var(--sel-green-bg); color: var(--sel-green-fg);
+            border: 1px solid rgba(159,224,168,.28);
+        }
+        #panel-todo .td-tag-carry {
+            background: rgba(255,184,77,.1); color: var(--fg-warn-soft);
+            border: 1px solid rgba(255,184,77,.3);
+        }
+        #panel-todo .td-flags {
+            flex: 0 0 auto; display: inline-flex; gap: 2px; align-items: center;
+        }
+        #panel-todo .td-flag {
+            cursor: pointer; font-size: 11px; line-height: 1.5;
+            color: var(--border); padding: 0 2px;
+            user-select: none; -webkit-user-select: none;
+        }
+        #panel-todo .td-flag:hover { color: var(--accent); }
+        #panel-todo .td-flag.on { color: var(--accent); font-weight: 700; }
+        #panel-todo .td-flag-urgent.on { color: var(--err); }
+        /* 置顶/加急条目的视觉标记 */
+        #panel-todo .td-item.pinned { background: rgba(139,92,246,.06); }
+        #panel-todo .td-item.pinned .td-cb { border-color: var(--accent); }
+        #panel-todo .td-item.urgent .td-tx { font-weight: 600; }
+        #panel-todo .td-item.urgent .td-cb {
+            border-color: var(--err); box-shadow: inset 0 0 0 3px rgba(248,81,73,.14);
+        }
+        #panel-todo .td-item.done .td-flag.on { color: var(--muted); }
+        /* 分组汇总 */
+        #panel-todo .td-group-sum { display: flex; flex-direction: column; gap: 10px; }
+        #panel-todo .td-gsblock { display: flex; flex-direction: column; gap: 2px; }
+        #panel-todo .td-gstitle {
+            font-size: 10px; color: var(--muted); text-transform: uppercase;
+            letter-spacing: .4px; margin-bottom: 3px;
+        }
+        #panel-todo .td-gsrow {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 11.5px; padding: 2px 5px; border-radius: 4px;
+        }
+        #panel-todo .td-gsrow:hover { background: var(--panel2); }
+        #panel-todo .td-gsk {
+            flex: 1 1 auto; min-width: 0; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #panel-todo .td-gsv {
+            flex: 0 0 auto; color: var(--muted); font-size: 10.5px;
+            font-variant-numeric: tabular-nums;
+        }
+        #panel-todo .td-gsrow.all .td-gsk { color: var(--muted); text-decoration: line-through; }
+        #panel-todo .td-gsrow.all .td-gsv { color: var(--fg-ok-soft); }
