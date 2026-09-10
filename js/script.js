@@ -695,6 +695,9 @@
         var hitIdx = -1;             // 当前定位到第几个命中（0 基）
         var onlyHits = false;        // false=保留全文并定位到第一个命中；true=只列出命中行
         var pendingScrollEp = null;  // 渲染后需要滚动到的集（选集/跳集时置位）
+        var viewEp = null;           // 当前视口顶部所在的集（随右栏滚动变化，驱动左栏高亮）
+        var epMarks = [];            // [[集号, 标题元素], ...] 渲染后缓存，供滚动同步快速取用
+        var epMarksDirty = true;
 
         function epLines(ep) {
             return (data.lines || []).filter(function (x) { return ep ? x.episode === ep : true; });
@@ -728,20 +731,46 @@
         }
 
         // ---------- 左栏集数列表（全量渲染下：点击 = 滚动定位 + 高亮）----------
+        // 左栏项按集号存起来，右栏滚动时只切样式不重建 DOM（避免闪烁与开销）
+        var sidebarMap = {};   // 'all' 或 String(ep) -> element
+        var SIDE_NORMAL = 'padding:5px 12px;font-size:12px;color:#aaa;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid transparent;';
+        var SIDE_ACTIVE = 'padding:5px 12px;font-size:12px;color:#8fc0e8;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid #537d96;background:#22303c;';
+
+        // 高亮指定集（并保证它在左栏可视区内）
+        function updateSidebarActive(ep) {
+            var key = (ep != null ? String(ep) : 'all');
+            Object.keys(sidebarMap).forEach(function (k) {
+                var el2 = sidebarMap[k];
+                if (!el2 || !el2.parentNode) return;
+                el2.style.cssText = (k === key) ? SIDE_ACTIVE : SIDE_NORMAL;
+            });
+            var cur = sidebarMap[key];
+            if (!cur) return;
+            // 左栏自身滚动，让高亮项居中可见
+            try {
+                var top = cur.offsetTop;
+                var h = cur.offsetHeight || 24;
+                var viewTop = sidebar.scrollTop;
+                var viewBottom = viewTop + sidebar.clientHeight;
+                if (top < viewTop + 4 || top + h > viewBottom - 4) {
+                    sidebar.scrollTop = Math.max(0, top - sidebar.clientHeight / 2 + h / 2);
+                }
+            } catch (e) {}
+        }
+
         function renderSidebar() {
             sidebar.innerHTML = '';
+            sidebarMap = {};
             function addItem(label, ep) {
                 var it = document.createElement('div');
-                it.style.cssText = 'padding:5px 12px;font-size:12px;color:#aaa;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid transparent;';
+                var isActive = (viewEp != null) ? (ep === viewEp) : (curEp === ep);
+                it.style.cssText = isActive ? SIDE_ACTIVE : SIDE_NORMAL;
                 it.textContent = label;
-                if (curEp === ep) {
-                    it.style.background = '#22303c';
-                    it.style.color = '#8fc0e8';
-                    it.style.borderLeft = '2px solid #537d96';
-                }
+                sidebarMap[ep != null ? String(ep) : 'all'] = it;
                 it.addEventListener('click', function () {
                     curEp = ep;
                     curEpKey = curEp != null ? String(curEp) : 'all';
+                    viewEp = ep;
                     searchKeyword = '';
                     searchInp.value = '';
                     searchState.textContent = '';
@@ -755,6 +784,17 @@
             }
             addItem('📄 全部', null);
             eps.forEach(function (e) { addItem('第 ' + e + ' 集', e); });
+            // 渲染完把高亮项滚到左栏可视区（点开续读时直接定位）
+            var key = (viewEp != null) ? String(viewEp) : ((curEp != null) ? String(curEp) : 'all');
+            var act = sidebarMap[key];
+            if (act) {
+                try {
+                    var top = act.offsetTop, h = act.offsetHeight || 24;
+                    if (top < sidebar.scrollTop || top + h > sidebar.scrollTop + sidebar.clientHeight) {
+                        sidebar.scrollTop = Math.max(0, top - sidebar.clientHeight / 2 + h / 2);
+                    }
+                } catch (e2) {}
+            }
         }
 
         // ---------- 台词渲染 ----------
@@ -800,6 +840,7 @@
         function render() {
             var lines = data.lines || [];
             var html = '';
+            epMarks = [];   // [集号, 元素] 缓存，避免滚动时反复查询 DOM
             for (var li = 0; li < lines.length; li++) {
                 var x = lines[li];
                 var t = x.text || '';
@@ -814,6 +855,7 @@
                 }
                 if (tp === 'ep_title') {
                     html += '<div class="scr-ept" data-ep="' + (x.episode != null ? x.episode : '') + '" data-raw="' + escHtml(t) + '">' + disp + '</div>';
+                    epMarks.push(x.episode);
                 } else if (tp === 'scene') {
                     html += '<div class="scr-scene" data-raw="' + escHtml(t) + '">🎬 ' + disp + '</div>';
                 } else if (tp === 'cast') {
@@ -832,12 +874,17 @@
                 (searchKeyword ? (onlyHits ? '没有匹配「' + escHtml(searchKeyword) + '」的内容' : '剧本暂无内容')
                                : '剧本暂无内容') + '</div>';
             body.innerHTML = html || emptyHtml;
+            epMarksDirty = true;
             applyHighlight();
             refreshHitUI();
             // 选集模式：渲染后滚动到目标集（仅当没有在定位搜索命中时）
             if (pendingScrollEp != null && !searchKeyword) {
                 scrollToEp(pendingScrollEp);
+                if (viewEp !== pendingScrollEp) { viewEp = pendingScrollEp; updateSidebarActive(viewEp); }
                 pendingScrollEp = null;
+            } else {
+                // 普通重渲染：按当前滚动位置回填左栏高亮
+                onBodyScroll();
             }
         }
 
@@ -852,6 +899,50 @@
                 body.scrollTop += (elRect.top - bodyRect.top) - 6;
             } catch (e) {}
         }
+
+        // 集标题缓存：每次 render 后标记失效，首次滚动时惰性重建
+        function buildEpMarks() {
+            if (!epMarksDirty) return;
+            epMarks = [];
+            var nodes = body.querySelectorAll('.scr-ept[data-ep]');
+            for (var i = 0; i < nodes.length; i++) {
+                var v = nodes[i].getAttribute('data-ep');
+                if (v === '' || v == null) continue;
+                epMarks.push([v, nodes[i]]);
+            }
+            epMarksDirty = false;
+        }
+
+        // 右栏滚动 → 算出当前视口顶部对应的集，同步左栏高亮 + 左栏自动滚动
+        var syncRaf = null;
+        function readVisibleEp() {
+            buildEpMarks();
+            if (!epMarks.length) return null;
+            var bodyTop = body.getBoundingClientRect().top;
+            var cur = null;
+            for (var i = 0; i < epMarks.length; i++) {
+                // 标题顶端已到达（或越过）视口顶部的，就是当前集；取最后一个
+                if (epMarks[i][1].getBoundingClientRect().top - bodyTop <= 8) cur = epMarks[i][0];
+                else break;
+            }
+            if (cur == null) cur = epMarks[0][0];   // 还没到任何集标题，算作第一集
+            return cur != null ? parseInt(cur, 10) : null;
+        }
+        function onBodyScroll() {
+            if (syncRaf) return;
+            syncRaf = (window.requestAnimationFrame || function (f) { return setTimeout(f, 16); })(function () {
+                syncRaf = null;
+                var ep = readVisibleEp();
+                if (ep != null && ep !== viewEp) {
+                    viewEp = ep;
+                    curEp = ep;                       // 滚动也算「读到这一集」，翻译/记录对齐当前视口
+                    curEpKey = String(ep);
+                    updateSidebarActive(ep);
+                    saveReading(docxPath, ep);        // 读到哪记到哪
+                }
+            });
+        }
+        body.addEventListener('scroll', onBodyScroll);
 
         // 收集所有命中标记（渲染后调用，dialogue 行的高亮由 applyHighlight 补，故必须在其后）
         function collectHits() {
