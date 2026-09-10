@@ -258,7 +258,10 @@
                     : ('已配置 Cookie 头（' + r.data.len + ' 字符）');
             }
             $('vCookieTxt').textContent = label;
-        }).catch(function () {});
+        }).catch(function (e) {
+            // 状态栏装饰性刷新，失败不影响下载；但服务异常时要留痕便于排查
+            try { window.__vhLog && window.__vhLog.info('刷新 cookie 状态失败', e); } catch (_) {}
+        });
     }
 
     function pasteCookie() {
@@ -481,7 +484,18 @@
                         }
                         resolve({ ok: false, err: emsg });
                     }
-                }).catch(function () {});
+                }).catch(function (e) {
+                    // 轮询接口失败：本地下载服务可能已挂，静默吞掉会让用户以为"下载卡住了"
+                    var m = (e && e.message) ? e.message : String(e);
+                    try { window.__vhLog && window.__vhLog.err('下载轮询失败（本地服务可能已停止）', e); } catch (_) {}
+                    if (!silent) {
+                        clearInterval(timer);
+                        $('btnVDownload').disabled = false;
+                        $('vProgress').className = 'v-progress';
+                        setStatus('下载中断：' + m, 'err');
+                        addLog('下载轮询失败: ' + m, 'err');
+                    }
+                });
             }, 1200);
         });
     }

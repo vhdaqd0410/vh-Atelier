@@ -533,7 +533,11 @@
         try {
           var srcBase = path.basename(tk.outFile).replace(/\.mp4$/i, '');
           dlFile = await downloadTask(tk.taskId, dir, srcBase + '_720p.mp4');
-        } catch (e) {}
+        } catch (e) {
+          // 保留具体原因：外层只知道"下载失败"，这里能区分网络/令牌过期/磁盘问题
+          try { window.__vhLog && window.__vhLog.err('超分结果下载失败 task=' + tk.taskId, e); } catch (_) {}
+          log('⚠ 下载异常（任务 ' + tk.taskId + '）：' + ((e && e.message) || e), 'warn');
+        }
         if (dlFile && fs.existsSync(dlFile)) {
           log('📥 已下载：' + dlFile);
           var imp = await importToBin([dlFile], '超分');
