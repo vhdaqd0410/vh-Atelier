@@ -694,6 +694,7 @@
         var searchHits = [];         // 当前命中的 <mark> 元素列表
         var hitIdx = -1;             // 当前定位到第几个命中（0 基）
         var onlyHits = false;        // false=保留全文并定位到第一个命中；true=只列出命中行
+        var pendingScrollEp = null;  // 渲染后需要滚动到的集（选集/跳集时置位）
 
         function epLines(ep) {
             return (data.lines || []).filter(function (x) { return ep ? x.episode === ep : true; });
@@ -726,7 +727,7 @@
             xhr.send();
         }
 
-        // ---------- 左栏集数列表 ----------
+        // ---------- 左栏集数列表（全量渲染下：点击 = 滚动定位 + 高亮）----------
         function renderSidebar() {
             sidebar.innerHTML = '';
             function addItem(label, ep) {
@@ -745,6 +746,7 @@
                     searchInp.value = '';
                     searchState.textContent = '';
                     searchHits = []; hitIdx = -1;
+                    pendingScrollEp = ep;   // 全量渲染后滚到该集
                     saveReading(docxPath, curEp);   // 记住读到第几集
                     renderSidebar();
                     render();
@@ -756,7 +758,7 @@
         }
 
         // ---------- 台词渲染 ----------
-        function renderDialogue(text) {
+        function renderDialogue(text, ep) {
             var m = text.match(/^([^:：]{1,50}?)[：:]\s*(.*)$/);
             if (!m) return '<div class="scr-dlg">' + escHtml(text) + '</div>';
             var rolePart = m[1], speech = m[2];
@@ -782,8 +784,8 @@
             var zhHtml = '';
             if (cachedZh) zhHtml = '<div class="scr-zh">' + escHtml(cachedZh) + '</div>';
             else {
-                // 批量翻译缓存（整集翻译按钮）
-                var bk = curEpKey;
+                // 批量翻译缓存（整集翻译按钮）：按该行自己的集号取，全量渲染下也能命中
+                var bk = (ep != null ? String(ep) : curEpKey);
                 if (bk && transMap['__' + bk] && transMap['__' + bk][text]) {
                     zhHtml = '<div class="scr-zh">' + escHtml(transMap['__' + bk][text]) + '</div>';
                 }
@@ -794,13 +796,12 @@
         // 在已转义 HTML 上做关键词高亮（简单：大小写不敏感子串包 <mark>）—— 因 HTML 已含标签，仅在纯文本段操作有风险；改为渲染前对原文高亮。
         function hlText(escapedHtml, kw) { return escapedHtml; } // 占位，实际用 render 层高亮
 
-        // 渲染右栏
+        // 渲染右栏（全量渲染所有集：选集只做滚动定位，上下滚可连续阅读相邻集）
         function render() {
             var lines = data.lines || [];
             var html = '';
             for (var li = 0; li < lines.length; li++) {
                 var x = lines[li];
-                if (curEp && x.episode !== curEp) continue;
                 var t = x.text || '';
                 var tp = x.type || 'plain';
                 // 关键词：默认保留全文（看得到上下文），切到「只看命中」时才过滤
@@ -812,7 +813,7 @@
                     disp = hlOnPlain(t);
                 }
                 if (tp === 'ep_title') {
-                    html += '<div class="scr-ept" data-raw="' + escHtml(t) + '">' + disp + '</div>';
+                    html += '<div class="scr-ept" data-ep="' + (x.episode != null ? x.episode : '') + '" data-raw="' + escHtml(t) + '">' + disp + '</div>';
                 } else if (tp === 'scene') {
                     html += '<div class="scr-scene" data-raw="' + escHtml(t) + '">🎬 ' + disp + '</div>';
                 } else if (tp === 'cast') {
@@ -822,17 +823,34 @@
                 } else if (tp === 'caption') {
                     html += '<div class="scr-caption" data-raw="' + escHtml(t) + '">' + disp + '</div>';
                 } else if (tp === 'dialogue') {
-                    html += renderDialogue(t);
+                    html += renderDialogue(t, x.episode);
                 } else {
                     html += '<div class="scr-plain" data-raw="' + escHtml(t) + '">' + disp + '</div>';
                 }
             }
             var emptyHtml = '<div style="color:#888;padding:30px;text-align:center;">' +
-                (searchKeyword ? (onlyHits ? '没有匹配「' + escHtml(searchKeyword) + '」的内容' : '该集暂无内容')
-                               : '该集暂无内容') + '</div>';
+                (searchKeyword ? (onlyHits ? '没有匹配「' + escHtml(searchKeyword) + '」的内容' : '剧本暂无内容')
+                               : '剧本暂无内容') + '</div>';
             body.innerHTML = html || emptyHtml;
             applyHighlight();
             refreshHitUI();
+            // 选集模式：渲染后滚动到目标集（仅当没有在定位搜索命中时）
+            if (pendingScrollEp != null && !searchKeyword) {
+                scrollToEp(pendingScrollEp);
+                pendingScrollEp = null;
+            }
+        }
+
+        // 滚动到指定集的标题行（顶部对齐）
+        function scrollToEp(ep) {
+            if (ep == null) return;
+            var node = body.querySelector('.scr-ept[data-ep="' + ep + '"]');
+            if (!node) return;
+            try {
+                var bodyRect = body.getBoundingClientRect();
+                var elRect = node.getBoundingClientRect();
+                body.scrollTop += (elRect.top - bodyRect.top) - 6;
+            } catch (e) {}
         }
 
         // 收集所有命中标记（渲染后调用，dialogue 行的高亮由 applyHighlight 补，故必须在其后）
@@ -1004,6 +1022,7 @@
                     curEpKey = String(n);
                     searchKeyword = '';
                     searchState.textContent = '已跳转 第' + n + ' 集';
+                    pendingScrollEp = n;
                     saveReading(docxPath, curEp);   // 跳集也算在读位置
                     renderSidebar();
                     render();
@@ -1106,6 +1125,7 @@
             inp.focus();
         });
 
+        pendingScrollEp = curEp;   // 打开时定位到上次读到的集（全量渲染，可上下滚看相邻集）
         renderSidebar();
         render();
         // 关闭当前剧本：清空面板 → 显示剧本库首页（留在剧本组）；清除在读记录（下次进剧本组回首页）
