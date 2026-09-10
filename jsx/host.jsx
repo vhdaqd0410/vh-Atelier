@@ -1145,39 +1145,63 @@ function meExport(outputPath, presetPath, exportType) {
 }
 
 // ==================== 选中片段：去字幕/超分 按片段导出 ====================
-// 读取时间轴当前选中的视频片段信息（只读，用于面板显示）
-// 返回 { seqName, startSec, endSec, durationSec, clipCount }
+// 读取时间轴当前选中的片段信息（只读，用于面板显示）
+// 返回 { seqName, startSec, endSec, durationSec, clipCount, onVideoTracks }
+// 设计说明：区间导出（exportType=1）渲染的是序列该时间段上的画面，
+// 与「选中的块是视频还是音频」无关，所以这里不做类型过滤，
+// 直接把所有选中项取并集算区间；额外回报其中多少个落在视频轨上（仅作提示）。
 function meGetSelectedClipInfo() {
     try {
         var seq = app.project.activeSequence;
         if (!seq) return "ERR:没有激活的序列";
         var sel = seq.getSelection();
-        if (!sel || sel.length === 0) return "ERR:当前序列没有选中的片段，请先在时间轴选中视频片段";
+        if (!sel || sel.length === 0) return "ERR:当前序列没有选中的片段，请先在时间轴选中片段";
 
-        var ticksPerSec = 254016000000;
-        var startSec = -1, endSec = -1, n = 0;
+        // 视频轨片段起点 ticks 集合（仅用于统计「有几个选中块在视频轨」）
+        var vidTicks = {};
+        var vt, vk, vc;
+        for (vt = 0; vt < seq.videoTracks.numTracks; vt++) {
+            var tr = seq.videoTracks[vt];
+            for (vk = 0; vk < tr.clips.numItems; vk++) {
+                vc = tr.clips[vk];
+                try { vidTicks[String(vc.start.ticks)] = 1; } catch (e) {}
+            }
+        }
+
+        var startSec = -1, endSec = -1, n = 0, onVid = 0, seen = [];
         for (var i = 0; i < sel.length; i++) {
             var it = sel[i];
-            var t = '';
-            try { t = it.type; } catch (e) {}
-            if (t !== 'video') continue;   // 只认视频片段（去字幕/超分都要画面）
             var st = 0, du = 0;
-            try { st = it.start.seconds; } catch (e2) { continue; }
-            try { du = it.outPoint.seconds - it.inPoint.seconds; } catch (e3) { du = 0; }
+            try { st = it.start.seconds; } catch (e4) { continue; }
+            try { du = it.outPoint.seconds - it.inPoint.seconds; } catch (e5) { du = 0; }
             if (du <= 0) continue;
             var en = st + du;
             if (startSec < 0 || st < startSec) startSec = st;
             if (endSec < 0 || en > endSec) endSec = en;
             n++;
+            try {
+                var tk = String(it.start.ticks);
+                if (vidTicks[tk] === 1) onVid++;
+            } catch (e6) {}
+            if (seen.length < 6) {
+                var tp = '', mt = '';
+                try { tp = String(it.type || ''); } catch (e7) {}
+                try { mt = String(it.mediaType || ''); } catch (e8) {}
+                seen.push(tp + '/' + mt);
+            }
         }
-        if (n === 0) return "ERR:选中的不是视频片段（可能选到了音频轨），请选中视频轨上的片段";
+        if (n === 0) {
+            return "ERR:选中项读不到有效时长（实测类型值：" + (seen.join(', ') || '无') + "）";
+        }
         if (endSec <= startSec) return "ERR:片段时长无效";
         return "OK:" + JSON.stringify({
             seqName: seq.name,
             startSec: Math.round(startSec * 1000) / 1000,
             endSec: Math.round(endSec * 1000) / 1000,
             durationSec: Math.round((endSec - startSec) * 1000) / 1000,
-            clipCount: n
+            clipCount: n,
+            onVideoTracks: onVid,
+            types: seen
         });
     } catch (e) { return "ERR:" + e.toString(); }
 }
