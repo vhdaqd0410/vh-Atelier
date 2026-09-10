@@ -58,7 +58,8 @@
             assignee: (o && o.assignee) || '',
             pinned: !!(o && o.pinned),
             urgent: !!(o && o.urgent),
-            carried: !!(o && o.carried)
+            carried: !!(o && o.carried),
+            wbId: (o && o.wbId) || 0        // 视频工作台 project_todos 行 id（0=未同步）
         };
     }
     function emptyDay() { return { todos: [], memo: '', summary: '' }; }
@@ -106,6 +107,8 @@
                     }
                 } catch (_) {}
                 fs.writeFileSync(DATA_FILE, JSON.stringify(DB, null, 1), 'utf8');
+                // 通知进度面板等关心待办的模块刷新（项目卡片上的待办角标）
+                try { if (window.__progressRefreshTodos) window.__progressRefreshTodos(); } catch (_) {}
             } catch (e) {
                 try { window.__vhLog && window.__vhLog.err('待办数据保存失败', e); } catch (_) {}
             }
@@ -200,6 +203,30 @@
         try { xhr.send(); } catch (e) { cb(new Error('请求失败：' + e.message)); }
     }
 
+    // 写：POST/PUT/DELETE 到工作台（用于待办双向同步）
+    function wbSend(method, sub, body, cb) {
+        cb = cb || function () {};
+        var secret = readSecret();
+        if (!secret) { cb(new Error('读不到视频工作台 api_secret')); return; }
+        var url = WB_BASE + sub + (sub.indexOf('?') >= 0 ? '&' : '?') + 'key=' + encodeURIComponent(secret);
+        var XH = (typeof XMLHttpRequest !== 'undefined') ? XMLHttpRequest : null;
+        if (!XH) { cb(new Error('当前环境不支持网络请求')); return; }
+        var xhr = new XH();
+        xhr.open(method, url, true);
+        xhr.timeout = 12000;
+        if (body != null) xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status === 200) {
+                try { cb(null, JSON.parse(xhr.responseText)); }
+                catch (e) { cb(null, {}); }
+            } else { cb(new Error('HTTP ' + xhr.status)); }
+        };
+        xhr.onerror = function () { cb(new Error('连不上视频工作台')); };
+        xhr.ontimeout = function () { cb(new Error('视频工作台超时')); };
+        try { xhr.send(body == null ? null : JSON.stringify(body)); } catch (e) { cb(new Error('请求失败：' + e.message)); }
+    }
+
     // 已完成/交付态判定
     function isFinishedStatus(st) {
         st = String(st || '');
@@ -268,6 +295,57 @@
         } catch (e) { return []; }
     }
     var projPlans = {};   // 项目名 -> episode_plan 原始 JSON 字符串
+
+    // ---------- 与视频工作台双向同步（project_todos）----------
+    // 只同步「有项目」的待办；无项目的纯个人琐事留在本地，不污染工作台
+    var syncState = { on: true, lastErr: '' };
+
+    function wbTodoBody(t) {
+        var b = {
+            text: t.text,
+            priority: t.urgent ? 2 : (t.pinned ? 1 : 0),
+            status: t.done ? 'done' : 'todo',
+            assignee: t.assignee || ''
+        };
+        if (t.project) b.project_name = t.project;
+        return b;
+    }
+
+    // 新增：推到工作台，回存 wbId
+    function syncAdd(t, cb) {
+        if (!syncState.on || !t.project) { if (cb) cb(null); return; }
+        wbSend('POST', '/api/todos', wbTodoBody(t), function (err, d) {
+            if (err || !d || !d.ok) {
+                syncState.lastErr = err ? err.message : '工作台拒绝了这条待办';
+                if (cb) cb(new Error(syncState.lastErr));
+                return;
+            }
+            t.wbId = d.id || 0;
+            syncState.lastErr = '';
+            save();
+            if (cb) cb(null);
+        });
+    }
+
+    // 更新（完成状态 / 文字 / 优先级 / 负责人）
+    function syncUpdate(t) {
+        if (!syncState.on || !t.wbId) return;
+        wbSend('PUT', '/api/todos/' + t.wbId, {
+            done: !!t.done,
+            text: t.text,
+            priority: t.urgent ? 2 : (t.pinned ? 1 : 0),
+            status: t.done ? 'done' : 'todo',
+            assignee: t.assignee || ''
+        }, function (err) { syncState.lastErr = err ? err.message : ''; });
+    }
+
+    // 删除
+    function syncDelete(t) {
+        if (!syncState.on || !t.wbId) return;
+        wbSend('DELETE', '/api/todos/' + t.wbId, null, function (err) {
+            syncState.lastErr = err ? err.message : '';
+        });
+    }
 
     // ---------- 渲染 ----------
     var today = '';
@@ -814,14 +892,21 @@
         if (!isToday()) { toast('往期不能新增'); return; }
         var v = (el.tdInput.value || '').replace(/^\s+|\s+$/g, '');
         if (!v) return;
-        day(curKey).todos.push(emptyTodo({ text: v, project: pendingProj, assignee: pendingAsg }));
+        var t = emptyTodo({ text: v, project: pendingProj, assignee: pendingAsg });
+        day(curKey).todos.push(t);
         el.tdInput.value = '';
-        // 项目/负责人不自动清空（同一批通常同项目同人），但提示当前值仍生效
         save();
         renderList();
         renderGroupSum();
         renderHistory();
         el.tdInput.focus();
+        // 有项目的待办 → 同步到视频工作台（任一失败都不影响本地已有数据）
+        if (t.project) {
+            syncAdd(t, function (err) {
+                if (err) toast('已加到本地；工作台同步失败：' + err.message);
+                else toast('已加，并同步到工作台');
+            });
+        }
     }
 
     function findTodo(id) {
@@ -836,6 +921,7 @@
         t.done = !t.done;
         t.doneAt = t.done ? Date.now() : 0;
         save(); renderList(); renderGroupSum(); renderHistory();
+        syncUpdate(t);
     }
 
     function toggleFlag(id, flag) {
@@ -843,12 +929,16 @@
         if (!t) return;
         t[flag] = !t[flag];
         save(); renderList();
+        syncUpdate(t);
     }
 
     function delTodo(id) {
         var d = day(curKey);
+        var target = null;
+        for (var i = 0; i < d.todos.length; i++) { if (d.todos[i].id === id) { target = d.todos[i]; break; } }
         d.todos = d.todos.filter(function (t) { return t.id !== id; });
         save(true); renderList(); renderGroupSum(); renderHistory();
+        if (target) syncDelete(target);
     }
 
     function startEdit(itemEl, id) {
@@ -870,6 +960,7 @@
             var nv = (inp.value || '').replace(/^\s+|\s+$/g, '');
             if (ok && nv) t.text = nv;
             save(); renderList();
+            syncUpdate(t);
         }
         inp.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') commit(true);
@@ -917,6 +1008,38 @@
         },
         // 供其它模块查工作台数据（已缓存）
         projects: function () { return wbProjects.slice(); },
-        members: function () { return wbMembers.slice(); }
+        members: function () { return wbMembers.slice(); },
+
+        // 按项目汇总「今天起的未完成待办」（供进度面板联动）
+        // 返回 { 项目名: { open, total, urgent, pinned, items: [{text, assignee, urgent, pinned, date}] } }
+        byProject: function () {
+            var out = {};
+            var tk = todayKey();
+            Object.keys(DB.days).forEach(function (k) {
+                // 只看今天及将来（往期未完成靠结转带过来，不在这里重复计）
+                if (k < tk) return;
+                var d = DB.days[k];
+                (d.todos || []).forEach(function (t) {
+                    if (t.done || !t.project) return;
+                    if (!out[t.project]) out[t.project] = { open: 0, total: 0, urgent: 0, pinned: 0, items: [] };
+                    var o = out[t.project];
+                    o.open++; o.total++;
+                    if (t.urgent) o.urgent++;
+                    if (t.pinned) o.pinned++;
+                    o.items.push({ text: t.text, assignee: t.assignee || '', urgent: !!t.urgent, pinned: !!t.pinned, date: k });
+                });
+            });
+            return out;
+        },
+        // 单个项目：未完成待办
+        forProject: function (name) {
+            if (!name) return [];
+            var all = window.__vhTodo.byProject();
+            return (all[name] && all[name].items) || [];
+        },
+        // 通知其它模块（进度面板）刷新
+        _notify: function () {
+            try { if (window.__progressRefreshTodos) window.__progressRefreshTodos(); } catch (e) {}
+        }
     };
 })();

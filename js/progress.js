@@ -537,9 +537,68 @@
             opsMore.appendChild(fmBtn);
             item.appendChild(openRow);
 
+            // 📝 待办角标：该项目在待办板块里的未完成条数（有则显示，可点开看）
+            appendTodoBadge(item, p.name || '');
+
             el.activeList.appendChild(item);
         });
     }
+
+    // 项目卡片上的待办角标（数据来自待办板块 __vhTodo.byProject）
+    function appendTodoBadge(item, projName) {
+        if (!projName) return;
+        var api = window.__vhTodo;
+        if (!api || typeof api.byProject !== 'function') return;
+        var info = null;
+        try { info = api.byProject()[projName]; } catch (e) { return; }
+        if (!info || !info.open) return;
+
+        var row = document.createElement('div');
+        row.className = 'prg-todo-row';
+        row.setAttribute('data-todo-proj', projName);
+        var chip = document.createElement('span');
+        chip.className = 'prg-todo-chip' + (info.urgent ? ' urgent' : '');
+        chip.textContent = '📝 待办 ' + info.open +
+            (info.urgent ? '（加急 ' + info.urgent + '）' : '') +
+            (info.pinned ? '（置顶 ' + info.pinned + '）' : '');
+        chip.title = '点开查看该项目未完成待办';
+        row.appendChild(chip);
+
+        var detail = document.createElement('div');
+        detail.className = 'prg-todo-detail';
+        detail.style.display = 'none';
+        info.items.forEach(function (t) {
+            var li = document.createElement('div');
+            li.className = 'prg-todo-li' + (t.urgent ? ' urgent' : '');
+            var mark = (t.urgent ? '❗ ' : '') + (t.pinned ? '⬆ ' : '');
+            li.textContent = mark + t.text + (t.assignee ? '（' + t.assignee + '）' : '');
+            if (t.date && t.date !== (window.__vhTodo.today ? window.__vhTodo.today() : '')) {
+                li.title = '日期：' + t.date;
+            }
+            detail.appendChild(li);
+        });
+        row.appendChild(detail);
+
+        chip.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            detail.style.display = detail.style.display === 'none' ? '' : 'none';
+        });
+        item.appendChild(row);
+    }
+
+    // 供 todo.js 在数据变化时调用：重建项目列表里的待办角标（不重新拉接口）
+    window.__progressRefreshTodos = function () {
+        try {
+            var nodes = document.querySelectorAll('#prgActiveList .prg-item, .prg-item[data-proj]');
+            for (var i = 0; i < nodes.length; i++) {
+                var it = nodes[i];
+                var nm = it.getAttribute('data-proj') || '';
+                var oldRow = it.querySelector('.prg-todo-row');
+                if (oldRow) oldRow.parentNode.removeChild(oldRow);
+                appendTodoBadge(it, nm);
+            }
+        } catch (e) {}
+    };
 
     // 分秒帧：读取链接 → 有则切审片板块并导航；无则提示填写后保存再导航
     function openFenmiaozhen(projectName, forceEdit) {

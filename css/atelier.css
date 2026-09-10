@@ -2591,3 +2591,29 @@
         }
         #panel-todo .td-gsrow.all .td-gsk { color: var(--muted); text-decoration: line-through; }
         #panel-todo .td-gsrow.all .td-gsv { color: var(--fg-ok-soft); }
+
+        /* ===== 进度面板：项目卡片上的待办角标 ===== */
+        .prg-todo-row { margin-top: 5px; }
+        .prg-todo-chip {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 10.5px; line-height: 1.6;
+            padding: 1px 7px; border-radius: 4px; cursor: pointer;
+            background: var(--sel-blue2-bg); color: var(--fg-link);
+            border: 1px solid rgba(109,179,255,.3);
+            user-select: none; -webkit-user-select: none;
+        }
+        .prg-todo-chip:hover { border-color: var(--fg-link); }
+        .prg-todo-chip.urgent {
+            background: rgba(248,81,73,.1); color: var(--fg-err-soft);
+            border-color: rgba(248,81,73,.35);
+        }
+        .prg-todo-detail {
+            margin-top: 4px; padding: 5px 8px;
+            background: var(--gray-deep); border: 1px solid var(--border);
+            border-radius: 5px; display: flex; flex-direction: column; gap: 2px;
+        }
+        .prg-todo-li {
+            font-size: 11px; color: var(--text); line-height: 1.6;
+            padding: 1px 0;
+        }
+        .prg-todo-li.urgent { color: var(--fg-err-soft); font-weight: 600; }

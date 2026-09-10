@@ -127,7 +127,7 @@ def upload_and_create(folder_id, file_path, resolution='720p', username='', pass
 
     st, d = _req('GET', '/api/enhance/applyUpload?' + urllib.parse.urlencode({'fileName': fname}), headers_extra=hx)
     if d.get('code') != 0:
-        raise RuntimeError('applyUpload 失败: ' + str(d.get('msg')))
+        raise RuntimeError('applyUpload 失败: ' + _why(d, st))
     upload_url = (d.get('data') or {}).get('uploadUrl')
     object_key = (d.get('data') or {}).get('objectKey')
     if not upload_url or not object_key:
@@ -188,7 +188,7 @@ def download_task(token, task_id, download_dir, save_name='', progress_cb=None):
     import urllib.error
     st, d = _req('GET', '/api/enhance/getDownloadURL?' + urllib.parse.urlencode({'ID': int(task_id)}), headers_extra={'x-token': token})
     if d.get('code') != 0:
-        raise RuntimeError('getDownloadURL 失败: ' + str(d.get('msg')))
+        raise RuntimeError('getDownloadURL 失败: ' + _why(d, st))
     url = (d.get('data') or {}).get('url')
     if not url:
         raise RuntimeError('未返回下载 URL')
@@ -219,8 +219,8 @@ def download_task(token, task_id, download_dir, save_name='', progress_cb=None):
 def list_folders(username, password):
     token = get_token(username, password)
     st, d = _req('GET', '/api/erase/getFolderList', headers_extra={'x-token': token})
-    if d.get('code') != 0:
-        raise RuntimeError(str(d.get('msg')))
+    if not isinstance(d, dict) or d.get('code') != 0:
+        raise RuntimeError(_why(d, st))
     return (d.get('data') or {}).get('list') or []
 
 def list_tasks(username, password, page=1, page_size=50):
@@ -228,27 +228,40 @@ def list_tasks(username, password, page=1, page_size=50):
     st, d = _req('GET', '/api/enhance/getTaskList?' + urllib.parse.urlencode({'page': page, 'pageSize': page_size}),
                  headers_extra={'x-token': token})
     if d.get('code') != 0:
-        raise RuntimeError(str(d.get('msg')))
+        raise RuntimeError(_why(d, st))
     return (d.get('data') or {}).get('list') or []
 
 # ==================== 去字幕（erase）====================
 # 与超分不同：走火山 VOD 点播上传，流程为
-#   applyVodUpload({fileName,fileSize}) → 拿 {uploadHost,storeUri,auth,sessionKey}
+#   applyVodUpload(fileName,fileSize)  ← 注意：此接口是 GET（POST 会 404）
 #   → PUT https://{uploadHost}/{storeUri}（带 Authorization / Content-CRC32: Ignore）
-#   → commitVodUpload({sessionKey}) → 拿 vid
-#   → createTask({folderID,inputVid,sourceFileName})
+#   → commitVodUpload({sessionKey}) → 拿 vid（POST）
+#   → createTask({folderID,inputVid,sourceFileName})（POST）
+
+def _why(d, http_status=None):
+    """把接口失败原因说清楚：msg 为空时回退到 _raw / data / code，避免报出 "None"。"""
+    if not isinstance(d, dict):
+        return 'HTTP ' + str(http_status) + ' ' + str(d)[:200]
+    msg = d.get('msg') or d.get('message') or d.get('error')
+    if msg:
+        return str(msg)
+    if d.get('_raw'):
+        return 'HTTP ' + str(http_status) + ' ' + str(d.get('_raw'))
+    return 'code=' + str(d.get('code')) + ' 响应=' + json.dumps(d, ensure_ascii=False)[:200]
+
 
 def erase_apply_upload(token, file_path):
     fname = os.path.basename(file_path)
     fsize = os.path.getsize(file_path)
-    st, d = _req('POST', '/api/erase/applyVodUpload', {'fileName': fname, 'fileSize': fsize},
-                 headers_extra={'x-token': token})
-    if d.get('code') != 0:
-        raise RuntimeError('applyVodUpload 失败: ' + str(d.get('msg')))
+    # 该接口是 GET（参数走 query），POST 会返回 404
+    st, d = _req('GET', '/api/erase/applyVodUpload?' + urllib.parse.urlencode(
+        {'fileName': fname, 'fileSize': fsize}), headers_extra={'x-token': token})
+    if not isinstance(d, dict) or d.get('code') != 0:
+        raise RuntimeError('applyVodUpload 失败: ' + _why(d, st))
     data = d.get('data') or {}
     for k in ('uploadHost', 'storeUri', 'auth', 'sessionKey'):
         if not data.get(k):
-            raise RuntimeError('applyVodUpload 未返回 ' + k + ': ' + json.dumps(d, ensure_ascii=False))
+            raise RuntimeError('applyVodUpload 未返回 ' + k + ': ' + json.dumps(d, ensure_ascii=False)[:300])
     return data
 
 
@@ -288,8 +301,8 @@ def erase_put_vod(data, file_path):
 def erase_commit_upload(token, session_key):
     st, d = _req('POST', '/api/erase/commitVodUpload', {'sessionKey': session_key},
                  headers_extra={'x-token': token})
-    if d.get('code') != 0:
-        raise RuntimeError('commitVodUpload 失败: ' + str(d.get('msg')))
+    if not isinstance(d, dict) or d.get('code') != 0:
+        raise RuntimeError('commitVodUpload 失败: ' + _why(d, st))
     vid = (d.get('data') or {}).get('vid')
     if not vid:
         raise RuntimeError('VOD 未返回 Vid')
@@ -300,8 +313,8 @@ def erase_create_task(token, folder_id, vid, file_name):
     st, d = _req('POST', '/api/erase/createTask',
                  {'folderID': int(folder_id), 'inputVid': vid, 'sourceFileName': file_name},
                  headers_extra={'x-token': token})
-    if d.get('code') != 0:
-        raise RuntimeError('创建任务失败: ' + str(d.get('msg')))
+    if not isinstance(d, dict) or d.get('code') != 0:
+        raise RuntimeError('创建任务失败: ' + _why(d, st))
     return (d.get('data') or {})
 
 
@@ -350,8 +363,8 @@ def erase_download(token, task_id, download_dir, save_name=''):
     """下载去字幕结果（mode=download）"""
     st, d = _req('GET', '/api/erase/getDownloadURL?' + urllib.parse.urlencode({'ID': int(task_id), 'mode': 'download'}),
                  headers_extra={'x-token': token})
-    if d.get('code') != 0:
-        raise RuntimeError('getDownloadURL 失败: ' + str(d.get('msg')))
+    if not isinstance(d, dict) or d.get('code') != 0:
+        raise RuntimeError('getDownloadURL 失败: ' + _why(d, st))
     url = (d.get('data') or {}).get('url')
     if not url:
         raise RuntimeError('未返回下载 URL')
@@ -386,8 +399,8 @@ def erase_list_tasks(username, password, page=1, page_size=50):
     token = get_token(username, password)
     st, d = _req('GET', '/api/erase/getTaskList?' + urllib.parse.urlencode({'page': page, 'pageSize': page_size}),
                  headers_extra={'x-token': token})
-    if d.get('code') != 0:
-        raise RuntimeError(str(d.get('msg')))
+    if not isinstance(d, dict) or d.get('code') != 0:
+        raise RuntimeError(_why(d, st))
     return (d.get('data') or {}).get('list') or []
 
 
