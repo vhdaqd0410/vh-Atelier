@@ -1041,15 +1041,32 @@ function meListSequences() {
 }
 
 // 激活指定序列（按名字）
+// 容错：去首尾空白、忽略大小写、全角空格→半角、忽略所有空格后比较
 function meActivateSequence(name) {
     try {
-        for (var i = 0; i < app.project.sequences.numSequences; i++) {
-            if (app.project.sequences[i].name === name) {
-                app.project.activeSequence = app.project.sequences[i];
-                return "OK:" + name;
-            }
+        var target = String(name == null ? "" : name);
+        function norm(s) {
+            return String(s == null ? "" : s)
+                .replace(/\u3000/g, " ")
+                .replace(/^\s+|\s+$/g, "")
+                .toLowerCase();
         }
-        return "ERR:未找到序列 " + name;
+        function compact(s) { return norm(s).replace(/\s+/g, ""); }
+        var tn = norm(target), tc = compact(target);
+        var exact = null, loose = null, avail = [];
+        for (var i = 0; i < app.project.sequences.numSequences; i++) {
+            var sq = app.project.sequences[i];
+            var sn = String(sq.name == null ? "" : sq.name);
+            avail.push(sn);
+            if (sn === target) { exact = sq; break; }
+            if (!loose && (norm(sn) === tn || compact(sn) === tc)) { loose = sq; }
+        }
+        var hit = exact || loose;
+        if (hit) {
+            app.project.activeSequence = hit;
+            return "OK:" + hit.name;
+        }
+        return "ERR:未找到序列 [" + target + "]；当前项目可用序列（" + avail.length + "）：" + avail.join(" | ");
     } catch (e) { return "ERR:" + e; }
 }
 

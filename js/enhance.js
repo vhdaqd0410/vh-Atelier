@@ -63,20 +63,49 @@
     } catch (_) {}
     return '';
   }
+  // 探测过的可用解释器缓存（避免反复 spawn）
+  var _pyResolved = null;
+  // 判断某个 python 是否能 import ddddocr（同步探测，带超时）
+  function _pyHasDdddocr(exe) {
+    try {
+      var cp = require('child_process');
+      var r = cp.spawnSync(exe, ['-c', 'import ddddocr'], { windowsHide: true, timeout: 20000 });
+      return r && r.status === 0;
+    } catch (e) { return false; }
+  }
+  // 找可用的 Python 解释器：优先 runtime/python.exe，其次系统安装；
+  // 关键：优先选能 import ddddocr 的（登录需要验证码识别）
   function findPy() {
+    if (_pyResolved) return _pyResolved;
+    var cands = [];
     try {
       var root = '';
       try { root = csInterface.getSystemPath('extension'); } catch (_) {}
-      if (root && fs.existsSync(path.join(root, 'runtime', 'python.exe'))) return path.join(root, 'runtime', 'python.exe');
-      var cands = [
-        path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
-        path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python311', 'python.exe'),
-        path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python312', 'python.exe'),
-        path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe')
-      ];
-      for (var i = 0; i < cands.length; i++) if (fs.existsSync(cands[i])) return cands[i];
+      if (root) cands.push(path.join(root, 'runtime', 'python.exe'));
+      ['Python310', 'Python311', 'Python312', 'Python313'].forEach(function (v) {
+        cands.push(path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', v, 'python.exe'));
+      });
+      // py 启动器与 PATH 上的 python 作为兜底
+      cands.push('py');
+      cands.push('python');
     } catch (e) {}
-    return 'python';
+    var existing = cands.filter(function (c) {
+      if (c === 'py' || c === 'python') return true;
+      try { return fs.existsSync(c); } catch (e) { return false; }
+    });
+    if (!existing.length) { _pyResolved = 'python'; return _pyResolved; }
+    // 先找带 ddddocr 的
+    for (var i = 0; i < existing.length; i++) {
+      if (_pyHasDdddocr(existing[i])) {
+        _pyResolved = existing[i];
+        try { console.log('[vh-enhance] 选用 Python（含 ddddocr）: ' + existing[i]); } catch (e) {}
+        return _pyResolved;
+      }
+    }
+    // 都没有 ddddocr：退回第一个存在的，并提示
+    _pyResolved = existing[0];
+    try { console.log('[vh-enhance] 警告：所有候选 Python 均无 ddddocr，暂用 ' + _pyResolved); } catch (e) {}
+    return _pyResolved;
   }
 
   // 扫描 AME 预设，找含「无字幕」的 .epr
@@ -190,6 +219,7 @@
       if (r.indexOf('OK:') !== 0) { log('读取序列失败：' + r, 'err'); return; }
       seqs = JSON.parse(r.slice(3));
     } catch (e) { log('解析序列失败：' + e.message, 'err'); return; }
+    try { log('📋 读到 ' + seqs.length + ' 个序列：' + seqs.map(function (s) { return s.name; }).join(' | ')); } catch (e) {}
     enSeqList.innerHTML = '';
     if (!seqs.length) { enSeqList.innerHTML = '<div class="hint" style="padding:6px 8px;">项目里没有序列</div>'; return; }
     seqs.forEach(function (s) {
@@ -274,6 +304,7 @@
       var root = locateExtRoot();
       var script = root ? path.join(root, 'py', 'enhance_client.py') : '';
       if (!script || !fs.existsSync(script)) return reject(new Error('找不到 enhance_client.py'));
+      log('（使用 Python：' + py + '）');
       var cp = require('child_process');
       var args = [script, 'upload', '--file', file, '--folder', String(folderId),
                   '--resolution', String(resolution)];   // 不带 --wait → 提交后立即返回 task_id
@@ -281,13 +312,19 @@
       var buf = '';
       child.stdout.on('data', function (d) { buf += d.toString(); });
       child.stderr.on('data', function (d) { buf += d.toString(); });
-      child.on('error', function (e) { reject(new Error('启动 python 失败：' + e.message)); });
+      child.on('error', function (e) { reject(new Error('启动 python 失败（' + py + '）：' + e.message)); });
       child.on('close', function (code) {
         var last = buf.split(/\r?\n/).filter(Boolean).pop() || '';
         var j = null;
         try { j = JSON.parse(last); } catch (e) {}
         if (j && j.ok && j.task_id) { resolve(j.task_id); }
-        else { reject(new Error((j && j.msg) || last || ('退出码 ' + code))); }
+        else {
+          var msg = (j && j.msg) || last || ('退出码 ' + code);
+          if (/ddddocr/i.test(msg)) {
+            msg += '  → 请在 Python 中安装："' + py + '" -m pip install ddddocr（或改用带 ddddocr 的 Python）';
+          }
+          reject(new Error(msg));
+        }
       });
     });
   }
@@ -378,6 +415,16 @@
     }
     try {
       if (!checked.length) { log('请先勾选要超分的序列', 'err'); return; }
+      // 导出前校验：剔除已不存在于项目中的勾选项（如序列被删/改名）
+      var validNames = {};
+      seqs.forEach(function (s) { validNames[s.name] = true; });
+      var missing = checked.filter(function (n) { return !validNames[n]; });
+      if (missing.length) {
+        log('⚠ 以下勾选项在当前项目中找不到（将跳过）：' + missing.join('、') + '。若列表与 PR 不一致，请点“刷新序列”。', 'warn');
+        checked = checked.filter(function (n) { return validNames[n]; });
+        syncCheck(); updateHint();
+        if (!checked.length) { log('没有可导出的有效序列', 'err'); return; }
+      }
       var presetPath = enPreset.value;
       if (!presetPath) {
         var auto = findNoSubtitlePreset();
