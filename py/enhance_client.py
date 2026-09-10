@@ -231,6 +231,166 @@ def list_tasks(username, password, page=1, page_size=50):
         raise RuntimeError(str(d.get('msg')))
     return (d.get('data') or {}).get('list') or []
 
+# ==================== 去字幕（erase）====================
+# 与超分不同：走火山 VOD 点播上传，流程为
+#   applyVodUpload({fileName,fileSize}) → 拿 {uploadHost,storeUri,auth,sessionKey}
+#   → PUT https://{uploadHost}/{storeUri}（带 Authorization / Content-CRC32: Ignore）
+#   → commitVodUpload({sessionKey}) → 拿 vid
+#   → createTask({folderID,inputVid,sourceFileName})
+
+def erase_apply_upload(token, file_path):
+    fname = os.path.basename(file_path)
+    fsize = os.path.getsize(file_path)
+    st, d = _req('POST', '/api/erase/applyVodUpload', {'fileName': fname, 'fileSize': fsize},
+                 headers_extra={'x-token': token})
+    if d.get('code') != 0:
+        raise RuntimeError('applyVodUpload 失败: ' + str(d.get('msg')))
+    data = d.get('data') or {}
+    for k in ('uploadHost', 'storeUri', 'auth', 'sessionKey'):
+        if not data.get(k):
+            raise RuntimeError('applyVodUpload 未返回 ' + k + ': ' + json.dumps(d, ensure_ascii=False))
+    return data
+
+
+def erase_put_vod(data, file_path):
+    """PUT 直传到火山 VOD。流式读文件，避免整份载入内存。"""
+    import urllib.error
+    host = str(data['uploadHost']).rstrip('/')
+    uri = str(data['storeUri']).lstrip('/')
+    url = 'https://' + host + '/' + uri
+    ext = os.path.splitext(file_path)[1].lower().lstrip('.')
+    ctype = {'mp4': 'video/mp4', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska',
+             'avi': 'video/x-msvideo', 'flv': 'video/x-flv', 'wmv': 'video/x-ms-wmv'}.get(
+        ext, 'application/octet-stream')
+    total = os.path.getsize(file_path)
+    headers = {
+        'Authorization': str(data['auth']),
+        'Content-CRC32': 'Ignore',
+        'Content-Type': ctype,
+        'Content-Length': str(total),
+        'User-Agent': 'Mozilla/5.0',
+    }
+    fp = open(file_path, 'rb')
+    try:
+        req = urllib.request.Request(url, data=fp, method='PUT', headers=headers)
+        resp = urllib.request.urlopen(req, timeout=3600)
+        code = resp.status
+        resp.read()
+    except urllib.error.HTTPError as e:
+        raise RuntimeError('VOD 上传失败 HTTP ' + str(e.code) + ': ' + e.read(300).decode('utf-8', 'replace'))
+    finally:
+        fp.close()
+    if code not in (200, 201, 204):
+        raise RuntimeError('VOD 上传失败 HTTP ' + str(code))
+    return code
+
+
+def erase_commit_upload(token, session_key):
+    st, d = _req('POST', '/api/erase/commitVodUpload', {'sessionKey': session_key},
+                 headers_extra={'x-token': token})
+    if d.get('code') != 0:
+        raise RuntimeError('commitVodUpload 失败: ' + str(d.get('msg')))
+    vid = (d.get('data') or {}).get('vid')
+    if not vid:
+        raise RuntimeError('VOD 未返回 Vid')
+    return vid
+
+
+def erase_create_task(token, folder_id, vid, file_name):
+    st, d = _req('POST', '/api/erase/createTask',
+                 {'folderID': int(folder_id), 'inputVid': vid, 'sourceFileName': file_name},
+                 headers_extra={'x-token': token})
+    if d.get('code') != 0:
+        raise RuntimeError('创建任务失败: ' + str(d.get('msg')))
+    return (d.get('data') or {})
+
+
+def erase_submit(folder_id, file_path, username='', password='', wait=False,
+                 poll_interval=20, poll_max=3600, download_to=''):
+    """完整去字幕提交：上传 → 提交 VOD → 建任务（可选等结果并下载）"""
+    token = get_token(username, password)
+    fname = os.path.basename(file_path)
+    out('⬆ 申请 VOD 上传凭据：' + fname)
+    up = erase_apply_upload(token, file_path)
+    mb = round(os.path.getsize(file_path) / 1048576.0, 1)
+    out('⬆ 上传中（' + str(mb) + ' MB）…')
+    erase_put_vod(up, file_path)
+    out('⬆ 上传完成，提交 VOD…')
+    vid = erase_commit_upload(token, up['sessionKey'])
+    out('✅ VOD 已受理 vid=' + str(vid))
+    task = erase_create_task(token, folder_id, vid, fname)
+    task_id = task.get('ID') or task.get('id')
+    out('✅ 去字幕任务已创建 ID=' + str(task_id))
+    if not wait:
+        return {'ok': True, 'task_id': task_id}
+
+    deadline = time.time() + poll_max
+    while time.time() < deadline:
+        time.sleep(poll_interval)
+        st, dl = _req('GET', '/api/erase/getTaskList?' + urllib.parse.urlencode({'page': 1, 'pageSize': 30}),
+                      headers_extra={'x-token': token})
+        for t in (dl.get('data') or {}).get('list') or []:
+            if t.get('ID') == task_id:
+                status = t.get('status')
+                out('  状态: ' + str(status), '进度=' + str(t.get('progress')) + '%')
+                if status == 'succeeded':
+                    out('✅ 去字幕完成，结果: ' + str(t.get('resultFileName')))
+                    if download_to:
+                        src_base = os.path.splitext(fname)[0]
+                        saved = erase_download(token, task_id, download_to, src_base + '_nosub.mp4')
+                        out('已下载: ' + saved)
+                        t['downloaded'] = saved
+                    return {'ok': True, 'task_id': task_id, 'status': status, 'result': t}
+                if status == 'failed':
+                    raise RuntimeError('任务失败: ' + str(t.get('errorMessage')))
+    raise RuntimeError('等待超时')
+
+
+def erase_download(token, task_id, download_dir, save_name=''):
+    """下载去字幕结果（mode=download）"""
+    st, d = _req('GET', '/api/erase/getDownloadURL?' + urllib.parse.urlencode({'ID': int(task_id), 'mode': 'download'}),
+                 headers_extra={'x-token': token})
+    if d.get('code') != 0:
+        raise RuntimeError('getDownloadURL 失败: ' + str(d.get('msg')))
+    url = (d.get('data') or {}).get('url')
+    if not url:
+        raise RuntimeError('未返回下载 URL')
+    fname = save_name or ('erase_' + str(task_id) + '.mp4')
+    os.makedirs(download_dir, exist_ok=True)
+    dest = os.path.join(download_dir, fname)
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    with urllib.request.urlopen(req, timeout=3600) as r:
+        total = int(r.headers.get('Content-Length') or 0)
+        got = 0
+        last_pct = -1
+        with open(dest, 'wb') as fp:
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                fp.write(chunk)
+                got += len(chunk)
+                if total > 0:
+                    pct = int(got * 100 / total)
+                    if pct != last_pct:
+                        last_pct = pct
+                        try:
+                            sys.stderr.write('DLP:%d\n' % pct)
+                            sys.stderr.flush()
+                        except Exception:
+                            pass
+    return dest
+
+
+def erase_list_tasks(username, password, page=1, page_size=50):
+    token = get_token(username, password)
+    st, d = _req('GET', '/api/erase/getTaskList?' + urllib.parse.urlencode({'page': page, 'pageSize': page_size}),
+                 headers_extra={'x-token': token})
+    if d.get('code') != 0:
+        raise RuntimeError(str(d.get('msg')))
+    return (d.get('data') or {}).get('list') or []
+
+
 # ---------- CLI ----------
 def main():
     # stdout 统一 UTF-8（Windows 控制台默认 GBK，管道场景 JS 解析需 UTF-8）
@@ -240,7 +400,8 @@ def main():
     except Exception:
         pass
     ap = argparse.ArgumentParser(description='超分站客户端')
-    ap.add_argument('cmd', choices=['login', 'upload', 'tasks', 'folders', 'download'])
+    ap.add_argument('cmd', choices=['login', 'upload', 'tasks', 'folders', 'download',
+                                    'erase', 'erase-tasks', 'erase-download'])
     ap.add_argument('--user', default='张大强')
     ap.add_argument('--pwd', default='tianqiao123')
     ap.add_argument('--file', default='')
@@ -276,6 +437,28 @@ def main():
         folder = args.folder or '14086'
         r = upload_and_create(folder, args.file, args.resolution, args.user, args.pwd, wait=args.wait, download_to=args.download_to)
         out(json.dumps(r, ensure_ascii=False, default=str))
+    elif args.cmd == 'erase':
+        if not args.file:
+            out('需要 --file'); sys.exit(1)
+        folder = args.folder or '14086'
+        r = erase_submit(folder, args.file, args.user, args.pwd, wait=args.wait, download_to=args.download_to)
+        out(json.dumps(r, ensure_ascii=False, default=str))
+    elif args.cmd == 'erase-tasks':
+        tl = erase_list_tasks(args.user, args.pwd)
+        if args.json:
+            out(json.dumps(tl, ensure_ascii=False, default=str))
+        else:
+            for t in tl:
+                out(t.get('ID'), t.get('status'), t.get('sourceFileName'))
+    elif args.cmd == 'erase-download':
+        if not args.task:
+            out('需要 --task'); sys.exit(1)
+        tok = get_token(args.user, args.pwd)
+        dest = erase_download(tok, args.task, args.download_to or os.getcwd(), args.save_name)
+        if args.json:
+            out(json.dumps({'ok': True, 'path': dest}, ensure_ascii=False))
+        else:
+            out('已下载: ' + dest)
     elif args.cmd == 'download':
         if not args.task:
             out('需要 --task'); sys.exit(1)

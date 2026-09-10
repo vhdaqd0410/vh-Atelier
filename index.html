@@ -799,13 +799,19 @@
                 </div>
                 <div id="enSeqList" class="en-seqs"><div class="hint" style="padding:4px 6px;">点「刷新」加载序列，默认选当前活动序列</div></div>
                 <div class="en-row2">
+                    <label class="en-f"><span>处理类型</span>
+                        <select id="enMode">
+                            <option value="enhance" selected>⚡ 超分（去字幕底版）</option>
+                            <option value="erase">🧹 去字幕（擦除硬字幕）</option>
+                        </select>
+                    </label>
                     <label class="en-f"><span>导出预设</span>
                         <select id="enPreset"><option value="">自动（无字幕）</option></select>
                     </label>
                     <label class="en-f"><span>上传文件夹</span>
                         <select id="enFolder"><option value="14086">超分（默认）</option></select>
                     </label>
-                    <label class="en-f"><span>分辨率</span>
+                    <label class="en-f" id="enResWrap"><span>分辨率</span>
                         <select id="enRes">
                             <option value="720p" selected>720P · ¥2.5/分</option>
                             <option value="1080p">1080P · ¥5/分</option>
@@ -828,7 +834,7 @@
             <!-- 卡2：任务(左) + 日志(右) 并排 -->
             <div class="en-split">
                 <div class="en-card en-col">
-                    <div class="en-card-head"><span>📥 超分任务</span><button id="enTaskRefresh" class="secondary mini" style="margin-left:auto;">🔄</button></div>
+                    <div class="en-card-head"><span id="enTaskTitle">📥 超分任务</span><button id="enTaskRefresh" class="secondary mini" style="margin-left:auto;">🔄</button></div>
                     <div class="en-task-hint" id="enTaskHint"></div>
                     <div id="enTaskList" class="en-tasks"><div class="hint" style="padding:6px;">暂无</div></div>
                 </div>
