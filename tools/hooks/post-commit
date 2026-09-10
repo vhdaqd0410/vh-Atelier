@@ -1,0 +1,42 @@
+#!/bin/sh
+# vh-Atelier: 提交后自动把源码镜像到 PR 实际加载的安装目录。
+# 这样"提交"就等于"已同步"，不会再出现改了源码忘了同步、
+# PR 里看不到改动的情况。
+#
+# 安装方式（在仓库根执行一次）：
+#   python tools/install-hook.py
+# 或手动把本文件复制到 .git/hooks/post-commit（去掉 .sh 后缀）
+#
+# 注意：同步失败不影响提交结果（post-commit 的返回值被 git 忽略），
+# 但会打印警告，提示手动跑 sync-to-pr.py。
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_ROOT" ]; then
+    exit 0
+fi
+
+# 允许临时跳过（例如只想提交不想同步）
+if [ "$VH_SKIP_SYNC" = "1" ]; then
+    echo "[vh-Atelier] VH_SKIP_SYNC=1，跳过自动同步"
+    exit 0
+fi
+
+SYNC_SCRIPT="$(dirname "$REPO_ROOT")/sync-to-pr.py"
+if [ ! -f "$SYNC_SCRIPT" ]; then
+    echo "[vh-Atelier] 未找到同步脚本，跳过自动同步：$SYNC_SCRIPT"
+    exit 0
+fi
+
+echo "[vh-Atelier] 提交后自动同步到 PR 安装目录..."
+if command -v python >/dev/null 2>&1; then
+    PY=python
+elif command -v py >/dev/null 2>&1; then
+    PY=py
+else
+    echo "[vh-Atelier] 未找到 python，跳过。请手动运行 sync-to-pr.py"
+    exit 0
+fi
+
+"$PY" "$SYNC_SCRIPT" </dev/null
+echo "[vh-Atelier] 同步结束，请在 PR 里重载扩展。"
+exit 0
