@@ -10,12 +10,50 @@
 
     var WB_PORT = 8089;
     var WB_BASE = 'http://127.0.0.1:' + WB_PORT;
-    // 视频工作台 config.yaml 位置（默认桌面；可通过 localStorage 覆盖）
+    // 视频工作台位置：不写死用户名/盘符，按候选列表自动探测第一个存在的工作台目录。
+    // 优先级：localStorage 手动指定 > 常见位置的自动探测。
     var CFG_MEM_KEY = 'vh_progress_wb_yaml';
-    var WB_CFG_PATH = 'C:/Users/Admin/Desktop/视频工作台/backend/config.yaml';
-    var WB_START = 'C:/Users/Admin/Desktop/视频工作台/start_desktop.vbs';
+
+    // 探测视频工作台根目录（含 main_desktop.py 或 backend/config.yaml 的那个目录）
+    function detectWbDir() {
+        // 1) 用户手动指定过 config.yaml 路径 → 用它反推工作台根目录
+        try {
+            var saved = localStorage.getItem(CFG_MEM_KEY);
+            if (saved) {
+                var dir = saved.replace(/[/\\]backend[/\\]config\.yaml$/i, '')
+                              .replace(/[/\\]config\.yaml$/i, '');
+                if (dir && fs.existsSync(dir)) return dir;
+            }
+        } catch (e) {}
+
+        // 2) 常见位置候选（用户目录下的桌面 / 各盘根目录 / 旧的固定位置）
+        var cands = [];
+        try {
+            var home = os.homedir();
+            cands.push(path.join(home, 'Desktop', '视频工作台'));
+            cands.push(path.join(home, '桌面', '视频工作台'));
+        } catch (e) {}
+        ['C:', 'D:', 'E:', 'F:'].forEach(function (drv) {
+            cands.push(drv + '\\视频工作台');
+            cands.push(drv + '\\OH-WorkSpace\\视频工作台');
+            cands.push(drv + '\\OH-WorkSpace\\projects\\视频工作台');
+            cands.push(drv + '\\tools\\视频工作台');
+        });
+        for (var i = 0; i < cands.length; i++) {
+            try {
+                if (fs.existsSync(path.join(cands[i], 'backend', 'config.yaml'))) return cands[i];
+            } catch (e) {}
+        }
+        // 3) 都没找到 → 退回用户桌面的默认位置（保持原行为，便于报错提示）
+        try { return path.join(os.homedir(), 'Desktop', '视频工作台'); } catch (e) {}
+        return '视频工作台';
+    }
+
+    var WB_DIR = detectWbDir();
+    var WB_CFG_PATH = path.join(WB_DIR, 'backend', 'config.yaml').replace(/\\/g, '/');
+    var WB_START = path.join(WB_DIR, 'start_desktop.vbs').replace(/\\/g, '/');
     // 兜底：找不到 start_desktop.vbs 时用 main_desktop.py + pythonw
-    var WB_PY = 'C:/Users/Admin/Desktop/视频工作台/main_desktop.py';
+    var WB_PY = path.join(WB_DIR, 'main_desktop.py').replace(/\\/g, '/');
     // 插件根目录（js/ 的上一级），供定位 py/ 等资源
     var extRoot = (function () {
         try {
