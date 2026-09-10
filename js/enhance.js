@@ -689,10 +689,44 @@
     enRefSeq.addEventListener('click', function () { refreshSeqs(); });
     enGo.addEventListener('click', runAll);
     enStop.addEventListener('click', function () { stopFlag = true; log('⏹ 停止请求已发送…', 'warn'); });
+    var enEnvBtn = document.getElementById('enEnv');
+    if (enEnvBtn) enEnvBtn.addEventListener('click', checkEnv);
     if (enTaskRefresh) enTaskRefresh.addEventListener('click', function () { refreshTaskList(); });
     // 默认加载
     refreshSeqs();
     refreshTaskList();
+  }
+
+  // 检测 Python 环境：逐个候选报告是否能 import ddddocr
+  function checkEnv() {
+    log('════ 环境检测 ════');
+    var cands = [];
+    try {
+      var root = '';
+      try { root = csInterface.getSystemPath('extension'); } catch (_) {}
+      if (root) cands.push(path.join(root, 'runtime', 'python.exe'));
+      ['Python310', 'Python311', 'Python312', 'Python313'].forEach(function (v) {
+        cands.push(path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', v, 'python.exe'));
+      });
+    } catch (e) {}
+    var cp = require('child_process');
+    var any = false;
+    cands.forEach(function (exe) {
+      var isPath = (exe === 'py' || exe === 'python');
+      var exists = isPath ? true : (function () { try { return fs.existsSync(exe); } catch (e) { return false; } })();
+      if (!exists) { log('  ✖ 不存在：' + exe); return; }
+      try {
+        var r = cp.spawnSync(exe, ['-c', 'import ddddocr'], { windowsHide: true, timeout: 25000 });
+        if (r && r.status === 0) { log('  ✅ ddddocr 可用：' + exe, 'ok'); any = true; }
+        else { log('  ⚠ 无 ddddocr：' + exe); }
+      } catch (e) { log('  ⚠ 探测失败：' + exe + '（' + e.message + '）'); }
+    });
+    if (any) { log('环境正常，可直接导出并超分。', 'ok'); }
+    else {
+      log('未找到含 ddddocr 的 Python。请在其中一个解释器执行安装：', 'err');
+      log('  "<上面任一 python.exe>" -m pip install ddddocr');
+      log('  或安装到指定版本："...\\Python310\\python.exe" -m pip install ddddocr');
+    }
   }
 
   // 面板显示钩子（main.js 切换时调用）
