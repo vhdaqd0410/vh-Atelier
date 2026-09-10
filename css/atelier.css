@@ -25,6 +25,114 @@
         h1 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
         .sub { color: var(--muted); font-size: 11px; margin-bottom: 12px; }
 
+        /* ===== 运行日志入口与浮层 ===== */
+        .top-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .top-head h1 { margin-bottom: 0; }
+        .log-btn {
+            position: relative;
+            background: var(--panel);
+            color: var(--muted);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 11px;
+            padding: 3px 9px;
+            cursor: pointer;
+            flex: 0 0 auto;
+            margin-bottom: 4px;
+        }
+        .log-btn:hover { color: var(--text); border-color: var(--accent); }
+        .log-badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: var(--err);
+            color: #fff;
+            font-size: 9px;
+            line-height: 1;
+            padding: 2px 4px;
+            border-radius: 8px;
+            min-width: 14px;
+            text-align: center;
+        }
+        .log-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .55);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .log-box {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            width: 100%;
+            max-width: 640px;
+            max-height: 82vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .log-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .log-title { font-size: 13px; font-weight: 600; flex: 0 0 auto; }
+        .log-path {
+            flex: 1 1 auto;
+            color: var(--muted);
+            font-size: 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            direction: rtl;
+            text-align: left;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        .log-x {
+            flex: 0 0 auto;
+            background: transparent;
+            color: var(--muted);
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 2px 6px;
+        }
+        .log-x:hover { color: var(--text); }
+        .log-body {
+            flex: 1 1 auto;
+            overflow: auto;
+            padding: 8px 12px;
+            font-family: Consolas, "Microsoft YaHei", monospace;
+            font-size: 11px;
+            line-height: 1.6;
+            background: var(--bg);
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        .log-line { color: var(--text); white-space: pre-wrap; word-break: break-all; }
+        .log-line.lv-err { color: var(--err); }
+        .log-line.lv-warn { color: var(--warn); }
+        .log-line.lv-console { color: var(--muted); }
+        .log-empty { color: var(--muted); padding: 20px 0; text-align: center; }
+        .log-foot {
+            display: flex;
+            gap: 6px;
+            padding: 8px 12px;
+            border-top: 1px solid var(--border);
+        }
+
         .tabs {
             display: flex;
             gap: 4px;

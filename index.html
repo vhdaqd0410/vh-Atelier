@@ -6,8 +6,29 @@
     <link rel="stylesheet" href="css/atelier.css">
 </head>
 <body>
-    <h1>vh-Atelier</h1>
+    <div class="top-head">
+        <h1>vh-Atelier</h1>
+        <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">日志<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
+    </div>
     <div class="sub">字幕 · 声音 · 交付 · 进度 四工作台</div>
+
+    <!-- 错误日志浮层 -->
+    <div id="logOverlay" class="log-overlay" style="display:none;">
+        <div class="log-box">
+            <div class="log-head">
+                <span class="log-title">运行日志</span>
+                <span class="log-path" id="logPath"></span>
+                <button type="button" id="logClose" class="log-x" title="关闭">✕</button>
+            </div>
+            <div class="log-body" id="logBody"></div>
+            <div class="log-foot">
+                <button type="button" id="logRefresh" class="secondary">刷新</button>
+                <button type="button" id="logCopy" class="secondary">复制全部</button>
+                <button type="button" id="logOpen" class="secondary">打开文件</button>
+                <button type="button" id="logClear" class="secondary">清空</button>
+            </div>
+        </div>
+    </div>
 
     <div class="ws-groups">
         <button class="ws-group" data-group="media">🗂 素材</button>
@@ -983,6 +1004,94 @@
             urlInput: document.getElementById('upUrl'),
             autoFn: '__upscaleAutoLoad'
         });
+    })();
+
+    // ==== 错误日志查看器 ====
+    (function () {
+        var btn = document.getElementById('btnLogView');
+        var overlay = document.getElementById('logOverlay');
+        var body = document.getElementById('logBody');
+        var badge = document.getElementById('logBadge');
+        var pathEl = document.getElementById('logPath');
+        if (!btn || !overlay) return;
+
+        function esc(s) {
+            return String(s).replace(/[&<>]/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+            });
+        }
+
+        function render() {
+            var LOG = window.__vhLog;
+            if (!LOG) { body.innerHTML = '<div class="log-empty">日志模块未加载</div>'; return; }
+            var lines = LOG.text(300);
+            if (pathEl) pathEl.textContent = LOG.path() || '';
+            if (!lines) { body.innerHTML = '<div class="log-empty">暂无日志</div>'; return; }
+            // 按级别着色
+            var html = lines.split(/\r?\n/).filter(function (l) { return l.trim(); }).map(function (l) {
+                var cls = 'log-line';
+                if (l.indexOf('][ERROR]') >= 0 || l.indexOf('][ERR]') >= 0 || l.indexOf('][REJECT]') >= 0) cls += ' lv-err';
+                else if (l.indexOf('][WARN]') >= 0) cls += ' lv-warn';
+                else if (l.indexOf('][CONSOLE]') >= 0) cls += ' lv-console';
+                return '<div class="' + cls + '">' + esc(l) + '</div>';
+            }).join('');
+            body.innerHTML = html;
+            body.scrollTop = body.scrollHeight;
+        }
+
+        function open() {
+            overlay.style.display = '';
+            render();
+            if (window.__vhLog && window.__vhLog.markRead) window.__vhLog.markRead();
+        }
+        function close() { overlay.style.display = 'none'; }
+
+        function syncBadge(n) {
+            n = n || 0;
+            if (n > 0) { badge.textContent = n > 99 ? '99+' : String(n); badge.style.display = ''; }
+            else badge.style.display = 'none';
+        }
+
+        btn.addEventListener('click', function () {
+            if (overlay.style.display === 'none') open(); else close();
+        });
+        document.getElementById('logClose').addEventListener('click', close);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && overlay.style.display !== 'none') close();
+        });
+
+        document.getElementById('logRefresh').addEventListener('click', render);
+        document.getElementById('logOpen').addEventListener('click', function () {
+            if (window.__vhLog) window.__vhLog.open();
+        });
+        document.getElementById('logClear').addEventListener('click', function () {
+            if (window.__vhLog) { window.__vhLog.clear(); window.__vhLog.markRead(); }
+            render();
+        });
+        document.getElementById('logCopy').addEventListener('click', function () {
+            var t = window.__vhLog ? window.__vhLog.text(300) : '';
+            var btnC = document.getElementById('logCopy');
+            function done(ok) {
+                btnC.textContent = ok ? '已复制' : '复制失败';
+                setTimeout(function () { btnC.textContent = '复制全部'; }, 1500);
+            }
+            try {
+                var ta = document.createElement('textarea');
+                ta.value = t;
+                document.body.appendChild(ta);
+                ta.select();
+                var ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                done(ok);
+            } catch (e) { done(false); }
+        });
+
+        // 红点：订阅未读错误数
+        if (window.__vhLog && window.__vhLog.onUnreadChange) {
+            window.__vhLog.onUnreadChange(syncBadge);
+            syncBadge(window.__vhLog.unread ? window.__vhLog.unread() : 0);
+        }
     })();
 </script>
 </body>

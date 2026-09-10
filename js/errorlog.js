@@ -85,10 +85,18 @@
     }
 
     var writeCount = 0;
+    var unread = 0;          // 未读的非 INFO 条数（用于面板红点）
+    var listeners = [];      // 变更通知回调
+    function notify() {
+        for (var i = 0; i < listeners.length; i++) {
+            try { listeners[i](unread); } catch (e) {}
+        }
+    }
     function write(level, msg, extra) {
         var line = '[' + stamp() + '][' + tag() + '][' + level + '] ' + stringify(msg);
         if (extra !== undefined) line += ' | ' + stringify(extra);
         line += '\n';
+        if (level !== 'INFO' && level !== 'DEBUG') { unread++; notify(); }
         try { console.log('[vh-log] ' + line.trim()); } catch (e) {}
         if (!ensureDir()) return;
         try {
@@ -138,11 +146,16 @@
         err: function (msg, e) { write('ERR', msg, e); },
         warn: function (msg, e) { write('WARN', msg, e); },
         info: function (msg, e) { write('INFO', msg, e); },
+        // 未读错误数 + 变更订阅（面板红点用）
+        unread: function () { return unread; },
+        onUnreadChange: function (fn) { if (typeof fn === 'function') listeners.push(fn); },
+        markRead: function () { unread = 0; notify(); },
         read: function (n) {
             var lines = readTail(n);
             console.log('[vh-log] 最近 ' + lines.length + ' 条：\n' + lines.join('\n'));
             return lines;
         },
+        text: function (n) { return readTail(n).join('\n'); },
         open: function () {
             try {
                 if (logFile && fs.existsSync(logFile)) childProcess.exec('start "" "' + logFile + '"');
