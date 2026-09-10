@@ -22,6 +22,9 @@
   var enRes = document.getElementById('enRes');
   var enResWrap = document.getElementById('enResWrap');
   var enMode = document.getElementById('enMode');
+  var enGrabClip = document.getElementById('enGrabClip');
+  var enGoClip = document.getElementById('enGoClip');
+  var enClipInfo = document.getElementById('enClipInfo');
   var enGo = document.getElementById('enGo');
   var enStop = document.getElementById('enStop');
   var enLog = document.getElementById('enLog');
@@ -43,6 +46,7 @@
   var checked = [];        // 勾选序列名
   var stopFlag = false;
   var busy = false;
+  var grabbedClip = null;  // 从时间轴抓取的片段 { seqName, startSec, endSec, durationSec, clipCount }
 
   // 目录规划：
   // tmpRoot   = 无字幕导出过程件（跑完清空，仅此目录被清）
@@ -752,6 +756,175 @@
     try { refreshTaskList(); } catch (e) {}
   }
 
+  // ===== 选中片段模式：从时间轴抓取片段区间，只导出这一段跑完整流程 =====
+  // 抓取（只读）：读时间轴当前选中的视频片段，记录序列名 + 起止秒
+  async function grabClip() {
+    try {
+      var r = await evalHost('meGetSelectedClipInfo()');
+      if (!r || r.indexOf('OK:') !== 0) {
+        grabbedClip = null;
+        renderClipInfo();
+        log('✗ ' + (r ? r.replace(/^ERR:/, '') : '抓取失败'), 'err');
+        return;
+      }
+      var info = JSON.parse(r.slice(3));
+      grabbedClip = info;
+      renderClipInfo();
+      log('✂ 已抓取片段：' + info.seqName + ' ｜ ' + fmtSec(info.startSec) + ' → ' + fmtSec(info.endSec) +
+          '（' + fmtSec(info.durationSec) + (info.clipCount > 1 ? '，含 ' + info.clipCount + ' 个选中块（按并集）' : '') + '）', 'ok');
+    } catch (e) {
+      grabbedClip = null;
+      renderClipInfo();
+      log('✗ 抓取异常：' + e.message, 'err');
+    }
+  }
+
+  function fmtSec(s) {
+    var n = Number(s) || 0;
+    var m = Math.floor(n / 60);
+    var r = n - m * 60;
+    return m + ':' + (r < 10 ? '0' : '') + (Math.round(r * 100) / 100);
+  }
+
+  function renderClipInfo() {
+    if (!enClipInfo) return;
+    if (!grabbedClip) {
+      enClipInfo.textContent = '未抓取（在时间轴选中视频片段后点左侧按钮）';
+      enClipInfo.className = 'en-clip-info';
+      if (enGoClip) enGoClip.disabled = true;
+      return;
+    }
+    var c = grabbedClip;
+    enClipInfo.textContent = c.seqName + ' ｜ ' + fmtSec(c.startSec) + ' → ' + fmtSec(c.endSec) +
+      ' （' + fmtSec(c.durationSec) + '）';
+    enClipInfo.className = 'en-clip-info has';
+    if (enGoClip) enGoClip.disabled = false;
+  }
+
+  // 导出抓取到的片段区间（设入出点 → 导出 → 还原入出点）
+  function exportRange(seqName, startSec, endSec, presetPath, outFile) {
+    return new Promise(function (resolve, reject) {
+      var payload = {
+        seqName: seqName, startSec: startSec, endSec: endSec,
+        outPath: outFile, presetPath: presetPath
+      };
+      csInterface.evalScript('meRangePayload = ' + JSON.stringify(payload) + ';', function () {
+        csInterface.evalScript('meExportRangeStr()', function (r) {
+          if (!r) return reject(new Error('导出无返回'));
+          if (r.indexOf('OK:') === 0) return resolve(r.slice(3).trim());
+          var msg = r.replace(/^ERR:/, '');
+          if (msg.indexOf('NOSETINOUT:') === 0) {
+            msg = msg.slice('NOSETINOUT:'.length);
+          }
+          reject(new Error(msg));
+        });
+      });
+    });
+  }
+
+  // 跑「选中片段」流程：导出区间 → 上传 → 轮询 → 下载导入
+  async function runClip() {
+    if (busy) return;
+    if (!grabbedClip) { log('请先点「✂ 从时间轴抓取选中片段」', 'err'); return; }
+    var isErase = (taskMode === 'erase');
+    var modeCN = isErase ? '去字幕' : '超分';
+    var binName = isErase ? '去字幕' : '超分';
+    busy = true; stopFlag = false;
+    enGo.disabled = true; enGoClip.disabled = true; enStop.disabled = false;
+    log('════ 开始处理选中片段（' + modeCN + '） ════');
+    var progWrap = document.getElementById('enProgWrap');
+    var progFill = document.getElementById('enProgFill');
+    var progText = document.getElementById('enProgText');
+    var progPct = document.getElementById('enProgPct');
+    function setProg(pct, txt) {
+      if (!progWrap || !progFill) return;
+      progWrap.style.display = 'block';
+      progFill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (progText) progText.textContent = txt || '';
+      if (progPct) progPct.textContent = Math.round(pct) + '%';
+    }
+    try {
+      var presetPath = enPreset.value;
+      if (!presetPath) {
+        var auto = isErase ? findSubtitlePreset() : findNoSubtitlePreset();
+        if (!auto.length) { log('找不到' + (isErase ? '有字幕' : '无字幕') + '导出预设（.epr），请手动选择', 'err'); return; }
+        presetPath = auto[0].full;
+        log('自动使用预设：' + path.basename(presetPath));
+      }
+      var folderId = enFolder && enFolder.value ? enFolder.value : ENHANCE_FOLDER;
+      var resolution = enRes ? (enRes.value || ENHANCE_RES) : ENHANCE_RES;
+      await resolveResultDir();
+
+      var c = grabbedClip;
+      var safe = String(c.seqName).replace(/[\\/:*?"<>|]/g, '_');
+      if (!fs.existsSync(tmpRoot)) { try { fs.mkdirSync(tmpRoot, { recursive: true }); } catch (e) {} }
+      var outFile = path.join(tmpRoot, safe + (isErase ? '_clip.mp4' : '_clip_nosub.mp4'));
+      try { if (fs.existsSync(outFile)) fs.unlinkSync(outFile); } catch (e) {}
+
+      setProg(6, '导出区间 ' + fmtSec(c.startSec) + ' → ' + fmtSec(c.endSec) + ' …');
+      log('▶ 导出区间（' + (isErase ? '含字幕' : '无字幕') + '）：' + c.seqName + ' ' + fmtSec(c.startSec) + '→' + fmtSec(c.endSec));
+      await exportRange(c.seqName, c.startSec, c.endSec, presetPath, outFile);
+      // 等文件落地
+      var deadline = Date.now() + 30 * 60 * 1000;
+      while (!fs.existsSync(outFile) && Date.now() < deadline) {
+        if (stopFlag) throw new Error('__STOPPED__');
+        await sleep(700);
+      }
+      if (!fs.existsSync(outFile)) throw new Error('导出超时，未生成文件');
+      var mb = Math.round(fs.statSync(outFile).size / 1048576 * 10) / 10;
+      log('✅ 片段已导出（' + mb + ' MB），上传' + modeCN + '…', 'ok');
+
+      setProg(30, '上传' + modeCN + '…');
+      var tid = await submitMode(outFile, folderId, resolution, taskMode);
+      log('✅ 已提交任务 ID=' + tid + '，等待云端处理…', 'ok');
+      setProg(45, '云端处理中…');
+
+      // 轮询
+      var done = false, failed = null;
+      while (!done && !failed) {
+        if (stopFlag) { log('⏹ 已停止等待', 'warn'); return; }
+        await sleep(20000);
+        var list = await queryTasks(taskMode);
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].ID === tid) {
+            var t = list[i];
+            log('  ' + taskStateLabel(t.status) + ' ' + (t.progress || 0) + '%');
+            setProg(45 + (t.progress || 0) * 0.5, '云端处理 ' + (t.progress || 0) + '%');
+            if (t.status === 'succeeded') { done = true; }
+            if (t.status === 'failed') { failed = t.errorMessage || '未知'; }
+            break;
+          }
+        }
+      }
+      if (failed) throw new Error(modeCN + '失败：' + failed);
+
+      setProg(96, '下载中…');
+      var dlFile = await downloadTask(tid, resultDir, safe + (isErase ? '_clip_erased.mp4' : '_clip_720p.mp4'), function (pct) {
+        setProg(96 + pct * 0.03, '下载 ' + pct + '%');
+      }, taskMode);
+      if (dlFile && fs.existsSync(dlFile)) {
+        log('📥 已下载：' + dlFile, 'ok');
+        var imp = await importToBin([dlFile], binName);
+        if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
+        else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
+      } else {
+        log('⚠ 下载失败（任务 ' + tid + '），可稍后到处理站手动下载', 'warn');
+      }
+      setProg(100, '完成');
+      log('════ 选中片段处理结束 ════', 'ok');
+      try { refreshTaskList(); } catch (e) {}
+    } catch (e) {
+      if (e && e.message === '__STOPPED__') log('⏹ 已停止', 'warn');
+      else log('✗ ' + e.message, 'err');
+    } finally {
+      busy = false;
+      enGo.disabled = false;
+      enGoClip.disabled = !grabbedClip;
+      enStop.disabled = true;
+      if (progWrap) setTimeout(function () { try { progWrap.style.display = 'none'; } catch (e) {} }, 3000);
+    }
+  }
+
   function init() {
     if (!enGo || !enSeqList) return;  // 元素不存在（其它面板被禁用时）
     fillPresets();
@@ -774,8 +947,11 @@
     var enEnvBtn = document.getElementById('enEnv');
     if (enEnvBtn) enEnvBtn.addEventListener('click', checkEnv);
     if (enTaskRefresh) enTaskRefresh.addEventListener('click', function () { refreshTaskList(); });
+    if (enGrabClip) enGrabClip.addEventListener('click', grabClip);
+    if (enGoClip) enGoClip.addEventListener('click', runClip);
     // 默认加载
     applyMode();
+    renderClipInfo();
     refreshSeqs();
     refreshTaskList();
   }

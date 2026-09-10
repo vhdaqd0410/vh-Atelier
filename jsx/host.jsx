@@ -1144,6 +1144,102 @@ function meExport(outputPath, presetPath, exportType) {
     } catch (e) { return "ERR:" + e; }
 }
 
+// ==================== 选中片段：去字幕/超分 按片段导出 ====================
+// 读取时间轴当前选中的视频片段信息（只读，用于面板显示）
+// 返回 { seqName, startSec, endSec, durationSec, clipCount }
+function meGetSelectedClipInfo() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return "ERR:没有激活的序列";
+        var sel = seq.getSelection();
+        if (!sel || sel.length === 0) return "ERR:当前序列没有选中的片段，请先在时间轴选中视频片段";
+
+        var ticksPerSec = 254016000000;
+        var startSec = -1, endSec = -1, n = 0;
+        for (var i = 0; i < sel.length; i++) {
+            var it = sel[i];
+            var t = '';
+            try { t = it.type; } catch (e) {}
+            if (t !== 'video') continue;   // 只认视频片段（去字幕/超分都要画面）
+            var st = 0, du = 0;
+            try { st = it.start.seconds; } catch (e2) { continue; }
+            try { du = it.outPoint.seconds - it.inPoint.seconds; } catch (e3) { du = 0; }
+            if (du <= 0) continue;
+            var en = st + du;
+            if (startSec < 0 || st < startSec) startSec = st;
+            if (endSec < 0 || en > endSec) endSec = en;
+            n++;
+        }
+        if (n === 0) return "ERR:选中的不是视频片段（可能选到了音频轨），请选中视频轨上的片段";
+        if (endSec <= startSec) return "ERR:片段时长无效";
+        return "OK:" + JSON.stringify({
+            seqName: seq.name,
+            startSec: Math.round(startSec * 1000) / 1000,
+            endSec: Math.round(endSec * 1000) / 1000,
+            durationSec: Math.round((endSec - startSec) * 1000) / 1000,
+            clipCount: n
+        });
+    } catch (e) { return "ERR:" + e.toString(); }
+}
+
+// 导出指定区间：把入出点设为 [startSec, endSec] → 导出 → 还原原入出点
+// 从全局变量 meRangePayload 读 { seqName, startSec, endSec, outPath, presetPath }
+function meExportRangeStr() {
+    try {
+        var pl = meRangePayload;
+        if (!pl || !pl.outPath || !pl.presetPath) return "ERR:缺少导出参数";
+        var seq = app.project.activeSequence;
+        if (!seq) return "ERR:没有激活的序列";
+        // 序列名不一致时先激活（容错去空白/大小写）
+        if (pl.seqName && seq.name !== pl.seqName) {
+            var act = meActivateSequence(pl.seqName);
+            if (act.indexOf('OK:') !== 0) return "ERR:激活序列失败：" + act;
+            seq = app.project.activeSequence;
+        }
+        var ticksPerSec = 254016000000;
+        var inTicks = String(Math.round((pl.startSec || 0) * ticksPerSec));
+        var outTicks = String(Math.round((pl.endSec || 0) * ticksPerSec));
+
+        // 备份原入出点（-1 = 原本未设置）
+        var oldIn = -1, oldOut = -1;
+        try { oldIn = seq.getInPoint(); } catch (e) { oldIn = -1; }
+        if (typeof oldIn !== 'number') oldIn = -1;
+        try { oldOut = seq.getOutPoint(); } catch (e) { oldOut = -1; }
+        if (typeof oldOut !== 'number') oldOut = -1;
+
+        // 设入出点（PR 需要 ticks 字符串）
+        var okSet = true;
+        try {
+            if (!seq.setInPoint) okSet = false;
+            else seq.setInPoint(inTicks);
+            if (!seq.setOutPoint) okSet = false;
+            else seq.setOutPoint(outTicks);
+        } catch (e4) { okSet = false; }
+        if (!okSet) {
+            return "ERR:NOSETINOUT:当前 PR 版本的 setInPoint/setOutPoint 不可用，请先在时间轴上按 I/O 手动设好入出点，再用「整集」方式导出";
+        }
+
+        var output = new File(pl.outPath);
+        var preset = new File(pl.presetPath);
+        if (!preset.exists) return "ERR:导出预设不存在：" + pl.presetPath;
+        // exportType: 1 = 入点到出点
+        var ok = seq.exportAsMediaDirect(output.fsName, preset.fsName, 1);
+
+        // 还原入出点（不管导出成败）
+        try {
+            if (oldIn >= 0) seq.setInPoint(String(Math.round(oldIn * ticksPerSec)));
+            else if (seq.clearInPoint) seq.clearInPoint();
+        } catch (e5) {}
+        try {
+            if (oldOut >= 0) seq.setOutPoint(String(Math.round(oldOut * ticksPerSec)));
+            else if (seq.clearOutPoint) seq.clearOutPoint();
+        } catch (e6) {}
+
+        if (!ok) return "ERR:exportAsMediaDirect 返回失败（入点 " + pl.startSec + "s / 出点 " + pl.endSec + "s）";
+        return "OK:" + output.fsName;
+    } catch (e) { return "ERR:" + e.toString(); }
+}
+
 // 获取活动序列的时长（秒）与帧尺寸，供交付清单使用
 function meSeqInfo() {
     try {

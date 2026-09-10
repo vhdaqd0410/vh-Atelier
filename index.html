@@ -798,6 +798,11 @@
                     <button id="enRefSeq" class="secondary mini" style="margin-left:auto;">🔄 刷新</button>
                 </div>
                 <div id="enSeqList" class="en-seqs"><div class="hint" style="padding:4px 6px;">点「刷新」加载序列，默认选当前活动序列</div></div>
+                <!-- 快捷：从时间轴选中片段整段处理（不用先导出整集） -->
+                <div class="en-clip-row">
+                    <button id="enGrabClip" class="secondary mini">✂ 从时间轴抓取选中片段</button>
+                    <span id="enClipInfo" class="en-clip-info">未抓取（在时间轴选中视频片段后点左侧按钮）</span>
+                </div>
                 <div class="en-row2">
                     <label class="en-f"><span>处理类型</span>
                         <select id="enMode">
@@ -821,6 +826,7 @@
                 </div>
                 <div class="en-actions">
                     <button id="enGo" class="en-go">🚀 导出并超分</button>
+                    <button id="enGoClip" class="en-go" title="对抓取的片段区间跑完整流程，不导出整集">🎬 处理选中片段</button>
                     <button id="enStop" class="secondary mini" disabled>停止</button>
                     <button id="enEnv" class="secondary mini" title="检查 Python 与 ddddocr">🔧 环境</button>
                 </div>

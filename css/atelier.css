@@ -2139,6 +2139,19 @@
             font-size: 11px; padding: 3px 2px; cursor: pointer;
         }
         #panel-upscale .en-actions { display: flex; gap: 8px; align-items: center; }
+        /* 时间轴选中片段快捷行 */
+        #panel-upscale .en-clip-row {
+            display: flex; align-items: center; gap: 8px;
+            margin-top: 6px; padding: 4px 6px;
+            background: var(--panel2); border: 1px dashed var(--border); border-radius: 5px;
+        }
+        #panel-upscale .en-clip-info {
+            flex: 1; min-width: 0; font-size: 11px; color: var(--muted);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #panel-upscale .en-clip-info.has {
+            color: #7fd68b; font-weight: 600;
+        }
         #panel-upscale .en-go {
             flex: 1; background: linear-gradient(135deg, var(--purple-upscale), #9c6ee0);
             color: var(--white); border: none; border-radius: 6px;
