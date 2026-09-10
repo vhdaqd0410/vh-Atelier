@@ -37,6 +37,13 @@
             font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
             font-size: 13px;
             padding: 14px;
+            /* 默认允许选中文字：面板里任何想复制的内容都能直接拖选 */
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        /* 交互控件禁止选中：避免点击/拖拽时误选文字，影响按钮手感 */
+        button, .ws-group, .tab, .caret, .md-crumb-item, .wb-nav-btn,
+        .scr-copy, .scr-trn, .md-tree, .md-tree-item, .md-file {
             user-select: none;
             -webkit-user-select: none;
         }
@@ -2263,13 +2270,19 @@
         #panel-media .md-file .md-fn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
         #panel-media .md-file .md-check { flex: 0 0 14px; text-align: center; color: var(--fg-link); font-size: 11px; }
         #panel-media .md-file.sel .md-check::after { content: '✓'; }
-        /* 素材库 v2：左树(宽) + 右详情(窄) */
-        #panel-media .md-tree { flex: 1 1 auto; min-width: 0; overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; }
+        /* 素材库 v3：左目录树（纯文件夹）+ 右文件列表 */
+        #panel-media .md-tree { flex: 0 0 38%; min-width: 100px; max-width: 55%; overflow: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; user-select: none; -webkit-user-select: none; }
+        #panel-media .md-files { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; }
+        #panel-media .md-fhead { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 4px 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+        #panel-media .md-fhead .md-fcap { flex: 0 1 auto; font-size: 12px; font-weight: 600; color: var(--text); padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+        #panel-media .md-fhead .md-finfo { flex: 0 0 auto; font-size: 10px; color: var(--muted); }
+        #panel-media .md-flist { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+        #panel-media .md-flist .md-file { border-bottom: 1px dashed #2e2e2e; }
+        #panel-media .md-tree-item.sel { background: #23415e; box-shadow: inset 2px 0 0 var(--fg-link); }
+        #panel-media .md-tree-body { padding-top: 2px; }
         #panel-media .md-detail { flex: 0 0 30%; min-width: 120px; max-width: 40%; overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 6px; user-select: text !important; -webkit-user-select: text !important; cursor: text; }
         #panel-media .md-detail .md-file { user-select: none; -webkit-user-select: none; }
-        #panel-media .md-tree { user-select: none; -webkit-user-select: none; }
         #panel-media .md-detail *, #panel-media .md-detail div, #panel-media .md-detail span, #panel-media .md-detail button { user-select: text !important; -webkit-user-select: text !important; }
-        #panel-media .md-leaf { margin-left: 12px; padding: 3px 6px; }
+        #panel-media .md-leaf { padding: 3px 6px; }
         #panel-media .md-leaf .md-fn { font-size: 11.5px; }
         #panel-media .md-tree-item.md-up, #panel-media .md-subdir { padding: 4px 6px; }
-        #panel-media .md-files { flex: 1; }

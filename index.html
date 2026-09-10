@@ -869,10 +869,13 @@
                 <span id="mdProjInfo" style="font-size:10px;color:#9fd0ff;flex:1 1 auto;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="">工程：检测中…</span>
                 <input id="mdBinName" type="text" value="素材" placeholder="素材箱名" style="flex:0 1 90px;min-width:60px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;padding:3px 6px;" title="导入到哪个素材箱（不存在自动创建）">
             </div>
-            <!-- 主体：左目录树(完整多级+文件叶子) / 右详情窄栏 -->
+            <!-- 主体：左目录树（纯文件夹） / 右文件列表 -->
             <div style="flex:1;display:flex;gap:6px;min-height:0;">
-                <div class="md-tree" id="mdTree"><div class="hint" style="padding:8px;">浏览目录（双击目录展开/收起，单击文件看详情）</div></div>
-                <div class="md-detail" id="mdDetail"><div class="hint" style="padding:8px;">← 选择文件/文件夹看详情</div></div>
+                <div class="md-tree" id="mdTree"><div class="hint" style="padding:8px;">浏览目录</div></div>
+                <div class="md-files" id="mdDetail">
+                    <div class="md-fhead" id="mdFHead"><span class="hint">← 选择左侧文件夹查看内容</span></div>
+                    <div class="md-flist" id="mdFList"></div>
+                </div>
             </div>
             <!-- 底部工具条 -->
             <div class="md-bar">

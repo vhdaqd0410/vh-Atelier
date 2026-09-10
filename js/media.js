@@ -25,7 +25,9 @@
     progPct: null,
     tree: document.getElementById('mdTree'),
     files: document.getElementById('mdDetail'),
-    detail: document.getElementById('mdDetail')
+    detail: document.getElementById('mdDetail'),
+    fhead: document.getElementById('mdFHead'),
+    flist: document.getElementById('mdFList')
   };
   el.files = el.detail;
   if (!el.tree) return;
@@ -148,8 +150,8 @@
     if (cur === 'COMPUTER' || !cur || roots.indexOf(cur) < 0) el.rootSel.value = 'COMPUTER';
     else el.rootSel.value = cur;
     currentRoot = el.rootSel.value || 'COMPUTER';
-    if (currentRoot === 'COMPUTER') { browseDir = 'COMPUTER'; renderNav(); if (el.detail) el.detail.innerHTML = '<div class="hint" style="padding:10px;">选择磁盘开始浏览</div>'; }
-    else { browseDir = currentRoot; renderNav(); showDirDetail(browseDir); }
+    if (currentRoot === 'COMPUTER') { browseDir = 'COMPUTER'; curDirPath = 'COMPUTER'; renderNav(); }
+    else { browseDir = currentRoot; renderNav(); }
   }
   function setRoot(p) {
     if (!p || p === 'COMPUTER') return;
@@ -283,89 +285,128 @@
       var parent = path.dirname(dir);
       var upRow = document.createElement('div');
       upRow.className = 'md-tree-item md-up';
-      upRow.textContent = '⬆ 上级';
+      upRow.textContent = '⬆ 上级目录';
       upRow.title = parent;
-      upRow.addEventListener('click', function () { if (fs.existsSync(parent)) { browseDir = parent; renderNav(); showDirDetail(parent); } });
+      upRow.addEventListener('click', function () { if (fs.existsSync(parent)) { browseDir = parent; renderNav(); } });
       el.tree.appendChild(upRow);
     }
-    // 当前目录：渲染一个可展开的目录树（文件不随展开重复，进目录看）
-    var subs = listDirs(dir);
-    var files = listFiles(dir);
+    // 目录树：以 currentRoot 为根，只放文件夹（文件在右侧列表）
+    if (!treeModel || treeModel.abs !== currentRoot) {
+      treeModel = makeNode(currentRoot, dirName(currentRoot) || currentRoot, 0);
+      if (browseDir && browseDir !== currentRoot) expandAncestors(browseDir);
+    }
+    renderTree();
+    renderFilePanel(browseDir);
+  }
+
+  // ===== 目录树（纯文件夹，数据驱动）=====
+  var treeModel = null;      // { abs, name, depth, children: [] | null }
+  var expandedSet = {};      // abs -> true
+  var curDirPath = '';       // 当前选中目录（用于行高亮）
+
+  function makeNode(abs, name, depth) {
+    return { abs: abs, name: name || dirName(abs), depth: depth, children: null };
+  }
+  // 懒加载子目录（只目录，不含文件）
+  function ensureChildren(node) {
+    if (node.children) return node.children;
+    var kids = [];
+    if (node.abs === 'COMPUTER') {
+      listDrives().forEach(function (d) { kids.push(makeNode(d, d, node.depth + 1)); });
+    } else {
+      listDirs(node.abs).forEach(function (s) { kids.push(makeNode(path.join(node.abs, s), s, node.depth + 1)); });
+    }
+    node.children = kids;
+    return kids;
+  }
+  // 子目录数量（不展开也能显示箭头）
+  function subCount(node) {
+    if (node.children) return node.children.length;
+    if (node.abs === 'COMPUTER') return listDrives().length;
+    try { return listDirs(node.abs).length; } catch (e) { return 0; }
+  }
+  // 把 target 路径的祖先链全部展开（用于恢复上次位置 / 面包屑跳转）
+  function expandAncestors(target) {
+    if (!treeModel || !target || target === 'COMPUTER') return;
+    var norm = function (p) { return String(p).replace(/[\\/]+$/, '').toLowerCase(); };
+    var targetNorm = norm(target);
+    var chain = [];
+    var probe = target;
+    while (probe && probe.length >= treeModel.abs.length) {
+      chain.unshift(probe);
+      var p2 = path.dirname(probe);
+      if (p2 === probe) break;
+      probe = p2;
+    }
+    var node = treeModel;
+    expandedSet[node.abs] = true;
+    for (var i = 0; i < chain.length; i++) {
+      if (norm(chain[i]) === norm(node.abs)) continue;
+      var kids = ensureChildren(node);
+      var hit = null;
+      for (var k = 0; k < kids.length; k++) {
+        if (norm(kids[k].abs) === norm(chain[i])) { hit = kids[k]; break; }
+      }
+      if (!hit) break;
+      node = hit;
+      if (i < chain.length - 1) expandedSet[node.abs] = true;
+    }
+  }
+
+  function renderTree() {
+    if (!el.tree) return;
+    // 保留面包屑等已插入的前置节点，只重建树本体
+    var oldWrap = el.tree.querySelector('.md-tree-body');
+    if (oldWrap) oldWrap.parentNode.removeChild(oldWrap);
     var wrap = document.createElement('div');
-    wrap.className = 'md-subwrap';
-    if (!subs.length && !files.length) wrap.innerHTML = '<div style="padding:6px 4px;font-size:11px;color:var(--muted);">空目录</div>';
-    subs.forEach(function (s) {
-      var full = path.join(dir, s);
-      wrap.appendChild(makeDirRow(full, s, 0));
-    });
-    // 当前目录直接文件叶子（平铺在目录下方，缩进与子目录一致以便阅读）
-    files.forEach(function (fn) {
-      var full = path.join(dir, fn);
-      var leaf = makeFileLeaf(full, fn, dir);
-      if (leaf) wrap.appendChild(leaf);
-    });
+    wrap.className = 'md-subwrap md-tree-body';
+    if (!treeModel) { el.tree.appendChild(wrap); return; }
+    (function walk(node) {
+      wrap.appendChild(makeDirRow(node));
+      if (expandedSet[node.abs]) {
+        ensureChildren(node).forEach(walk);
+      }
+    })(treeModel);
     el.tree.appendChild(wrap);
   }
 
-  // 生成一个目录行：点击箭头/行身进入（进目录浏览），Shift/右键保留。箭头 ▸ 显示下级数
-  function makeDirRow(full, name, depth) {
+  // 目录行：单击 = 选中 + 自动展开下一层；点箭头只切换展开/收起
+  function makeDirRow(node) {
+    var abs = node.abs;
     var row = document.createElement('div');
-    row.className = 'md-tree-item md-subdir';
-    row.style.paddingLeft = (6 + depth * 12) + 'px';
-    var subCnt = listDirs(full).length;
+    row.className = 'md-tree-item md-subdir' + (abs === curDirPath ? ' sel' : '');
+    row.style.paddingLeft = (6 + node.depth * 12) + 'px';
+    var kids = subCount(node);
     var caret = document.createElement('span');
     caret.className = 'caret';
-    caret.textContent = subCnt ? '▸' : '';
+    caret.textContent = kids ? (expandedSet[abs] ? '▾' : '▸') : '';
     caret.style.cssText = 'display:inline-block;width:22px;height:20px;line-height:18px;text-align:center;color:var(--accent);cursor:pointer;border-radius:4px;font-size:13px;flex:0 0 auto;';
-    caret.title = subCnt ? '展开/收起' : '';
+    caret.title = kids ? '展开/收起' : '';
     var ico = document.createElement('span');
-    ico.textContent = '📁 ';
+    ico.textContent = abs === 'COMPUTER' ? '💻 ' : '📁 ';
     var lbl = document.createElement('span');
-    lbl.textContent = name;
-    lbl.title = full;
+    lbl.textContent = node.name;
+    lbl.title = abs;
+    lbl.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
     row.appendChild(caret); row.appendChild(ico); row.appendChild(lbl);
-    // 行身点击：进入该目录
     row.addEventListener('click', function (ev) {
-      if (ev.target === caret) { toggleDirExpand(full, row, depth + 1); return; }
-      browseDir = full; renderNav(); showDirDetail(full);
+      if (ev.target === caret) {
+        if (expandedSet[abs]) delete expandedSet[abs]; else expandedSet[abs] = true;
+        renderTree();
+        return;
+      }
+      // 行身：选中该目录，并自动展开下一层（与音乐库一致）
+      curDirPath = abs;
+      if (absentExpandedFallback(abs, node)) expandedSet[abs] = true;
+      try { localStorage.setItem('mdCurDir', abs); } catch (e) {}
+      renderTree();
+      renderFilePanel(abs);
     });
     return row;
   }
-  // 展开/收起某目录的子级（懒加载）
-  function toggleDirExpand(full, row, depth) {
-    var existed = row.__expanded;
-    var subWrap = row.__sub;
-    if (existed) {
-      row.__expanded = false;
-      var c = row.querySelector('.caret');
-      if (c) c.textContent = listDirs(full).length ? '▸' : '';
-      subWrap.style.display = 'none';
-      return;
-    }
-    if (!subWrap) {
-      subWrap = document.createElement('div');
-      subWrap.className = 'md-subwrap';
-      row.__sub = subWrap;
-      var kids = listDirs(full);
-      var fkids = listFiles(full);
-      if (!kids.length && !fkids.length) {
-        var empty = document.createElement('div');
-        empty.style.cssText = 'padding:2px 4px 2px ' + (22 + depth * 12) + 'px;font-size:10px;color:var(--muted);';
-        empty.textContent = '（空）';
-        subWrap.appendChild(empty);
-      } else {
-        kids.forEach(function (ks) { subWrap.appendChild(makeDirRow(path.join(full, ks), ks, depth)); });
-        fkids.forEach(function (fk) {
-          var leaf = makeFileLeaf(path.join(full, fk), fk, full);
-          if (leaf) { leaf.style.paddingLeft = (22 + depth * 12) + 'px'; subWrap.appendChild(leaf); }
-        });
-      }
-      row.parentNode.insertBefore(subWrap, row.nextSibling);
-    }
-    row.__expanded = true;
-    var c2 = row.querySelector('.caret');
-    if (c2) c2.textContent = listDirs(full).length ? '▾' : '▸';
-    subWrap.style.display = '';
+  function absentExpandedFallback(abs, node) {
+    if (expandedSet[abs]) return false;
+    try { return subCount(node) > 0; } catch (e) { return false; }
   }
   // 「我的电脑」虚拟浏览：列本机盘符
   function listDrives() {
@@ -388,23 +429,46 @@
     el.tree.appendChild(crumb);
     var drives = listDrives();
     var wrap = document.createElement('div');
-    wrap.className = 'md-subwrap';
+    wrap.className = 'md-subwrap md-tree-body';
     if (!drives.length) wrap.innerHTML = '<div style="padding:6px;font-size:11px;color:var(--muted);">未检测到磁盘</div>';
     var driveRows = [];
     drives.forEach(function (d) {
+      var node = makeNode(d, d, 0);
       var row = document.createElement('div');
-      row.className = 'md-tree-item md-subdir';
+      row.className = 'md-tree-item md-subdir' + (d === curDirPath ? ' sel' : '');
       row.dataset.drive = d;
-      row.textContent = '💽 ' + d + '（读取卷标…）';
-      row.title = d;
       row.style.cursor = 'pointer';
-      // 点击盘符：进盘根浏览
-      row.addEventListener('click', function () { browseDir = d; renderNav(); showDirDetail(d); });
+      var caret = document.createElement('span');
+      caret.className = 'caret';
+      var kc = 0;
+      try { kc = listDirs(d).length; } catch (e) {}
+      caret.textContent = kc ? (expandedSet[d] ? '▾' : '▸') : '';
+      caret.style.cssText = 'display:inline-block;width:22px;height:20px;line-height:18px;text-align:center;color:var(--accent);cursor:pointer;border-radius:4px;font-size:13px;flex:0 0 auto;';
+      var ico = document.createElement('span');
+      ico.textContent = '💽 ';
+      var lbl = document.createElement('span');
+      lbl.className = 'dlbl';
+      lbl.textContent = d + '（读取卷标…）';
+      lbl.title = d;
+      row.appendChild(caret); row.appendChild(ico); row.appendChild(lbl);
+      row.__node = node;
+      row.addEventListener('click', function (ev) {
+        if (ev.target === caret) {
+          if (expandedSet[d]) delete expandedSet[d]; else expandedSet[d] = true;
+          renderComputerNav();
+          return;
+        }
+        curDirPath = d;
+        expandedSet[d] = true;
+        try { localStorage.setItem('mdCurDir', d); } catch (e) {}
+        renderComputerNav();
+        renderFilePanel(d);
+      });
       wrap.appendChild(row);
       driveRows.push(row);
     });
     el.tree.appendChild(wrap);
-    if (el.detail) el.detail.innerHTML = '<div class="hint" style="padding:10px;">选择磁盘开始浏览</div>';
+    if (el.fhead && el.flist) renderFilePanel(curDirPath || 'COMPUTER');
     // 异步读卷标：VolumeName（资源管理器式盘符显示）
     loadDriveLabels(driveRows);
   }
@@ -441,50 +505,77 @@
         try { fs.unlinkSync(tmpOut); } catch (e) {}
         rows.forEach(function (row) {
           var d = (row.dataset.drive || '').toUpperCase();
+          var lbl = row.querySelector('.dlbl');
+          if (!lbl) return;
           var vol = map[d];
           if (vol) {
-            row.textContent = '💽 ' + d + ' [' + vol + ']';
+            lbl.textContent = d + ' [' + vol + ']';
             row.title = d + '  (' + vol + ')';
           } else if (d) {
-            row.textContent = '💽 ' + d;
+            lbl.textContent = d;
           }
         });
       });
     } catch (e) {}
   }
 
-  // ===== 文件列表（支持多选）=====
-  // 右侧：目录详情（左树点目录时）
+  // ===== 右侧文件列表（支持多选）=====
+  // 选中某个目录：右侧头部显示路径+统计，列表显示该目录文件
   function showDirDetail(dir) {
-    if (!el.detail) return;
-    el.detail.innerHTML = '';
-    var files = listFiles(dir);
-    var subs = listDirs(dir);
-    var ttl = document.createElement('div');
-    ttl.className = 'md-fcap';
-    ttl.textContent = (subs.length ? subs.length + ' 文件夹 · ' : '') + files.length + ' 文件';
-    el.detail.appendChild(ttl);
-    var info = document.createElement('div');
-    info.style.cssText = 'font-size:10px;color:var(--muted);word-break:break-all;padding:2px 4px 6px;';
-    info.textContent = dir;
-    el.detail.appendChild(info);
-    if (!files.length && !subs.length) {
-      el.detail.innerHTML += '<div class="hint" style="padding:8px;">空目录</div>';
+    renderFilePanel(dir);
+  }
+  function renderFilePanel(dir) {
+    if (!el.fhead || !el.flist) return;
+    curDirPath = dir;
+    el.fhead.innerHTML = '';
+    el.flist.innerHTML = '';
+    if (!dir || dir === 'COMPUTER') {
+      var hint0 = document.createElement('div');
+      hint0.className = 'hint';
+      hint0.style.padding = '6px 4px';
+      hint0.textContent = '← 选择左侧磁盘或文件夹查看内容';
+      el.fhead.appendChild(hint0);
       return;
     }
-    var tip = document.createElement('div');
-    tip.style.cssText = 'font-size:10px;color:var(--muted);padding:2px 4px;';
-    tip.textContent = '💡 左侧点选文件看详情；拖拽文件可直接放入 PR 项目/时间线。';
-    el.detail.appendChild(tip);
-    var bf = document.createElement('button');
-    bf.type = 'button';
-    bf.textContent = '📁 导入整个目录';
-    bf.className = 'secondary mini';
-    bf.style.cssText = 'margin-top:6px;color:#7fd68b;border-color:#2a5a3a;';
-    bf.addEventListener('click', function () { if (confirmProject()) importFolderTree(dir, (el.binName.value || '').trim() || '素材'); });
-    el.detail.appendChild(bf);
+    var files = [];
+    var subs = [];
+    try { files = listFiles(dir); } catch (e) {}
+    try { subs = listDirs(dir); } catch (e) {}
+    // 头部：目录名 + 统计 + 导入整个目录
+    var ttl = document.createElement('div');
+    ttl.className = 'md-fcap';
+    ttl.textContent = dirName(dir) || dir;
+    ttl.title = dir;
+    el.fhead.appendChild(ttl);
+    var info = document.createElement('div');
+    info.className = 'md-finfo';
+    info.textContent = (subs.length ? subs.length + ' 文件夹 · ' : '') + files.length + ' 文件';
+    el.fhead.appendChild(info);
+    var impBtn = document.createElement('button');
+    impBtn.type = 'button';
+    impBtn.textContent = '📁 导入整个目录';
+    impBtn.className = 'secondary mini';
+    impBtn.style.cssText = 'color:#7fd68b;border-color:#2a5a3a;margin-left:auto;flex:0 0 auto;';
+    impBtn.addEventListener('click', function () {
+      if (confirmProject()) importFolderTree(dir, (el.binName.value || '').trim() || '素材');
+    });
+    el.fhead.appendChild(impBtn);
+    // 列表：文件项（复用 makeFileLeaf：拖拽/多选/预览/双击导入）
+    if (!files.length) {
+      var empty = document.createElement('div');
+      empty.className = 'hint';
+      empty.style.padding = '10px 4px';
+      empty.textContent = subs.length ? '该目录没有直接包含的文件，展开左侧子文件夹看看' : '空目录';
+      el.flist.appendChild(empty);
+      return;
+    }
+    files.forEach(function (fn) {
+      var full = path.join(dir, fn);
+      var leaf = makeFileLeaf(full, fn, dir);
+      if (leaf) el.flist.appendChild(leaf);
+    });
   }
-  // 左树文件叶子：构建一个可拖拽/可点的文件行（缩进样式由 CSS .md-leaf 控制）
+  // 文件行：构建一个可拖拽/可点的文件项（用于右侧文件列表 el.flist）
   function makeFileLeaf(full, name, dir) {
     var ext = path.extname(name).toLowerCase().slice(1);
     var kind = fileKind(name);
@@ -509,7 +600,7 @@
       }
       Object.keys(selFiles).forEach(function (k) { delete selFiles[k]; });
       selFiles[full] = true;
-      var all = el.tree.querySelectorAll('.md-file');
+      var all = (el.flist || el.tree).querySelectorAll('.md-file');
       all.forEach(function (r) { r.classList.remove('sel'); });
       row.classList.add('sel');
       updateSelCount();
@@ -522,25 +613,27 @@
     });
     return row;
   }
-  // 右侧：文件详情
+  // 右侧：文件详情（显示在右栏头部，不破坏下方文件列表）
   function showFileDetail(full, name, kind, isMedia) {
-    if (!el.detail) return;
-    el.detail.innerHTML = '';
+    if (!el.fhead) return;
+    el.fhead.innerHTML = '';
     var ttl = document.createElement('div');
     ttl.className = 'md-fcap';
     ttl.textContent = name;
-    el.detail.appendChild(ttl);
+    ttl.title = full;
+    el.fhead.appendChild(ttl);
     try {
       var st = fs.statSync(full);
       var sz = st.size;
       var szTxt = sz < 1048576 ? Math.round(sz / 1024) + ' KB' : (sz / 1048576).toFixed(2) + ' MB';
       var meta = document.createElement('div');
-      meta.style.cssText = 'font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all;line-height:1.6;padding:2px 4px;';
-      meta.textContent = '类型: ' + (kind || '未知') + '\n大小: ' + szTxt + '\n修改: ' + (st.mtime ? st.mtime.toLocaleString() : '') + '\n路径: ' + full;
-      el.detail.appendChild(meta);
+      meta.className = 'md-finfo';
+      meta.style.whiteSpace = 'pre-wrap';
+      meta.textContent = (kind || '未知') + ' · ' + szTxt + ' · ' + (st.mtime ? st.mtime.toLocaleString() : '');
+      el.fhead.appendChild(meta);
     } catch (e) {}
     var btns = document.createElement('div');
-    btns.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;';
+    btns.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;';
     if (isMedia) {
       var b1 = document.createElement('button'); b1.type='button'; b1.textContent='👁 预览'; b1.className='secondary mini';
       b1.addEventListener('click', function () { openPreview(full, name); }); btns.appendChild(b1);
@@ -557,7 +650,7 @@
     var b3 = document.createElement('button'); b3.type='button'; b3.textContent='📂 定位'; b3.className='secondary mini';
     b3.addEventListener('click', function () { try { require('child_process').exec('explorer /select,"' + full + '"', { windowsHide: true }); } catch (e) {} });
     btns.appendChild(b3);
-    el.detail.appendChild(btns);
+    el.fhead.appendChild(btns);
   }
   // 兼容旧调用：renderFiles(dir) → 显示目录详情
   function renderFiles(dir) { showDirDetail(dir); }
@@ -877,8 +970,8 @@
   function restoreLastDir() {
     try {
       var last = localStorage.getItem('mdCurDir') || '';
-      if (last && fs.existsSync(last)) { browseDir = last; renderNav(); showDirDetail(last); }
-      else if (browseDir && browseDir !== 'COMPUTER') { renderNav(); showDirDetail(browseDir); }
+      if (last && last !== 'COMPUTER' && fs.existsSync(last)) { browseDir = last; renderNav(); }
+      else if (browseDir && browseDir !== 'COMPUTER') { renderNav(); }
     } catch (e) {}
   }
   // ===== 初始化 =====

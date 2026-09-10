@@ -612,8 +612,24 @@
         searchInp.style.cssText = 'flex:1;min-width:150px;background:#242424;color:#ddd;border:1px solid #444;border-radius:4px;padding:5px 8px;font-size:12px;';
         head.appendChild(searchInp);
         var searchState = document.createElement('span');
-        searchState.style.cssText = 'font-size:11px;color:#c9a86a;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        searchState.style.cssText = 'font-size:11px;color:#c9a86a;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         head.appendChild(searchState);
+        // 命中定位：上一条 / 下一条 / 只看命中
+        var hitPrev = document.createElement('button');
+        hitPrev.textContent = '↑';
+        hitPrev.title = '上一个命中';
+        hitPrev.style.cssText = 'background:#2a2a2a;color:#c9a86a;border:1px solid #4a4a2a;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;display:none;';
+        head.appendChild(hitPrev);
+        var hitNext = document.createElement('button');
+        hitNext.textContent = '↓';
+        hitNext.title = '下一个命中';
+        hitNext.style.cssText = hitPrev.style.cssText;
+        head.appendChild(hitNext);
+        var onlyHitBtn = document.createElement('button');
+        onlyHitBtn.textContent = '只看命中';
+        onlyHitBtn.title = '切换：只列出命中行 / 保留原文并定位';
+        onlyHitBtn.style.cssText = 'background:#2a2a2a;color:#888;border:1px solid #444;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;display:none;';
+        head.appendChild(onlyHitBtn);
         // 翻译
         var transBtn = document.createElement('button');
         transBtn.textContent = '🌐 翻译台词';
@@ -675,6 +691,9 @@
         var transMap = {};           // 批量翻译缓存：'__'+epkey -> {台词行:译文}
         var lineTransMap = {};       // 单句翻译缓存
         var searchKeyword = '';      // 关键词搜索（非集号时）
+        var searchHits = [];         // 当前命中的 <mark> 元素列表
+        var hitIdx = -1;             // 当前定位到第几个命中（0 基）
+        var onlyHits = false;        // false=保留全文并定位到第一个命中；true=只列出命中行
 
         function epLines(ep) {
             return (data.lines || []).filter(function (x) { return ep ? x.episode === ep : true; });
@@ -725,6 +744,7 @@
                     searchKeyword = '';
                     searchInp.value = '';
                     searchState.textContent = '';
+                    searchHits = []; hitIdx = -1;
                     saveReading(docxPath, curEp);   // 记住读到第几集
                     renderSidebar();
                     render();
@@ -778,16 +798,14 @@
         function render() {
             var lines = data.lines || [];
             var html = '';
-            var hitCount = 0;
             for (var li = 0; li < lines.length; li++) {
                 var x = lines[li];
                 if (curEp && x.episode !== curEp) continue;
                 var t = x.text || '';
                 var tp = x.type || 'plain';
-                // 关键词过滤：命中才显示
-                if (searchKeyword) {
+                // 关键词：默认保留全文（看得到上下文），切到「只看命中」时才过滤
+                if (searchKeyword && onlyHits) {
                     if (t.toLowerCase().indexOf(searchKeyword) < 0) continue;
-                    hitCount++;
                 }
                 var disp = escHtml(t);
                 if (searchKeyword) {
@@ -809,12 +827,56 @@
                     html += '<div class="scr-plain" data-raw="' + escHtml(t) + '">' + disp + '</div>';
                 }
             }
-            if (searchKeyword) {
-                searchState.textContent = '命中 ' + hitCount + ' 处';
-            }
-            body.innerHTML = html || (searchKeyword ? '<div style="color:#888;padding:30px;text-align:center;">没有匹配「' + escHtml(searchKeyword) + '」的内容</div>' : '<div style="color:#888;padding:30px;text-align:center;">该集暂无内容</div>');
-            body.scrollTop = 0;
+            var emptyHtml = '<div style="color:#888;padding:30px;text-align:center;">' +
+                (searchKeyword ? (onlyHits ? '没有匹配「' + escHtml(searchKeyword) + '」的内容' : '该集暂无内容')
+                               : '该集暂无内容') + '</div>';
+            body.innerHTML = html || emptyHtml;
             applyHighlight();
+            refreshHitUI();
+        }
+
+        // 收集所有命中标记（渲染后调用，dialogue 行的高亮由 applyHighlight 补，故必须在其后）
+        function collectHits() {
+            searchHits = [];
+            if (!searchKeyword) return;
+            var all = body.querySelectorAll('mark.scr-hl');
+            for (var i = 0; i < all.length; i++) searchHits.push(all[i]);
+        }
+
+        // 跳到第 idx 个命中：高亮当前项并滚动到可视区中部
+        function gotoHit(idx) {
+            if (searchHits.length === 0) { hitIdx = -1; updateHitUI(); return; }
+            if (idx < 0) idx = searchHits.length - 1;
+            if (idx >= searchHits.length) idx = 0;
+            for (var i = 0; i < searchHits.length; i++) searchHits[i].classList.remove('scr-hl-cur');
+            hitIdx = idx;
+            var el = searchHits[idx];
+            el.classList.add('scr-hl-cur');
+            try {
+                var bodyRect = body.getBoundingClientRect();
+                var elRect = el.getBoundingClientRect();
+                body.scrollTop += (elRect.top - bodyRect.top) - body.clientHeight / 3;
+            } catch (e) {}
+            updateHitUI();
+        }
+
+        // 刷新命中计数与按钮显隐
+        function updateHitUI() {
+            var has = !!searchKeyword;
+            hitPrev.style.display = has ? '' : 'none';
+            hitNext.style.display = has ? '' : 'none';
+            onlyHitBtn.style.display = has ? '' : 'none';
+            if (!has) { searchState.textContent = ''; return; }
+            if (searchHits.length === 0) { searchState.textContent = '无命中'; return; }
+            searchState.textContent = '第 ' + (hitIdx + 1) + '/' + searchHits.length + ' 处';
+        }
+
+        // 重新收集 + 定位到第一个
+        function refreshHitUI() {
+            if (!searchKeyword) { searchHits = []; hitIdx = -1; updateHitUI(); return; }
+            collectHits();
+            if (searchHits.length > 0) gotoHit(0);
+            else updateHitUI();
         }
         // 纯文本关键词高亮（在转义前的原文上做，避免破坏 HTML）
         function hlOnPlain(raw) {
@@ -880,7 +942,7 @@
 
         // 样式
         var st = document.createElement('style');
-        st.textContent = '.scr-dlg{margin:3px 0;padding:2px 4px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;} .scr-ept{margin:16px 0 8px;padding:5px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;} .scr-scene{margin:10px 0 3px;padding:2px 8px;color:#7fb3d9;font-weight:600;font-size:12.5px;} .scr-cast{color:#999;font-size:12px;padding:1px 8px;} .scr-action{color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 8px;border-left:2px solid #3a3a3a;margin:2px 0;} .scr-caption{color:#c9a86a;font-size:12px;padding:1px 8px;} .scr-plain{padding:1px 8px;} mark.scr-hl{background:#5a4a1e;color:#ffd76a;padding:0 1px;border-radius:2px;}';
+        st.textContent = '.scr-dlg{margin:3px 0;padding:2px 4px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;} .scr-ept{margin:16px 0 8px;padding:5px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;} .scr-scene{margin:10px 0 3px;padding:2px 8px;color:#7fb3d9;font-weight:600;font-size:12.5px;} .scr-cast{color:#999;font-size:12px;padding:1px 8px;} .scr-action{color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 8px;border-left:2px solid #3a3a3a;margin:2px 0;} .scr-caption{color:#c9a86a;font-size:12px;padding:1px 8px;} .scr-plain{padding:1px 8px;} mark.scr-hl{background:#5a4a1e;color:#ffd76a;padding:0 1px;border-radius:2px;} mark.scr-hl-cur{background:#ffb347;color:#1a1a1a;outline:1px solid #ffd76a;}';
         document.head.appendChild(st);
 
         // 事件委托：复制 + 单句翻译
@@ -917,6 +979,17 @@
             d.textContent = zh;
             dlg.appendChild(d);
         }
+
+        // 命中导航：上一条 / 下一条 / 只看命中
+        hitPrev.addEventListener('click', function () { gotoHit(hitIdx - 1); });
+        hitNext.addEventListener('click', function () { gotoHit(hitIdx + 1); });
+        onlyHitBtn.addEventListener('click', function () {
+            onlyHits = !onlyHits;
+            onlyHitBtn.textContent = onlyHits ? '保留原文' : '只看命中';
+            onlyHitBtn.style.color = onlyHits ? '#c9a86a' : '#888';
+            onlyHitBtn.style.borderColor = onlyHits ? '#4a4a2a' : '#444';
+            render();
+        });
 
         // 搜索框：纯数字 → 集号跳转；否则关键词检索
         searchInp.addEventListener('input', function () {
