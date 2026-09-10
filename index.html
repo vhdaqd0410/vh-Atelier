@@ -34,6 +34,7 @@
         <button class="ws-group" data-group="media">🗂 素材</button>
         <button class="ws-group" data-group="script">📖 剧本</button>
         <button class="ws-group active" data-group="progress">进度</button>
+        <button class="ws-group" data-group="todo">📝 待办</button>
         <button class="ws-group" data-group="upscale">✨ 超分</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
@@ -43,6 +44,9 @@
 
     <div class="tabs ws-subtabs" data-group="progress">
         <button class="tab active" data-tab="progress">项目进度</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="todo" style="display:none;">
+        <button class="tab active" data-tab="todo">今日待办</button>
     </div>
     <div class="tabs ws-subtabs" data-group="sub" style="display:none;">
         <button class="tab active" data-tab="subtitle">字幕识别</button>
@@ -728,6 +732,56 @@
         <div class="v-status" id="vStatus"></div>
     </div>
 
+    <!-- ==================== 待办（独立板块：逐条列待办 → 打勾 → 生成当日总结） ==================== -->
+    <div class="tab-panel" id="panel-todo" style="display:none;">
+        <div class="td-wrap">
+            <div class="td-main">
+                <div class="td-card">
+                    <div class="td-head">
+                        <span class="td-date" id="tdDate">今天</span>
+                        <button id="tdBackToday" class="secondary mini" style="display:none;">回到今天</button>
+                        <label class="td-roll" title="凌晨 4 点前算前一天，适合夜班">
+                            <input type="checkbox" id="tdRollover" checked>
+                            <span>凌晨归前一天</span>
+                        </label>
+                    </div>
+                    <div class="td-prog">
+                        <div class="td-prog-bar"><div class="td-prog-fill" id="tdProgFill"></div></div>
+                        <span class="td-prog-txt" id="tdProgTxt">还没有待办</span>
+                    </div>
+                    <div class="td-addrow">
+                        <input type="text" id="tdInput" placeholder="加一条待办，回车即可">
+                        <button id="tdAdd" class="td-addbtn">加</button>
+                    </div>
+                    <div class="td-carry" id="tdCarry" style="display:none;">
+                        <span id="tdCarryTxt"></span>
+                        <button id="tdCarryBtn" class="secondary mini">一键结转到今天</button>
+                    </div>
+                    <div class="td-list" id="tdList"></div>
+                </div>
+                <div class="td-card">
+                    <div class="td-sec-title">备忘</div>
+                    <textarea id="tdMemo" class="td-memo" placeholder="当天想到的、临时记的、后面要跟进的，都可写这里"></textarea>
+                </div>
+            </div>
+            <div class="td-side">
+                <div class="td-card">
+                    <div class="td-sec-title">当日工作总结</div>
+                    <div class="td-sum" id="tdSummary"></div>
+                    <div class="td-sum-acts">
+                        <button id="tdGen" class="td-btn-main">生成</button>
+                        <button id="tdCopy" class="secondary mini">复制</button>
+                        <button id="tdSave" class="secondary mini">存为 .md</button>
+                    </div>
+                </div>
+                <div class="td-card">
+                    <div class="td-sec-title">往期</div>
+                    <div class="td-history" id="tdHistory"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== 板块八：项目进度（视频工作台联动） ==================== -->
     <div class="tab-panel" id="panel-progress">
         <!-- 服务状态条 -->
@@ -921,6 +975,7 @@
     <script src="js/video.js"></script>
     <script src="js/script.js"></script>
     <script src="js/progress.js"></script>
+    <script src="js/todo.js"></script>
     <script>
     // ===== 外站内嵌通用导航（审片/超分）：后退/前进基于本导航栏历史，刷新/首页/外开可用 =====
     function makeNavBar(cfg) {

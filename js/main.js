@@ -15,13 +15,15 @@
         progress: document.getElementById('panel-progress'),
         script: document.getElementById('panel-script'),
         shenpian: document.getElementById('panel-shenpian'),
-        upscale: document.getElementById('panel-upscale')
+        upscale: document.getElementById('panel-upscale'),
+        todo: document.getElementById('panel-todo')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
         media: { members: ['media'], default: 'media' },
         progress: { members: ['progress'], default: 'progress' },
+        todo: { members: ['todo'], default: 'todo' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
@@ -84,6 +86,10 @@
         }
         if (name === 'progress' && window.__progressOnShow) {
             try { window.__progressOnShow(); } catch (e) {}
+        }
+        // 待办：切到时刷新（跨天/外部改动后回来看到最新）
+        if (name === 'todo' && window.__todoOnShow) {
+            try { window.__todoOnShow(); } catch (e) {}
         }
         // 剧本：切到剧本 tab 时若面板是空的（没在阅读、也没首页），渲染剧本库首页
         if (name === 'script' && window.__atShowScriptHome) {
