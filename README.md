@@ -25,6 +25,7 @@ com.vh.atelier/
 │   ├── main.js             两级导航切换（工作台 → 子功能）
 │   ├── utils.js            共享工具（SRT 解析/生成、HTML 转义、Python 探测）
 │   ├── translate.js        共享翻译引擎（英译中，识别/校对两板块共用）
+│   ├── errorlog.js         错误日志（捕获运行时异常 + 标题栏日志按钮/红点/浮层）
 │   ├── subtitle.js         字幕识别 + 人声分离
 │   ├── check.js            字幕校对 + 翻译入口
 │   ├── clone.js            语音克隆
@@ -32,12 +33,14 @@ com.vh.atelier/
 │   ├── music.js            网易云音乐
 │   ├── export.js           多版本导出（含交付模板）
 │   ├── video.js            视频下载
+│   ├── script.js           剧本模块（剧本库/阅读器/书签，由 progress.js 拆出）
 │   ├── progress.js         项目进度（视频工作台联动）
 │   ├── wavesurfer.js       波形预览
 │   └── CSInterface.js      CEP 桥接库
 ├── jsx/host.jsx            ExtendScript 宿主（ws/vc/sfx/me/music/video/ck 前缀函数）
 ├── bg/                     后台桥隐藏面板（负责拉起网易云本地服务）
 ├── keyhook/                全局热键钩子源码（已退役，无代码引用，保留备用）
+├── tools/                  开发辅助（提交后自动同步钩子）
 ├── bin/ffmpeg-win32-x64.exe
 ├── py/
 │   ├── funasr_cli.py       中文识别 CLI
@@ -56,34 +59,48 @@ com.vh.atelier/
 
 ### 源码目录 vs PR 安装目录
 
-- **源码目录**：`outputs\vh-Atelier\com.vh.atelier\`（开发改这里）
+- **源码目录**：`F:\OH-WorkSpace\plugins\vh-Atelier\com.vh.atelier\`（开发改这里，也是 git 仓库根）
 - **安装目录**：`%APPDATA%\Adobe\CEP\extensions\com.vh.atelier\`（PR 实际加载这里）
-- 改完源码**必须同步**到安装目录，否则 PR 里看不到改动。一键同步脚本：
-  - `sync-to-pr.py`（命令行）或 `sync-to-pr.pyw`（双击弹窗），位于 `outputs\vh-Atelier\`
+- 两个目录是独立的两份，改完源码**必须同步**到安装目录，否则 PR 里看不到改动
+- 同步脚本 `sync-to-pr.py` / `sync-to-pr.pyw` 位于仓库**上一级**（`plugins\vh-Atelier\`）：
+  - `python sync-to-pr.py` 同步；`python sync-to-pr.py --check` 只报告差异、不改文件
   - 镜像同步，排除 `.git/_tmp/_releases/ncm-server/collect` 与 `.log/.pyc`
   - **collect/ 是运行时用户数据**（替换字典等），绝不镜像覆盖，否则用户数据会被源码样板冲掉
   - 运行中被 PR 占用的 exe/dll 会跳过，不影响功能更新
-  - **同步方向以源码为准**：安装目录里源码没有的文件会被删除，勿在安装目录直接改代码
+  - **同步方向以源码为准**：安装目录里源码没有的文件会被删除，勿在安装目录里直接改东西
+
+### 提交后自动同步（已配置）
+
+- 钩子 `tools/hooks/post-commit` 会在每次 `git commit` 后自动跑同步
+- 安装/重装（新机器或重新克隆后跑一次）：`python tools/install-hook.py`
+- 临时跳过：设环境变量 `VH_SKIP_SYNC=1`
+- 同步失败不影响提交结果，但会打印警告，需手动补跑
+- 改动后随手确认：`python sync-to-pr.py --check`
 
 ### 共享模块
 
-- `js/utils.js`（`window.__vhUtils`）：SRT 解析/生成、HTML 转义、Python 探测等纯函数
-- `js/translate.js`（`window.__translateBridge`）：英译中翻译引擎，识别/校对两板块共用
-- 新增跨板块共享代码时优先放这里；各板块内部函数保持 IIFE 私有
+- `js/utils.js`（挂在 `window.__vhUtils`）：SRT 解析/生成、HTML 转义、Python 探测等纯函数
+- `js/translate.js`（挂在 `window.__translateBridge`）：英译中翻译引擎，识别/校对两板块共用
+- `js/errorlog.js`：错误日志，入口在标题栏「日志」按钮
+- 新增跨板块共享代码时优先放这几处；各板块内部保持自包含
 
 ### 脚本加载顺序（index.html 底部）
 
-`CSInterface.js → main.js → utils.js → translate.js → subtitle.js → clone.js → wavesurfer.js → sfx.js → music.js → export.js → check.js → video.js → progress.js`
+```
+CSInterface.js → errorlog.js → main.js → utils.js → translate.js → subtitle.js →
+clone.js → wavesurfer.js → sfx.js → musiclib.js → music.js → export.js → enhance.js →
+media.js → check.js → video.js → script.js → progress.js
+```
 
 依赖关系：utils/translate 必须先于使用它们的板块加载；main.js 先于各板块（它们调用 `__atSwitchTab`）。
+script.js 与 progress.js 之间没有加载顺序依赖，两者运行时通过全局对象通信：
+`window.__vhProgress.setStatus()` / `window.__vhScript.openScriptForProject()`。
 
 ### 安装与调试
 
 1. 把 `com.vh.atelier` 复制到 `%APPDATA%\Adobe\CEP\extensions\`
 2. 注册表 `HKEY_CURRENT_USER\Software\Adobe\CSXS.6` 建 `PlayerDebugMode` = `1`（未签名扩展必需）
 3. **改 JSX 必须彻底重启 PR**（host.jsx 是 PR 启动时才加载）；改前端 js/html 重开面板即可
-
----
 
 ## 各工作台功能
 
@@ -131,7 +148,8 @@ com.vh.atelier/
 
 ## 版本
 
-- **0.2.1**（当前）：翻译收拢共享模块 + utils.js 消重复；四工作台导航成型（进度/字幕/声音/交付）；人声分离迁入声音组；进度联动视频工作台；移除全局音效搜索浮窗（避免与 Excalibur 钩子冲突）
+- **0.2.2**（开发中）：错误日志接面板入口（标题栏日志按钮 + 未读红点 + 浮层）；CSS 状态色收口为变量（17 个，零视觉变化）；progress.js 拆分出 script.js（剧本模块独立）；新增提交后自动同步钩子 + sync-to-pr.py --check
+- **0.2.1**：翻译收拢共享模块 + utils.js 消重复；四工作台导航成型（进度/字幕/声音/交付）；人声分离迁入声音组；进度联动视频工作台；移除全局音效搜索浮窗（避免与 Excalibur 钩子冲突）
 - 0.2.0：网易云音乐板块
 - 0.1.6：字幕校对板块
 - 0.1.5：多版本导出（整合自 com.delivery.multiexport）
