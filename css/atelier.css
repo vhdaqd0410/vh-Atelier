@@ -2617,3 +2617,66 @@
             padding: 1px 0;
         }
         .prg-todo-li.urgent { color: var(--fg-err-soft); font-weight: 600; }
+
+        /* ===== 人声分离：结果列表（试听 / 拖拽 / 导入）===== */
+        #panel-sep .sep-res-head {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+        }
+        #panel-sep .sep-res-head h2 {
+            font-size: 12px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .5px;
+        }
+        #panel-sep .sep-res-list { display: flex; flex-direction: column; }
+        #panel-sep .sep-res-empty {
+            padding: 16px 8px; text-align: center;
+            color: var(--muted); font-size: 11.5px;
+        }
+        #panel-sep .sep-res-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 7px; border-radius: 6px;
+            border-bottom: 1px dashed var(--border);
+            cursor: grab;
+        }
+        #panel-sep .sep-res-item:last-child { border-bottom: none; }
+        #panel-sep .sep-res-item:hover { background: var(--panel2); }
+        #panel-sep .sep-res-item:active { cursor: grabbing; }
+        #panel-sep .sep-res-play {
+            flex: 0 0 auto; width: 24px; height: 24px;
+            background: var(--gray-input); color: var(--accent);
+            border: 1px solid var(--border); border-radius: 50%;
+            cursor: pointer; font-size: 10px; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0;
+        }
+        #panel-sep .sep-res-play:hover { border-color: var(--accent); color: var(--accent-hover); }
+        #panel-sep .sep-res-tag {
+            flex: 0 0 auto; font-size: 10px; line-height: 1.6;
+            padding: 0 6px; border-radius: 3px; white-space: nowrap;
+        }
+        #panel-sep .sep-res-vocals {
+            background: var(--sel-green-bg); color: var(--sel-green-fg);
+            border: 1px solid rgba(159,224,168,.3);
+        }
+        #panel-sep .sep-res-accomp {
+            background: var(--sel-blue2-bg); color: var(--fg-link);
+            border: 1px solid rgba(109,179,255,.3);
+        }
+        #panel-sep .sep-res-info { flex: 1 1 auto; min-width: 0; }
+        #panel-sep .sep-res-name {
+            font-size: 11.5px; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #panel-sep .sep-res-sub {
+            font-size: 10px; color: var(--muted);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        #panel-sep .sep-res-wave {
+            flex: 0 0 130px; height: 26px; overflow: hidden;
+        }
+        #panel-sep .sep-res-btn {
+            flex: 0 0 auto; background: var(--gray-input); color: var(--muted);
+            border: 1px solid var(--border); border-radius: 4px;
+            padding: 2px 8px; cursor: pointer; font-size: 10.5px;
+        }
+        #panel-sep .sep-res-btn:hover { color: var(--accent); border-color: var(--accent); }
+        #panel-sep .sep-res-del:hover { color: var(--fg-err-soft); border-color: var(--fg-err-soft); }

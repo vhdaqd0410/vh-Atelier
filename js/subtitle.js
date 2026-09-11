@@ -48,6 +48,8 @@
         btnSeparate: document.getElementById('btnSeparate'),
         btnImportVocals: document.getElementById('btnImportVocals'),
         btnImportAccomp: document.getElementById('btnImportAccomp'),
+        btnSepClear: document.getElementById('btnSepClear'),
+        sepResultList: document.getElementById('sepResultList'),
         sepProgressWrap: document.getElementById('sepProgressWrap'),
         sepProgressFill: document.getElementById('sepProgressFill'),
         sepProgressText: document.getElementById('sepProgressText'),
@@ -851,6 +853,8 @@
             // 取选中的第一个（人声分离通常针对单个素材）
             var clip = data.clips[0];
             if (!clip.mediaPath) { setSepBusy(false); setSepStatus('选中的片段没有媒体路径', 'err'); return; }
+            // 来源名：优先片段名，否则媒体文件名（写入结果列表，方便认哪一集）
+            var clipName = clip.name || path.basename(clip.mediaPath || '');
 
             ensureSepAssets(function (err, sepDir) {
                 if (err) { setSepBusy(false); setSepStatus(err, 'err'); return; }
@@ -908,7 +912,10 @@
                         el.btnImportVocals.disabled = false;
                         if (sepAccompPath) el.btnImportAccomp.disabled = false;
                         setSepBusy(false);
-                        setSepStatus('分离完成：可分别导入人声 / 伴奏到「人声分离」素材箱', 'ok');
+                        // 列出结果（可试听 / 拖拽 / 导入），源名取选中片段名
+                        addSepResult('vocals', outVocals, clipName, clip.mediaPath);
+                        if (sepAccompPath) addSepResult('accomp', sepAccompPath, clipName, clip.mediaPath);
+                        setSepStatus('分离完成：结果已列在下方，可试听或直接拖进时间轴', 'ok');
                     });
                 });
             });
@@ -916,12 +923,205 @@
     }
 
     function importVocals() {
-        importToBin([sepVocalsPath], '人声');
+        importToBin(sepResults.map(function (r) { return r.path; }), '全部分离结果');
     }
 
     function importAccomp() {
         importToBin([sepAccompPath], '伴奏');
     }
+
+    // ---------- 分离结果列表（试听 / 拖拽进时间轴 / 导入素材箱）----------
+    var sepResults = [];        // [{ kind, path, name, srcName, srcPath, addedAt }]
+    var sepWs = null;           // 当前试听的 WaveSurfer
+    var sepWsPath = '';
+    var sepWsPlaying = false;
+
+    function sepKindLabel(kind) { return kind === 'vocals' ? '人声' : '伴奏'; }
+    function sepKindClass(kind) { return kind === 'vocals' ? 'sep-res-vocals' : 'sep-res-accomp'; }
+
+    function addSepResult(kind, p, srcName, srcPath) {
+        if (!p || !fs.existsSync(p)) return;
+        // 同路径去重（重跑同一集不重复列）
+        var exist = sepResults.filter(function (r) { return r.path === p; })[0];
+        if (exist) return;
+        sepResults.push({
+            kind: kind,
+            path: p,
+            name: path.basename(p),
+            srcName: srcName || '',
+            srcPath: srcPath || '',
+            addedAt: Date.now()
+        });
+        renderSepResults();
+    }
+
+    function clearSepResults() {
+        stopSepPlay();
+        sepResults = [];
+        sepVocalsPath = null;
+        sepAccompPath = null;
+        renderSepResults();
+        setSepStatus('已清空分离结果列表（磁盘上的文件未删除）', '');
+    }
+
+    function renderSepResults() {
+        var box = document.getElementById('sepResultList');
+        if (!box) return;
+        // 同步「全部导入」按钮可用性
+        if (el.btnImportVocals) el.btnImportVocals.disabled = sepBusy || sepResults.length === 0;
+        if (!sepResults.length) {
+            box.innerHTML = '<div class="sep-res-empty">还没有分离结果</div>';
+            return;
+        }
+        box.innerHTML = '';
+        sepResults.slice().reverse().forEach(function (r) {
+            box.appendChild(buildSepRow(r));
+        });
+    }
+
+    function buildSepRow(r) {
+        var row = document.createElement('div');
+        row.className = 'sep-res-item';
+        row.setAttribute('data-path', r.path);
+        row.setAttribute('draggable', 'true');
+        row.title = r.path;
+
+        // 试听
+        var playBtn = document.createElement('button');
+        playBtn.type = 'button';
+        playBtn.className = 'sep-res-play';
+        playBtn.textContent = (sepWsPath === r.path && sepWsPlaying) ? '⏸' : '▶';
+        playBtn.title = '试听';
+        playBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            toggleSepPlay(r.path, playBtn);
+        });
+        row.appendChild(playBtn);
+
+        // 类型标签
+        var tag = document.createElement('span');
+        tag.className = 'sep-res-tag ' + sepKindClass(r.kind);
+        tag.textContent = sepKindLabel(r.kind);
+        row.appendChild(tag);
+
+        // 名字 + 来源
+        var info = document.createElement('div');
+        info.className = 'sep-res-info';
+        var nm = document.createElement('div');
+        nm.className = 'sep-res-name';
+        nm.textContent = r.name;
+        var sub = document.createElement('div');
+        sub.className = 'sep-res-sub';
+        sub.textContent = r.srcName ? ('来源：' + r.srcName) : '';
+        info.appendChild(nm);
+        info.appendChild(sub);
+        row.appendChild(info);
+
+        // 操作
+        var imp = document.createElement('button');
+        imp.type = 'button';
+        imp.className = 'sep-res-btn';
+        imp.textContent = '导入';
+        imp.title = '导入到「人声分离」素材箱';
+        imp.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            importToBin([r.path], sepKindLabel(r.kind));
+        });
+        row.appendChild(imp);
+
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'sep-res-btn sep-res-del';
+        rm.textContent = '✕';
+        rm.title = '从列表移除（不删文件）';
+        rm.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            if (sepWsPath === r.path) stopSepPlay();
+            sepResults = sepResults.filter(function (x) { return x.path !== r.path; });
+            renderSepResults();
+        });
+        row.appendChild(rm);
+
+        // 拖拽进 PR 时间轴（CEP 官方 DnD，与音乐库/音效库一致）
+        row.addEventListener('dragstart', function (ev) {
+            var t = ev.target;
+            if (t && t.tagName === 'BUTTON') { ev.preventDefault(); return; }
+            ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', r.path);
+            ev.dataTransfer.setData('text/plain', r.path);
+            ev.dataTransfer.effectAllowed = 'copy';
+        });
+        row.addEventListener('dragend', function () { stopSepPlay(); });
+        // 双击 = 导入素材箱
+        row.addEventListener('dblclick', function () { importToBin([r.path], sepKindLabel(r.kind)); });
+        return row;
+    }
+
+    // 试听：单实例，点同一个暂停，点另一个切换
+    function toggleSepPlay(p, btn) {
+        if (sepWsPath === p && sepWs && sepWsPlaying) { pauseSepPlay(btn); return; }
+        stopSepPlay();
+        var row = document.querySelector('#sepResultList .sep-res-item[data-path="' + cssEsc(p) + '"]');
+        var holder = row ? row.querySelector('.sep-res-wave') : null;
+        if (!holder) {
+            // 首次：在行内插入波形容器
+            holder = document.createElement('div');
+            holder.className = 'sep-res-wave';
+            var infoEl = row ? row.querySelector('.sep-res-info') : null;
+            if (row && infoEl) row.insertBefore(holder, infoEl);
+        }
+        try {
+            if (typeof WaveSurfer === 'undefined') throw new Error('wavesurfer 未加载');
+            sepWs = WaveSurfer.create({
+                container: holder,
+                waveColor: '#8ab0ff',
+                progressColor: '#4f8bff',
+                cursorColor: '#ffffff',
+                height: 26,
+                barWidth: 1, barGap: 1, barMinHeight: 1, cursorWidth: 1,
+                interact: true,
+                hideScrollbar: true
+            });
+            sepWsPath = p;
+            sepWs.load('file:///' + String(p).replace(/\\/g, '/'));
+            sepWs.on('ready', function () {
+                try { sepWs.play(); } catch (e) {}
+                sepWsPlaying = true;
+                if (btn) btn.textContent = '⏸';
+            });
+            sepWs.on('finish', function () { sepWsPlaying = false; if (btn) btn.textContent = '▶'; });
+        } catch (e) {
+            setSepStatus('试听失败：' + e.message, 'err');
+        }
+    }
+
+    function pauseSepPlay(btn) {
+        try { if (sepWs) sepWs.pause(); } catch (e) {}
+        sepWsPlaying = false;
+        if (btn) btn.textContent = '▶';
+        renderSepPlayButtons();
+    }
+
+    function stopSepPlay() {
+        try { if (sepWs) sepWs.stop(); } catch (e) {}
+        sepWs = null;
+        sepWsPath = '';
+        sepWsPlaying = false;
+        renderSepPlayButtons();
+    }
+
+    // 把所有行的播放按钮同步成当前状态
+    function renderSepPlayButtons() {
+        var box = document.getElementById('sepResultList');
+        if (!box) return;
+        var rows = box.querySelectorAll('.sep-res-item');
+        for (var i = 0; i < rows.length; i++) {
+            var p = rows[i].getAttribute('data-path');
+            var b = rows[i].querySelector('.sep-res-play');
+            if (b) b.textContent = (sepWsPath === p && sepWsPlaying) ? '⏸' : '▶';
+        }
+    }
+
+    function cssEsc(s) { return String(s).replace(/(["\\])/g, '\\$1'); }
 
     // 通用导入：把文件列表放进「人声分离」素材箱，kind 用于提示文案
     function importToBin(files, kind) {
@@ -954,7 +1154,8 @@
     function setSepBusy(busy) {
         sepBusy = busy;
         el.btnSeparate.disabled = busy;
-        el.btnImportVocals.disabled = busy || !sepVocalsPath;
+        // 「全部导入」按结果列表里有没有可用文件决定
+        el.btnImportVocals.disabled = busy || sepResults.length === 0;
         el.btnImportAccomp.disabled = busy || !sepAccompPath;
         if (busy) {
             el.sepProgressWrap.classList.add('show');
@@ -983,6 +1184,8 @@
     el.btnSeparate.addEventListener('click', separateVocals);
     el.btnImportVocals.addEventListener('click', importVocals);
     el.btnImportAccomp.addEventListener('click', importAccomp);
+    if (el.btnSepClear) el.btnSepClear.addEventListener('click', clearSepResults);
+    renderSepResults();
 
     // 语言切换时联动模型框：中文→FunASR（固定，置灰）；英文/其他→whisper large-v3
     function syncModelByLang() {
