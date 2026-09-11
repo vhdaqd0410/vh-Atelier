@@ -33,6 +33,13 @@
   var enTaskList = document.getElementById('enTaskList');
   var enTaskTitle = document.getElementById('enTaskTitle');
   var enTaskHint = document.getElementById('enTaskHint');
+  var enTaskPickAll = document.getElementById('enTaskPickAll');
+  var enTaskDlSel = document.getElementById('enTaskDlSel');
+  var enTaskExpand = document.getElementById('enTaskExpand');
+  var enTaskCard = document.getElementById('enTaskCard');
+  var enLogCard = document.getElementById('enLogCard');
+  var enLogExpand = document.getElementById('enLogExpand');
+  var enLogClear = document.getElementById('enLogClear');
 
   // 处理站固定参数（用户/密码来自 client 默认）
   var ENHANCE_FOLDER = '14086';
@@ -628,20 +635,50 @@
     } catch (e) { return ''; }
   }
   var taskDownloading = {};  // taskId -> true（防重复下载）
+  var taskPicked = {};       // taskId -> true（勾选待批量下载）
+  var taskListCache = [];    // 最近一次拉到的任务列表（供批量下载取文件名）
 
   async function refreshTaskList() {
     if (!enTaskList) return;
     var list = await queryTasks(taskMode);
+    taskListCache = list;
     if (enTaskTitle) enTaskTitle.textContent = taskMode === 'erase' ? '📥 去字幕任务' : '📥 超分任务';
-    if (enTaskHint) enTaskHint.textContent = list.length ? '共 ' + list.length + ' 条' : '';
+    // 清理已不存在的勾选（换模式/任务消失时）
+    var alive = {};
+    list.forEach(function (t) { alive[t.ID] = 1; });
+    Object.keys(taskPicked).forEach(function (id) { if (!alive[id]) delete taskPicked[id]; });
+    var doneCount = list.filter(function (t) { return t.status === 'succeeded'; }).length;
+    if (enTaskHint) {
+      var pickedN = Object.keys(taskPicked).length;
+      enTaskHint.textContent = list.length
+        ? ('共 ' + list.length + ' 条 · 已完成 ' + doneCount + (pickedN ? ' · 已选 ' + pickedN : ''))
+        : '';
+    }
     enTaskList.innerHTML = '';
-    if (!list.length) { enTaskList.innerHTML = '<div class="hint" style="padding:8px;">暂无任务</div>'; return; }
+    if (!list.length) { enTaskList.innerHTML = '<div class="hint" style="padding:8px;">暂无任务</div>'; syncTaskPickUI(); return; }
     list.forEach(function (t) {
       var row = document.createElement('div');
       row.style.cssText = 'display:flex;flex-direction:column;padding:4px 6px;border-bottom:1px dashed var(--border);';
-      // 主行：文件名 + 状态 + 下载按钮
+      // 主行：勾选框 + 文件名 + 状态 + 下载按钮
       var mainRow = document.createElement('div');
       mainRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+      var canPick = (t.status === 'succeeded' && !taskDownloading[t.ID]);
+      if (canPick) {
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'en-task-cb';
+        cb.checked = !!taskPicked[t.ID];
+        cb.title = '勾选后可批量下载';
+        cb.addEventListener('change', function () {
+          if (cb.checked) taskPicked[t.ID] = 1; else delete taskPicked[t.ID];
+          syncTaskPickUI();
+        });
+        mainRow.appendChild(cb);
+      } else {
+        var sp = document.createElement('span');
+        sp.className = 'en-task-cb-space';
+        mainRow.appendChild(sp);
+      }
       var nm = document.createElement('span');
       nm.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:600;font-size:11px;';
       nm.textContent = prettyName(t.sourceFileName);
@@ -690,7 +727,91 @@
       row.appendChild(metaRow);
       enTaskList.appendChild(row);
     });
+    syncTaskPickUI();
   }
+
+  // 同步「全选/下载选中」按钮状态
+  function syncTaskPickUI() {
+    var succeeded = taskListCache.filter(function (t) { return t.status === 'succeeded'; });
+    var pickedN = succeeded.filter(function (t) { return taskPicked[t.ID]; }).length;
+    if (enTaskPickAll) {
+      enTaskPickAll.checked = succeeded.length > 0 && pickedN === succeeded.length;
+      enTaskPickAll.indeterminate = pickedN > 0 && pickedN < succeeded.length;
+      enTaskPickAll.disabled = succeeded.length === 0;
+    }
+    if (enTaskDlSel) {
+      enTaskDlSel.disabled = pickedN === 0;
+      enTaskDlSel.textContent = pickedN ? ('⬇ 下载选中 (' + pickedN + ')') : '⬇ 下载选中';
+    }
+  }
+
+  // 批量下载勾选的任务（串行，避免同时打满磁盘/带宽）
+  async function downloadPicked() {
+    var ids = Object.keys(taskPicked).filter(function (id) { return taskPicked[id]; });
+    if (!ids.length) { log('请先勾选要下载的任务', 'err'); return; }
+    // 找出对应的任务与文件名
+    var jobs = [];
+    ids.forEach(function (id) {
+      var n = parseInt(id, 10);
+      var t = null;
+      for (var i = 0; i < taskListCache.length; i++) { if (taskListCache[i].ID === n) { t = taskListCache[i]; break; } }
+      if (t) jobs.push({ id: n, name: t.sourceFileName || '' });
+    });
+    if (!jobs.length) { log('勾选的任务已不存在，请刷新列表', 'err'); return; }
+
+    // 不占用 busy（那是导出/分离流程的），单独用一个标记防重入
+    if (batchDownloading) { log('批量下载已在进行中…', 'warn'); return; }
+    batchDownloading = true;
+    if (enTaskDlSel) enTaskDlSel.disabled = true;
+    if (enTaskPickAll) enTaskPickAll.disabled = true;
+    log('════ 批量下载 ' + jobs.length + ' 个任务 ════');
+    var okN = 0, failN = 0;
+    var prog = document.getElementById('enProgWrap');
+    var fill = document.getElementById('enProgFill');
+    var txt = document.getElementById('enProgText');
+    var pctEl = document.getElementById('enProgPct');
+    function setProg(pct, t) {
+      if (!prog) return;
+      prog.style.display = 'block';
+      if (fill) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (txt) txt.textContent = t || '';
+      if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+    }
+    try {
+      var dir = resultDir || (await resolveResultDir());
+      for (var k = 0; k < jobs.length; k++) {
+        if (stopFlag) { log('⏹ 已停止批量下载', 'warn'); break; }
+        var job = jobs[k];
+        setProg((k / jobs.length) * 100, '[' + (k + 1) + '/' + jobs.length + '] 下载 ' + prettyName(job.name));
+        var srcBase = String(job.name || ('task_' + job.id)).replace(/\.mp4$/i, '').replace(/_nosub$/i, '');
+        var saveName = srcBase + (taskMode === 'erase' ? '_erased.mp4' : '_720p.mp4');
+        try {
+          var f = await downloadTask(job.id, dir, saveName, null, taskMode);
+          if (f && fs.existsSync(f)) {
+            okN++;
+            delete taskPicked[job.id];
+            log('📥 [' + (k + 1) + '/' + jobs.length + '] 已下载：' + path.basename(f), 'ok');
+          } else {
+            failN++;
+            log('✗ [' + (k + 1) + '/' + jobs.length + '] 下载失败（任务 ' + job.id + '）', 'err');
+          }
+        } catch (e) {
+          failN++;
+          log('✗ 下载异常（任务 ' + job.id + '）：' + e.message, 'err');
+        }
+      }
+      setProg(100, '批量下载结束：成功 ' + okN + '，失败 ' + failN);
+      log('════ 批量下载结束：成功 ' + okN + ' / 失败 ' + failN + ' ════', failN ? 'warn' : 'ok');
+      if (okN) log('📁 文件已保存在：' + dir, 'ok');
+    } catch (e) {
+      log('✗ 批量下载中断：' + e.message, 'err');
+    } finally {
+      batchDownloading = false;
+      refreshTaskList();
+      setTimeout(function () { if (prog) { try { prog.style.display = 'none'; } catch (_) {} } }, 4000);
+    }
+  }
+  var batchDownloading = false;
 
   // 下载某已完成任务到项目根/超分结果 + 导入素材箱（带进度显示）
   var dlProgEls = {};   // taskId -> {row, mainRow, btn}
@@ -951,6 +1072,62 @@
       if (progWrap) setTimeout(function () { try { progWrap.style.display = 'none'; } catch (e) {} }, 3000);
     }
   }
+
+  // ===== 任务卡 / 日志卡 展开：占满面板（与内嵌站展开同一套交互）=====
+  (function () {
+    var STORE_X = 'vh_upscale_card_exp';   // '' | 'task' | 'log'
+
+    function setCardExpanded(which, save) {
+      var panel = document.getElementById('panel-upscale');
+      if (!panel) return;
+      // 先清掉旧态
+      panel.classList.remove('en-exp-task');
+      panel.classList.remove('en-exp-log');
+      function restore(btn) { if (btn) { btn.textContent = '⤢'; btn.title = '展开：占满面板（再点还原）'; } }
+      restore(enTaskExpand); restore(enLogExpand);
+      if (!which) {
+        if (save) { try { localStorage.setItem(STORE_X, ''); } catch (e) {} }
+        return;
+      }
+      if (which === 'task') {
+        panel.classList.add('en-exp-task');
+        if (enTaskExpand) { enTaskExpand.textContent = '⤡'; enTaskExpand.title = '还原：恢复并排布局'; }
+      } else {
+        panel.classList.add('en-exp-log');
+        if (enLogExpand) { enLogExpand.textContent = '⤡'; enLogExpand.title = '还原：恢复并排布局'; }
+      }
+      if (save) { try { localStorage.setItem(STORE_X, which); } catch (e) {} }
+    }
+
+    function toggle(which) {
+      var panel = document.getElementById('panel-upscale');
+      if (!panel) return;
+      var already = panel.classList.contains(which === 'task' ? 'en-exp-task' : 'en-exp-log');
+      setCardExpanded(already ? '' : which, true);
+    }
+
+    if (enTaskExpand) enTaskExpand.addEventListener('click', function () { toggle('task'); });
+    if (enLogExpand) enLogExpand.addEventListener('click', function () { toggle('log'); });
+    if (enLogClear) enLogClear.addEventListener('click', function () { if (enLog) enLog.innerHTML = ''; });
+
+    // 恢复上次
+    var saved = '';
+    try { saved = localStorage.getItem(STORE_X) || ''; } catch (e) {}
+    if (saved === 'task' || saved === 'log') setCardExpanded(saved, false);
+
+    // 绑定批量下载相关
+    if (enTaskPickAll) {
+      enTaskPickAll.addEventListener('change', function () {
+        var on = enTaskPickAll.checked;
+        taskListCache.forEach(function (t) {
+          if (t.status !== 'succeeded') return;
+          if (on) taskPicked[t.ID] = 1; else delete taskPicked[t.ID];
+        });
+        refreshTaskList();
+      });
+    }
+    if (enTaskDlSel) enTaskDlSel.addEventListener('click', downloadPicked);
+  })();
 
   function init() {
     if (!enGo || !enSeqList) return;  // 元素不存在（其它面板被禁用时）

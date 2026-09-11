@@ -933,13 +933,26 @@
             </div>
             <!-- 卡2：任务(左) + 日志(右) 并排 -->
             <div class="en-split">
-                <div class="en-card en-col">
-                    <div class="en-card-head"><span id="enTaskTitle">📥 超分任务</span><button id="enTaskRefresh" class="secondary mini" style="margin-left:auto;">🔄</button></div>
+                <div class="en-card en-col" id="enTaskCard">
+                    <div class="en-card-head">
+                        <span id="enTaskTitle">📥 超分任务</span>
+                        <label class="en-pickall" title="全选/取消全选已完成的任务">
+                            <input type="checkbox" id="enTaskPickAll">
+                            <span>全选</span>
+                        </label>
+                        <button id="enTaskDlSel" class="secondary mini" disabled>⬇ 下载选中</button>
+                        <button id="enTaskRefresh" class="secondary mini">🔄</button>
+                        <button id="enTaskExpand" class="wb-nav-btn en-card-exp" title="展开：任务列表占满面板（再点还原）">⤢</button>
+                    </div>
                     <div class="en-task-hint" id="enTaskHint"></div>
                     <div id="enTaskList" class="en-tasks"><div class="hint" style="padding:6px;">暂无</div></div>
                 </div>
-                <div class="en-card en-col">
-                    <div class="en-card-head"><span>📋 运行日志</span></div>
+                <div class="en-card en-col" id="enLogCard">
+                    <div class="en-card-head">
+                        <span>📋 运行日志</span>
+                        <button id="enLogClear" class="secondary mini" style="margin-left:auto;">清空</button>
+                        <button id="enLogExpand" class="wb-nav-btn en-card-exp" title="展开：日志占满面板（再点还原）">⤢</button>
+                    </div>
                     <div class="en-log" id="enLog"></div>
                 </div>
             </div>

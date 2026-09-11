@@ -2680,3 +2680,41 @@
         }
         #panel-sep .sep-res-btn:hover { color: var(--accent); border-color: var(--accent); }
         #panel-sep .sep-res-del:hover { color: var(--fg-err-soft); border-color: var(--fg-err-soft); }
+
+        /* ===== 超分面板：任务卡 / 日志卡 展开态 + 批量下载勾选 ===== */
+        #panel-upscale .en-card-head { display: flex; align-items: center; gap: 6px; }
+        #panel-upscale .en-card-exp {
+            flex: 0 0 auto; height: 20px; min-width: 22px; padding: 0 4px;
+            font-size: 11px; color: var(--muted);
+        }
+        #panel-upscale .en-card-exp:hover { color: var(--accent); border-color: var(--accent); }
+        #panel-upscale .en-pickall {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 10.5px; color: var(--muted); cursor: pointer;
+            user-select: none; -webkit-user-select: none;
+        }
+        #panel-upscale .en-pickall input { cursor: pointer; }
+        #panel-upscale .en-task-cb { flex: 0 0 auto; cursor: pointer; margin: 0; }
+        #panel-upscale .en-task-cb-space { flex: 0 0 auto; width: 13px; }
+
+        /* 任务卡展开：占满整个面板滚动区，隐藏日志卡与内嵌站 */
+        #panel-upscale.en-exp-task .en-scroll,
+        #panel-upscale.en-exp-log .en-scroll { overflow: hidden; }
+        #panel-upscale.en-exp-task .en-card:not(#enTaskCard),
+        #panel-upscale.en-exp-task #enLogCard,
+        #panel-upscale.en-exp-task .en-splitter,
+        #panel-upscale.en-exp-task #upNav,
+        #panel-upscale.en-exp-task #upscaleFrame { display: none !important; }
+        #panel-upscale.en-exp-task .en-split { height: 100%; min-height: 0; }
+        #panel-upscale.en-exp-task #enTaskCard { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        #panel-upscale.en-exp-task #enTaskList { flex: 1 1 auto; max-height: none; overflow-y: auto; }
+
+        /* 日志卡展开：同理 */
+        #panel-upscale.en-exp-log .en-card:not(#enLogCard),
+        #panel-upscale.en-exp-log #enTaskCard,
+        #panel-upscale.en-exp-log .en-splitter,
+        #panel-upscale.en-exp-log #upNav,
+        #panel-upscale.en-exp-log #upscaleFrame { display: none !important; }
+        #panel-upscale.en-exp-log .en-split { height: 100%; min-height: 0; }
+        #panel-upscale.en-exp-log #enLogCard { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+        #panel-upscale.en-exp-log #enLog { flex: 1 1 auto; max-height: none; overflow-y: auto; }
