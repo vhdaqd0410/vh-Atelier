@@ -51,18 +51,22 @@
     }
 
     // ---------- fetch 封装 ----------
+    // 失败时尽量带上 HTTP 状态与响应片段，避免所有错误都变成笼统的「响应解析失败」
     function api(pathname) {
         return new Promise(function (resolve, reject) {
             var xhr = new XMLHttpRequest();
             xhr.open('GET', API + pathname, true);
             xhr.timeout = 8000;
             xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
-                    try { resolve(JSON.parse(xhr.responseText)); }
-                    catch (e) { reject(new Error('响应解析失败')); }
+                if (xhr.readyState !== 4) return;
+                if (xhr.status === 0) { reject(new Error('连不上本地服务（' + API + '）')); return; }
+                var txt = xhr.responseText || '';
+                try { resolve(JSON.parse(txt)); }
+                catch (e) {
+                    reject(new Error('响应解析失败（HTTP ' + xhr.status + '，返回：' + txt.slice(0, 80).replace(/\s+/g, ' ') + '）'));
                 }
             };
-            xhr.onerror = function () { reject(new Error('无法连接本地服务')); };
+            xhr.onerror = function () { reject(new Error('无法连接本地服务（' + API + '）')); };
             xhr.ontimeout = function () { reject(new Error('请求超时')); };
             xhr.send();
         });
@@ -75,12 +79,15 @@
             xhr.timeout = 8000;
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
-                    try { resolve(JSON.parse(xhr.responseText)); }
-                    catch (e) { reject(new Error('响应解析失败')); }
+                if (xhr.readyState !== 4) return;
+                if (xhr.status === 0) { reject(new Error('连不上本地服务（' + API + '）')); return; }
+                var txt = xhr.responseText || '';
+                try { resolve(JSON.parse(txt)); }
+                catch (e) {
+                    reject(new Error('响应解析失败（HTTP ' + xhr.status + '，返回：' + txt.slice(0, 80).replace(/\s+/g, ' ') + '）'));
                 }
             };
-            xhr.onerror = function () { reject(new Error('无法连接本地服务')); };
+            xhr.onerror = function () { reject(new Error('无法连接本地服务（' + API + '）')); };
             xhr.ontimeout = function () { reject(new Error('请求超时')); };
             xhr.send(JSON.stringify(body || {}));
         });
@@ -626,7 +633,11 @@
             });
         };
         // 首次也刷一次 cookie 状态
-        refreshCookieBar();
+        // 注意：面板加载时视频服务通常还没起来（懒启动只在切到本板块时触发），
+        // 这里只做装饰性刷新——服务未起时不报错，避免每次开插件都往日志写一条失败
+        setTimeout(function () {
+            api('/health').then(function () { refreshCookieBar(); }).catch(function () { /* 服务未就绪，静默 */ });
+        }, 300);
         renderHistory();
     }
 
