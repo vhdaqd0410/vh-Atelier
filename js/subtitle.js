@@ -47,7 +47,6 @@
         bilingual: document.getElementById('btnBilingual'),
         btnSeparate: document.getElementById('btnSeparate'),
         btnImportVocals: document.getElementById('btnImportVocals'),
-        btnImportAccomp: document.getElementById('btnImportAccomp'),
         btnSepClear: document.getElementById('btnSepClear'),
         sepResultList: document.getElementById('sepResultList'),
         sepProgressWrap: document.getElementById('sepProgressWrap'),
@@ -909,8 +908,6 @@
                         }
                         sepVocalsPath = outVocals;
                         sepAccompPath = fs.existsSync(outAccomp) ? outAccomp : null;
-                        el.btnImportVocals.disabled = false;
-                        if (sepAccompPath) el.btnImportAccomp.disabled = false;
                         setSepBusy(false);
                         // 列出结果（可试听 / 拖拽 / 导入），源名取选中片段名
                         addSepResult('vocals', outVocals, clipName, clip.mediaPath);
@@ -924,10 +921,6 @@
 
     function importVocals() {
         importToBin(sepResults.map(function (r) { return r.path; }), '全部分离结果');
-    }
-
-    function importAccomp() {
-        importToBin([sepAccompPath], '伴奏');
     }
 
     // ---------- 分离结果列表（试听 / 拖拽进时间轴 / 导入素材箱）----------
@@ -1153,10 +1146,9 @@
 
     function setSepBusy(busy) {
         sepBusy = busy;
-        el.btnSeparate.disabled = busy;
+        if (el.btnSeparate) el.btnSeparate.disabled = busy;
         // 「全部导入」按结果列表里有没有可用文件决定
-        el.btnImportVocals.disabled = busy || sepResults.length === 0;
-        el.btnImportAccomp.disabled = busy || !sepAccompPath;
+        if (el.btnImportVocals) el.btnImportVocals.disabled = busy || sepResults.length === 0;
         if (busy) {
             el.sepProgressWrap.classList.add('show');
             el.sepProgressFill.className = 'fill indet';
@@ -1183,7 +1175,6 @@
 
     el.btnSeparate.addEventListener('click', separateVocals);
     el.btnImportVocals.addEventListener('click', importVocals);
-    el.btnImportAccomp.addEventListener('click', importAccomp);
     if (el.btnSepClear) el.btnSepClear.addEventListener('click', clearSepResults);
     renderSepResults();
 
