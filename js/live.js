@@ -310,32 +310,102 @@
     }
 
     // ---------- 观看 ----------
-    // 直播流地址带时效与防盗链，直接用 yt-dlp -g 拿一次直链喂给 <video>
+    // CEP 是 Chromium 桌面内核：<video> 原生不支持 HLS(m3u8)，也不能放 FLV。
+    // 所以按流类型选播放器：
+    //   .m3u8  → hls.js（MediaSource 解封装）
+    //   .flv   → flv.js
+    //   其它   → 交给 <video> 原生（mp4 等）
+    var hlsInst = null;
+    var flvInst = null;
+
+    function destroyPlayers() {
+        try { if (hlsInst) { hlsInst.destroy(); hlsInst = null; } } catch (e) {}
+        try { if (flvInst) { flvInst.destroy(); flvInst = null; } } catch (e) {}
+    }
+
+    function guessStreamType(u) {
+        var s = String(u || '').toLowerCase()
+        if (/\.m3u8($|\?)/.test(s) || /m3u8/.test(s)) return 'hls'
+        if (/\.flv($|\?)/.test(s) || /flv/.test(s)) return 'flv'
+        return 'native'
+    }
+
+    function playStream(url) {
+        var v = $('lvVideo');
+        var kind = guessStreamType(url);
+        destroyPlayers();
+        $('lvVideoMask').style.display = 'none';
+        $('lvThumb').style.display = 'none';
+
+        if (kind === 'hls' && typeof Hls !== 'undefined' && Hls.isSupported()) {
+            hlsInst = new Hls({ enableWorker: false, lowLatencyMode: true, liveSyncDurationCount: 3 });
+            hlsInst.loadSource(url);
+            hlsInst.attachMedia(v);
+            hlsInst.on(Hls.Events.MANIFEST_PARSED, function () { v.play().catch(function () {}); });
+            hlsInst.on(Hls.Events.ERROR, function (evt, data) {
+                if (data && data.fatal) flash('直播流错误：' + (data.details || data.type), true);
+            });
+            return true;
+        }
+        if (kind === 'flv' && typeof flvjs !== 'undefined' && flvjs.isSupported()) {
+            flvInst = flvjs.createPlayer({ type: 'flv', url: url, isLive: true }, { enableWorker: false });
+            flvInst.attachMediaElement(v);
+            flvInst.load();
+            flvInst.play().catch(function () {});
+            flvInst.on(flvjs.Events.ERROR, function (e, d) { flash('直播流错误：' + (d || e), true); });
+            return true;
+        }
+        // 原生（mp4 等），或库不可用时退回原生
+        v.src = url;
+        var pr = v.play();
+        if (pr && pr.catch) pr.catch(function () {
+            flash('无法直接播放该流，建议点「外部播放」用本地播放器看', true);
+        });
+        if (kind === 'hls' && (typeof Hls === 'undefined' || !Hls.isSupported())) {
+            flash('hls.js 未加载或不被支持，无法播放 HLS 直播', true);
+        }
+        return true;
+    }
+
     function watch() {
         if (!curInfo) return;
         var q = $('lvQuality').value || '';
         flash('获取播放地址…');
-        var u = '/parse?url=' + encodeURIComponent(curInfo.roomUrl);
-        ensureServer().then(function () { return api(u); }).then(function (info) {
-            // 选指定画质
-            var target = info.streamUrl;
-            if (q) {
-                var f = (info.formats || []).filter(function (x) { return x.formatId === q; })[0];
-                if (f) target = f.formatId;
-            }
+        ensureServer().then(function () {
+            var sub = '/stream?url=' + encodeURIComponent(curInfo.roomUrl);
+            if (q) sub += '&format=' + encodeURIComponent(q);
+            return api(sub, { timeout: 90000 });
+        }).then(function (d) {
+            var target = (d && d.streamUrl) || '';
             if (!target) throw new Error('没拿到可播放的流地址');
             curStreamUrl = target;
-            var v = $('lvVideo');
-            v.src = target;
-            $('lvVideoMask').style.display = 'none';
-            $('lvThumb').style.display = 'none';
-            v.play().catch(function () {});
+            playStream(target);
             $('lvStopWatch').disabled = false;
-            flash('开始播放（直播流，画质取决于平台）');
+            var kind = guessStreamType(target);
+            flash('开始播放（' + (kind === 'hls' ? 'HLS' : kind === 'flv' ? 'FLV' : '直链') + '）');
         }).catch(function (e) { flash('播放失败：' + e.message, true); });
     }
 
+    // 用系统默认播放器打开直播流（PotPlayer/VLC 等；看流比面板内更稳）
+    function openExternal() {
+        if (!curStreamUrl) { flash('请先点「观看」获取到播放地址', true); return; }
+        var q = $('lvQuality').value || '';
+        // 若有选择具体画质，重新取一次对应直链
+        ensureServer().then(function () {
+            var sub = '/stream?url=' + encodeURIComponent(curInfo.roomUrl);
+            if (q) sub += '&format=' + encodeURIComponent(q);
+            return api(sub, { timeout: 90000 });
+        }).then(function (d) {
+            var u = (d && d.streamUrl) || curStreamUrl;
+            try {
+                require('child_process').exec('start "" "' + u.replace(/"/g, '') + '"');
+                flash('已交给系统默认播放器打开');
+            } catch (e) { flash('外部打开失败：' + e.message, true); }
+        }).catch(function (e) { flash('外部打开失败：' + e.message, true); });
+    }
+
     function stopWatch() {
+        destroyPlayers();
         var v = $('lvVideo');
         try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {}
         curStreamUrl = '';
@@ -576,6 +646,7 @@
         if ($('lvMore')) $('lvMore').addEventListener('click', function () { curPage++; loadList(false); });
         if ($('lvWatch')) $('lvWatch').addEventListener('click', watch);
         if ($('lvStopWatch')) $('lvStopWatch').addEventListener('click', stopWatch);
+        if ($('lvExternal')) $('lvExternal').addEventListener('click', openExternal);
         if ($('lvStartRec')) $('lvStartRec').addEventListener('click', startRec);
         if ($('lvStopRec')) $('lvStopRec').addEventListener('click', stopRec);
         if ($('lvRecRefresh')) $('lvRecRefresh').addEventListener('click', refreshRecs);

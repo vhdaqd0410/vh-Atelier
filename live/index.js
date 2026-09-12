@@ -126,28 +126,58 @@ function parseLive(link, cb) {
           acodec: f.acodec || ''
         })
       })
-      // 默认取最佳单文件（直播通常单流，避免合流等待）
-      let streamUrl = j.url || ''
-      let streamExt = j.ext || ''
-      if (!streamUrl && formats.length) {
-        const best = formats.slice().sort(function (a, b) { return (b.height || 0) - (a.height || 0) })[0]
-        streamUrl = best.formatId || ''
-        streamExt = best.ext || ''
-      }
+      // 注意：直播的播放地址不能从 -J 的顶层 url/formats 拿（常常为空），
+      // 要用 getStreamUrl()（yt-dlp -g）单独取。这里只回元信息。
       cb(null, {
         platform: plat,
         isLive: isLive,
         title: j.title || '',
         uploader: j.uploader || j.channel || '',
         roomUrl: link,
-        streamUrl: streamUrl,
-        streamExt: streamExt,
+        streamUrl: '',          // 播放地址请调 /stream（-g）
+        streamExt: j.ext || '',
         formats: formats,
         thumbnail: j.thumbnail || ''
       })
     })
   } catch (e) {
     return cb(new Error('启动解析失败: ' + e.message))
+  }
+}
+
+// 取播放直链：用 yt-dlp -g（--get-url）拿真正的流地址
+// 不同于 -J（元信息），-g 才会给出可直接喂给播放器/ffmpeg 的 URL。
+// 传入可选的 formatId 时，取该格式的直链。
+function getStreamUrl(link, formatId, cb) {
+  const plat = platformOf(link)
+  if (!plat) return cb(new Error('无法识别的直播间链接'))
+  if (!fs.existsSync(YTDLP)) return cb(new Error('yt-dlp.exe 缺失'))
+
+  const args = baseArgs().concat(['-g'])
+  if (formatId) args.push('-f', String(formatId))
+  args.push(link)
+
+  try {
+    childProcess.execFile(YTDLP, args, { timeout: 90000, maxBuffer: 1024 * 1024 * 16, windowsHide: true }, function (err, stdout, stderr) {
+      if (err) {
+        const msg = String((stderr || '') + (err.message || '')).toLowerCase()
+        if (/not currently live|is not live|offline|未开播/.test(msg)) {
+          return cb(new Error('当前未开播'))
+        }
+        return cb(new Error('取流地址失败: ' + String(err.message || err).split('\n')[0]))
+      }
+      // -g 可能返回多行（视频流/音频流），直播通常单行
+      const urls = String(stdout || '').split('\n').map(function (s) { return s.trim() }).filter(Boolean)
+      if (!urls.length) return cb(new Error('未取到播放地址（可能未开播或需要 Cookie）'))
+      // 取第一个符合条件的 http(s) 地址
+      const u = urls.filter(function (x) { return /^https?:\/\//i.test(x) })[0] || urls[0]
+      if (!/^https?:\/\//i.test(u)) {
+        return cb(new Error('取到的不是有效地址：' + u.slice(0, 60)))
+      }
+      cb(null, { streamUrl: u, alternates: urls.length > 1 ? urls.slice(1, 4) : [] })
+    })
+  } catch (e) {
+    return cb(new Error('启动 yt-dlp 失败: ' + e.message))
   }
 }
 
@@ -182,25 +212,27 @@ function startRecord(link, quality, cb) {
     const base = safeName(rec.platformCN + '_' + rec.title + '_' + stamp)
     rec.segmentMkv = path.join(OUT_DIR, base + '.mkv')
 
-    // ffmpeg 拉流转存 mkv：
-    //   -c copy 不转码（省 CPU，画质无损）
-    //   -t 上限 4 小时
-    //   自动重连（直播断流常见）
-    const args = [
-      '-hide_banner', '-loglevel', 'warning',
-      '-rw_timeout', '15000000',
-      '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '30',
-      '-i', info.streamUrl || link,
-      '-c', 'copy',
-      '-t', String(REC_MAX_MINUTES * 60),
-      '-y', rec.segmentMkv
-    ]
+    // 用 yt-dlp 直接录制（而不是自己拿直链喂 ffmpeg）：
+    //   yt-dlp 自己会做提取/重连/断流恢复，是录直播的标准做法；
+    //   直链有时效，长时录制中途失效会直接断，交给 yt-dlp 更稳。
+    //   --hls-use-mpegts：HLS 写 mpegts 流式落盘，中途停止时文件仍可播放（关键）；
+    //   -o 指定 .mkv：容器耐崩溃，录完再无损 remux 成 mp4。
+    const args = baseArgs().concat([
+      '--hls-use-mpegts',
+      '--no-part',
+      '--no-playlist',
+      '--retries', '20',
+      '--fragment-retries', '20',
+      '--no-check-certificates',
+      '-o', rec.segmentMkv,
+      link
+    ])
 
     let child
     try {
-      child = childProcess.spawn(FFMPEG, args, { windowsHide: true })
+      child = childProcess.spawn(YTDLP, args, { windowsHide: true })
     } catch (e) {
-      rec.status = 'error'; rec.err = '启动 ffmpeg 失败: ' + e.message
+      rec.status = 'error'; rec.err = '启动 yt-dlp 失败: ' + e.message
       return cb(null, id)
     }
     rec.child = child
@@ -213,10 +245,19 @@ function startRecord(link, quality, cb) {
       errBuf += s
       if (errBuf.length > 20000) errBuf = errBuf.slice(-10000)
     })
+    // 4 小时上限：yt-dlp 没有内建的时长限制，到点自动停（走与手动停止相同的收尾流程）
+    const maxTimer = setTimeout(function () {
+      if (rec.status === 'recording') {
+        rec.log.push('已达 ' + REC_MAX_MINUTES + ' 分钟上限，自动停止')
+        stopRecord(rec.id, function () {})
+      }
+    }, REC_MAX_MINUTES * 60 * 1000)
+    rec.maxTimer = maxTimer
     child.on('error', function (e) {
       rec.status = 'error'; rec.err = e.message
     })
     child.on('close', function (code) {
+      if (rec.maxTimer) { try { clearTimeout(rec.maxTimer) } catch (e) {} rec.maxTimer = null }
       rec.stoppedAt = Date.now()
       rec.minutes = Math.max(1, Math.round((rec.stoppedAt - rec.startedAt) / 60000))
       if (rec.status === 'error') return
@@ -266,8 +307,9 @@ function stopRecord(id, cb) {
   if (!rec) return cb(new Error('录制任务不存在'))
   if (rec.status !== 'recording') return cb(new Error('该任务已结束（' + rec.status + '）'))
   rec.status = 'stopping'
+  if (rec.maxTimer) { try { clearTimeout(rec.maxTimer) } catch (e) {} rec.maxTimer = null }
   try {
-    // Windows 下 ffmpeg 需要 taskkill 才能干净退出（SIGTERM 可能导致文件不完整）
+    // Windows 下需要 taskkill 才能让 yt-dlp/ffmpeg 干净退出并封好容器
     if (rec.child && rec.child.pid) {
       childProcess.exec('taskkill /PID ' + rec.child.pid + ' /T /F', { windowsHide: true }, function () {})
     } else if (rec.child) {
@@ -574,6 +616,16 @@ const server = http.createServer(function (req, res) {
       parseLive(link, function (err, info) {
         if (err) return json(res, fail(err.message))
         json(res, ok(info))
+      })
+      return
+    }
+
+    if (p === '/stream') {   // 取播放直链（yt-dlp -g）
+      const link = (q.url || '').trim()
+      if (!link) return json(res, fail('缺少 url'))
+      getStreamUrl(link, q.format || '', function (err, d) {
+        if (err) return json(res, fail(err.message))
+        json(res, ok(d))
       })
       return
     }
