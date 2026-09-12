@@ -760,7 +760,25 @@
             <div class="lv-hint">快手暂不支持（yt-dlp 无对应直播解析）</div>
         </div>
 
-        <!-- 2. 播放 + 信息 -->
+        <!-- 2. 平台推荐 / 搜索 -->
+        <div class="lv-card">
+            <div class="lv-plat-bar">
+                <button class="lv-plat active" data-plat="douyu">斗鱼</button>
+                <button class="lv-plat" data-plat="huya">虎牙</button>
+                <button class="lv-plat" data-plat="bilibili">哔哩哔哩</button>
+                <button class="lv-plat" data-plat="douyin">抖音</button>
+                <span class="lv-plat-hint" id="lvPlatHint"></span>
+            </div>
+            <div class="lv-row" style="margin-bottom:8px;">
+                <input type="text" id="lvKw" placeholder="搜索主播/房间名（回车搜索；空则看推荐）">
+                <button id="lvSearch" class="tbtn">搜索</button>
+                <button id="lvRec" class="tbtn" title="加载该平台推荐">🔥 推荐</button>
+                <button id="lvMore" class="tbtn">加载更多</button>
+            </div>
+            <div id="lvGrid" class="lv-grid"><div class="lv-empty">选平台后点「推荐」或搜索</div></div>
+        </div>
+
+        <!-- 3. 播放 + 信息 -->
         <div class="lv-card" id="lvPlayCard" style="display:none;">
             <div class="lv-thumb-wrap">
                 <video id="lvVideo" controls playsinline preload="none"></video>
@@ -776,7 +794,7 @@
                 <button id="lvWatch" class="tbtn primary" disabled>▶ 观看</button>
                 <button id="lvStopWatch" class="tbtn" disabled>■ 停止播放</button>
                 <select id="lvQuality" title="画质"></select>
-                <button id="lvRec" class="tbtn" disabled>⏺ 开始录制</button>
+                <button id="lvStartRec" class="tbtn" disabled>⏺ 开始录制</button>
                 <button id="lvStopRec" class="tbtn" disabled>■ 停止录制</button>
                 <button id="lvOpenDir" class="tbtn">打开录制目录</button>
             </div>

@@ -19,6 +19,10 @@
     var curRecId = '';       // 当前正在录制的任务 id
     var recTimer = null;     // 录制轮询
     var curStreamUrl = '';   // 当前播放地址
+    var curPlat = 'douyu';   // 当前平台
+    var curPage = 1;         // 当前推荐/搜索页码
+    var curKw = '';          // 当前搜索词（空 = 推荐模式）
+    var lastList = [];       // 当前列表（供加载更多去重）
 
     function $(id) { return document.getElementById(id); }
 
@@ -117,8 +121,135 @@
         el.className = 'lv-badge' + (h.hasFfmpeg ? ' ok' : ' err');
     }
 
+    // ---------- 平台推荐 / 搜索 ----------
+    function setPlat(plat) {
+        curPlat = plat;
+        curPage = 1;
+        curKw = '';
+        lastList = [];
+        var bar = document.querySelectorAll('#panel-live .lv-plat');
+        for (var i = 0; i < bar.length; i++) {
+            bar[i].className = 'lv-plat' + (bar[i].getAttribute('data-plat') === plat ? ' active' : '');
+        }
+        var ph = $('lvPlatHint');
+        if (ph) {
+            if (plat === 'huya') ph.textContent = '虎牙搜索接口已关闭，仅支持推荐';
+            else if (plat === 'douyin') ph.textContent = '抖音仅支持推荐（搜索需签名）';
+            else ph.textContent = '';
+        }
+        loadList(true);
+    }
+
+    function loadList(reset) {
+        if (reset) { curPage = 1; lastList = []; }
+        var kw = ($('lvKw').value || '').trim();
+        curKw = kw;
+        var grid = $('lvGrid');
+        if (reset && grid) grid.innerHTML = '<div class="lv-empty">加载中…</div>';
+        ensureServer().then(function () {
+            var sub;
+            if (kw) {
+                sub = '/search?platform=' + curPlat + '&kw=' + encodeURIComponent(kw) + '&page=' + curPage;
+            } else {
+                sub = '/recommend?platform=' + curPlat + '&page=' + curPage;
+            }
+            return api(sub, { timeout: 30000 });
+        }).then(function (d) {
+            var list = (d && d.list) || [];
+            if (curPage > 1) list = lastList.concat(list);
+            lastList = list;
+            renderGrid(list);
+            if (!list.length) {
+                var tip = kw ? ('没有搜到「' + kw + '」') : '这个平台暂时没拉到推荐';
+                if (curPlat === 'huya' && kw) tip += '（虎牙不支持搜索）';
+                if (curPlat === 'douyin' && kw) tip += '（抖音不支持搜索）';
+                flash(tip, true);
+            } else {
+                flash('已加载 ' + list.length + ' 个直播间');
+            }
+        }).catch(function (e) {
+            if (grid) grid.innerHTML = '<div class="lv-empty">加载失败：' + esc(e.message) + '</div>';
+            flash(e.message, true);
+        });
+    }
+
+    function renderGrid(list) {
+        var grid = $('lvGrid');
+        if (!grid) return;
+        if (!list.length) { grid.innerHTML = '<div class="lv-empty">没有可展示的直播间</div>'; return; }
+        grid.innerHTML = '';
+        list.forEach(function (r) {
+            var card = document.createElement('div');
+            card.className = 'lv-cell';
+            card.title = (r.title || '') + (r.uname ? ('\n主播：' + r.uname) : '') + (r.online ? ('\n热度：' + r.online) : '');
+
+            var coverBox = document.createElement('div');
+            coverBox.className = 'lv-cell-cover';
+            if (r.cover) {
+                var img = document.createElement('img');
+                img.src = r.cover;
+                img.alt = '';
+                img.loading = 'lazy';
+                img.onerror = function () { img.style.display = 'none'; };
+                coverBox.appendChild(img);
+            }
+            var tag = document.createElement('span');
+            tag.className = 'lv-cell-plat';
+            tag.textContent = r.platformCN || '';
+            coverBox.appendChild(tag);
+            card.appendChild(coverBox);
+
+            var t = document.createElement('div');
+            t.className = 'lv-cell-title';
+            t.textContent = r.title || '(无标题)';
+            card.appendChild(t);
+
+            var s = document.createElement('div');
+            s.className = 'lv-cell-sub';
+            var bits = [r.uname || '', r.areaName || ''];
+            if (r.online) bits.push('热 ' + r.online);
+            s.textContent = bits.filter(Boolean).join(' · ');
+            card.appendChild(s);
+
+            var acts = document.createElement('div');
+            acts.className = 'lv-cell-acts';
+            var bView = document.createElement('button');
+            bView.className = 'tbtn mini';
+            bView.textContent = '▶ 看';
+            bView.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                $('lvUrl').value = r.url;
+                parse(function () { watch(); });
+            });
+            var bRec = document.createElement('button');
+            bRec.className = 'tbtn mini';
+            bRec.textContent = '⏺ 录';
+            bRec.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                $('lvUrl').value = r.url;
+                parse(function () { startRec(); });
+            });
+            var bFav = document.createElement('button');
+            bFav.className = 'tbtn mini';
+            bFav.textContent = '☆';
+            bFav.title = '关注';
+            bFav.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                favAction('add', r.url, r.uname || r.title || '');
+            });
+            acts.appendChild(bView); acts.appendChild(bRec); acts.appendChild(bFav);
+            card.appendChild(acts);
+
+            card.addEventListener('click', function () {
+                $('lvUrl').value = r.url;
+                parse();
+            });
+            grid.appendChild(card);
+        });
+    }
+
     // ---------- 解析 ----------
-    function parse() {
+    function parse(afterOk) {
         var link = ($('lvUrl').value || '').trim();
         if (!link) { flash('请先粘贴直播间链接', true); return; }
         flash('解析中…（首次可能要几秒）');
@@ -130,6 +261,7 @@
             renderInfo(info);
             if (info.isLive) flash('已解析：' + (info.title || info.uploader || '') + '（正在直播）');
             else flash('已解析：当前未开播');
+            if (typeof afterOk === 'function') afterOk(info);
         }).catch(function (e) {
             curInfo = null;
             renderInfo(null);
@@ -173,7 +305,7 @@
 
         var canWatch = info.isLive && !!info.streamUrl;
         $('lvWatch').disabled = !canWatch;
-        $('lvRec').disabled = !canWatch;
+        $('lvStartRec').disabled = !canWatch;
         if (!info.isLive) $('lvWatch').disabled = true;
     }
 
@@ -222,7 +354,7 @@
             return api('/record?url=' + encodeURIComponent(curInfo.roomUrl), { method: 'POST', timeout: 120000 });
         }).then(function (d) {
             curRecId = d.id;
-            $('lvRec').disabled = true;
+            $('lvStartRec').disabled = true;
             $('lvStopRec').disabled = false;
             flash('录制已启动（mkv 落盘，结束后自动转 mp4）');
             refreshRecs();
@@ -261,12 +393,12 @@
             var mine = list.filter(function (r) { return r.id === curRecId; })[0];
             if (curRecId && mine) {
                 var running = (mine.status === 'recording' || mine.status === 'starting' || mine.status === 'stopping' || mine.status === 'remuxing');
-                $('lvRec').disabled = running;
+                $('lvStartRec').disabled = running;
                 $('lvStopRec').disabled = !(mine.status === 'recording');
                 if (!running) {
                     curRecId = '';
                     stopRecPoll();
-                    $('lvRec').disabled = !(curInfo && curInfo.isLive);
+                    $('lvStartRec').disabled = !(curInfo && curInfo.isLive);
                     $('lvStopRec').disabled = true;
                     if (mine.status === 'done') flash('录制完成，已转 mp4');
                 }
@@ -430,12 +562,21 @@
 
     // ---------- 事件 ----------
     function bind() {
-        if ($('lvParse')) $('lvParse').addEventListener('click', parse);
+        if ($('lvParse')) $('lvParse').addEventListener('click', function () { parse(); });
         if ($('lvUrl')) $('lvUrl').addEventListener('keydown', function (e) { if (e.key === 'Enter') parse(); });
         if ($('lvFav')) $('lvFav').addEventListener('click', addFav);
+        // 平台切换
+        var pbtns = document.querySelectorAll('#panel-live .lv-plat');
+        for (var pi = 0; pi < pbtns.length; pi++) {
+            pbtns[pi].addEventListener('click', function () { setPlat(this.getAttribute('data-plat')); });
+        }
+        if ($('lvSearch')) $('lvSearch').addEventListener('click', function () { loadList(true); });
+        if ($('lvKw')) $('lvKw').addEventListener('keydown', function (e) { if (e.key === 'Enter') loadList(true); });
+        if ($('lvRec')) $('lvRec').addEventListener('click', function () { $('lvKw').value = ''; loadList(true); });
+        if ($('lvMore')) $('lvMore').addEventListener('click', function () { curPage++; loadList(false); });
         if ($('lvWatch')) $('lvWatch').addEventListener('click', watch);
         if ($('lvStopWatch')) $('lvStopWatch').addEventListener('click', stopWatch);
-        if ($('lvRec')) $('lvRec').addEventListener('click', startRec);
+        if ($('lvStartRec')) $('lvStartRec').addEventListener('click', startRec);
         if ($('lvStopRec')) $('lvStopRec').addEventListener('click', stopRec);
         if ($('lvRecRefresh')) $('lvRecRefresh').addEventListener('click', refreshRecs);
         if ($('lvFavCheck')) $('lvFavCheck').addEventListener('click', checkFavStatus);
@@ -459,6 +600,12 @@
             syncHealth(h);
             refreshRecs();
             loadFavs();
+            // 首次进入自动拉一次推荐
+            var grid = $('lvGrid');
+            if (grid && grid.getAttribute('data-loaded') !== '1') {
+                grid.setAttribute('data-loaded', '1');
+                loadList(true);
+            }
         }).catch(function (e) {
             syncHealth(null);
             flash(e.message, true);

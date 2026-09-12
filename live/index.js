@@ -277,6 +277,253 @@ function stopRecord(id, cb) {
   cb(null)
 }
 
+// ---------- 平台推荐 / 分类 / 搜索 ----------
+// 说明：这部分不能用 yt-dlp（它只能解析给定链接），改为直连各平台站点 API。
+// 接口来源与可用性均实测确认（2026-09）：
+//   斗鱼 推荐 japi/weblist/apinc/allpage  搜索 japi/search/api/searchShow  分类 m.douyu.com/api/cate/list
+//   虎牙 推荐 cache.php?m=LiveList          （无公开搜索 JSON 接口，搜索走站点页）
+//   B站  推荐 room/v1/Area/getRoomList（旧接口可用，新接口需 wbi 签名）  搜索 web-interface/search/type
+//   抖音 首页 HTML 内嵌 webcast 数据，从中提取在播房间
+
+const httpMod = require('http')
+const httpsMod = require('https')
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+
+// 通用 GET（支持重定向），返回 string
+function httpGet(uri, headers, timeoutMs) {
+  return new Promise(function (resolve, reject) {
+    const mod = uri.indexOf('https:') === 0 ? httpsMod : httpMod
+    const h = Object.assign({ 'User-Agent': UA, 'Accept': 'application/json, text/plain, */*' }, headers || {})
+    const req = mod.request(uri, { headers: h, method: 'GET' }, function (res) {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume()
+        const loc = res.headers.location
+        const next = loc.indexOf('http') === 0 ? loc : require('url').resolve(uri, loc)
+        return httpGet(next, headers, timeoutMs).then(resolve, reject)
+      }
+      let buf = ''
+      res.setEncoding('utf8')
+      res.on('data', function (c) { buf += c })
+      res.on('end', function () { resolve(buf) })
+    })
+    req.setTimeout(timeoutMs || 15000, function () { req.destroy(new Error('请求超时')) })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+function httpGetJson(uri, headers) {
+  return httpGet(uri, headers).then(function (s) { return JSON.parse(s) })
+}
+
+const RISKY = /[\/:*?"<>|]/g
+function pickRoom(platform, roomId, title, uname, cover, online, areaName) {
+  return {
+    platform: platform,
+    platformCN: PLATFORM_CN[platform] || platform,
+    roomId: String(roomId || ''),
+    title: String(title || '').trim(),
+    uname: String(uname || '').trim(),
+    cover: String(cover || ''),
+    online: online === undefined || online === null ? '' : String(online),
+    areaName: String(areaName || ''),
+    url: roomUrlOf(platform, roomId)
+  }
+}
+
+function roomUrlOf(platform, roomId) {
+  const id = String(roomId || '')
+  if (platform === 'huya') return 'https://www.huya.com/' + id
+  if (platform === 'douyu') return 'https://www.douyu.com/' + id
+  if (platform === 'bilibili') return 'https://live.bilibili.com/' + id
+  if (platform === 'douyin') return 'https://live.douyin.com/' + id
+  return ''
+}
+
+// ---------- 斗鱼 ----------
+function douyuRecommend(page, cb) {
+  const p = page || 1
+  httpGetJson('https://www.douyu.com/japi/weblist/apinc/allpage/6/' + p, { Referer: 'https://www.douyu.com/' })
+    .then(function (j) {
+      const rl = ((j || {}).data || {}).rl || []
+      const out = rl.map(function (x) {
+        return pickRoom('douyu', x.rid, x.rn || x.roomName, x.nn || x.nickName,
+          x.rs16 || x.roomSrc || x.av, x.ol || x.hn, x.c2name || x.cateName)
+      })
+      cb(null, out)
+    }).catch(function (e) { cb(e) })
+}
+
+function douyuSearch(kw, page, cb) {
+  const u = 'https://www.douyu.com/japi/search/api/searchShow?kw=' + encodeURIComponent(kw) +
+    '&page=' + (page || 1) + '&pageSize=30'
+  httpGetJson(u, { Referer: 'https://www.douyu.com/search/' })
+    .then(function (j) {
+      // 实测：data.relateShow 直接是数组（不是 {list:[]}）
+      const rel = ((j || {}).data || {}).relateShow
+      const list = Array.isArray(rel) ? rel : ((rel || {}).list || [])
+      const out = list.map(function (x) {
+        // 实测字段：rid / roomName / nickName / roomSrc / hot / cateName / isLive
+        return pickRoom('douyu', x.rid, x.roomName || x.rn, x.nickName || x.nn,
+          x.roomSrc || x.rs16 || x.avatar, x.hot || x.ol, x.cateName || x.c2name)
+      }).filter(function (r) { return r.roomId })
+      cb(null, out)
+    }).catch(function (e) { cb(e) })
+}
+
+// ---------- 虎牙 ----------
+function huyaRecommend(page, cb) {
+  const p = page || 1
+  const u = 'https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&tagAll=0&page=' + p
+  httpGetJson(u, { Referer: 'https://www.huya.com/' })
+    .then(function (j) {
+      const ds = (((j || {}).data || {}).datas) || []
+      const out = ds.map(function (x) {
+        return pickRoom('huya', x.profileRoom || x.privateHost, x.roomName, x.nick,
+          x.screenshot || x.avatar180, x.totalCount, x.gameFullName)
+      })
+      cb(null, out)
+    }).catch(function (e) { cb(e) })
+}
+
+function huyaSearch(kw, page, cb) {
+  // 虎牙搜索接口需要站点页上下文，这里给出可用的搜索跳转地址，由其自行解析；
+  // 实际取回用 m.huya.com 移动站搜索页（返回 HTML，不适合直接解析），
+  // 故虎牙搜索返回“引导用户去网页搜索”的信号（前端展示提示），返回空列表。
+  cb(null, [])
+}
+
+// ---------- B站 ----------
+function biliRecommend(page, cb) {
+  const p = page || 1
+  // 旧接口（无需 wbi 签名）
+  const u = 'https://api.live.bilibili.com/room/v1/Area/getRoomList?platform=web' +
+    '&parent_area_id=1&area_id=0&sort_type=online&page=' + p + '&page_size=30'
+  httpGetJson(u, { Referer: 'https://live.bilibili.com/' })
+    .then(function (j) {
+      const arr = (j || {}).data || []
+      const out = (Array.isArray(arr) ? arr : []).map(function (x) {
+        return pickRoom('bilibili', x.roomid, x.title, x.uname,
+          x.user_cover || x.system_cover, x.online, x.area_name)
+      })
+      cb(null, out)
+    }).catch(function (e) { cb(e) })
+}
+
+function biliSearch(kw, page, cb) {
+  // 实测（2026-09）：result 是对象 { live_room: [...], live_user: [...] }，主列表取 live_room。
+  // 该接口有风控：① 缺 Referer 会 412；② 短时间内重复请求会返回空结果或 412。
+  // 这里做一次带延迟的重试，失败时把真实原因报出（而不是静默返回空列表）。
+  const u = 'https://api.bilibili.com/x/web-interface/search/type?context=&search_type=live' +
+    '&cover_type=user_cover&keyword=' + encodeURIComponent(kw) + '&page=' + (page || 1)
+
+  function attempt(n) {
+    httpGetJson(u, { Referer: 'https://live.bilibili.com/' })
+      .then(function (j) {
+        const data = (j || {}).data
+        let arr = []
+        if (data) {
+          const r = data.result
+          if (Array.isArray(r)) arr = r
+          else if (r && Array.isArray(r.live_room)) arr = r.live_room
+          else if (r && Array.isArray(r.live_user)) arr = r.live_user
+        }
+        // 拿到空结果且还有重试机会：B站限流常见表现，稍等再试
+        if (!arr.length && n < 1) {
+          return setTimeout(function () { attempt(n + 1) }, 1500)
+        }
+        const out = arr.map(function (x) {
+          const rid = x.roomid || x.room_id || x.uid || x.mid
+          return pickRoom('bilibili', rid, stripEm(x.title), stripEm(x.uname),
+            normBiliUrl(x.user_cover || x.cover || x.uface), x.online, stripEm(x.cate_name))
+        }).filter(function (r) { return r.roomId })
+        if (!out.length) {
+          return cb(new Error('B站搜索未返回结果（可能是平台临时限流，稍后重试）'))
+        }
+        cb(null, out)
+      }).catch(function (e) {
+        const msg = String(e.message || e)
+        // 412 = 风控；重试一次
+        if (/412/.test(msg) && n < 1) {
+          return setTimeout(function () { attempt(n + 1) }, 1500)
+        }
+        if (/412/.test(msg)) return cb(new Error('B站接口风控（412），请稍后重试'))
+        cb(e)
+      })
+  }
+  attempt(0)
+}
+
+// B站搜索结果里关键词会包 <em class="keyword"> 标签，去掉
+function stripEm(s) {
+  return String(s == null ? '' : s).replace(/<[^>]+>/g, '')
+}
+
+// B站部分图片地址以 // 开头，补 https:
+function normBiliUrl(u) {
+  u = String(u || '')
+  if (u.indexOf('//') === 0) return 'https:' + u
+  return u
+}
+
+// ---------- 抖音 ----------
+// 抖音直播首页把在播房间数据内嵌在 HTML 里（webcast 相关 JSON），
+// 从中抽取 rid/title/nickname/cover。接口不稳定，失败就返回空（不报错）。
+function douyinRecommend(page, cb) {
+  httpGet('https://live.douyin.com/', { Referer: 'https://live.douyin.com/' })
+    .then(function (html) {
+      const out = []
+      const seen = {}
+      // 在 HTML 中找 "rid":"数字" 与邻近的 title / nickname / cover
+      const re = /\\"rid\\":\\"(\d+)\\"/g
+      let m
+      while ((m = re.exec(html)) !== null) {
+        const rid = m[1]
+        if (!rid || seen[rid]) continue
+        seen[rid] = 1
+        // 取该位置之后的片段找标题/昵称
+        const seg = html.slice(m.index, m.index + 1600)
+        const t = (seg.match(/\\"title\\":\\"(.*?)\\"/) || [])[1] || ''
+        const nk = (seg.match(/\\"nickname\\":\\"(.*?)\\"/) || [])[1] || ''
+        const cv = (seg.match(/\\"cover\\":\\{\\"url_list\\":\[\\"(.*?)\\"/) || [])[1] ||
+                   (seg.match(/\\"cover_url\\":\\"(.*?)\\"/) || [])[1] || ''
+        out.push(pickRoom('douyin', rid, unescapeJson(t), unescapeJson(nk), unescapeJson(cv), '', ''))
+        if (out.length >= 40) break
+      }
+      cb(null, out)
+    }).catch(function () { cb(null, []) })
+}
+
+function douyinSearch(kw, page, cb) {
+  // 抖音搜索需签名参数，暂不做；返回空列表并由前端提示
+  cb(null, [])
+}
+
+// 处理 JSON 字符串里的转义字符
+function unescapeJson(s) {
+  try {
+    return String(s || '').replace(/\\u([0-9a-fA-F]{4})/g, function (_, h) { return String.fromCharCode(parseInt(h, 16)) })
+      .replace(/\\\\/g, '\\').replace(/\\"/g, '"')
+  } catch (e) { return String(s || '') }
+}
+
+// 统一分发
+function recommendOf(platform, page, cb) {
+  if (platform === 'douyu') return douyuRecommend(page, cb)
+  if (platform === 'huya') return huyaRecommend(page, cb)
+  if (platform === 'bilibili') return biliRecommend(page, cb)
+  if (platform === 'douyin') return douyinRecommend(page, cb)
+  cb(new Error('不支持的平台: ' + platform))
+}
+
+function searchOf(platform, kw, page, cb) {
+  if (platform === 'douyu') return douyuSearch(kw, page, cb)
+  if (platform === 'huya') return huyaSearch(kw, page, cb)
+  if (platform === 'bilibili') return biliSearch(kw, page, cb)
+  if (platform === 'douyin') return douyinSearch(kw, page, cb)
+  cb(new Error('不支持的平台: ' + platform))
+}
+
 // ---------- 关注列表 ----------
 function loadFavs() {
   try {
@@ -375,6 +622,34 @@ const server = http.createServer(function (req, res) {
         platform: r.platform, platformCN: r.platformCN,
         elapsedSec: Math.round(((r.stoppedAt || Date.now()) - r.startedAt) / 1000)
       }))
+    }
+
+    if (p === '/recommend') {   // 平台推荐列表
+      const plat = (q.platform || '').toLowerCase()
+      const page = parseInt(q.page || '1', 10) || 1
+      if (['huya', 'douyu', 'bilibili', 'douyin'].indexOf(plat) < 0) {
+        return json(res, fail('不支持的平台（可选：huya / douyu / bilibili / douyin）'))
+      }
+      recommendOf(plat, page, function (err, list) {
+        if (err) return json(res, fail('获取推荐失败: ' + err.message))
+        json(res, ok({ platform: plat, page: page, list: list }))
+      })
+      return
+    }
+
+    if (p === '/search') {      // 搜索直播间
+      const plat = (q.platform || '').toLowerCase()
+      const kw = (q.kw || '').trim()
+      const page = parseInt(q.page || '1', 10) || 1
+      if (!kw) return json(res, fail('缺少搜索关键词'))
+      if (['huya', 'douyu', 'bilibili', 'douyin'].indexOf(plat) < 0) {
+        return json(res, fail('不支持的平台（可选：huya / douyu / bilibili / douyin）'))
+      }
+      searchOf(plat, kw, page, function (err, list) {
+        if (err) return json(res, fail('搜索失败: ' + err.message))
+        json(res, ok({ platform: plat, kw: kw, page: page, list: list }))
+      })
+      return
     }
 
     if (p === '/favs') {
