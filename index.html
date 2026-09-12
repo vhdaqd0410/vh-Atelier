@@ -62,6 +62,7 @@
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
         <button class="tab" data-tab="export">多版本导出</button>
         <button class="tab" data-tab="video">视频下载</button>
+        <button class="tab" data-tab="live">📺 直播</button>
     </div>
     <div class="tabs ws-subtabs" data-group="script" style="display:none;">
         <button class="tab" data-tab="script">剧本阅读</button>
@@ -741,6 +742,65 @@
         <div class="v-status" id="vStatus"></div>
     </div>
 
+    <!-- ==================== 板块：直播（观看 + 录制） ==================== -->
+    <div class="tab-panel" id="panel-live" style="display:none;">
+        <div class="lv-flash" id="lvFlash"></div>
+
+        <!-- 1. 地址栏 -->
+        <div class="lv-card">
+            <div class="lv-card-head">
+                <span>🔗 直播间地址</span>
+                <span class="lv-badge" id="lvHealth">服务检测中…</span>
+            </div>
+            <div class="lv-row">
+                <input type="text" id="lvUrl" placeholder="粘贴直播间链接（虎牙 / 斗鱼 / 哔哩哔哩 / 抖音）">
+                <button id="lvParse" class="tbtn">解析</button>
+                <button id="lvFav" class="tbtn" title="加入关注列表">☆ 关注</button>
+            </div>
+            <div class="lv-hint">快手暂不支持（yt-dlp 无对应直播解析）</div>
+        </div>
+
+        <!-- 2. 播放 + 信息 -->
+        <div class="lv-card" id="lvPlayCard" style="display:none;">
+            <div class="lv-thumb-wrap">
+                <video id="lvVideo" controls playsinline preload="none"></video>
+                <div class="lv-video-mask" id="lvVideoMask"><span>点「观看」开始播放</span></div>
+                <img id="lvThumb" class="lv-thumb" alt="">
+            </div>
+            <div class="lv-meta">
+                <span class="lv-state" id="lvState">—</span>
+                <span class="lv-title" id="lvTitle"></span>
+                <span class="lv-sub" id="lvSub"></span>
+            </div>
+            <div class="lv-acts">
+                <button id="lvWatch" class="tbtn primary" disabled>▶ 观看</button>
+                <button id="lvStopWatch" class="tbtn" disabled>■ 停止播放</button>
+                <select id="lvQuality" title="画质"></select>
+                <button id="lvRec" class="tbtn" disabled>⏺ 开始录制</button>
+                <button id="lvStopRec" class="tbtn" disabled>■ 停止录制</button>
+                <button id="lvOpenDir" class="tbtn">打开录制目录</button>
+            </div>
+        </div>
+
+        <!-- 3. 录制任务 -->
+        <div class="lv-card">
+            <div class="lv-card-head">
+                <span>⏺ 录制任务</span>
+                <button id="lvRecRefresh" class="tbtn mini" style="margin-left:auto;">🔄</button>
+            </div>
+            <div id="lvRecList" class="lv-reclist"><div class="lv-empty">暂无录制任务</div></div>
+        </div>
+
+        <!-- 4. 关注列表 -->
+        <div class="lv-card">
+            <div class="lv-card-head">
+                <span>⭐ 关注列表</span>
+                <button id="lvFavCheck" class="tbtn mini" style="margin-left:auto;">检测开播状态</button>
+            </div>
+            <div id="lvFavList" class="lv-favlist"><div class="lv-empty">还没有关注的直播间</div></div>
+        </div>
+    </div>
+
     <!-- ==================== 待办（独立板块：逐条列待办 → 打勾 → 生成当日总结） ==================== -->
     <div class="tab-panel" id="panel-todo" style="display:none;">
         <div class="td-wrap">
@@ -1029,6 +1089,7 @@
     <script src="js/script.js"></script>
     <script src="js/progress.js"></script>
     <script src="js/todo.js"></script>
+    <script src="js/live.js"></script>
     <script>
     // ===== 外站内嵌通用导航（审片/超分）：后退/前进基于本导航栏历史，刷新/首页/外开可用 =====
     function makeNavBar(cfg) {

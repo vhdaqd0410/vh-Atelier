@@ -16,7 +16,8 @@
         script: document.getElementById('panel-script'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
-        todo: document.getElementById('panel-todo')
+        todo: document.getElementById('panel-todo'),
+        live: document.getElementById('panel-live')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
@@ -26,7 +27,7 @@
         todo: { members: ['todo'], default: 'todo' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music'], default: 'separate' },
-        deliver: { members: ['export', 'video'], default: 'export' },
+        deliver: { members: ['export', 'video', 'live'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' }
@@ -80,6 +81,10 @@
         }
         if (name === 'video' && window.__videoOnShow) {
             try { window.__videoOnShow(); } catch (e) {}
+        }
+        // 直播：切到时确保本地服务在跑，刷新录制任务与关注
+        if (name === 'live' && window.__liveOnShow) {
+            try { window.__liveOnShow(); } catch (e) {}
         }
         if (name === 'sfx' && window.__sfxOnShow) {
             try { window.__sfxOnShow(); } catch (e) {}
