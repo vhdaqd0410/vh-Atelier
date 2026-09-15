@@ -41,7 +41,7 @@
                 </Lifecycle>
                 <UI>
                     <Type>Panel</Type>
-                    <Menu>vh-Atelier</Menu>
+                    <Menu>vh-Atelier A</Menu>
                     <Geometry>
                         <Size>
                             <Height>640</Height>
