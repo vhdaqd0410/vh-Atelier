@@ -10,7 +10,7 @@
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
-        clone: { members: ['clone'], default: 'clone' }
+        audio: { members: ['clone'], default: 'clone' }
     };
     // tab 归属映射
     var groupOf = {};
