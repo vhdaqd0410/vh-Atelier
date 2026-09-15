@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-subtitle",
   "displayName": "vh-Subtitle",
-  "version": "1.0.0",
-  "buildTime": "2026-09-15 18:39:53",
+  "version": "1.0.2",
+  "buildTime": "2026-09-15 19:23:14",
   "skipDirs": [
     "collect",
     "bin",
@@ -16,5 +16,6 @@
     ".git",
     "_tmp",
     "_releases"
-  ]
+  ],
+  "notes": "新增在线更新：标题栏「⬆ 更新」按钮，启动时自动检查\n新增「ℹ 序列信息」按钮（显示帧率、时长、分辨率）\n更新弹窗美化，支持展示更新说明"
 }
