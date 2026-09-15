@@ -9,6 +9,7 @@
     <div class="top-head">
         <h1>vh-Atelier</h1>
         <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">日志<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
+        <button type="button" id="btnUpdate" class="log-btn" title="在线更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
     </div>
     <div class="sub">字幕 · 声音 · 交付 · 进度 四工作台</div>
 
@@ -1014,6 +1015,7 @@
 
     <script src="js/CSInterface.js"></script>
     <script src="js/errorlog.js"></script>
+    <script src="js/updater.js"></script>
     <script src="js/main.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/translate.js"></script>
@@ -1220,5 +1222,45 @@
         }
     })();
 </script>
+
+    // ==== 在线更新按钮 ====
+    (function () {
+        var btn = document.getElementById('btnUpdate');
+        if (!btn) return;
+        if (window.__vhUpdateBtnBound) return;
+        window.__vhUpdateBtnBound = true;
+        btn.addEventListener('click', function () {
+            var U = window.__vhUpdate;
+            if (!U) { alert('更新模块未加载'); return; }
+            btn.disabled = true;
+            var old = btn.textContent;
+            btn.textContent = '检查中…';
+            U.check(function (err, r) {
+                if (err) {
+                    btn.disabled = false; btn.textContent = old;
+                    alert('检查更新失败：' + err.message + '\n\n（需要能访问 GitHub）');
+                    return;
+                }
+                var cur = r.local.version || '?';
+                if (!r.hasUpdate) {
+                    btn.disabled = false; btn.textContent = old;
+                    alert('已是最新版本（' + cur + '）');
+                    return;
+                }
+                var msg = '发现新版本！\n\n当前：' + cur + '\n最新：' + (r.remote.version || '?') +
+                          '\n发布时间：' + (r.remoteTime || '未知') +
+                          '\n\n更新只同步代码（几百 KB），不动模型和引擎。\n更新后需要重开面板（改 JSX 则需重启 PR）。\n\n现在更新？';
+                if (!confirm(msg)) { btn.disabled = false; btn.textContent = old; return; }
+                btn.textContent = '更新中…';
+                var logs = [];
+                U.run(function (m) { logs.push(m); btn.textContent = '更新中…'; },
+                      function (e2, rr) {
+                          btn.disabled = false; btn.textContent = old;
+                          if (e2) { alert('更新失败：' + e2.message + '\n\n' + logs.join('\n')); return; }
+                          alert('✅ 更新完成，共 ' + rr.files + ' 个文件。\n\n请关闭并重开本面板；\n若改动涉及 JSX，需重启 Premiere Pro。');
+                      });
+            });
+        });
+    })();
 </body>
 </html>

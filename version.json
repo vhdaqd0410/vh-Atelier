@@ -1,0 +1,20 @@
+{
+  "_说明": "在线更新配置：插件从 GitHub 公共仓库对应分支拉取代码更新（不含模型/引擎）",
+  "repo": "vhdaqd0410/vh-Atelier",
+  "branch": "main",
+  "displayName": "vh-Atelier",
+  "version": "1.0.0",
+  "buildTime": "2026-09-15 18:39:43",
+  "skipDirs": [
+    "collect",
+    "bin",
+    "models",
+    "engine",
+    "ncm",
+    "runtime",
+    "stubs",
+    ".git",
+    "_tmp",
+    "_releases"
+  ]
+}
