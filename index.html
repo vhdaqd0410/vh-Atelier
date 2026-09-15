@@ -2,16 +2,16 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>vh-Atelier</title>
+    <title>vh-Atelier A</title>
     <link rel="stylesheet" href="css/atelier.css">
 </head>
 <body>
     <div class="top-head">
-        <h1>vh-Atelier</h1>
+        <h1>vh-Atelier A</h1>
         <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">日志<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
         <button type="button" id="btnUpdate" class="log-btn" title="在线更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
     </div>
-    <div class="sub">字幕 · 声音 · 交付 · 进度 四工作台</div>
+    <div class="sub">素材 · 剧本 · 超分 · 声音 · 审片 · 交付 六工作台</div>
 
     <!-- 错误日志浮层 -->
     <div id="logOverlay" class="log-overlay" style="display:none;">
@@ -818,7 +818,8 @@
     })();
 </script>
 
-    // ==== 在线更新按钮 ====
+    <script>
+// ==== 在线更新按钮 ====
     (function () {
         var btn = document.getElementById('btnUpdate');
         if (!btn) return;
@@ -857,5 +858,6 @@
             });
         });
     })();
+</script>
 </body>
 </html>
