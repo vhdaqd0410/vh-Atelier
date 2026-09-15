@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.0.1",
-  "buildTime": "2026-09-15 19:09:57",
+  "version": "1.0.2",
+  "buildTime": "2026-09-15 19:23:06",
   "skipDirs": [
     "collect",
     "bin",
@@ -16,5 +16,6 @@
     ".git",
     "_tmp",
     "_releases"
-  ]
+  ],
+  "notes": "修正在线更新：更新说明展示 / 美化弹窗 / 启动自动检查\n新增「ℹ 序列信息」按钮（显示帧率、时长、分辨率）\n修复内联脚本未包裹导致代码显示在面板底部的问题"
 }

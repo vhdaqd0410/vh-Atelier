@@ -1,7 +1,6 @@
-// vh-Atelier 系列插件 · 在线更新模块
-// 原理：GitHub 仓库（public）对应分支打包下载 → 解压 → 覆盖代码文件（跳过模型/引擎/用户数据）
-// 特点：只同步代码（几百 KB），不动 bin/models/engine（GB 级，不常变）
-// 用法：面板标题栏「⬆ 更新」按钮；或点标题栏版本号查看当前版本
+// vh-Atelier 系列插件 · 在线更新模块 v2
+// 能力：版本检查 / 自动检查 / 美化弹窗 / 更新说明展示 / 选择性覆盖
+// 原理：GitHub 公共仓库对应分支打包下载 → 解压 → 覆盖代码（跳过模型/引擎/用户数据）
 (function () {
     var fs, path, os, cp;
     try {
@@ -27,8 +26,9 @@
     var ROOT = extRoot();
     var CFG_FILE = ROOT ? path.join(ROOT, 'version.json') : '';
     var TMP = path.join(os.tmpdir(), 'vh_update');
+    var LAST_CHECK_KEY = 'vh_update_last_check';
 
-    // 这些目录/文件不参与更新（大文件 + 用户数据）
+    // 不参与更新的目录（大文件 + 用户数据）
     var SKIP = ['collect', 'bin', 'models', 'engine', 'ncm', 'runtime', 'stubs',
                 '.git', '_tmp', '_releases', 'node_modules'];
 
@@ -41,25 +41,111 @@
         return null;
     }
 
-    function toast(msg, isErr) {
-        if (window.__copyFlash) { window.__copyFlash(msg); return; }
-        // 无全局提示时自建一个
-        try {
-            var tip = document.createElement('span');
-            tip.textContent = msg || '';
-            tip.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:' +
-                (isErr ? '#3a2a2a' : '#2a3a2a') + ';color:' + (isErr ? '#ff9090' : '#7fd68b') +
-                ';padding:6px 14px;border-radius:6px;font-size:12px;z-index:9999;pointer-events:none;';
-            document.body.appendChild(tip);
-            setTimeout(function () { if (tip.parentNode) tip.parentNode.removeChild(tip); }, 2200);
-        } catch (e) { console.log('[update]', msg); }
+    // ============ 样式（统一注入一次）============
+    var STYLE_ID = 'vh-update-style';
+    function injectStyle() {
+        if (document.getElementById(STYLE_ID)) return;
+        var st = document.createElement('style');
+        st.id = STYLE_ID;
+        st.textContent = [
+            '.vhu-mask{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}',
+            '.vhu-card{background:linear-gradient(180deg,#252526,#1e1e1e);border:1px solid #3f3f46;border-radius:10px;width:440px;max-width:100%;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.55);overflow:hidden;font-family:"Segoe UI","Microsoft YaHei",sans-serif;}',
+            '.vhu-head{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid #333;}',
+            '.vhu-ico{width:26px;height:26px;border-radius:6px;background:rgba(139,92,246,.18);color:#a78bfa;display:flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 auto;}',
+            '.vhu-title{font-size:13.5px;font-weight:600;color:#eaeaea;flex:1 1 auto;}',
+            '.vhu-x{background:transparent;border:none;color:#888;font-size:15px;cursor:pointer;padding:2px 5px;border-radius:4px;}',
+            '.vhu-x:hover{color:#fff;background:#3a3a3a;}',
+            '.vhu-body{padding:14px 16px;overflow-y:auto;font-size:12.5px;color:#cfcfcf;line-height:1.75;}',
+            '.vhu-ver{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;}',
+            '.vhu-badge{font-size:11px;padding:2px 8px;border-radius:4px;font-family:Consolas,monospace;}',
+            '.vhu-old{background:#3a3a3a;color:#9a9a9a;}',
+            '.vhu-new{background:rgba(127,214,139,.16);color:#7fd68b;border:1px solid rgba(127,214,139,.35);}',
+            '.vhu-arrow{color:#666;}',
+            '.vhu-sec{font-size:11px;color:#8a8a8a;text-transform:uppercase;letter-spacing:.6px;margin:12px 0 6px;}',
+            '.vhu-log{background:#141414;border:1px solid #333;border-radius:6px;padding:8px 10px;font-family:Consolas,monospace;font-size:11px;color:#9fe0a8;max-height:170px;overflow-y:auto;white-space:pre-wrap;}',
+            '.vhu-note{font-size:11.5px;color:#a8a8a8;background:rgba(255,184,77,.07);border:1px solid rgba(255,184,77,.22);border-radius:6px;padding:8px 10px;line-height:1.7;}',
+            '.vhu-bar{height:6px;background:#111;border-radius:3px;overflow:hidden;margin:10px 0 4px;}',
+            '.vhu-fill{height:100%;width:0;background:linear-gradient(90deg,#8b5cf6,#a78bfa);border-radius:3px;transition:width .25s;}',
+            '.vhu-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid #333;background:#1a1a1a;}',
+            '.vhu-btn{border:none;border-radius:6px;padding:7px 18px;font-size:12.5px;cursor:pointer;font-family:inherit;}',
+            '.vhu-btn.pri{background:linear-gradient(135deg,#8b5cf6,#9c6ee0);color:#fff;font-weight:600;}',
+            '.vhu-btn.pri:hover{filter:brightness(1.12);}',
+            '.vhu-btn.pri:disabled{filter:grayscale(.6);cursor:not-allowed;}',
+            '.vhu-btn.sec{background:#3a3a3a;color:#c8c8c8;}',
+            '.vhu-btn.sec:hover{background:#464646;}',
+            '.vhu-files{font-family:Consolas,monospace;font-size:11px;color:#8a8a8a;}'
+        ].join('');
+        document.head.appendChild(st);
     }
 
-    // 比对远程版本
+    // ============ 弹窗组件 ============
+    function modal(cfg) {
+        injectStyle();
+        var mask = document.createElement('div');
+        mask.className = 'vhu-mask';
+        var card = document.createElement('div');
+        card.className = 'vhu-card';
+        card.innerHTML =
+            '<div class="vhu-head">' +
+              '<div class="vhu-ico">⬆</div>' +
+              '<div class="vhu-title"></div>' +
+              '<button class="vhu-x" title="关闭">✕</button>' +
+            '</div>' +
+            '<div class="vhu-body"></div>' +
+            '<div class="vhu-foot"></div>';
+        card.querySelector('.vhu-title').textContent = cfg.title || '在线更新';
+        var body = card.querySelector('.vhu-body');
+        var foot = card.querySelector('.vhu-foot');
+        mask.appendChild(card);
+        document.body.appendChild(mask);
+
+        function close() { if (mask.parentNode) mask.parentNode.removeChild(mask); }
+        card.querySelector('.vhu-x').addEventListener('click', close);
+        mask.addEventListener('click', function (e) { if (e.target === mask && !cfg.locked) close(); });
+
+        var api = {
+            el: body,
+            close: close,
+            addBtn: function (text, primary, onClick) {
+                var b = document.createElement('button');
+                b.className = 'vhu-btn ' + (primary ? 'pri' : 'sec');
+                b.textContent = text;
+                b.addEventListener('click', onClick);
+                foot.appendChild(b);
+                return b;
+            },
+            clearBtns: function () { foot.innerHTML = ''; }
+        };
+        cfg.onReady && cfg.onReady(api);
+        return api;
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+        });
+    }
+
+    // 把更新说明（可能是 markdown 列表）渲染成 HTML
+    function renderNotes(notes) {
+        if (!notes) return '<div class="vhu-note">本次更新无详细说明。</div>';
+        var txt = String(notes).trim();
+        var lines = txt.split(/\r?\n/).filter(function (l) { return l.trim(); });
+        var html = '<div class="vhu-log">';
+        lines.forEach(function (l) {
+            l = l.replace(/^[-*+]\s+/, '• ').replace(/^\d+\.\s+/, function (m) { return m; });
+            html += esc(l) + '\n';
+        });
+        html += '</div>';
+        return html;
+    }
+
+    // ============ 版本检查 ============
     function checkUpdate(cb) {
         var cfg = readCfg();
         if (!cfg || !cfg.repo || !cfg.branch) { cb(new Error('未配置更新源（缺 version.json）')); return; }
-        var url = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch + '/version.json?_=' + Date.now();
+        var url = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
+                  '/version.json?_=' + Date.now();
         var xhr = new XMLHttpRequest();
         xhr.open('GET', url, true);
         xhr.timeout = 20000;
@@ -68,11 +154,13 @@
             if (xhr.status !== 200) { cb(new Error('读取远程版本失败（HTTP ' + xhr.status + '）')); return; }
             var remote = null;
             try { remote = JSON.parse(xhr.responseText); } catch (e) { cb(new Error('远程版本文件解析失败')); return; }
+            try { localStorage.setItem(LAST_CHECK_KEY, String(Date.now())); } catch (e) {}
             cb(null, {
                 local: cfg,
                 remote: remote,
                 hasUpdate: String(remote.version || '') !== String(cfg.version || ''),
-                remoteTime: remote.buildTime || ''
+                remoteTime: remote.buildTime || '',
+                notes: remote.notes || ''
             });
         };
         xhr.onerror = function () { cb(new Error('网络错误（无法访问 GitHub）')); };
@@ -80,8 +168,8 @@
         xhr.send();
     }
 
-    // 执行更新：下载分支 zip → 解压 → 覆盖代码
-    function doUpdate(onLog, cb) {
+    // ============ 执行更新 ============
+    function doUpdate(onLog, onProgress, cb) {
         var cfg = readCfg();
         if (!cfg) { cb(new Error('未配置更新源')); return; }
         var log = onLog || function () {};
@@ -90,22 +178,21 @@
 
         (async function () {
             try {
-                log('下载更新包…');
+                log('正在下载更新包…');
                 await download(zipUrl, zipFile, function (pct) {
-                    if (pct % 20 === 0) log('下载中 ' + pct + '%');
+                    if (onProgress) onProgress(pct);
                 });
-                log('解压…');
+                log('下载完成，正在解压…');
                 var outDir = TMP + '_' + Date.now();
                 if (fs.existsSync(outDir)) rmrf(outDir);
                 fs.mkdirSync(outDir, { recursive: true });
                 await unzip(zipFile, outDir);
-                // zip 解压后是一个顶层目录（仓库名-分支）
                 var tops = fs.readdirSync(outDir).filter(function (f) {
                     return fs.statSync(path.join(outDir, f)).isDirectory();
                 });
                 if (!tops.length) throw new Error('解压结果为空');
                 var srcRoot = path.join(outDir, tops[0]);
-                log('覆盖代码文件（跳过模型/引擎/用户数据）…');
+                log('正在覆盖代码文件（跳过模型/引擎/用户数据）…');
                 var n = copyTree(srcRoot, ROOT, ROOT);
                 log('已更新 ' + n + ' 个文件');
                 try { fs.unlinkSync(zipFile); } catch (e) {}
@@ -118,25 +205,20 @@
         })();
     }
 
-    // 递归复制，跳过 SKIP 目录；返回复制文件数
-    function copyTree(src, dst, root) {
+    function copyTree(src, dst) {
         var n = 0;
         var items = fs.readdirSync(src);
         items.forEach(function (name) {
-            if (SKIP.indexOf(name) >= 0) return;           // 跳过指定目录/文件
+            if (SKIP.indexOf(name) >= 0) return;
             var s = path.join(src, name);
             var st = fs.statSync(s);
             if (st.isDirectory()) {
                 var d = path.join(dst, name);
                 try { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); } catch (e) {}
-                n += copyTree(s, d, root);
+                n += copyTree(s, d);
             } else {
-                // 不覆盖用户数据文件
                 if (name === '.gitignore') return;
-                try {
-                    fs.copyFileSync(s, path.join(dst, name));
-                    n++;
-                } catch (e) {}
+                try { fs.copyFileSync(s, path.join(dst, name)); n++; } catch (e) {}
             }
         });
         return n;
@@ -145,17 +227,13 @@
     function rmrf(p) {
         try {
             if (!fs.existsSync(p)) return;
-            var st = fs.statSync(p);
-            if (st.isDirectory()) {
+            if (fs.statSync(p).isDirectory()) {
                 fs.readdirSync(p).forEach(function (f) { rmrf(path.join(p, f)); });
                 fs.rmdirSync(p);
-            } else {
-                fs.unlinkSync(p);
-            }
+            } else { fs.unlinkSync(p); }
         } catch (e) {}
     }
 
-    // 下载（Node http/https，写文件）
     function download(url, dest, onPct) {
         return new Promise(function (resolve, reject) {
             var mod = url.indexOf('https') === 0 ? require('https') : require('http');
@@ -182,7 +260,6 @@
         });
     }
 
-    // 解压 zip：优先用 Windows 自带 PowerShell（无需第三方库）
     function unzip(zipFile, outDir) {
         return new Promise(function (resolve, reject) {
             var ps = 'Expand-Archive -LiteralPath "' + zipFile.replace(/"/g, '') +
@@ -195,9 +272,106 @@
         });
     }
 
+    // ============ 主流程（面板按钮调用）============
+    function showUpdateUI(silent) {
+        var m = modal({
+            title: '在线更新',
+            locked: false,
+            onReady: function (api) {
+                api.el.innerHTML = '<div class="vhu-files">正在检查更新…</div>';
+                checkUpdate(function (err, r) {
+                    if (err) {
+                        api.el.innerHTML = '<div class="vhu-note">检查更新失败：' + esc(err.message) +
+                            '<br><br>提示：需要能访问 GitHub。若使用代理，请确认 CEP 能走代理。</div>';
+                        api.addBtn('关闭', true, api.close);
+                        return;
+                    }
+                    var cur = r.local.version || '?';
+                    if (!r.hasUpdate) {
+                        api.el.innerHTML =
+                            '<div class="vhu-ver"><span class="vhu-badge vhu-new">已是最新</span>' +
+                            '<span class="vhu-files">v' + esc(cur) + '</span></div>' +
+                            '<div class="vhu-note">当前已是最新版本，无需更新。</div>';
+                        api.addBtn('关闭', true, api.close);
+                        return;
+                    }
+                    // 有更新：展示版本 + 更新说明
+                    api.el.innerHTML =
+                        '<div class="vhu-ver">' +
+                          '<span class="vhu-badge vhu-old">当前 v' + esc(cur) + '</span>' +
+                          '<span class="vhu-arrow">→</span>' +
+                          '<span class="vhu-badge vhu-new">最新 v' + esc(r.remote.version || '?') + '</span>' +
+                        '</div>' +
+                        '<div class="vhu-sec">本次更新内容</div>' +
+                        renderNotes(r.notes) +
+                        (r.remoteTime ? '<div class="vhu-sec">发布时间</div><div class="vhu-files">' + esc(r.remoteTime) + '</div>' : '') +
+                        '<div class="vhu-note" style="margin-top:12px;">更新只同步代码（几百 KB），不动模型、引擎与你的数据。<br>更新后请关闭并重开面板；若涉及 JSX，需重启 Premiere Pro。</div>';
+                    var btnDo = api.addBtn('立即更新', true, function () {
+                        btnDo.disabled = true;
+                        btnDo.textContent = '更新中…';
+                        var logBox = document.createElement('div');
+                        logBox.className = 'vhu-log';
+                        logBox.style.marginTop = '12px';
+                        logBox.textContent = '';
+                        api.el.appendChild(logBox);
+                        var bar = document.createElement('div');
+                        bar.className = 'vhu-bar';
+                        bar.innerHTML = '<div class="vhu-fill"></div>';
+                        api.el.appendChild(bar);
+                        var fill = bar.querySelector('.vhu-fill');
+                        doUpdate(function (msg) {
+                            logBox.textContent += msg + '\n';
+                            logBox.scrollTop = logBox.scrollHeight;
+                        }, function (pct) {
+                            fill.style.width = pct + '%';
+                        }, function (e2, rr) {
+                            api.clearBtns();
+                            if (e2) {
+                                logBox.textContent += '\n✗ 更新失败：' + e2.message + '\n';
+                                api.addBtn('关闭', true, api.close);
+                                return;
+                            }
+                            logBox.textContent += '\n✅ 更新完成，共 ' + rr.files + ' 个文件。\n';
+                            api.el.insertAdjacentHTML('afterbegin',
+                                '<div class="vhu-ver"><span class="vhu-badge vhu-new">更新完成</span>' +
+                                '<span class="vhu-files">共 ' + rr.files + ' 个文件</span></div>');
+                            api.addBtn('重开面板', true, function () {
+                                // 尝试重载面板页面
+                                try { location.reload(); } catch (e) {}
+                                api.close();
+                            });
+                            api.addBtn('稍后', false, api.close);
+                        });
+                    });
+                    api.addBtn('稍后', false, api.close);
+                });
+            }
+        });
+        return m;
+    }
+
+    // 自动检查（启动时静默检查，有新版本才弹窗）
+    function autoCheck() {
+        var cfg = readCfg();
+        if (!cfg) return;
+        // 同一次会话只自动检查一次
+        try {
+            if (sessionStorage.getItem('vh_update_autochecked') === '1') return;
+            sessionStorage.setItem('vh_update_autochecked', '1');
+        } catch (e) {}
+        setTimeout(function () {
+            checkUpdate(function (err, r) {
+                if (err || !r || !r.hasUpdate) return;
+                showUpdateUI(true);
+            });
+        }, 2500);
+    }
+
     window.__vhUpdate = {
         check: checkUpdate,
         run: doUpdate,
+        show: showUpdateUI,
+        autoCheck: autoCheck,
         version: function () { var c = readCfg(); return c ? c.version : ''; },
         info: function () { return readCfg(); }
     };

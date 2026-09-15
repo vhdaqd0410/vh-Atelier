@@ -1034,239 +1034,24 @@
     <script src="js/script.js"></script>
     <script src="js/progress.js"></script>
     <script src="js/todo.js"></script>
-    <script>
-    // ===== 外站内嵌通用导航（审片/超分）：后退/前进基于本导航栏历史，刷新/首页/外开可用 =====
-    function makeNavBar(cfg) {
-        var fr = document.getElementById(cfg.frame);
-        var HOME = cfg.home;
-        function tryLoad(url) {
-            if (!fr || !url) return;
-            fr.src = url;
-            push(url);
-        }
-        // 历史栈（只记录通过本导航栏访问过的地址；站内点击跳转父页无法感知）
-        var stack = [];
-        var idx = -1;
-        function push(url) {
-            if (url === stack[idx]) return;
-            stack = stack.slice(0, idx + 1);
-            stack.push(url);
-            idx = stack.length - 1;
-            syncUrl();
-        }
-        function go(step) {
-            var ni = idx + step;
-            if (ni < 0 || ni >= stack.length) return;
-            idx = ni;
-            fr.src = stack[idx];
-            syncUrl();
-        }
-        function syncUrl() {
-            if (!cfg.urlInput) return;
-            cfg.urlInput.value = stack[idx] || '';
-        }
-        function normalize(u) {
-            u = (u || '').trim();
-            if (!u) return '';
-            if (!/^[a-zA-Z]+:\/\//.test(u)) u = 'http://' + u;
-            return u;
-        }
-        if (cfg.back) cfg.back.addEventListener('click', function () { go(-1); });
-        if (cfg.fwd) cfg.fwd.addEventListener('click', function () { go(1); });
-        if (cfg.reload) cfg.reload.addEventListener('click', function () {
-            try { if (fr && fr.contentWindow && fr.contentWindow.location) { fr.contentWindow.location.reload(); return; } } catch (e) {}
-            if (stack[idx]) fr.src = stack[idx];
-        });
-        if (cfg.btnHome) cfg.btnHome.addEventListener('click', function () {
-            if (HOME !== stack[idx]) { tryLoad(HOME); }
-            else { try { if (fr && fr.contentWindow) fr.contentWindow.location.reload(); } catch (e) { fr.src = HOME; } }
-        });
-        if (cfg.external) cfg.external.addEventListener('click', function () {
-            var target = stack[idx] || HOME;
-            try {
-                var cp = require('child_process');
-                cp.exec('start "" "' + target + '"');
-            } catch (e) {
-                try { window.open(target, '_blank'); } catch (e2) {}
-            }
-        });
-        if (cfg.urlInput) {
-            cfg.urlInput.addEventListener('keydown', function (ev) {
-                if (ev.key === 'Enter') {
-                    var u = normalize(cfg.urlInput.value);
-                    if (u) tryLoad(u);
-                }
-            });
-        }
-        window[cfg.autoFn] = function () {
-            if (!fr) return;
-            if (!fr.src || fr.src === 'about:blank') tryLoad(HOME);
-        };
-        return { go: go, tryLoad: tryLoad };
-    }
-
-    // ==== 审片：分秒帧（自动加载）====
-    (function () {
-        makeNavBar({
-            frame: 'spFrame',
-            home: 'https://app.mediatrack.cn/',
-            back: document.getElementById('spBack'),
-            fwd: document.getElementById('spFwd'),
-            reload: document.getElementById('spReload'),
-            btnHome: document.getElementById('btnSpHome'),
-            external: document.getElementById('spExternal'),
-            urlInput: document.getElementById('spUrl'),
-            autoFn: '__spAutoLoad'
-        });
-    })();
-
-    // ==== 超分：去字幕/超分站（自动加载）====
-    (function () {
-        makeNavBar({
-            frame: 'upscaleFrame',
-            home: 'http://subtitle.zztianqiao.com/#/layout/eraseFolders',
-            back: document.getElementById('upBack'),
-            fwd: document.getElementById('upFwd'),
-            reload: document.getElementById('upReload'),
-            btnHome: document.getElementById('btnUpscaleHome'),
-            external: document.getElementById('upExternal'),
-            urlInput: document.getElementById('upUrl'),
-            autoFn: '__upscaleAutoLoad'
-        });
-    })();
-
-    // ==== 错误日志查看器 ====
-    (function () {
-        var btn = document.getElementById('btnLogView');
-        var overlay = document.getElementById('logOverlay');
-        var body = document.getElementById('logBody');
-        var badge = document.getElementById('logBadge');
-        var pathEl = document.getElementById('logPath');
-        if (!btn || !overlay) return;
-
-        function esc(s) {
-            return String(s).replace(/[&<>]/g, function (c) {
-                return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
-            });
-        }
-
-        function render() {
-            var LOG = window.__vhLog;
-            if (!LOG) { body.innerHTML = '<div class="log-empty">日志模块未加载</div>'; return; }
-            var lines = LOG.text(300);
-            if (pathEl) pathEl.textContent = LOG.path() || '';
-            if (!lines) { body.innerHTML = '<div class="log-empty">暂无日志</div>'; return; }
-            // 按级别着色
-            var html = lines.split(/\r?\n/).filter(function (l) { return l.trim(); }).map(function (l) {
-                var cls = 'log-line';
-                if (l.indexOf('][ERROR]') >= 0 || l.indexOf('][ERR]') >= 0 || l.indexOf('][REJECT]') >= 0) cls += ' lv-err';
-                else if (l.indexOf('][WARN]') >= 0) cls += ' lv-warn';
-                else if (l.indexOf('][CONSOLE]') >= 0) cls += ' lv-console';
-                return '<div class="' + cls + '">' + esc(l) + '</div>';
-            }).join('');
-            body.innerHTML = html;
-            body.scrollTop = body.scrollHeight;
-        }
-
-        function open() {
-            overlay.style.display = '';
-            render();
-            if (window.__vhLog && window.__vhLog.markRead) window.__vhLog.markRead();
-        }
-        function close() { overlay.style.display = 'none'; }
-
-        function syncBadge(n) {
-            n = n || 0;
-            if (n > 0) { badge.textContent = n > 99 ? '99+' : String(n); badge.style.display = ''; }
-            else badge.style.display = 'none';
-        }
-
-        btn.addEventListener('click', function () {
-            if (overlay.style.display === 'none') open(); else close();
-        });
-        document.getElementById('logClose').addEventListener('click', close);
-        overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && overlay.style.display !== 'none') close();
-        });
-
-        document.getElementById('logRefresh').addEventListener('click', render);
-        document.getElementById('logOpen').addEventListener('click', function () {
-            if (window.__vhLog) window.__vhLog.open();
-        });
-        document.getElementById('logClear').addEventListener('click', function () {
-            if (window.__vhLog) { window.__vhLog.clear(); window.__vhLog.markRead(); }
-            render();
-        });
-        document.getElementById('logCopy').addEventListener('click', function () {
-            var t = window.__vhLog ? window.__vhLog.text(300) : '';
-            var btnC = document.getElementById('logCopy');
-            function done(ok) {
-                btnC.textContent = ok ? '已复制' : '复制失败';
-                setTimeout(function () { btnC.textContent = '复制全部'; }, 1500);
-            }
-            try {
-                var ta = document.createElement('textarea');
-                ta.value = t;
-                document.body.appendChild(ta);
-                ta.select();
-                var ok = document.execCommand('copy');
-                document.body.removeChild(ta);
-                done(ok);
-            } catch (e) { done(false); }
-        });
-
-        // 红点：订阅未读错误数
-        if (window.__vhLog && window.__vhLog.onUnreadChange) {
-            window.__vhLog.onUnreadChange(syncBadge);
-            syncBadge(window.__vhLog.unread ? window.__vhLog.unread() : 0);
-        }
-    })();
-</script>
 
     <script>
-// ==== 在线更新按钮 ====
+    // ==================== 面板尾部逻辑（统一收拢） ====================
+
+    // ---- 1. 在线更新 ----
     (function () {
         var btn = document.getElementById('btnUpdate');
-        if (!btn) return;
-        if (window.__vhUpdateBtnBound) return;
-        window.__vhUpdateBtnBound = true;
-        btn.addEventListener('click', function () {
-            var U = window.__vhUpdate;
-            if (!U) { alert('更新模块未加载'); return; }
-            btn.disabled = true;
-            var old = btn.textContent;
-            btn.textContent = '检查中…';
-            U.check(function (err, r) {
-                if (err) {
-                    btn.disabled = false; btn.textContent = old;
-                    alert('检查更新失败：' + err.message + '\n\n（需要能访问 GitHub）');
-                    return;
-                }
-                var cur = r.local.version || '?';
-                if (!r.hasUpdate) {
-                    btn.disabled = false; btn.textContent = old;
-                    alert('已是最新版本（' + cur + '）');
-                    return;
-                }
-                var msg = '发现新版本！\n\n当前：' + cur + '\n最新：' + (r.remote.version || '?') +
-                          '\n发布时间：' + (r.remoteTime || '未知') +
-                          '\n\n更新只同步代码（几百 KB），不动模型和引擎。\n更新后需要重开面板（改 JSX 则需重启 PR）。\n\n现在更新？';
-                if (!confirm(msg)) { btn.disabled = false; btn.textContent = old; return; }
-                btn.textContent = '更新中…';
-                var logs = [];
-                U.run(function (m) { logs.push(m); btn.textContent = '更新中…'; },
-                      function (e2, rr) {
-                          btn.disabled = false; btn.textContent = old;
-                          if (e2) { alert('更新失败：' + e2.message + '\n\n' + logs.join('\n')); return; }
-                          alert('✅ 更新完成，共 ' + rr.files + ' 个文件。\n\n请关闭并重开本面板；\n若改动涉及 JSX，需重启 Premiere Pro。');
-                      });
-            });
-        });
+        if (btn && window.__vhUpdate && !window.__vhUpdateBtnBound) {
+            window.__vhUpdateBtnBound = true;
+            btn.addEventListener('click', function () { window.__vhUpdate.show(false); });
+        }
+        // 启动后自动检查一次（有新版本才弹窗）
+        if (window.__vhUpdate && window.__vhUpdate.autoCheck) {
+            window.__vhUpdate.autoCheck();
+        }
     })();
-</script>
 
-    // ==== 序列信息（在线更新验证功能）====
+    // ---- 2. 序列信息 ----
     (function () {
         var btn = document.getElementById('btnSeqInfo');
         if (!btn) return;
@@ -1295,5 +1080,6 @@
             });
         });
     })();
+    </script>
 </body>
 </html>
