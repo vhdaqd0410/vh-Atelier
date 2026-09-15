@@ -1,0 +1,159 @@
+// vh-Atelier 整合插件 - 两级导航切换逻辑
+// 工作台（组）→ 子功能（面板）。三组：字幕(字幕识别/字幕校对)、声音(人声分离/语音克隆/音效库/音乐)、交付(多版本导出/视频下载)
+(function () {
+    var panels = {
+        media: document.getElementById('panel-media'),
+        separate: document.getElementById('panel-sep'),
+        sfx: document.getElementById('panel-sfx'),
+        musiclib: document.getElementById('panel-musiclib'),
+        music: document.getElementById('panel-music'),
+        export: document.getElementById('panel-export'),
+        video: document.getElementById('panel-video'),
+        script: document.getElementById('panel-script'),
+        shenpian: document.getElementById('panel-shenpian'),
+        upscale: document.getElementById('panel-upscale'),
+    };
+
+    // 组定义：组名 → { members: [tab名...], default: 默认tab }
+    var groups = {
+        media: { members: ['media'], default: 'media' },
+        audio: { members: ['separate', 'sfx', 'musiclib', 'music'], default: 'separate' },
+        deliver: { members: ['export', 'video'], default: 'export' },
+        script: { members: ['script'], default: 'script' },
+        shenpian: { members: ['shenpian'], default: 'shenpian' },
+        upscale: { members: ['upscale'], default: 'upscale' }
+    };
+    // tab 归属映射
+    var groupOf = {};
+    Object.keys(groups).forEach(function (g) {
+        groups[g].members.forEach(function (m) { groupOf[m] = g; });
+    });
+
+    var groupBtns = document.querySelectorAll('.ws-group');
+    var subTabBars = document.querySelectorAll('.ws-subtabs');
+    var allTabs = document.querySelectorAll('.tab');
+
+    // 每个组当前选中哪个 tab（切走再切回能记住）
+    var currentInGroup = {};
+    Object.keys(groups).forEach(function (g) { currentInGroup[g] = groups[g].default; });
+
+    // 真正显示某个 panel
+    function showPanel(name) {
+        Object.keys(panels).forEach(function (key) {
+            panels[key].style.display = (key === name) ? '' : 'none';
+        });
+    }
+
+    // 高亮子 tab（只在该 tab 所属的组条内高亮）
+    function syncTabHighlight(name) {
+        allTabs.forEach(function (t) {
+            t.classList.toggle('active', t.dataset.tab === name);
+        });
+    }
+
+    // 高亮组按钮
+    function syncGroupHighlight(group) {
+        groupBtns.forEach(function (b) {
+            b.classList.toggle('active', b.dataset.group === group);
+        });
+    }
+
+    // 显示某个组的子 tab 条
+    function showGroupBar(group) {
+        subTabBars.forEach(function (bar) {
+            bar.style.display = (bar.dataset.group === group) ? '' : 'none';
+        });
+    }
+
+    // 懒启动钩子
+    function lazyInit(name) {
+        if (name === 'music' && window.__musicOnShow) {
+            try { window.__musicOnShow(); } catch (e) {}
+        }
+        if (name === 'video' && window.__videoOnShow) {
+            try { window.__videoOnShow(); } catch (e) {}
+        }
+        if (name === 'sfx' && window.__sfxOnShow) {
+            try { window.__sfxOnShow(); } catch (e) {}
+        }
+        // 待办：切到时刷新（跨天/外部改动后回来看到最新）
+        // 剧本：切到剧本 tab 时若面板是空的（没在阅读、也没首页），渲染剧本库首页
+        if (name === 'script' && window.__atShowScriptHome) {
+            try { window.__atShowScriptHome(); } catch (e) {}
+        }
+        // 审片：切到时 iframe 若未加载则自动加载分秒帧
+        if (name === 'shenpian' && window.__spAutoLoad) {
+            try { window.__spAutoLoad(); } catch (e) {}
+        }
+        // 素材库：切到时自动刷新（保持目录状态）
+        if (name === 'media' && window.__mediaOnShow) {
+            try { window.__mediaOnShow(); } catch (e) {}
+        }
+        // 超分：切到时自动加载去字幕/超分站
+        if (name === 'upscale' && window.__upscaleAutoLoad) {
+            try { window.__upscaleAutoLoad(); } catch (e) {}
+        }
+        // 超分面板：切到时刷新序列列表
+        if (name === 'upscale' && window.__enhanceOnShow) {
+            try { window.__enhanceOnShow(); } catch (e) {}
+        }
+    }
+
+    // 切到某个 tab（面板 + 组条 + 高亮同步）
+    function switchTab(name) {
+        if (!panels[name]) return;
+        var g = groupOf[name];
+        if (!g) return;
+        currentInGroup[g] = name;
+        showPanel(name);
+        showGroupBar(g);
+        syncGroupHighlight(g);
+        syncTabHighlight(name);
+        lazyInit(name);
+    }
+
+    // 切工作台：显示该组子 tab 条 + 切到该组记忆的 tab
+    function switchGroup(g) {
+        if (!groups[g]) return;
+        var target = currentInGroup[g] || groups[g].default;
+        switchTab(target);
+    }
+
+    // 事件：组按钮
+    groupBtns.forEach(function (b) {
+        b.addEventListener('click', function () {
+            switchGroup(b.dataset.group);
+        });
+    });
+    // 事件：子 tab
+    allTabs.forEach(function (t) {
+        t.addEventListener('click', function () {
+            switchTab(t.dataset.tab);
+        });
+    });
+
+    // 暴露给其他板块调用：字幕识别 → 字幕校对 联动时切 tab
+    window.__atSwitchTab = switchTab;
+    // 剧本工作台（常驻）：切过去并确保面板有内容；无内容时显示剧本库首页
+    // 剧本库首页由 script.js 提供（__atShowScriptHome），面板无阅读器时切到该组就展示它
+    window.__atShowScriptGroup = function () {
+        var btn = document.querySelector('.ws-group[data-group="script"]');
+        if (btn) btn.style.display = '';
+        // 若面板是空的（没有正在阅读的剧本），先渲染剧本库首页
+        var panel = document.getElementById('panel-script');
+        var hasReader = panel && panel.querySelector('#scriptReaderBox');
+        if (panel && !hasReader && window.__atShowScriptHome) {
+            try { window.__atShowScriptHome(); } catch (e) {}
+        }
+        switchGroup('script');
+    };
+    window.__atIsScriptGroupActive = function () {
+        var active = null;
+        groupBtns.forEach(function (b) { if (b.classList.contains('active')) active = b.dataset.group; });
+        return active === 'script';
+    };
+    // 供 script.js 调用：直接切到剧本组（已渲染好内容时用）
+    window.__atSwitchToScript = function () {
+        switchGroup('script');
+    };
+})();

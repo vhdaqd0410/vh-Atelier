@@ -1,0 +1,27 @@
+# 依赖与运行环境（不入库，随部署包分发）
+node_modules/
+runtime/
+engine/
+models/
+bin/whisper/
+bin/sherpa/
+ncm/node_modules/
+
+# 运行时用户数据
+collect/
+*.log
+*.pyc
+__pycache__/
+_tmp/
+_releases/
+
+# 隐私数据（绝不入库）
+.video_cookie
+.video_cookies.txt
+*.cookies.txt
+_enhance_token.json
+
+# 系统
+Thumbs.db
+desktop.ini
+.DS_Store
