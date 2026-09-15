@@ -1,3 +1,4 @@
+bin/*.exe
 # 依赖与运行环境（不入库，随部署包分发）
 node_modules/
 runtime/
