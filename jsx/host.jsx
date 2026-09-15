@@ -1264,6 +1264,37 @@ function meExportRangeStr() {
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
+
+// 获取活动序列的详细信息（帧率 / 时长 / 分辨率 / 音频轨数）
+// 供「序列信息」功能使用（也是在线更新功能的验证点）
+function meSequenceInfo() {
+    try {
+        var s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+        var ticksPerSec = 254016000000;
+        var dur = 0, fps = 0, w = 0, h = 0, aTracks = 0, vTracks = 0;
+        try { w = s.frameSizeHorizontal; } catch (e) {}
+        try { h = s.frameSizeVertical; } catch (e) {}
+        try {
+            var endTicks = parseFloat(s.end);
+            var zeroTicks = parseFloat(s.zeroPoint);
+            if (!isNaN(endTicks) && !isNaN(zeroTicks)) dur = (endTicks - zeroTicks) / ticksPerSec;
+        } catch (e) {}
+        // 帧率：PR 各版本字段名不一，逐个兜底
+        try { if (s.timebase) fps = parseFloat(s.timebase); } catch (e) {}
+        if (!fps) { try { fps = parseFloat(s.getSettings && s.getSettings().videoFrameRate); } catch (e) {} }
+        try { aTracks = s.audioTracks.numTracks; } catch (e) {}
+        try { vTracks = s.videoTracks.numTracks; } catch (e) {}
+        return "OK:" + JSON.stringify({
+            name: s.name || '',
+            durationSec: Math.round(dur * 100) / 100,
+            fps: fps,
+            width: w, height: h,
+            audioTracks: aTracks, videoTracks: vTracks
+        });
+    } catch (e) { return "ERR:" + e.toString(); }
+}
+
 // 获取活动序列的时长（秒）与帧尺寸，供交付清单使用
 function meSeqInfo() {
     try {
