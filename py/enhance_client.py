@@ -18,8 +18,49 @@ BASE = 'http://subtitle.zztianqiao.com'
 _py_dir = os.path.dirname(os.path.abspath(__file__))
 _collect_dir = os.path.join(os.path.dirname(_py_dir), 'collect')
 _cfg_dir = _collect_dir if os.path.isdir(_collect_dir) else _py_dir
+ACCOUNT_FILE = os.path.join(_cfg_dir, 'enhance_account.json')
 TOKEN_FILE = os.path.join(_cfg_dir, '_enhance_token.json')
 FOLDER_FILE = os.path.join(_cfg_dir, '_enhance_folder.json')
+
+
+# ---------- 账号配置（每台机器各自的账号，存 collect/enhance_account.json）----------
+def load_account():
+    """读用户配置的账号。返回 (user, pwd)；未配置返回 ('', '')"""
+    try:
+        if os.path.exists(ACCOUNT_FILE):
+            j = json.load(open(ACCOUNT_FILE, encoding='utf-8'))
+            return str(j.get('user') or ''), str(j.get('pwd') or '')
+    except Exception:
+        pass
+    return '', ''
+
+
+def save_account(user, pwd):
+    """保存账号到本地配置"""
+    try:
+        os.makedirs(os.path.dirname(ACCOUNT_FILE), exist_ok=True)
+        json.dump({'user': user, 'pwd': pwd}, open(ACCOUNT_FILE, 'w', encoding='utf-8'),
+                  ensure_ascii=False)
+        try:
+            if os.path.exists(TOKEN_FILE):
+                os.remove(TOKEN_FILE)
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
+
+
+def resolve_account(user, pwd):
+    """命令行没给账号时，回退到本地配置；都没有则报错"""
+    if not user or not pwd:
+        u2, p2 = load_account()
+        user = user or u2
+        pwd = pwd or p2
+    if not user or not pwd:
+        raise RuntimeError('未配置超分站账号：请在插件「超分」面板点「⚙ 账号」填写自己的账号')
+    return user, pwd
+
 
 def out(*a):
     try:
@@ -413,10 +454,10 @@ def main():
     except Exception:
         pass
     ap = argparse.ArgumentParser(description='超分站客户端')
-    ap.add_argument('cmd', choices=['login', 'upload', 'tasks', 'folders', 'download',
+    ap.add_argument('cmd', choices=['login', 'account', 'upload', 'tasks', 'folders', 'download',
                                     'erase', 'erase-tasks', 'erase-download'])
-    ap.add_argument('--user', default='张大强')
-    ap.add_argument('--pwd', default='tianqiao123')
+    ap.add_argument('--user', default='', help='超分站账号（不传则读本地配置）')
+    ap.add_argument('--pwd', default='', help='超分站密码')
     ap.add_argument('--file', default='')
     ap.add_argument('--folder', default='', help='文件夹 ID（不带则用默认 14086）')
     ap.add_argument('--resolution', default='720p', choices=['720p', '1080p', '2k'])
@@ -427,9 +468,23 @@ def main():
     ap.add_argument('--save-name', default='', help='download 命令：结果保存的文件名（默认从 URL 推断）')
     args = ap.parse_args()
 
-    if args.cmd == 'login':
-        tok = login(args.user, args.pwd)
-        out('登录成功 token: ' + tok[:30] + '...')
+    if args.cmd == 'account':
+        if args.file:
+            u, _, p = args.file.partition(':')
+            if save_account(u.strip(), p.strip()):
+                out('✅ 账号已保存')
+            else:
+                out('❌ 保存失败')
+        else:
+            u, p = load_account()
+            out(json.dumps({'configured': bool(u and p), 'user': u, 'pwdLen': len(p)}, ensure_ascii=False))
+    elif args.cmd == 'login':
+        try:
+            u, p = resolve_account(args.user, args.pwd)
+            tok = login(u, p)
+            out('登录成功 token: ' + tok[:30] + '...')
+        except Exception as e:
+            out('❌ ' + str(e))
     elif args.cmd == 'folders':
         fl = list_folders(args.user, args.pwd)
         if args.json:

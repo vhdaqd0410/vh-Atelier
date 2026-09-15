@@ -33,6 +33,8 @@
   var enTaskList = document.getElementById('enTaskList');
   var enTaskTitle = document.getElementById('enTaskTitle');
   var enTaskHint = document.getElementById('enTaskHint');
+  var enAccount = document.getElementById('enAccount');
+  var enAccHint = document.getElementById('enAccHint');
   var enTaskPickAll = document.getElementById('enTaskPickAll');
   var enTaskDlSel = document.getElementById('enTaskDlSel');
   var enTaskExpand = document.getElementById('enTaskExpand');
@@ -864,6 +866,125 @@
     return d;
   }
 
+
+  // ===== 超分站账号（每台机器各用各的）=====
+  var SITE_URL = 'http://subtitle.zztianqiao.com';
+
+  function pyPath() {
+    var root = locateExtRoot();
+    return root ? path.join(root, 'py', 'enhance_client.py') : '';
+  }
+
+  function refreshAccount() {
+    if (!enAccHint) return;
+    var py = findPy();
+    var script = pyPath();
+    if (!script || !fs.existsSync(script)) { enAccHint.textContent = ''; return; }
+    var cp = require('child_process');
+    cp.exec('"' + py + '" "' + script + '" account', { windowsHide: true, timeout: 20000 }, function (err, stdout) {
+      var txt = String(stdout || '').trim().split('\n').pop() || '';
+      var j = null;
+      try { j = JSON.parse(txt); } catch (e) {}
+      if (j && j.configured) {
+        enAccHint.textContent = '当前账号：' + j.user;
+        enAccHint.className = 'en-acc-hint ok';
+      } else {
+        enAccHint.textContent = '⚠ 未配置超分站账号，请点「⚙ 账号」设置（否则无法提交任务）';
+        enAccHint.className = 'en-acc-hint warn';
+      }
+    });
+  }
+
+  function saveAccount(user, pwd, cb) {
+    var py = findPy();
+    var script = pyPath();
+    if (!script || !fs.existsSync(script)) { if (cb) cb('找不到 enhance_client.py'); return; }
+    var cp = require('child_process');
+    var arg = user + ':' + pwd;
+    cp.exec('"' + py + '" "' + script + '" account --file "' + arg.replace(/"/g, '') + '"',
+      { windowsHide: true, timeout: 30000 }, function (err, stdout) {
+        var out = String(stdout || '').trim();
+        if (out.indexOf('已保存') >= 0) { if (cb) cb(null); }
+        else { if (cb) cb(out || (err && err.message) || '保存失败'); }
+      });
+  }
+
+  function openAccountDialog() {
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#1e1e1e;border:1px solid #444;border-radius:8px;padding:18px;width:400px;max-width:92vw;';
+    box.innerHTML =
+      '<div style="font-size:13px;font-weight:600;color:#eee;margin-bottom:8px;">超分站账号</div>' +
+      '<div style="font-size:11px;color:#9a9a9a;line-height:1.7;margin-bottom:12px;">' +
+        '用于<b style="color:#c9a86a;">超分</b>和<b style="color:#c9a86a;">去字幕</b>任务（subtitle.zztianqiao.com）。' +
+        '<br>每台机器填自己的账号，任务和余额互不影响。' +
+        '<br>账号只存本地（collect/enhance_account.json），不会外传。' +
+      '</div>';
+    var lab1 = document.createElement('div');
+    lab1.style.cssText = 'font-size:11px;color:#aaa;margin-bottom:4px;';
+    lab1.textContent = '账号';
+    var in1 = document.createElement('input');
+    in1.type = 'text'; in1.placeholder = '你的账号';
+    in1.style.cssText = 'width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #444;border-radius:4px;background:#2a2a2a;color:#ddd;font-size:13px;margin-bottom:10px;';
+    var lab2 = document.createElement('div');
+    lab2.style.cssText = 'font-size:11px;color:#aaa;margin-bottom:4px;';
+    lab2.textContent = '密码';
+    var in2 = document.createElement('input');
+    in2.type = 'password'; in2.placeholder = '你的密码';
+    in2.style.cssText = in1.style.cssText.replace('margin-bottom:10px;', 'margin-bottom:12px;');
+    var tip = document.createElement('div');
+    tip.style.cssText = 'font-size:11px;color:#ffb84d;min-height:16px;margin-bottom:8px;';
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;';
+    var bWeb = document.createElement('button');
+    bWeb.textContent = '🌐 打开网页登录'; bWeb.className = 'secondary mini';
+    var bCancel = document.createElement('button');
+    bCancel.textContent = '取消'; bCancel.className = 'secondary mini';
+    var bSave = document.createElement('button');
+    bSave.textContent = '保存'; bSave.className = 'en-go';
+    bSave.style.cssText = 'flex:0 0 auto;padding:4px 16px;font-size:12px;';
+    row.appendChild(bWeb); row.appendChild(bCancel); row.appendChild(bSave);
+    box.appendChild(lab1); box.appendChild(in1);
+    box.appendChild(lab2); box.appendChild(in2);
+    box.appendChild(tip); box.appendChild(row);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    bWeb.addEventListener('click', function () {
+      try { require('child_process').exec('start "" "' + SITE_URL + '"'); } catch (e) {}
+      tip.style.color = '#7fd68b';
+      tip.textContent = '已用浏览器打开网站，登录后回到这里填账号密码即可';
+    });
+    bCancel.addEventListener('click', close);
+    bSave.addEventListener('click', function () {
+      var u = (in1.value || '').trim();
+      var p = in2.value || '';
+      if (!u || !p) { tip.style.color = '#ff9a9a'; tip.textContent = '账号和密码都要填'; return; }
+      tip.style.color = '#c9a86a'; tip.textContent = '保存中…';
+      saveAccount(u, p, function (err) {
+        if (err) { tip.style.color = '#ff9a9a'; tip.textContent = '保存失败：' + err; return; }
+        tip.style.color = '#7fd68b'; tip.textContent = '✅ 已保存，正在重新登录…';
+        var cp = require('child_process');
+        var py = findPy(); var script = pyPath();
+        cp.exec('"' + py + '" "' + script + '" login', { windowsHide: true, timeout: 120000 }, function (e2, so) {
+          var t = String(so || '');
+          if (t.indexOf('登录成功') >= 0) {
+            tip.textContent = '✅ 账号已保存并登录成功';
+            refreshAccount();
+            setTimeout(close, 1200);
+          } else {
+            tip.style.color = '#ffb84d';
+            tip.textContent = '已保存，但登录失败：' + (t.split('\n').pop() || '请检查账号密码').slice(0, 60);
+            refreshAccount();
+          }
+        });
+      });
+    });
+    in1.focus();
+  }
+
   // 切换处理类型（超分 / 去字幕）：改按钮文案、隐藏不适用项、切换任务列表数据源
   function applyMode() {
     var isErase = (taskMode === 'erase');
@@ -1150,6 +1271,7 @@
     }
     var enEnvBtn = document.getElementById('enEnv');
     if (enEnvBtn) enEnvBtn.addEventListener('click', checkEnv);
+    if (enAccount) enAccount.addEventListener('click', openAccountDialog);
     if (enTaskRefresh) enTaskRefresh.addEventListener('click', function () { refreshTaskList(); });
     if (enGrabClip) enGrabClip.addEventListener('click', function () { grabClip(false); });
     if (enGoClip) enGoClip.addEventListener('click', runClip);
