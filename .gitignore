@@ -3,6 +3,7 @@ node_modules/
 runtime/
 engine/
 models/
+bin/*.exe
 bin/whisper/
 bin/sherpa/
 ncm/node_modules/
