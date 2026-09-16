@@ -2263,6 +2263,12 @@
             color: var(--muted); user-select: text; -webkit-user-select: text;
             white-space: pre-wrap; word-break: break-all;
         }
+        /* 后台任务队列状态条 */
+        #panel-upscale .en-bgqueue {
+            flex: 0 0 auto; margin-bottom: 4px;
+            background: #1b1b22; border: 1px solid #33334a; border-radius: 5px;
+            padding: 5px 7px; line-height: 1.7;
+        }
 /* ===== 超分面板：可拖拽分隔条 + 内嵌站展开态 ===== */
         .en-splitter {
             flex: 0 0 8px; height: 8px; margin: 2px 0; cursor: row-resize;
