@@ -1150,6 +1150,34 @@ function meExport(outputPath, presetPath, exportType) {
 // 设计说明：区间导出（exportType=1）渲染的是序列该时间段上的画面，
 // 与「选中的块是视频还是音频」无关，所以这里不做类型过滤，
 // 直接把所有选中项取并集算区间；额外回报其中多少个落在视频轨上（仅作提示）。
+// 读取当前序列的入点/出点（供「从时间轴采集音效」的入出点模式用）
+// 返回 { inSec, outSec, durationSec }；PR 的 getInPoint/getOutPoint 正常返 Real（秒），
+// 个别版本可能返回 Time 对象或 -1，做双重兼容。
+function meGetSequenceInOut() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return "ERR:没有激活的序列";
+        var inSec = -1, outSec = -1;
+        try { inSec = seq.getInPoint(); } catch (e) { inSec = -1; }
+        if (typeof inSec !== 'number' || inSec < 0) {
+            try { var ipt = seq.getInPointAsTime(); if (ipt && ipt.seconds !== undefined) inSec = ipt.seconds; } catch (e2) {}
+        }
+        try { outSec = seq.getOutPoint(); } catch (e3) { outSec = -1; }
+        if (typeof outSec !== 'number' || outSec < 0) {
+            try { var opt = seq.getOutPointAsTime(); if (opt && opt.seconds !== undefined) outSec = opt.seconds; } catch (e4) {}
+        }
+        if (typeof inSec !== 'number' || inSec < 0 || typeof outSec !== 'number' || outSec <= inSec) {
+            return "ERR:序列未设置有效入出点（in=" + inSec + ", out=" + outSec + "），请先在时间轴按 I / O 设置";
+        }
+        return "OK:" + JSON.stringify({
+            inSec: inSec,
+            outSec: outSec,
+            durationSec: outSec - inSec,
+            seqName: seq.name
+        });
+    } catch (e) { return "ERR:" + e.toString(); }
+}
+
 function meGetSelectedClipInfo() {
     try {
         var seq = app.project.activeSequence;
