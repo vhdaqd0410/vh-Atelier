@@ -1160,36 +1160,50 @@
     if (enResWrap) enResWrap.style.display = isErase ? 'none' : '';   // 去字幕没有分辨率档
     if (enActHint) {
       enActHint.textContent = isErase
-        ? '导出含字幕成片 → 上传擦除硬字幕 → 下载导入「去字幕」箱；或时间轴选片段 → 点「处理选中片段」只做该段'
-        : '导出无字幕底版 → 上传超分 → 下载导入「超分」箱；或时间轴选片段 → 点「处理选中片段」只做该段';
+        ? '导出含字幕成片 → 上传擦除硬字幕 → 下载导入「去字幕」箱；或时间轴选片段 / 设 I-O 区间 → 点「处理选中区间」只做那一段'
+        : '导出无字幕底版 → 上传超分 → 下载导入「超分」箱；或时间轴选片段 / 设 I-O 区间 → 点「处理选中区间」只做那一段';
     }
     try { refreshTaskList(); } catch (e) {}
   }
 
-  // ===== 选中片段模式：从时间轴抓取片段区间，只导出这一段跑完整流程 =====
-  // 抓取（只读）：读时间轴当前选中的视频片段，记录序列名 + 起止秒
-  // silent=true 时不写日志（供「直接处理」时静默预抓）
+  // ===== 区间模式：从时间轴读区间，只处理这一段跑完整流程 =====
+  // 两种来源：
+  //   selection 选中片段（meGetSelectedClipInfo）
+  //   inout     入点→出点（meGetSequenceInOut）
+  // silent=true 时不写日志（供「直接处理」时静默预读）
+  function enClipSrcMode() {
+    var s = document.getElementById('enClipSrc');
+    return (s && s.value === 'inout') ? 'inout' : 'selection';
+  }
+
   async function grabClip(silent) {
+    var src = enClipSrcMode();
     try {
-      var r = await evalHost('meGetSelectedClipInfo()');
+      var r = await evalHost(src === 'inout' ? 'meGetSequenceInOut()' : 'meGetSelectedClipInfo()');
       if (!r || r.indexOf('OK:') !== 0) {
         grabbedClip = null;
-        var em = r ? r.replace(/^ERR:/, '') : '抓取失败（无返回）';
+        var em = r ? r.replace(/^ERR:/, '') : (src === 'inout' ? '读取入出点失败（无返回）' : '读取选中片段失败（无返回）');
         renderClipInfo(em);
         if (!silent) log('✗ ' + em, 'err');
         return null;
       }
       var info = JSON.parse(r.slice(3));
+      info.src = src;
       grabbedClip = info;
       renderClipInfo();
       if (!silent) {
-        log('✂ 已抓取片段：' + info.seqName + ' ｜ ' + fmtSec(info.startSec) + ' → ' + fmtSec(info.endSec) +
-            '（' + fmtSec(info.durationSec) + (info.clipCount > 1 ? '，含 ' + info.clipCount + ' 个选中块（按并集）' : '') + '）', 'ok');
+        if (src === 'inout') {
+          log('✂ 已读取入出点区间：' + info.seqName + ' ｜ ' + fmtSec(info.inSec) + ' → ' + fmtSec(info.outSec) +
+              '（' + fmtSec(info.durationSec) + '）', 'ok');
+        } else {
+          log('✂ 已读取选中片段：' + info.seqName + ' ｜ ' + fmtSec(info.startSec) + ' → ' + fmtSec(info.endSec) +
+              '（' + fmtSec(info.durationSec) + (info.clipCount > 1 ? '，含 ' + info.clipCount + ' 个选中块（按并集）' : '') + '）', 'ok');
+        }
       }
       return info;
     } catch (e) {
       grabbedClip = null;
-      renderClipInfo('抓取异常：' + e.message);
+      renderClipInfo('读取异常：' + e.message);
       if (!silent) log('✗ 抓取异常：' + e.message, 'err');
       return null;
     }
@@ -1212,14 +1226,19 @@
       return;
     }
     if (!grabbedClip) {
-      enClipInfo.textContent = '未抓取（在时间轴选中片段后点「处理选中片段」即可）';
+      enClipInfo.textContent = (enClipSrcMode() === 'inout')
+        ? '未读取（在时间轴按 I / O 设好入出点，再点左侧按钮）'
+        : '未读取（在时间轴选中片段，再点左侧按钮）';
       enClipInfo.className = 'en-clip-info';
       enClipInfo.title = '';
       return;
     }
     var c = grabbedClip;
-    enClipInfo.textContent = c.seqName + ' ｜ ' + fmtSec(c.startSec) + ' → ' + fmtSec(c.endSec) +
-      ' （' + fmtSec(c.durationSec) + '）';
+    var s0 = (c.startSec != null) ? c.startSec : c.inSec;
+    var s1 = (c.endSec != null) ? c.endSec : c.outSec;
+    enClipInfo.textContent = c.seqName + ' ｜ ' + fmtSec(s0) + ' → ' + fmtSec(s1) +
+      ' （' + fmtSec(c.durationSec) + '）' +
+      (c.src === 'inout' ? ' ［入点→出点］' : (c.clipCount > 1 ? ' ［' + c.clipCount + ' 个选中块］' : ''));
     enClipInfo.className = 'en-clip-info has';
     enClipInfo.title = enClipInfo.textContent;
   }
@@ -1255,7 +1274,9 @@
       // 1) 现场读取选中片段（总是重读，避免用上次的旧区间）
       var info = await grabClip(true);
       if (!info) {
-        log('✗ 读不到选中片段：请先在时间轴选中片段（视频轨或音频轨均可，导出按选中区间渲染画面）', 'err');
+        log('✗ 读不到区间：' + (enClipSrcMode() === 'inout'
+          ? '请先在时间轴按 I / O 设好入出点'
+          : '请先在时间轴选中片段（视频轨或音频轨均可）'), 'err');
         return;
       }
       log('✂ 选中区间：' + info.seqName + ' ｜ ' + fmtSec(info.startSec) + ' → ' + fmtSec(info.endSec) +
@@ -1273,7 +1294,12 @@
     var isErase = (taskMode === 'erase');
     var modeCN = isErase ? '去字幕' : '超分';
     var binName = isErase ? '去字幕' : '超分';
-    log('════ 开始处理选中片段（' + modeCN + '） ════');
+    // 区间字段归一：
+    //   选中片段 → { startSec, endSec }
+    //   入点出点 → { inSec, outSec }
+    if (c.startSec == null && c.inSec != null) c.startSec = c.inSec;
+    if (c.endSec == null && c.outSec != null) c.endSec = c.outSec;
+    log('════ 开始处理区间（' + modeCN + '｜' + (c.src === 'inout' ? '入点→出点' : '选中片段') + '） ════');
     var progWrap = document.getElementById('enProgWrap');
     var progFill = document.getElementById('enProgFill');
     var progText = document.getElementById('enProgText');
@@ -1414,6 +1440,22 @@
     if (enTaskRefresh) enTaskRefresh.addEventListener('click', function () { refreshTaskList(); });
     if (enGrabClip) enGrabClip.addEventListener('click', function () { grabClip(false); });
     if (enGoClip) enGoClip.addEventListener('click', runClip);
+    // 区间来源切换：清掉旧数据，提示重新读取
+    var enClipSrcSel = document.getElementById('enClipSrc');
+    if (enClipSrcSel) {
+      try {
+        var savedSrc = localStorage.getItem('vh_enhance_clipsrc');
+        if (savedSrc === 'inout' || savedSrc === 'selection') enClipSrcSel.value = savedSrc;
+      } catch (e) {}
+      enClipSrcSel.addEventListener('change', function () {
+        grabbedClip = null;
+        try { localStorage.setItem('vh_enhance_clipsrc', enClipSrcSel.value); } catch (e) {}
+        renderClipInfo();
+        log(enClipSrcSel.value === 'inout'
+          ? '区间来源：入点→出点（在时间轴按 I / O 设区间，再点「从时间轴读取区间」）'
+          : '区间来源：选中片段（在时间轴选中片段，再点「从时间轴读取区间」）');
+      });
+    }
     // 按钮始终可点（不再依赖先抓取），初始信息条只做提示
     if (enGoClip) enGoClip.disabled = false;
     // 默认加载
