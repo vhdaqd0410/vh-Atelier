@@ -141,43 +141,96 @@
     }
 
     // ============ 版本检查 ============
-    function checkUpdate(cb) {
-        var cfg = readCfg();
-        if (!cfg || !cfg.repo || !cfg.branch) { cb(new Error('未配置更新源（缺 version.json）')); return; }
-        var url = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
-                  '/version.json?_=' + Date.now();
+    // 注：raw.githubusercontent.com 是 CDN，发布后可能有几分钟到几小时缓存，
+    // 导致刚发新版本时检查不到。所以主地址之外再回退到 GitHub API（无 CDN 缓存）。
+    function fetchJson(url, cb) {
         var xhr = new XMLHttpRequest();
         xhr.open('GET', url, true);
         xhr.timeout = 20000;
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== 4) return;
-            if (xhr.status !== 200) { cb(new Error('读取远程版本失败（HTTP ' + xhr.status + '）')); return; }
-            var remote = null;
-            try { remote = JSON.parse(xhr.responseText); } catch (e) { cb(new Error('远程版本文件解析失败')); return; }
-            try { localStorage.setItem(LAST_CHECK_KEY, String(Date.now())); } catch (e) {}
-            cb(null, {
-                local: cfg,
-                remote: remote,
-                hasUpdate: String(remote.version || '') !== String(cfg.version || ''),
-                remoteTime: remote.buildTime || '',
-                notes: remote.notes || ''
-            });
+            if (xhr.status !== 200) { cb(new Error('HTTP ' + xhr.status)); return; }
+            var j = null;
+            try { j = JSON.parse(xhr.responseText); } catch (e) { cb(new Error('解析失败')); return; }
+            cb(null, j);
         };
-        xhr.onerror = function () { cb(new Error('网络错误（无法访问 GitHub）')); };
+        xhr.onerror = function () { cb(new Error('网络错误')); };
         xhr.ontimeout = function () { cb(new Error('请求超时')); };
         xhr.send();
     }
 
+    // 读远端 version.json：先 raw（快），拿到的版本若与本地相同再查 API 复核（防 CDN 缓存）
+    function fetchRemoteVersion(cfg, cb) {
+        var raw = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
+                  '/version.json?_=' + Date.now();
+        fetchJson(raw, function (e1, j1) {
+            if (!e1 && j1 && j1.version) {
+                if (String(j1.version) !== String(cfg.version)) { cb(null, j1, 'raw'); return; }
+            }
+            // raw 失败，或版本与本地相同（可能被缓存）：再问 API
+            var api = 'https://api.github.com/repos/' + cfg.repo + '/contents/version.json?ref=' +
+                      encodeURIComponent(cfg.branch) + '&_=' + Date.now();
+            fetchJson(api, function (e2, j2) {
+                try {
+                    if (!e2 && j2 && j2.content) {
+                        var txt = (typeof atob === 'function')
+                            ? decodeURIComponent(escape(atob(String(j2.content).replace(/\s/g, ''))))
+                            : '';
+                        var jr = JSON.parse(txt);
+                        if (jr && jr.version) { cb(null, jr, 'api'); return; }
+                    }
+                } catch (e) {}
+                if (!e1 && j1 && j1.version) { cb(null, j1, 'raw'); return; }
+                cb(e1 || e2 || new Error('无法读取远程版本'));
+            });
+        });
+    }
+
+    function checkUpdate(cb) {
+        var cfg = readCfg();
+        if (!cfg || !cfg.repo || !cfg.branch) { cb(new Error('未配置更新源（缺 version.json）')); return; }
+        fetchRemoteVersion(cfg, function (err, remote, src) {
+            if (err) { cb(err); return; }
+            try { localStorage.setItem(LAST_CHECK_KEY, String(Date.now())); } catch (e) {}
+            cb(null, {
+                local: cfg,
+                remote: remote,
+                src: src || 'raw',
+                hasUpdate: String(remote.version || '') !== String(cfg.version || ''),
+                remoteTime: remote.buildTime || '',
+                notes: remote.notes || ''
+            });
+        });
+    }
+
     // ============ 执行更新 ============
+    // codeload 也可能有 CDN 缓存，所以先问一次该分支最新 commit sha，
+    // 用 /zip/<sha> 这种不可变地址下载，确保拿到刚发布的代码。
+    function resolveZipUrl(cfg, cb) {
+        var plain = 'https://codeload.github.com/' + cfg.repo + '/zip/refs/heads/' + cfg.branch;
+        var api = 'https://api.github.com/repos/' + cfg.repo + '/commits/' +
+                  encodeURIComponent(cfg.branch) + '?_=' + Date.now();
+        fetchJson(api, function (e, j) {
+            if (!e && j && j.sha) {
+                cb('https://codeload.github.com/' + cfg.repo + '/zip/' + j.sha);
+            } else {
+                cb(plain);
+            }
+        });
+    }
+
     function doUpdate(onLog, onProgress, cb) {
         var cfg = readCfg();
         if (!cfg) { cb(new Error('未配置更新源')); return; }
         var log = onLog || function () {};
-        var zipUrl = 'https://codeload.github.com/' + cfg.repo + '/zip/refs/heads/' + cfg.branch;
         var zipFile = path.join(os.tmpdir(), 'vh_update_' + Date.now() + '.zip');
 
         (async function () {
             try {
+                var zipUrl = 'https://codeload.github.com/' + cfg.repo + '/zip/refs/heads/' + cfg.branch;
+                await new Promise(function (res) {
+                    resolveZipUrl(cfg, function (u) { zipUrl = u; res(); });
+                });
                 log('正在下载更新包…');
                 await download(zipUrl, zipFile, function (pct) {
                     if (onProgress) onProgress(pct);
