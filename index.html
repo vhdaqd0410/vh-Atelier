@@ -121,8 +121,12 @@
                 <div class="sfx-cap-body" id="sfxCapBody" style="display:none;">
                     <div class="sfx-cap-row">
                         <span class="sfx-lab">来源</span>
-                        <span class="sfx-cap-src" id="sfxCapSrc">未读取（点右侧「取选中」）</span>
-                        <button class="tbtn" id="btnSfxCapPick">取选中</button>
+                        <select id="sfxCapSrcMode" title="选取区间的方式" style="flex:0 0 116px;">
+                            <option value="selection">选中片段</option>
+                            <option value="inout">入点→出点</option>
+                        </select>
+                        <span class="sfx-cap-src" id="sfxCapSrc">未读取（点右侧「取区间」）</span>
+                        <button class="tbtn" id="btnSfxCapPick">取区间</button>
                     </div>
                     <div class="sfx-cap-row">
                         <span class="sfx-lab">名称</span>
@@ -144,7 +148,7 @@
                     </div>
                     <div class="sfx-cap-row">
                         <span class="sfx-lab">选项</span>
-                        <label class="sfx-cap-chk"><input type="checkbox" id="sfxCapFade" checked> 淡出 50ms（防拼接爆音）</label>
+                        <label class="sfx-cap-chk"><input type="checkbox" id="sfxCapFade"> 淡出 50ms（防拼接爆音）</label>
                         <label class="sfx-cap-chk"><input type="checkbox" id="sfxCapImport"> 同时导入素材箱</label>
                     </div>
                     <div class="sfx-cap-row sfx-cap-act">
