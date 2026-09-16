@@ -566,6 +566,65 @@
             color: var(--white);
             border-color: var(--accent);
         }
+        /* ---- 从时间轴采集音效 ---- */
+        .sfx-cap {
+            flex: 0 0 auto;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+        .sfx-cap-head {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .sfx-cap-head:hover { background: var(--panel2); }
+        .sfx-cap-ico {
+            flex: 0 0 auto;
+            width: 16px; height: 16px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 4px;
+            background: var(--accent);
+            color: var(--white);
+            font-size: 12px; line-height: 1;
+        }
+        .sfx-cap-t { flex: 0 0 auto; font-size: 12px; font-weight: 600; color: var(--text); }
+        .sfx-cap-hint { flex: 1 1 auto; min-width: 0; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sfx-cap-arrow { flex: 0 0 auto; color: var(--muted); font-size: 11px; transition: transform .18s; }
+        .sfx-cap.open .sfx-cap-arrow { transform: rotate(90deg); }
+        .sfx-cap-body { padding: 4px 10px 10px; border-top: 1px solid var(--border); }
+        .sfx-cap-row { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+        .sfx-lab { flex: 0 0 46px; font-size: 11px; color: var(--muted); }
+        .sfx-cap-row input[type=text] { flex: 1 1 auto; min-width: 0; }
+        .sfx-cap-row select { flex: 1 1 auto; min-width: 0; background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+        .sfx-cap-body .tbtn { flex: 0 0 auto; padding: 5px 9px; font-size: 11.5px; background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+        .sfx-cap-body .tbtn:hover { background: var(--gray-input); }
+        .sfx-cap-body .tbtn.on { background: var(--accent); color: var(--white); border-color: var(--accent); }
+        .sfx-cap-src { flex: 1 1 auto; min-width: 0; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sfx-cap-src.has { color: var(--text); font-weight: 500; }
+        .sfx-cap-chk { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); cursor: pointer; }
+        .sfx-cap-chk input { width: auto; }
+        .sfx-cap-tip {
+            margin-top: 7px;
+            padding: 6px 9px;
+            border-radius: 6px;
+            background: rgba(255, 184, 77, .07);
+            border: 1px solid rgba(255, 184, 77, .2);
+            font-size: 11px;
+            line-height: 1.6;
+            color: var(--muted);
+        }
+        .sfx-cap-tip b { color: #ffb84d; font-weight: 600; }
+        .sfx-cap-act { margin-top: 9px; }
+        .sfx-cap-st { flex: 1 1 auto; min-width: 0; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sfx-cap-st.ok { color: #7fd68b; }
+        .sfx-cap-st.err { color: #ff9a9a; }
+        .sfx-cap-st.warn { color: #ffb84d; }
         /* 音乐/下载列表（LX 联动） */
         .aigei-downloads {
             flex: 1;

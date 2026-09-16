@@ -304,6 +304,50 @@
                     <span id="sfxCount" style="margin-left:auto;"></span>
                 </div>
             </div>
+
+            <!-- 从时间轴采集音效（导出选中音频为 wav 存进音效库） -->
+            <div class="sfx-cap" id="sfxCap">
+                <div class="sfx-cap-head" id="sfxCapHead">
+                    <span class="sfx-cap-ico">＋</span>
+                    <span class="sfx-cap-t">从时间轴采集音效</span>
+                    <span class="sfx-cap-hint" id="sfxCapHint">选中时间轴音频片段后导出为 wav</span>
+                    <span class="sfx-cap-arrow">▸</span>
+                </div>
+                <div class="sfx-cap-body" id="sfxCapBody" style="display:none;">
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">来源</span>
+                        <span class="sfx-cap-src" id="sfxCapSrc">未读取（点右侧「取选中」）</span>
+                        <button class="tbtn" id="btnSfxCapPick">取选中</button>
+                    </div>
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">名称</span>
+                        <input type="text" id="sfxCapName" placeholder="音效文件名（默认取片段名）">
+                    </div>
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">模式</span>
+                        <select id="sfxCapMode" title="选择导出方式">
+                            <option value="fast">快速模式 · ffmpeg 剪切</option>
+                            <option value="exact">精确模式 · PR 原生导出</option>
+                        </select>
+                    </div>
+                    <div class="sfx-cap-tip" id="sfxCapTip"></div>
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">保存到</span>
+                        <input type="text" id="sfxCapDir" placeholder="默认：音效库 / 新采集">
+                        <button class="tbtn" id="btnSfxCapDir">选目录</button>
+                        <button class="tbtn" id="btnSfxCapDef" title="恢复为音效库下「新采集」子目录">默认</button>
+                    </div>
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">选项</span>
+                        <label class="sfx-cap-chk"><input type="checkbox" id="sfxCapFade" checked> 淡出 50ms（防拼接爆音）</label>
+                        <label class="sfx-cap-chk"><input type="checkbox" id="sfxCapImport"> 同时导入素材箱</label>
+                    </div>
+                    <div class="sfx-cap-row sfx-cap-act">
+                        <span id="sfxCapStatus" class="sfx-cap-st"></span>
+                        <button class="tbtn on" id="btnSfxCapGo">导出为音效</button>
+                    </div>
+                </div>
+            </div>
             <div class="mllib-body">
                 <div class="mllib-tree" id="sfxTree"></div>
                 <div class="mllib-main">
@@ -974,7 +1018,7 @@
             <input type="text" class="wb-nav-url" id="upUrl" placeholder="输入网址回车跳转">
             <button class="wb-nav-btn" id="upExpand" title="展开：内嵌站占满整个面板（再点还原）">⤢</button>
         </div>
-        <iframe id="upscaleFrame" style="flex:0 0 130px;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+        <iframe id="upscaleFrame" style="flex:0 0 260px;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
     </div>
 
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
@@ -1023,6 +1067,7 @@
     <script src="js/clone.js"></script>
     <script src="js/wavesurfer.js"></script>
     <script src="js/sfx.js"></script>
+    <script src="js/sfx-capture.js"></script>
     <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
     <script src="js/export.js"></script>
@@ -1033,6 +1078,7 @@
     <script src="js/script.js"></script>
     <script src="js/progress.js"></script>
     <script src="js/todo.js"></script>
+    <script src="js/iframe-nav.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================

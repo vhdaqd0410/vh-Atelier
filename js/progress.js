@@ -633,8 +633,13 @@
     // 切到审片板块并导航 iframe 到分秒帧项目页
     function gotoFm(projectName, url) {
         try {
-            var fr = document.getElementById('spFrame');
-            if (fr) fr.src = url;   // 先设 src，避免切 tab 时 __spAutoLoad 用首页覆盖
+            // 走 iframe-nav 的接口（同时入历史栈并标记已加载，避免切 tab 时被首页覆盖）
+            if (window.__spNav && window.__spNav.load) {
+                window.__spNav.load(url, true);
+            } else {
+                var fr = document.getElementById('spFrame');
+                if (fr) fr.src = url;
+            }
             if (window.__atSwitchTab) window.__atSwitchTab('shenpian');
         } catch (e) {
             // CEP 里跨域 iframe 导航失败则提示手动打开

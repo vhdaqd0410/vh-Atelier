@@ -1329,7 +1329,7 @@
 
     var STORE_H = 'vh_upscale_frame_h';
     var STORE_X = 'vh_upscale_expanded';
-    var DEFAULT_H = 130;
+    var DEFAULT_H = 260;
     var MIN_TOP = 110;   // 操作区保底高度
     var MIN_FRAME = 80;  // 内嵌站最小高度
 

@@ -1107,6 +1107,14 @@
         try { tryRestoreAfterScan(); } catch (e) {}
     };
 
+    // 重新扫描当前目录（供「从时间轴采集音效」导出后刷新列表用）
+    window.__sfxRescan = function () {
+        try {
+            if (!rootDir) return;
+            doScan(false);
+        } catch (e) {}
+    };
+
     // 切到音效库 tab 时自动聚焦搜索框
     var sfxTab = document.querySelector('.tab[data-tab="sfx"]');
     if (sfxTab) {
