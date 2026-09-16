@@ -902,11 +902,43 @@
     var cp = require('child_process');
     var arg = user + ':' + pwd;   // 借用 --file 传 user:pwd
     cp.exec('"' + py + '" "' + script + '" account --file "' + arg.replace(/"/g, '') + '"',
-      { windowsHide: true, timeout: 30000 }, function (err, stdout) {
+      { windowsHide: true, timeout: 30000, encoding: 'utf8' }, function (err, stdout) {
         var out = String(stdout || '').trim();
         if (out.indexOf('已保存') >= 0) { if (cb) cb(null); }
         else { if (cb) cb(out || (err && err.message) || '保存失败'); }
       });
+  }
+
+  // 环境自检：返回缺失项数组（为空表示就绪）
+  function envProblems() {
+    var miss = [];
+    var py = findPy();
+    if (!py) { miss.push('未找到 Python 3.10+'); return miss; }
+    var r = null;
+    try {
+      var cp = require('child_process');
+      r = cp.spawnSync(py, ['-c', 'import ddddocr'], { windowsHide: true, timeout: 25000 });
+    } catch (e) {}
+    if (!r || r.status !== 0) miss.push('Python 缺 ddddocr（验证码识别库）');
+    return miss;
+  }
+
+  // 一键安装缺失依赖（面板内直接调 pip，免重跑部署脚本）
+  function installDeps(onOk, onErr) {
+    var py = findPy();
+    if (!py) { onErr('未找到 Python'); return; }
+    try {
+      var cp = require('child_process');
+      cp.exec('"' + py + '" -m pip install --upgrade ddddocr',
+        { windowsHide: true, timeout: 600000, encoding: 'utf8', maxBuffer: 1024 * 1024 * 8 },
+        function (err, so, se) {
+          var all = String(so || '') + String(se || '');
+          var rr = null;
+          try { rr = cp.spawnSync(py, ['-c', 'import ddddocr'], { windowsHide: true, timeout: 25000 }); } catch (e) {}
+          if (rr && rr.status === 0) { onOk('ddddocr 已安装'); }
+          else { onErr((err && err.message) || all.slice(-160) || '未知错误'); }
+        });
+    } catch (e) { onErr(e.message); }
   }
 
   // 账号弹窗
@@ -936,6 +968,31 @@
     in2.style.cssText = in1.style.cssText.replace('margin-bottom:10px;', 'margin-bottom:12px;');
     var tip = document.createElement('div');
     tip.style.cssText = 'font-size:11px;color:#ffb84d;min-height:16px;margin-bottom:8px;';
+    // 环境自检：缺 ddddocr / Python 时先说清楚，避免“登录失败”不明所以
+    try {
+      var probs = envProblems();
+      if (probs.length) {
+        tip.style.color = '#ff9a9a';
+        tip.innerHTML = '⚠ 本机缺少：' + probs.join('、') +
+          ' <a href="#" id="fixDepsLink" style="color:#7fd68b;text-decoration:underline;">一键安装</a>';
+        setTimeout(function () {
+          var a = document.getElementById('fixDepsLink');
+          if (!a) return;
+          a.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            tip.style.color = '#c9a86a';
+            tip.textContent = '正在安装依赖（需要联网，可能几分钟）…';
+            installDeps(function (msg) {
+              tip.style.color = '#7fd68b';
+              tip.textContent = '✅ ' + msg + '，请重新点「保存」';
+            }, function (msg) {
+              tip.style.color = '#ff9a9a';
+              tip.textContent = '✗ 安装失败：' + msg + '（可手动："' + findPy() + '" -m pip install ddddocr）';
+            });
+          });
+        }, 0);
+      }
+    } catch (e) {}
     var row = document.createElement('div');
     row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;';
     var bWeb = document.createElement('button');
@@ -971,15 +1028,28 @@
         // 尝试登录验证
         var cp = require('child_process');
         var py = findPy(); var script = pyPath();
-        cp.exec('"' + py + '" "' + script + '" login', { windowsHide: true, timeout: 120000 }, function (e2, so) {
-          var t = String(so || '');
+        cp.exec('"' + py + '" "' + script + '" login', { windowsHide: true, timeout: 180000, encoding: 'utf8', maxBuffer: 1024 * 1024 }, function (e2, so, se) {
+          var t = String(so || '').trim();
+          var terr = String(se || '').trim();
           if (t.indexOf('登录成功') >= 0) {
             tip.textContent = '✅ 账号已保存并登录成功';
             refreshAccount();
             setTimeout(close, 1200);
           } else {
             tip.style.color = '#ffb84d';
-            tip.textContent = '已保存，但登录失败：' + (t.split('\n').pop() || '请检查账号密码').slice(0, 60);
+            // 取最后一行有内容的信息（脚本用 ❌/✅ 前缀标明结果）
+            var lines = t.split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+            var last = lines.length ? lines[lines.length - 1] : '';
+            var why = last || terr || '请检查账号密码';
+            // 常见原因给一句人话提示
+            if (/ddddocr/i.test(why + ' ' + terr)) {
+              why = '本机 Python 缺 ddddocr（验证码识别库）——请运行「一键部署」选 y 安装依赖';
+            } else if (/No module named/i.test(why + ' ' + terr)) {
+              why = '本机 Python 缺依赖：' + (why + ' ' + terr).replace(/[\r\n]+/g, ' ').slice(0, 80);
+            } else if (/未配置超分站账号/.test(why)) {
+              why = '账号未成功写入，请重试或手动检查 collect/enhance_account.json';
+            }
+            tip.textContent = '已保存，但登录失败：' + why.slice(0, 100);
             refreshAccount();
           }
         });
