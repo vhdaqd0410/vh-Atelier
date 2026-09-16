@@ -394,11 +394,13 @@
   // mode: 'enhance' 走 download 命令；'erase' 走 erase-download
   function downloadTask(taskId, dir, saveName, onProgress, mode) {
     mode = mode || taskMode;
-    return new Promise(function (resolve) {
+    return new Promise(function (resolve, reject) {
       var py = findPy();
       var root = locateExtRoot();
       var script = root ? path.join(root, 'py', 'enhance_client.py') : '';
-      if (!script || !fs.existsSync(script)) { resolve(''); return; }
+      if (!script || !fs.existsSync(script)) {
+        return reject(new Error('找不到 enhance_client.py（插件安装不完整）'));
+      }
       var cp = require('child_process');
       var args = (mode === 'erase')
         ? [script, 'erase-download', '--task', String(taskId), '--download-to', dir, '--json']
@@ -406,21 +408,39 @@
       if (saveName) { args.push('--save-name'); args.push(saveName); }
       var child = cp.spawn(py, args, { windowsHide: true });
       var outBuf = '';
+      var errBuf = '';
       child.stdout.on('data', function (d) { outBuf += d.toString(); });
       child.stderr.on('data', function (d) {
-        // 进度行 DLP:xx
         var s = d.toString();
+        // 进度行 DLP:xx（正常进度，不当作错误）
         var m = s.match(/DLP:(\d+)/);
         if (m && onProgress) onProgress(parseInt(m[1], 10));
+        // 其余 stderr 内容可能是真实错误（python 异常回显）
+        var rest = s.replace(/DLP:\d+\s*/g, '').trim();
+        if (rest) errBuf += rest + '\n';
       });
-      child.on('error', function () { resolve(''); });
-      child.on('close', function () {
-        try {
-          var out = outBuf.trim().split(/\r?\n/).filter(Boolean).pop() || '';
-          var j = JSON.parse(out);
-          var p = (j && j.path) || '';
-          resolve(p && fs.existsSync(p) ? p : '');
-        } catch (e) { resolve(''); }
+      child.on('error', function (e) {
+        reject(new Error('无法启动下载进程：' + (e && e.message ? e.message : e) +
+          '（请确认已装 Python，或运行一键部署选 y 装依赖）'));
+      });
+      child.on('close', function (code) {
+        var out = (outBuf || '').trim().split(/\r?\n/).filter(Boolean).pop() || '';
+        var j = null;
+        try { j = JSON.parse(out); } catch (e) {}
+        // 成功：拿得到路径
+        if (j && j.path && fs.existsSync(j.path)) return resolve(j.path);
+        // 失败：拼出尽可能具体的理由
+        var msg = '';
+        if (j && (j.error || j.msg)) msg = j.error || j.msg;
+        if (!msg) {
+          // python 正常情况下用 out('\u274c ' + str(e)) 输出错误，取最后一行
+          var lines = (outBuf || '').trim().split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+          var last = lines.length ? lines[lines.length - 1] : '';
+          if (last && !/^\{/.test(last)) msg = last.replace(/^\u274c\s*/, '');
+        }
+        if (!msg && errBuf) msg = errBuf.trim().split(/\r?\n/).pop();
+        if (!msg) msg = 'python 退出码 ' + code + '，无输出（可能脚本异常）';
+        reject(new Error(msg));
       });
     });
   }
@@ -592,7 +612,7 @@
         } catch (e) {
           // 保留具体原因：外层只知道"下载失败"，这里能区分网络/令牌过期/磁盘问题
           try { window.__vhLog && window.__vhLog.err((isErase ? '去字幕' : '超分') + '结果下载失败 task=' + tk.taskId, e); } catch (_) {}
-          log('⚠ 下载异常（任务 ' + tk.taskId + '）：' + ((e && e.message) || e), 'warn');
+          log('⚠ 下载失败（任务 ' + tk.taskId + '）：' + ((e && e.message) || e), 'warn');
         }
         if (dlFile && fs.existsSync(dlFile)) {
           log('📥 已下载：' + dlFile);
@@ -600,7 +620,7 @@
           if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
           else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
         } else {
-          log('⚠ 下载失败（任务 ' + tk.taskId + '），可稍后到处理站手动下载', 'warn');
+          log('⚠ 下载失败（任务 ' + tk.taskId + '），原因未知', 'warn');
         }
       } catch (e) {
         log('⚠ 下载/导入异常：' + e.message, 'warn');
@@ -1181,7 +1201,7 @@
         if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
         else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
       } else {
-        log('⚠ 下载失败（任务 ' + tid + '），可稍后到处理站手动下载', 'warn');
+        log('⚠ 下载失败（任务 ' + tid + '），原因未知', 'warn');
       }
       setProg(100, '完成');
       log('════ 选中片段处理结束 ════', 'ok');
