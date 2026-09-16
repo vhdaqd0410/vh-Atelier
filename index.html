@@ -10,7 +10,6 @@
         <h1>vh-Subtitle</h1>
         <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">日志<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
         <button type="button" id="btnUpdate" class="log-btn" title="在线更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
-        <button type="button" id="btnSeqInfo" class="log-btn" title="查看当前序列信息（帧率/时长/分辨率）">ℹ 序列信息</button>
     </div>
     <div class="sub">字幕识别 · 字幕校对 · 语音克隆</div>
 
@@ -333,36 +332,6 @@
         if (window.__vhUpdate && window.__vhUpdate.autoCheck) {
             window.__vhUpdate.autoCheck();
         }
-    })();
-
-    // ---- 2. 序列信息 ----
-    (function () {
-        var btn = document.getElementById('btnSeqInfo');
-        if (!btn) return;
-        if (window.__vhSeqInfoBound) return;
-        window.__vhSeqInfoBound = true;
-        var cs = new CSInterface();
-        btn.addEventListener('click', function () {
-            cs.evalScript('meSequenceInfo()', function (r) {
-                if (!r || r.indexOf('OK:') !== 0) {
-                    alert('读取序列信息失败：' + String(r || '无返回').replace(/^ERR:/, ''));
-                    return;
-                }
-                var d = JSON.parse(r.slice(3));
-                function fmt(s) {
-                    s = Math.max(0, Math.floor(Number(s) || 0));
-                    var hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
-                    function p(x) { return x < 10 ? '0' + x : '' + x; }
-                    return (hh > 0 ? hh + ':' : '') + p(mm) + ':' + p(ss);
-                }
-                alert('当前序列信息\n\n' +
-                      '名称：' + (d.name || '(未命名)') + '\n' +
-                      '帧率：' + (d.fps ? d.fps + ' fps' : '读取不到') + '\n' +
-                      '时长：' + fmt(d.durationSec) + '（' + d.durationSec + ' 秒）\n' +
-                      '分辨率：' + d.width + ' × ' + d.height + '\n' +
-                      '轨道：视频 ' + d.videoTracks + ' 条 / 音频 ' + d.audioTracks + ' 条');
-            });
-        });
     })();
     </script>
 </body>
