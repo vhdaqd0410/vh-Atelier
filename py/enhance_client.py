@@ -262,37 +262,234 @@ def upload_and_create(folder_id, file_path, resolution='720p', username='', pass
                     raise RuntimeError('任务失败: ' + str(t.get('errorMessage')))
     raise RuntimeError('等待超时')
 
-def download_task(token, task_id, download_dir, save_name='', progress_cb=None):
-    """下载超分结果到本地目录，返回保存路径。progress_cb(pct) 可传进度回调。"""
+def report_netcheck():
+    """联网自检：逐个测试关键网络点，输出可读报告。
+    排查「某台电脑上不了/下载不了」时先跑这个。
+    """
+    import socket
     import urllib.error
-    st, d = _req('GET', '/api/enhance/getDownloadURL?' + urllib.parse.urlencode({'ID': int(task_id)}), headers_extra={'x-token': token})
-    if d.get('code') != 0:
-        raise RuntimeError('getDownloadURL 失败: ' + _why(d, st))
-    url = (d.get('data') or {}).get('url')
-    if not url:
-        raise RuntimeError('未返回下载 URL')
     from urllib.parse import urlparse
-    fname = save_name or (os.path.basename(urlparse(url).path) or ('result_' + str(task_id) + '.mp4'))
+
+    out('===== 超分站联网自检 =====')
+    out('')
+
+    # 1) DNS + TCP 到主站
+    host = urlparse(BASE).hostname or 'subtitle.zztianqiao.com'
+    out('[1] 解析并连接主站 %s' % host)
+    try:
+        ip = socket.gethostbyname(host)
+        out('    DNS 解析: %s' % ip)
+    except Exception as e:
+        out('    ✗ DNS 解析失败: %s（检查网络 / DNS 设置）' % e)
+        return
+    try:
+        s = socket.create_connection((host, 80), timeout=10)
+        s.close()
+        out('    ✓ TCP 80 端口可达')
+    except Exception as e:
+        out('    ✗ TCP 连接失败: %s（可能被防火墙 / 代理拦截）' % e)
+        return
+    out('')
+
+    # 2) 主站接口可用性
+    out('[2] 主站接口')
+    try:
+        st, d = _req('POST', '/api/base/captcha', {}, timeout=20)
+        ok = isinstance(d, dict) and d.get('data')
+        out('    %s /api/base/captcha → HTTP %s' % ('✓' if ok else '⚠', st))
+    except Exception as e:
+        out('    ✗ 接口请求失败: %s' % e)
+    out('')
+
+    # 3) 登录态（能登说明账号与主站都通）
+    out('[3] 登录')
+    try:
+        u, p = load_account()
+        if not (u and p):
+            out('    ⚠ 未配置账号（跳过）')
+        else:
+            tok = get_token(u, p)
+            out('    ✓ 登录成功（账号 %s），token 正常' % u)
+            out('')
+            # 4) 下载节点可达性（用最近完成的任务试）
+            out('[4] 下载节点')
+            try:
+                tl = list_tasks(u, p, 1, 20)
+                done = [t for t in tl if str(t.get('status', '')).lower() in ('succeeded', 'success', 'done')]
+                if not done:
+                    out('    无已完成任务，跳过下载测试')
+                else:
+                    tid = done[0].get('ID')
+                    st, d = _req('GET', '/api/enhance/getDownloadURL?' + urllib.parse.urlencode({'ID': int(tid)}),
+                                 headers_extra={'x-token': tok})
+                    url = ((d or {}).get('data') or {}).get('url')
+                    if not url:
+                        out('    ⚠ 取下载地址失败: %s' % _why(d, st))
+                    else:
+                        dl_host = urlparse(url).hostname or ''
+                        out('    下载地址主机: %s' % dl_host)
+                        try:
+                            ip2 = socket.gethostbyname(dl_host)
+                            out('    DNS 解析: %s' % ip2)
+                        except Exception as e:
+                            out('    ✗ 下载节点 DNS 解析失败: %s（这是关键问题）' % e)
+                        resp, err = _open_url_retry(url, {'User-Agent': 'Mozilla/5.0'}, 20, 1)
+                        if resp is None:
+                            out('    ✗ 下载地址不可达: %s' % err)
+                            out('      → 该机器的网络到不了下载节点，可能是防火墙 / 代理 / 运营商问题')
+                        else:
+                            try:
+                                ct = resp.headers.get('Content-Length') or '?'
+                                out('    ✓ 下载地址可达（Content-Length=%s）' % ct)
+                            finally:
+                                try:
+                                    resp.close()
+                                except Exception:
+                                    pass
+            except Exception as e:
+                out('    下载节点测试异常: %s' % e)
+    except Exception as e:
+        out('    ✗ 登录失败: %s' % e)
+    out('')
+    out('===== 自检结束 =====')
+
+
+def _open_url_retry(url, headers=None, timeout=60, tries=3, log=None):
+    """带重试地打开 URL（应对偶发网络抖动 / 临时限流）。
+    返回 (response, None) 或 (None, 错误字符串)。
+    注意：403/404 不重试（重试也不会好）。
+    """
+    import urllib.error
+    hdrs = headers or {'User-Agent': 'Mozilla/5.0'}
+    last = ''
+    for i in range(max(1, tries)):
+        try:
+            req = urllib.request.Request(url, headers=hdrs)
+            return urllib.request.urlopen(req, timeout=timeout), None
+        except urllib.error.HTTPError as e:
+            # 4xx 一般不重试（签名过期、不存等），5xx 可重试
+            detail = ''
+            try:
+                detail = e.read(300).decode('utf-8', 'replace')
+            except Exception:
+                pass
+            last = 'HTTP %s %s %s' % (e.code, e.reason, detail[:200])
+            if 400 <= e.code < 500:
+                return None, last
+        except Exception as e:
+            last = '%s: %s' % (type(e).__name__, e)
+        if log:
+            log('下载重试 %d/%d（%s）' % (i + 1, tries, last))
+        time.sleep(1.5 * (i + 1))
+    return None, last or '连接失败'
+
+
+def _download_to_file(url, dest, progress_cb=None, log=None, timeout=60, tries=3):
+    """把 URL 内容下载到 dest。
+    关键加固：
+      - 先写成 .part，完成且校验通过才改名，避免半截文件被当成成品
+      - 返回前比对总长度，不一致则作废
+      - 内容明显是错误页（HTML/XML）时直接判失败，不写成品
+    """
+    import urllib.error
+    part = dest + '.part'
+
+    def attempt():
+        resp, err = _open_url_retry(url, {'User-Agent': 'Mozilla/5.0'}, timeout, tries, log)
+        if resp is None:
+            return False, err
+        try:
+            total = int(resp.headers.get('Content-Length') or 0)
+            ctype = (resp.headers.get('Content-Type') or '').lower()
+            got = 0
+            last_pct = -1
+            first = b''
+            with open(part, 'wb') as fp:
+                while True:
+                    chunk = resp.read(1 << 20)
+                    if not chunk:
+                        break
+                    if len(first) < 256:
+                        first += chunk[:256 - len(first)]
+                    fp.write(chunk)
+                    got += len(chunk)
+                    if progress_cb and total > 0:
+                        pct = int(got * 100 / total)
+                        if pct != last_pct:
+                            last_pct = pct
+                            progress_cb(pct)
+        finally:
+            try:
+                resp.close()
+            except Exception:
+                pass
+
+        # 1) 长度校验
+        if total > 0 and got != total:
+            return False, '下载不完整：%d / %d 字节' % (got, total)
+        if got == 0:
+            return False, '下载内容为空'
+
+        # 2) 内容嗅探：错误页 / 非媒体内容
+        head = first[:16]
+        low = first[:256].lower()
+        if head[:1] == b'<' or low.lstrip().startswith(b'<!doctype') or low.lstrip().startswith(b'<?xml'):
+            return False, '下载到的是网页/错误页，不是视频（签名可能已过期）：' + \
+                   first[:120].decode('utf-8', 'replace')
+        if 'text/html' in ctype or 'application/xml' in ctype:
+            return False, '响应类型异常（%s），不是视频文件' % ctype
+        return True, None
+
+    ok, err = attempt()
+    if not ok:
+        try:
+            if os.path.exists(part):
+                os.remove(part)
+        except Exception:
+            pass
+        return None, err
+    try:
+        if os.path.exists(dest):
+            os.remove(dest)
+        os.replace(part, dest)
+    except Exception as e:
+        try:
+            if os.path.exists(part):
+                os.remove(part)
+        except Exception:
+            pass
+        return None, '保存文件失败：%s' % e
+    return dest, None
+
+
+def download_task(token, task_id, download_dir, save_name='', progress_cb=None):
+    """下载超分结果到本地目录，返回保存路径。progress_cb(pct) 可传进度回调。
+    下载 URL 是带时效的签名链接，若过期则重新取一次（最多 2 轮）。
+    """
+    from urllib.parse import urlparse
     os.makedirs(download_dir, exist_ok=True)
-    dest = os.path.join(download_dir, fname)
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(req, timeout=3600) as r:
-        total = int(r.headers.get('Content-Length') or 0)
-        got = 0
-        last_pct = -1
-        with open(dest, 'wb') as fp:
-            while True:
-                chunk = r.read(1 << 20)
-                if not chunk:
-                    break
-                fp.write(chunk)
-                got += len(chunk)
-                if progress_cb and total > 0:
-                    pct = int(got * 100 / total)
-                    if pct != last_pct:
-                        last_pct = pct
-                        progress_cb(pct)
-    return dest
+
+    last_err = '未知错误'
+    for round_i in range(2):
+        st, d = _req('GET', '/api/enhance/getDownloadURL?' + urllib.parse.urlencode({'ID': int(task_id)}),
+                     headers_extra={'x-token': token})
+        if not isinstance(d, dict) or d.get('code') != 0:
+            raise RuntimeError('获取下载地址失败: ' + _why(d, st))
+        url = (d.get('data') or {}).get('url')
+        if not url:
+            raise RuntimeError('接口未返回下载地址（任务可能尚未完成或已过期）')
+
+        fname = save_name or (os.path.basename(urlparse(url).path) or ('result_' + str(task_id) + '.mp4'))
+        dest = os.path.join(download_dir, fname)
+        got, err = _download_to_file(url, dest, progress_cb)
+        if got:
+            return got
+        last_err = err or '未知错误'
+        # 若是签名过期类错误，重新取地址再试一轮
+        if round_i == 0 and ('403' in last_err or '过期' in last_err or '错误页' in last_err):
+            continue
+        break
+    raise RuntimeError('下载失败: ' + str(last_err))
 
 
 def list_folders(username, password):
@@ -440,38 +637,35 @@ def erase_submit(folder_id, file_path, username='', password='', wait=False,
 
 def erase_download(token, task_id, download_dir, save_name=''):
     """下载去字幕结果（mode=download）"""
-    st, d = _req('GET', '/api/erase/getDownloadURL?' + urllib.parse.urlencode({'ID': int(task_id), 'mode': 'download'}),
-                 headers_extra={'x-token': token})
-    if not isinstance(d, dict) or d.get('code') != 0:
-        raise RuntimeError('getDownloadURL 失败: ' + _why(d, st))
-    url = (d.get('data') or {}).get('url')
-    if not url:
-        raise RuntimeError('未返回下载 URL')
-    fname = save_name or ('erase_' + str(task_id) + '.mp4')
     os.makedirs(download_dir, exist_ok=True)
+    fname = save_name or ('erase_' + str(task_id) + '.mp4')
     dest = os.path.join(download_dir, fname)
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(req, timeout=3600) as r:
-        total = int(r.headers.get('Content-Length') or 0)
-        got = 0
-        last_pct = -1
-        with open(dest, 'wb') as fp:
-            while True:
-                chunk = r.read(1 << 20)
-                if not chunk:
-                    break
-                fp.write(chunk)
-                got += len(chunk)
-                if total > 0:
-                    pct = int(got * 100 / total)
-                    if pct != last_pct:
-                        last_pct = pct
-                        try:
-                            sys.stderr.write('DLP:%d\n' % pct)
-                            sys.stderr.flush()
-                        except Exception:
-                            pass
-    return dest
+
+    last_err = '未知错误'
+    for round_i in range(2):
+        st, d = _req('GET', '/api/erase/getDownloadURL?' + urllib.parse.urlencode({'ID': int(task_id), 'mode': 'download'}),
+                     headers_extra={'x-token': token})
+        if not isinstance(d, dict) or d.get('code') != 0:
+            raise RuntimeError('获取下载地址失败: ' + _why(d, st))
+        url = (d.get('data') or {}).get('url')
+        if not url:
+            raise RuntimeError('接口未返回下载地址（任务可能尚未完成或已过期）')
+
+        def cb(pct):
+            try:
+                sys.stderr.write('DLP:%d\n' % pct)
+                sys.stderr.flush()
+            except Exception:
+                pass
+
+        got, err = _download_to_file(url, dest, cb)
+        if got:
+            return got
+        last_err = err or '未知错误'
+        if round_i == 0 and ('403' in last_err or '过期' in last_err or '错误页' in last_err):
+            continue
+        break
+    raise RuntimeError('下载失败: ' + str(last_err))
 
 
 def erase_list_tasks(username, password, page=1, page_size=50):
@@ -493,7 +687,7 @@ def main():
         pass
     ap = argparse.ArgumentParser(description='超分站客户端')
     ap.add_argument('cmd', choices=['login', 'account', 'upload', 'tasks', 'folders', 'download',
-                                    'erase', 'erase-tasks', 'erase-download'])
+                                    'erase', 'erase-tasks', 'erase-download', 'netcheck'])
     ap.add_argument('--user', default='', help='超分站账号（不传则读本地配置）')
     ap.add_argument('--pwd', default='', help='超分站密码')
     ap.add_argument('--file', default='')
@@ -586,6 +780,9 @@ def main():
             out(json.dumps({'ok': True, 'path': dest}, ensure_ascii=False))
         else:
             out('已下载: ' + dest)
+    elif args.cmd == 'netcheck':
+        # 联网自检：诊断超分站与下载节点是否可达（其他电脑上排查用）
+        report_netcheck()
 
 if __name__ == '__main__':
     main()
