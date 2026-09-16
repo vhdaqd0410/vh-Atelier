@@ -52,8 +52,16 @@
   var seqs = [];           // 全量序列
   var checked = [];        // 勾选序列名
   var stopFlag = false;
-  var busy = false;
+  var busy = false;        // 仅表示「正在导出/上传」（短时），不含等待云端
   var grabbedClip = null;  // 从时间轴抓取的片段 { seqName, startSec, endSec, durationSec, clipCount }
+
+  // ===== 后台任务队列 =====
+  // 提交成功后任务进队列，由独立轮询器在后台等结果并自动下载导入。
+  // 这样「导出并超分/去字幕」按钮提交完就释放，可以立即提交下一个。
+  var bgQueue = [];         // [{ taskId, seqName, mode, status, addedAt }]
+  var bgPolling = false;    // 轮询器是否在跑
+  var BG_TICK = 15000;      // 轮询间隔 ms
+  var bgTimer = null;
 
   // 目录规划：
   // tmpRoot   = 无字幕导出过程件（跑完清空，仅此目录被清）
@@ -538,53 +546,13 @@
       }
       if (stopFlag) { log('⏹ 阶段1 已停止（已提交 ' + tasks.length + ' 个任务）', 'warn'); }
 
-      // ===== 阶段2：轮询所有任务 → 完成就下载+导入 =====
+      // ===== 阶段2：交给后台队列轮询（不阻塞界面） =====
       if (!tasks.length) { log('没有任何任务提交', 'err'); return; }
-      log('════ 全部 ' + tasks.length + ' 集已提交，进入' + modeCN + '等待阶段（云端处理中） ════', 'ok');
-      var doneCount = 0;
-      var failCount = 0;
-      var seenDone = {};
-      var pollTicks = 0;
-      // 每 20s 查一次全量任务，匹配我们的 taskId
-      while (doneCount + failCount < tasks.length) {
-        if (stopFlag) { log('⏹ 已停止等待，已完成的仍会下载', 'warn'); break; }
-        pollTicks++;
-        var list = await queryTasks(taskMode);
-        var byId = {};
-        list.forEach(function (t) { byId[t.ID] = t; });
-        var changed = false;
-        tasks.forEach(function (tk) {
-          if (seenDone[tk.taskId]) return;
-          var t = byId[tk.taskId];
-          if (!t) return;
-          var st = t.status;
-          tk.status = st;
-          if (st === 'succeeded' || st === 'failed') {
-            seenDone[tk.taskId] = true;
-            changed = true;
-            if (st === 'succeeded') {
-              doneCount++;
-              setProg(55 + (doneCount / tasks.length) * 45, modeCN + '完成：' + tk.seqName + ' → 下载中…');
-              log('✅ ' + modeCN + '完成：' + tk.seqName + '（任务 ' + tk.taskId + '），下载中…', 'ok');
-              downloadAndImport(tk, resultDir, taskMode);
-            } else {
-              failCount++;
-              log('✗ ' + modeCN + '失败：' + tk.seqName + '（任务 ' + tk.taskId + '）：' + (t.errorMessage || '未知'), 'err');
-            }
-          }
-        });
-        if (changed) {
-          var remain = tasks.length - doneCount - failCount;
-          log('⏳ 进度：完成 ' + doneCount + ' / 失败 ' + failCount + ' / 等待 ' + remain);
-        }
-        if (doneCount + failCount >= tasks.length) break;
-        // 等待下一轮（最后一轮短等即可）
-        await sleep(20000);
-      }
-      setProg(100, '全部结束：完成 ' + doneCount + '，失败 ' + failCount);
-      log('════ 全部结束：成功 ' + doneCount + ' / 失败 ' + failCount + ' ════', failCount ? 'warn' : 'ok');
+      tasks.forEach(function (tk) { bgEnqueue(tk.taskId, tk.seqName, taskMode); });
+      log('════ 全部 ' + tasks.length + ' 集已提交到后台队列 ════', 'ok');
+      log('💡 ' + modeCN + '在云端处理中，无需等待——可直接改选其他序列继续提交；结果完成后会自动下载并导入素材箱', 'ok');
+      setProg(100, '已提交 ' + tasks.length + ' 个任务，后台自动处理');
       cleanupTmp();
-      log('🧹 临时导出件已清理（超分结果已保存在 ' + resultDir + '）');
       try { refreshTaskList(); } catch (e) {}
     } catch (e) {
       log('✗ ' + e.message, 'err');
@@ -596,6 +564,183 @@
   }
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  // ==================== 后台任务队列 ====================
+  // 设计：提交任务的流程（导出+上传）是短时的，做完就释放按钮；
+  // 「等待云端处理 + 下载导入」交给这个独立轮询器，不阻塞界面。
+  // 两个模式的队列共用同一个轮询器（每次分别查 enhance / erase 两种任务列表）。
+
+  function bgEnqueue(taskId, seqName, mode) {
+    bgQueue.push({
+      taskId: String(taskId),
+      seqName: seqName || '',
+      mode: mode || taskMode,
+      status: 'queued',
+      addedAt: Date.now()
+    });
+    bgSave();
+    bgRender();
+    bgStart();
+  }
+
+  // 持久化：面板关闭/重开后继续轮询未完成的任务
+  var BG_LS = 'vh_enhance_bgqueue';
+  function bgSave() {
+    try {
+      // 只存未完成的（已完成/失败的不用跨会话恢复）
+      var keep = bgQueue.filter(function (q) { return q.status === 'queued'; });
+      localStorage.setItem(BG_LS, JSON.stringify(keep));
+    } catch (e) {}
+  }
+  function bgLoad() {
+    try {
+      var raw = localStorage.getItem(BG_LS);
+      if (!raw) return;
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return;
+      var now = Date.now();
+      arr.forEach(function (q) {
+        // 超过 24 小时的不再恢复（任务多半已在云端过期/清理）
+        if (q && q.taskId && (now - (q.addedAt || 0)) < 24 * 3600 * 1000) {
+          bgQueue.push({
+            taskId: String(q.taskId),
+            seqName: q.seqName || '',
+            mode: q.mode || 'enhance',
+            status: 'queued',
+            addedAt: q.addedAt || now
+          });
+        }
+      });
+      if (bgQueue.length) {
+        log('↻ 恢复上次未完成的后台任务 ' + bgQueue.length + ' 个，继续监控', 'ok');
+        bgStart();
+      }
+    } catch (e) {}
+  }
+
+  function bgStart() {
+    if (bgPolling) return;
+    bgPolling = true;
+    bgTick();
+  }
+
+  async function bgTick() {
+    if (!bgQueue.length) {
+      bgPolling = false;
+      bgSave();
+      bgRender();
+      return;
+    }
+    try {
+      // 分模式查一次任务列表
+      var modes = {};
+      bgQueue.forEach(function (q) { if (q.status === 'queued') modes[q.mode] = true; });
+      var byMode = {};
+      for (var m in modes) {
+        if (modes.hasOwnProperty(m)) {
+          try { byMode[m] = await queryTasks(m); } catch (e) { byMode[m] = []; }
+        }
+      }
+      var changed = false;
+      for (var i = bgQueue.length - 1; i >= 0; i--) {
+        var q = bgQueue[i];
+        if (q.status !== 'queued') continue;
+        var list = byMode[q.mode] || [];
+        var hit = null;
+        for (var k = 0; k < list.length; k++) {
+          if (String(list[k].ID) === q.taskId) { hit = list[k]; break; }
+        }
+        if (!hit) continue;
+        var st = String(hit.status || '').toLowerCase();
+        var modeCN = (q.mode === 'erase') ? '去字幕' : '超分';
+        if (st === 'succeeded' || st === 'success' || st === 'done') {
+          q.status = 'done';
+          changed = true;
+          log('✅ ' + modeCN + '完成：' + q.seqName + '（任务 ' + q.taskId + '），开始下载…', 'ok');
+          // 下载导入走异步，不卡轮询
+          bgDownload(q);
+        } else if (st === 'failed') {
+          q.status = 'failed';
+          changed = true;
+          log('✗ ' + modeCN + '失败：' + q.seqName + '（任务 ' + q.taskId + '）：' + (hit.errorMessage || '未知'), 'err');
+        }
+      }
+      if (changed) { bgSave(); bgRender(); }
+    } catch (e) {
+      try { console.log('[vh-enhance] bgTick 异常: ' + e.message); } catch (_) {}
+    }
+    bgTimer = setTimeout(bgTick, BG_TICK);
+  }
+
+  // 下载并导入（后台队列用；不复用 downloadAndImport，因为那个绑定了具体的 dir/mode 流程日志）
+  async function bgDownload(q) {
+    var isErase = (q.mode === 'erase');
+    var binName = isErase ? '去字幕' : '超分';
+    try {
+      var dir = resultDir || (await resolveResultDir());
+      var srcBase = String(q.seqName || ('task_' + q.taskId)).replace(/\.mp4$/i, '').replace(/_nosub$/i, '');
+      var saveName = srcBase + (isErase ? '_erased.mp4' : '_720p.mp4');
+      var f = await downloadTask(q.taskId, dir, saveName, null, q.mode);
+      if (f && fs.existsSync(f)) {
+        log('📥 已下载：' + f, 'ok');
+        var imp = await importToBin([f], binName);
+        if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
+        else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
+        q.status = 'imported';
+      } else {
+        log('⚠ 下载失败（任务 ' + q.taskId + '），原因未知', 'warn');
+        q.status = 'dlfail';
+      }
+    } catch (e) {
+      log('✗ 下载失败（任务 ' + q.taskId + '）：' + ((e && e.message) || e), 'err');
+      q.status = 'dlfail';
+    }
+    bgSave();
+    bgRender();
+    try { refreshTaskList(); } catch (e) {}
+  }
+
+  // 渲染后台队列状态条（挂到日志区上方；无容器时静默）
+  function bgRender() {
+    var box = document.getElementById('enBgQueue');
+    if (!box) return;
+    var pending = bgQueue.filter(function (q) { return q.status === 'queued'; }).length;
+    if (!bgQueue.length) {
+      box.style.display = 'none';
+      box.innerHTML = '';
+      return;
+    }
+    box.style.display = '';
+    var rows = bgQueue.map(function (q) {
+      var modeCN = (q.mode === 'erase') ? '去字幕' : '超分';
+      var label = { queued: '云端处理中', done: '下载中', imported: '✅ 已导入', failed: '❌ 失败', dlfail: '⚠ 下载失败' }[q.status] || q.status;
+      var color = { imported: '#7fd68b', failed: '#ff9a9a', dlfail: '#ffb84d', done: '#b39ddb' }[q.status] || '#9a9a9a';
+      return '<span style="display:inline-flex;gap:5px;align-items:center;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:4px;padding:2px 8px;margin:2px 4px 2px 0;font-size:10.5px;">' +
+             '<span style="color:' + color + ';">' + label + '</span>' +
+             '<span style="color:#888;">' + modeCN + ' · ' + (q.seqName || ('#' + q.taskId)) + '</span>' +
+             '</span>';
+    }).join('');
+    box.innerHTML = '<div style="font-size:10.5px;color:#8a8a8a;margin-bottom:3px;">后台任务（' + pending + ' 个在云端处理，可继续提交新任务）' +
+      (pending ? ' <a href="#" id="enBgClear" style="color:#7fd68b;">清除已完成</a>' : '') + '</div>' + rows;
+    var clr = document.getElementById('enBgClear');
+    if (clr) {
+      clr.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        bgQueue = bgQueue.filter(function (q) { return q.status === 'queued'; });
+        bgSave();
+        bgRender();
+      });
+    }
+  }
+
+  // 汇总查询后台队列里正在进行/已完成的任务（供任务列表页显式标记）
+  function bgIsQueued(taskId) {
+    taskId = String(taskId);
+    for (var i = 0; i < bgQueue.length; i++) {
+      if (bgQueue[i].taskId === taskId && bgQueue[i].status === 'queued') return true;
+    }
+    return false;
+  }
 
   // 下载并导入素材箱（异步后台执行）
   function downloadAndImport(tk, dir, mode) {
@@ -709,6 +854,14 @@
       st.style.cssText = 'flex:0 0 auto;font-weight:600;font-size:11px;color:' + taskColor(t.status) + ';';
       st.textContent = taskStateLabel(t.status);
       mainRow.appendChild(st);
+      // 后台队列中的任务：未完成时显式标出，避免用户以为“没反应”
+      if (bgIsQueued(t.ID)) {
+        var bgTag = document.createElement('span');
+        bgTag.style.cssText = 'flex:0 0 auto;color:#b39ddb;font-size:10px;border:1px solid #4a3a6a;border-radius:3px;padding:0 5px;';
+        bgTag.textContent = '⏳ 后台等待';
+        bgTag.title = '已挂在后台队列，完成后会自动下载并导入素材箱';
+        mainRow.appendChild(bgTag);
+      }
       // 已完成 → 下载按钮
       if (t.status === 'succeeded' && !taskDownloading[t.ID]) {
         var btn = document.createElement('button');
@@ -1243,42 +1396,13 @@
 
       setProg(30, '上传' + modeCN + '…');
       var tid = await submitMode(outFile, folderId, resolution, taskMode);
-      log('✅ 已提交任务 ID=' + tid + '，等待云端处理…', 'ok');
-      setProg(45, '云端处理中…');
+      log('✅ 已提交任务 ID=' + tid + '，已挂到后台处理', 'ok');
+      setProg(100, '已提交，后台处理中');
 
-      // 轮询
-      var done = false, failed = null;
-      while (!done && !failed) {
-        if (stopFlag) { log('⏹ 已停止等待', 'warn'); return; }
-        await sleep(20000);
-        var list = await queryTasks(taskMode);
-        for (var i = 0; i < list.length; i++) {
-          if (list[i].ID === tid) {
-            var t = list[i];
-            log('  ' + taskStateLabel(t.status) + ' ' + (t.progress || 0) + '%');
-            setProg(45 + (t.progress || 0) * 0.5, '云端处理 ' + (t.progress || 0) + '%');
-            if (t.status === 'succeeded') { done = true; }
-            if (t.status === 'failed') { failed = t.errorMessage || '未知'; }
-            break;
-          }
-        }
-      }
-      if (failed) throw new Error(modeCN + '失败：' + failed);
-
-      setProg(96, '下载中…');
-      var dlFile = await downloadTask(tid, resultDir, safe + (isErase ? '_clip_erased.mp4' : '_clip_720p.mp4'), function (pct) {
-        setProg(96 + pct * 0.03, '下载 ' + pct + '%');
-      }, taskMode);
-      if (dlFile && fs.existsSync(dlFile)) {
-        log('📥 已下载：' + dlFile, 'ok');
-        var imp = await importToBin([dlFile], binName);
-        if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
-        else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
-      } else {
-        log('⚠ 下载失败（任务 ' + tid + '），原因未知', 'warn');
-      }
-      setProg(100, '完成');
-      log('════ 选中片段处理结束 ════', 'ok');
+      // 交给后台队列：不阻塞界面，完成后自动下载导入
+      bgEnqueue(tid, c.seqName || ('片段 ' + fmtSec(c.startSec)), taskMode);
+      log('💡 ' + modeCN + '在云端处理中，无需等待——可立即选其他片段继续处理', 'ok');
+      log('════ 选中片段已提交 ════', 'ok');
       try { refreshTaskList(); } catch (e) {}
     } catch (e) {
       if (e && e.message === '__STOPPED__') log('⏹ 已停止', 'warn');
@@ -1377,6 +1501,7 @@
     refreshAccount();   // 显示当前超分站账号状态
     refreshSeqs();
     refreshTaskList();
+    bgLoad();           // 恢复上次未完成的后台任务，继续监控
   }
 
   // 检测 Python 环境：逐个候选报告是否能 import ddddocr
