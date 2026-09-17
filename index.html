@@ -11,6 +11,7 @@
         <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">日志<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
         <button type="button" id="btnFeedback" class="log-btn" title="在线反馈：提 Bug / 需求 / 意见">📮 反馈</button>
         <button type="button" id="btnUpdate" class="log-btn" title="在线更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
+        <button type="button" id="btnHistory" class="log-btn" title="版本更新历史：每个版本改了什么、修了什么">📋 历史</button>
     </div>
     <div class="sub">素材 · 剧本 · 超分 · 声音 · 审片 · 交付 六工作台</div>
 
@@ -719,6 +720,11 @@
         if (btn && window.__vhUpdate && !window.__vhUpdateBtnBound) {
             window.__vhUpdateBtnBound = true;
             btn.addEventListener('click', function () { window.__vhUpdate.show(false); });
+        }
+        // 更新历史入口
+        var hbtn = document.getElementById('btnHistory');
+        if (hbtn && window.__vhUpdate && window.__vhUpdate.history) {
+            hbtn.addEventListener('click', function () { window.__vhUpdate.history(); });
         }
         if (window.__vhUpdate && window.__vhUpdate.autoCheck) {
             window.__vhUpdate.autoCheck();
