@@ -34,6 +34,7 @@
     </div>
 
     <div class="ws-groups">
+        <button class="ws-group active" data-group="home">🏠 首页</button>
         <button class="ws-group" data-group="media">🗂 素材</button>
         <button class="ws-group" data-group="script">📖 剧本</button>
         <button class="ws-group" data-group="upscale">✨ 超分</button>
@@ -41,6 +42,64 @@
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
+    </div>
+
+    <!-- ==================== 首页（启动默认展示，工作台快捷入口） ==================== -->
+    <div class="tab-panel" id="panel-home">
+        <div class="home-hero">
+            <div class="home-kick">vh-Atelier A · 剪辑工作台</div>
+            <h1 class="home-title">从一个工作台开始</h1>
+            <p class="home-lede">素材导入 → 剧本阅读 → 超分去字幕 → 声音处理 → 审片 → 多版本交付。点下面的卡片直接进入对应工作台。</p>
+        </div>
+
+        <div class="home-grid">
+            <button type="button" class="home-card" data-goto="media">
+                <span class="hc-ico">🗂</span>
+                <span class="hc-t">素材</span>
+                <span class="hc-d">浏览本地目录，勾选后批量导入 PR 素材箱</span>
+            </button>
+            <button type="button" class="home-card" data-goto="script">
+                <span class="hc-ico">📖</span>
+                <span class="hc-t">剧本</span>
+                <span class="hc-d">读 docx / pdf，自动拆解角色与集数</span>
+            </button>
+            <button type="button" class="home-card" data-goto="upscale">
+                <span class="hc-ico">✨</span>
+                <span class="hc-t">超分</span>
+                <span class="hc-d">超分 / 去字幕，导出送云端处理后自动导回</span>
+            </button>
+            <button type="button" class="home-card" data-goto="audio">
+                <span class="hc-ico">🎵</span>
+                <span class="hc-t">声音</span>
+                <span class="hc-d">人声分离 · 音效库 · 音乐库 · 网易云</span>
+            </button>
+            <button type="button" class="home-card" data-goto="shenpian">
+                <span class="hc-ico">🎬</span>
+                <span class="hc-t">审片</span>
+                <span class="hc-d">分秒帧内嵌，看批注不用切出 PR</span>
+            </button>
+            <button type="button" class="home-card" data-goto="deliver">
+                <span class="hc-ico">📦</span>
+                <span class="hc-t">交付</span>
+                <span class="hc-d">多版本导出 · 视频下载</span>
+            </button>
+        </div>
+
+        <div class="home-sec">快速上手</div>
+        <div class="home-steps">
+            <div class="home-step"><b>1</b><div><span>导入素材</span><i>「素材」里选目录，勾选后一键进 PR 素材箱</i></div></div>
+            <div class="home-step"><b>2</b><div><span>处理画面</span><i>选中序列或片段，「超分」送云端处理并自动导回</i></div></div>
+            <div class="home-step"><b>3</b><div><span>补声音</span><i>「声音」里分离人声、找音效与音乐，拖进时间轴</i></div></div>
+            <div class="home-step"><b>4</b><div><span>出成片</span><i>「交付」里勾版本，成片 / 无字幕 / 无音乐一次导出</i></div></div>
+        </div>
+
+        <div class="home-foot">
+            <span id="homeVer">vh-Atelier A</span>
+            <span class="home-links">
+                <a href="#" id="homeUpd">检查更新</a>
+                <a href="#" id="homeFb">提反馈</a>
+            </span>
+        </div>
     </div>
 
     

@@ -2,6 +2,7 @@
 // 工作台（组）→ 子功能（面板）。三组：字幕(字幕识别/字幕校对)、声音(人声分离/语音克隆/音效库/音乐)、交付(多版本导出/视频下载)
 (function () {
     var panels = {
+        home: document.getElementById('panel-home'),
         media: document.getElementById('panel-media'),
         separate: document.getElementById('panel-sep'),
         sfx: document.getElementById('panel-sfx'),
@@ -17,6 +18,7 @@
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
+        home: { members: ['home'], default: 'home' },
         media: { members: ['media'], default: 'media' },
         audio: { members: ['separate', 'sfx', 'musiclib', 'music'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
@@ -162,4 +164,53 @@
     window.__atSwitchToScript = function () {
         switchGroup('script');
     };
+
+    // ==================== 首页 ====================
+    // 启动默认落在首页（避免 A/B 插件无默认面板导致首屏空白）
+    function showHome() {
+        // 清掉所有组/子 tab 高亮，只留首页
+        groupBtns.forEach(function (b) {
+            b.classList.toggle('active', b.dataset.group === 'home');
+        });
+        allTabs.forEach(function (t) { t.classList.remove('active'); });
+        // 隐藏所有子 tab 条
+        subTabBars.forEach(function (bar) { bar.style.display = 'none'; });
+        showPanel('home');
+    }
+    window.__atShowHome = showHome;
+
+    // 首页卡片 → 跳对应工作台
+    document.querySelectorAll('.home-card[data-goto]').forEach(function (card) {
+        card.addEventListener('click', function () {
+            switchGroup(card.dataset.goto);
+        });
+    });
+    // 首页底部：检查更新 / 提反馈
+    var homeUpd = document.getElementById('homeUpd');
+    if (homeUpd) {
+        homeUpd.addEventListener('click', function (e) {
+            e.preventDefault();
+            var b = document.getElementById('btnUpdate');
+            if (b) b.click();
+        });
+    }
+    var homeFb = document.getElementById('homeFb');
+    if (homeFb) {
+        homeFb.addEventListener('click', function (e) {
+            e.preventDefault();
+            var b = document.getElementById('btnFeedback');
+            if (b) b.click();
+        });
+    }
+    // 首页显示版本号（CEP 环境有 require；取不到时保留默认文本）
+    try {
+        var hv = document.getElementById('homeVer');
+        if (hv && window.__vhUpdate && window.__vhUpdate.version) {
+            var vv = window.__vhUpdate.version();
+            if (vv) hv.textContent = 'vh-Atelier A · v' + vv;
+        }
+    } catch (e) {}
+
+    // 启动：落在首页
+    showHome();
 })();
