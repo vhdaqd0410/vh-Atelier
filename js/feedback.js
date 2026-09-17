@@ -41,8 +41,9 @@
     var CFG_SAMPLE = ROOT ? path.join(ROOT, 'feedback.example.json') : '';
     var VER_FILE = ROOT ? path.join(ROOT, 'version.json') : '';
 
-    // 默认中转地址（部署服务后改成你的公网地址即可，无需重新分发插件）
-    var DEFAULT_ENDPOINT = 'http://YOUR_SERVER_IP:17893/api/feedback';
+    // 默认中转地址（自建反馈中心）
+    var DEFAULT_ENDPOINT = 'http://47.122.108.231:17893/api/feedback';
+    var DEFAULT_BASE = 'http://47.122.108.231:17893';
 
     function readJson(p) {
         try {
@@ -57,6 +58,7 @@
         var v = readJson(VER_FILE) || {};
         return {
             endpoint: String(c.endpoint || DEFAULT_ENDPOINT).trim(),
+            base: String(c.base || DEFAULT_BASE).trim(),
             secret: String(c.secret || '').trim(),
             timeout: Number(c.timeout) || 20000,
             displayName: v.displayName || 'vh-Atelier',
@@ -207,6 +209,14 @@
         submit: submitFeedback,
         collectEnv: collectEnv,
         recentLogs: recentLogs,
-        ping: ping
+        ping: ping,
+        // 用系统浏览器打开反馈中心网页
+        openBoard: function () {
+            var c = cfg();
+            try {
+                require('child_process').exec('start "" "' + c.base + '"');
+                return true;
+            } catch (e) { return false; }
+        }
     };
 })();

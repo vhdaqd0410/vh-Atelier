@@ -54,7 +54,8 @@
               '<div class="fb-status" id="fbStatus"></div>' +
             '</div>' +
             '<div class="fb-foot">' +
-              '<span class="fb-hint" id="fbHint">提交后会在项目 Issue 区创建一条记录</span>' +
+              '<span class="fb-hint" id="fbHint">提交后可在反馈中心查看进展</span>' +
+              '<button type="button" class="fb-btn" id="fbBoard" title="用浏览器打开反馈中心，看全部反馈与进展">查看已有</button>' +
               '<button type="button" class="fb-btn" id="fbTest" title="检查反馈服务是否可达">测试连接</button>' +
               '<button type="button" class="fb-btn" id="fbCancel">取消</button>' +
               '<button type="button" class="fb-btn pri" id="fbSubmit">提交</button>' +
@@ -88,6 +89,12 @@
                 b.classList.add('on');
                 kind = b.getAttribute('data-kind');
             });
+        });
+
+        // 打开反馈中心网页
+        el('fbBoard').addEventListener('click', function () {
+            var ok = window.__vhFeedback.openBoard();
+            if (!ok) setStatus('无法打开浏览器，请手动访问 ' + cfg.base, 'err');
         });
 
         // 测试连通性
@@ -125,15 +132,17 @@
 
                     var num = (res && res.number) ? ('#' + res.number) : '';
                     var u = (res && res.url) || '';
+                    // 自建版返回 id，没有单条网址；给个指向反馈中心的入口
+                    var board = (cfg.base || '').trim();
                     var s = el('fbStatus');
                     if (s) {
                         s.className = 'fb-status ok';
                         s.innerHTML = '✅ 已提交 ' + esc(num) +
-                            (u ? '　<a href="#" id="fbOpen" style="color:#7fd68b;">在浏览器打开</a>' : '');
+                            (board ? '　<a href="#" id="fbOpen" style="color:#7fd68b;">到反馈中心查看</a>' : '');
                         var op = el('fbOpen');
                         if (op) op.addEventListener('click', function (ev) {
                             ev.preventDefault();
-                            try { require('child_process').exec('start "" "' + u + '"'); } catch (e) {}
+                            window.__vhFeedback.openBoard();
                         });
                     }
                     setHint('感谢反馈！');
