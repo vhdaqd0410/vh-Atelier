@@ -8,10 +8,10 @@
 <body>
     <div class="top-head">
         <h1>vh-Atelier</h1>
-        <a class="site-btn" href="http://47.122.108.231:8888/" target="_blank" rel="noopener" title="打开官网：功能说明 / 截图 / 下载 / 提需求">
+        <button type="button" id="btnSite" class="site-btn" title="打开官网：功能说明 / 截图 / 下载 / 提需求">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8c2.5 3 3.8 5.9 3.8 9.2S14.5 18.2 12 21.2c-2.5-3-3.8-5.9-3.8-9.2S9.5 5.8 12 2.8z"/></svg>
             官网<span class="sd"></span>
-        </a>
+        </button>
         <span class="sep"></span>
         <button type="button" id="btnHistory" class="log-btn" title="版本更新历史：每个版本改了什么、修了什么">📋 历史</button>
         <button type="button" id="btnUpdate" class="log-btn" title="检查更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
@@ -1143,5 +1143,35 @@
         }
     })();
     </script>
+
+<script>
+    // ---- 官网入口：CEP 面板里 <a target=_blank> 不会打开系统浏览器，
+    //      必须走 child_process 调系统 start 命令 ----
+    (function () {
+        var btn = document.getElementById('btnSite');
+        if (!btn) return;
+        var SITE_URL = 'http://47.122.108.231:8888/';
+        function openSite() {
+            // 优先走 CEP 官方 API
+            try {
+                if (typeof CSInterface !== 'undefined') {
+                    var cs = new CSInterface();
+                    if (cs.openURLInDefaultBrowser) {
+                        cs.openURLInDefaultBrowser(SITE_URL);
+                        return;
+                    }
+                }
+            } catch (e) {}
+            // 退回 child_process
+            try {
+                require('child_process').exec('start "" "' + SITE_URL + '"');
+                return;
+            } catch (e) {}
+            // 最后退回 window.open（浏览器调试环境）
+            try { window.open(SITE_URL, '_blank'); } catch (e) {}
+        }
+        btn.addEventListener('click', openSite);
+    })();
+</script>
 </body>
 </html>
