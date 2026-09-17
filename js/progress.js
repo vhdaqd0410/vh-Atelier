@@ -157,13 +157,9 @@
     function fetchProjects(cb) {
         var secret = readSecret();
         if (!secret) { cb(new Error('读不到 api_secret（config.yaml 路径不对？）'), null); return; }
-        // 接口用 /api/projects/mobile：实测 0.2 秒返回（对比 /api/projects 要
-        // 25 秒、返回 4 MB），字段够用且额外带 overview_stats。
-        // 原来用全量接口会永远超时，表现为「工作台在跑却提示启动超时」。
-        var url = WB_BASE + '/api/projects/mobile?key=' + encodeURIComponent([FUNC]);
+        var url = WB_BASE + '/api/projects/mobile?key=' + encodeURIComponent(secret);
         var xhr = new XMLHttpRequest();
         xhr.open('GET', url, true);
-        // 超时仍放宽到 120 秒：冷启动 / 数据量大时留足余量。
         xhr.timeout = 120000;
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== 4) return;
@@ -185,17 +181,29 @@
     }
 
     // 带一次重试的取数（首次请求可能更慢）
+
     function fetchProjectsRetry(cb, retriesLeft) {
+
         fetchProjects(function (err, data) {
+
             if (!err) { cb(null, data); return; }
+
             var isTimeout = err && (err.message === '超时' || err.message === '网络错误');
+
             if (isTimeout && (retriesLeft || 0) > 0) {
+
                 setTimeout(function () { fetchProjectsRetry(cb, retriesLeft - 1); }, 1200);
+
                 return;
+
             }
+
             cb(err, null);
+
         });
+
     }
+
 
     // 通用带鉴权的 API GET（相对 /api/ 路径）
     function apiGet(sub, cb) {
@@ -1841,7 +1849,6 @@
         var url = WB_BASE + '/api/_self/jump?project=' + encodeURIComponent(projectName);
         var xhr = new XMLHttpRequest();
         xhr.open('GET', url, true);
-        // 跳转定位：服务冷启动时可能慢，放宽到 15 秒
         xhr.timeout = 15000;
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== 4) return;
@@ -1881,7 +1888,6 @@
             var xhr = new XMLHttpRequest();
             var url = WB_BASE + '/api/_self/jump?project=' + encodeURIComponent(projectName);
             xhr.open('GET', url, true);
-            // 轮询期间服务可能正在预热，单次放宽到 15 秒
             xhr.timeout = 15000;
             xhr.onreadystatechange = function () {
                 if (xhr.readyState !== 4) return;
