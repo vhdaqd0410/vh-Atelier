@@ -1,0 +1,9 @@
+{
+  "_说明": "在线反馈配置模板。把本文件复制一份、改名为 feedback.json，填上 token 即可启用标题栏「📮 反馈」按钮。",
+  "_说明2": "feedback.json 已被 .gitignore 排除，不会随更新下发，你的令牌不会外泄。",
+  "_生成方法": "GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token；Repository access 选 Only select repositories（勾本仓库）；Permissions → Repository permissions → Issues 设为 Read and write。",
+  "_权限说明": "该令牌只能操作本仓库的 Issue；即使泄露也无法改动代码。",
+  "token": "在这里填你的 Fine-grained Token",
+  "repo": "vhdaqd0410/vh-Atelier",
+  "labelPrefix": ""
+}

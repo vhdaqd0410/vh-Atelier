@@ -46,3 +46,8 @@ collect/_enhance_*.json
 py/_enhance_*.json
 # 超分结果目录（运行时产物，入仓会撑大仓库）
 collect/enhance_results/
+
+# 在线反馈配置（含令牌，绝不入库）
+feedback.json
+collect/feedback.json
+!feedback.example.json
