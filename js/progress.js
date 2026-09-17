@@ -88,6 +88,9 @@
     };
 
     var busy = false;
+    // 看门狗：CEP 面板关闭会中断 XHR，回调不执行时 busy 会残留为 true，
+    // 导致再次打开面板时 refresh 被挡掉、卡在「拉取中」。用独立超时兜底复位。
+    var busyWatchdog = null;
     var lastData = null;
     var allActiveProjects = [];   // 最近一次拉到的 group_active 全量（供筛选/排序）
 
@@ -1940,14 +1943,22 @@
 
     // 主刷新
     function refresh(showBusy) {
-        if (busy) return;
+        if (busy) { dbg('refresh 跳过：busy=true'); return; }
         busy = true;
-        if (showBusy) {
-            el.refresh.disabled = true;
-            el.statusText.textContent = '拉取中…';
-        }
-        fetchProjectsRetry(function (err, data) {
+        if (el.refresh) el.refresh.disabled = true;
+        dbg('正在拉取项目数据…');
+        // 看门狗兜底：最多 150 秒后强制解锁，避免中途关面板导致 busy 卡死
+        if (busyWatchdog) { clearTimeout(busyWatchdog); }
+        busyWatchdog = setTimeout(function () {
             busy = false;
+            busyWatchdog = null;
+            if (el.refresh) el.refresh.disabled = false;
+            setOnline(false, '拉取超时，请点刷新重试');
+        }, 150000);
+        fetchProjectsRetry(function (err, data) {
+            dbg(err ? ('拉取失败：' + (err.message || err)) : '拉取成功，正在渲染…');
+            busy = false;
+            if (busyWatchdog) { clearTimeout(busyWatchdog); busyWatchdog = null; }
             if (el.refresh) el.refresh.disabled = false;
             if (err) {
                 // 尝试区分：服务没起 vs 鉴权失败
@@ -2033,6 +2044,14 @@
 
     // 暴露给 main.js：切到 progress tab 时自动刷新一次（刷新会自动实扫剪辑中项目）
     window.__progressOnShow = function () {
+        dbg('面板打开，busy=' + busy);
+        // 面板重开时若上一轮请求因关面板被中断，busy 会残留为 true。
+        // 这里主动放行，保证重开面板一定能刷新。
+        if (busy) {
+            busy = false;
+            if (busyWatchdog) { clearTimeout(busyWatchdog); busyWatchdog = null; }
+            if (el.refresh) el.refresh.disabled = false;
+        }
         refresh(true);
     };
 
