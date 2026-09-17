@@ -2846,3 +2846,42 @@
         .fb-btn.pri { background: var(--accent); color: var(--white); border-color: var(--accent); font-weight: 600; }
         .fb-btn.pri:hover { filter: brightness(1.1); }
         .fb-btn:disabled { filter: grayscale(.5); cursor: not-allowed; }
+        /* ==================== 顶部栏重排 + 官网入口 ==================== */
+        .top-head { display: flex; align-items: center; gap: 6px; }
+        .top-head h1 { flex: 0 0 auto; margin-right: auto; }
+        /* 顶栏按钮：统一尺寸，图标+文字排布更整齐 */
+        .top-head .log-btn { display: inline-flex; align-items: center; gap: 5px;
+            height: 24px; padding: 0 9px; line-height: 1; margin-bottom: 0;
+            white-space: nowrap; }
+        /* 官网入口：最醒目（描边高亮 + 悬停发光） */
+        .top-head .site-btn { display: inline-flex; align-items: center; gap: 5px;
+            height: 24px; padding: 0 11px; font-size: 11px; font-weight: 600;
+            color: #d9c9ff; background: rgba(139,92,246,.16);
+            border: 1px solid rgba(139,92,246,.55); border-radius: 6px;
+            cursor: pointer; text-decoration: none; white-space: nowrap;
+            transition: background .16s, border-color .16s, box-shadow .18s, transform .16s;
+            position: relative; flex: 0 0 auto; }
+        .top-head .site-btn:hover { background: rgba(139,92,246,.28);
+            border-color: var(--accent); color: #fff; transform: translateY(-1px);
+            box-shadow: 0 4px 14px -4px rgba(139,92,246,.75); }
+        .top-head .site-btn svg { width: 12px; height: 12px; flex: 0 0 auto;
+            stroke: currentColor; fill: none; stroke-width: 1.9;
+            stroke-linecap: round; stroke-linejoin: round; }
+        /* 官网入口的小圆点（暗示「有内容/新」） */
+        .top-head .site-btn .sd { width: 5px; height: 5px; border-radius: 50%;
+            background: #a78bfa; box-shadow: 0 0 0 2.5px rgba(167,139,250,.28);
+            animation: siteDot 2.4s ease-in-out infinite; }
+        @keyframes siteDot {
+            0%,100% { box-shadow: 0 0 0 2.5px rgba(167,139,250,.28); }
+            50%     { box-shadow: 0 0 0 4.5px rgba(167,139,250,.12); }
+        }
+        /* 细分隔线，把「日志」与功能按钮分开 */
+        .top-head .sep { width: 1px; height: 16px; background: var(--border);
+            flex: 0 0 auto; margin: 0 2px; opacity: .8; }
+        /* 日志按钮：弱化为纯图标提示 */
+        .top-head #btnLogView { color: var(--muted); }
+        .top-head #btnLogView:hover { color: var(--text); }
+        .top-head #btnLogView .log-badge[style*="display:none"] { display: none !important; }
+        .top-head #btnLogView .log-badge { min-width: 14px; height: 14px;
+            line-height: 14px; font-size: 9px; padding: 0 3px; border-radius: 7px;
+            text-align: center; }
