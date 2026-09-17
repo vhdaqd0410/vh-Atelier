@@ -2,6 +2,7 @@
 // 工作台（组）→ 子功能（面板）。三组：字幕(字幕识别/字幕校对)、声音(人声分离/语音克隆/音效库/音乐)、交付(多版本导出/视频下载)
 (function () {
     var panels = {
+        home: document.getElementById('panel-home'),
         subtitle: document.getElementById('panel-subtitle'),
         check: document.getElementById('panel-check'),
         clone: document.getElementById('panel-clone'),
@@ -9,6 +10,7 @@
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
+        home: { members: ['home'], default: 'home' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
         audio: { members: ['clone'], default: 'clone' }
     };
@@ -99,4 +101,44 @@
 
     // 暴露给其他板块调用：字幕识别 → 字幕校对 联动时切 tab
     window.__atSwitchTab = switchTab;
+
+    // ==================== 首页 ====================
+    // 启动默认落在首页（避免无默认面板导致首屏空白）
+    function showHome() {
+        groupBtns.forEach(function (b) {
+            b.classList.toggle('active', b.dataset.group === 'home');
+        });
+        allTabs.forEach(function (t) { t.classList.remove('active'); });
+        subTabBars.forEach(function (bar) { bar.style.display = 'none'; });
+        showPanel('home');
+    }
+    window.__atShowHome = showHome;
+
+    // 首页卡片 → 跳对应工作台（可指定具体子 tab）
+    document.querySelectorAll('.home-card[data-goto]').forEach(function (card) {
+        card.addEventListener('click', function () {
+            var t = card.dataset.tab;
+            if (t && panels[t]) { switchTab(t); } else { switchGroup(card.dataset.goto); }
+        });
+    });
+    // 首页底部：检查更新
+    var homeUpd = document.getElementById('homeUpd');
+    if (homeUpd) {
+        homeUpd.addEventListener('click', function (e) {
+            e.preventDefault();
+            var b = document.getElementById('btnUpdate');
+            if (b) b.click();
+        });
+    }
+    // 首页显示版本号（CEP 环境有 require；取不到时保留默认文本）
+    try {
+        var hv = document.getElementById('homeVer');
+        if (hv && window.__vhUpdate && window.__vhUpdate.version) {
+            var vv = window.__vhUpdate.version();
+            if (vv) hv.textContent = 'vh-Subtitle · v' + vv;
+        }
+    } catch (e) {}
+
+    // 启动：落在首页
+    showHome();
 })();

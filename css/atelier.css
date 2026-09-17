@@ -2718,3 +2718,42 @@
         #panel-upscale.en-exp-log .en-split { height: 100%; min-height: 0; }
         #panel-upscale.en-exp-log #enLogCard { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
         #panel-upscale.en-exp-log #enLog { flex: 1 1 auto; max-height: none; overflow-y: auto; }
+
+        /* ==================== 首页（启动默认展示） ==================== */
+        .home-hero { padding: 6px 2px 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+        .home-kick { display: inline-flex; align-items: center; gap: 8px; font-size: 10.5px;
+            letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+        .home-kick::before { content: ""; width: 18px; height: 1.5px; background: var(--accent); }
+        .home-title { font-size: 19px; font-weight: 600; letter-spacing: -.01em; margin-bottom: 7px; }
+        .home-lede { color: var(--muted); font-size: 12px; line-height: 1.7; max-width: 62ch; }
+
+        .home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 8px; margin-bottom: 18px; }
+        .home-card { display: grid; grid-template-columns: 26px 1fr; grid-template-rows: auto auto;
+            gap: 2px 9px; align-items: center; text-align: left; font-family: inherit;
+            background: var(--panel); color: var(--text); border: 1px solid var(--border);
+            border-radius: 8px; padding: 11px 12px; cursor: pointer;
+            transition: border-color .16s, background .16s, transform .16s; }
+        .home-card:hover { border-color: var(--accent); background: var(--panel2); transform: translateY(-1px); }
+        .home-card .hc-ico { grid-row: 1 / 3; font-size: 17px; text-align: center; }
+        .home-card .hc-t { font-size: 13px; font-weight: 600; }
+        .home-card .hc-d { font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+
+        .home-sec { font-size: 11px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .5px; margin-bottom: 9px; }
+        .home-steps { display: grid; gap: 6px; margin-bottom: 18px; }
+        .home-step { display: flex; gap: 10px; align-items: flex-start; background: var(--panel);
+            border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+        .home-step > b { flex: 0 0 20px; height: 20px; line-height: 20px; text-align: center;
+            border-radius: 50%; background: var(--panel2); border: 1px solid var(--accent);
+            color: var(--accent); font-size: 11px; font-weight: 700; }
+        .home-step > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .home-step span { font-size: 12.5px; font-weight: 600; }
+        .home-step i { font-style: normal; font-size: 11px; color: var(--muted); line-height: 1.55; }
+
+        .home-foot { display: flex; align-items: center; justify-content: space-between;
+            gap: 10px; padding-top: 12px; border-top: 1px solid var(--border);
+            font-size: 11px; color: var(--muted); }
+        .home-links { display: flex; gap: 12px; }
+        .home-links a { color: var(--muted); text-decoration: none; border-bottom: 1px dashed var(--border); }
+        .home-links a:hover { color: var(--accent); border-bottom-color: var(--accent); }

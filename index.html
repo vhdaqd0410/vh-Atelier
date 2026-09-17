@@ -32,8 +32,50 @@
     </div>
 
     <div class="ws-groups">
+        <button class="ws-group active" data-group="home">🏠 首页</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
+    </div>
+
+    <!-- ==================== 首页（启动默认展示） ==================== -->
+    <div class="tab-panel" id="panel-home">
+        <div class="home-hero">
+            <div class="home-kick">vh-Subtitle · 字幕与配音</div>
+            <h1 class="home-title">识别、校对、配音</h1>
+            <p class="home-lede">选序列批量识别（中文 FunASR / 英文与多语言 Whisper），与剧本 docx 词级对齐校对，再用参考音色合成配音。全部本地运行。</p>
+        </div>
+
+        <div class="home-grid">
+            <button type="button" class="home-card" data-goto="sub" data-tab="subtitle">
+                <span class="hc-ico">💬</span>
+                <span class="hc-t">字幕识别</span>
+                <span class="hc-d">选序列批量识别，中 / 英 / 多语言，可导出 SRT</span>
+            </button>
+            <button type="button" class="home-card" data-goto="sub" data-tab="check">
+                <span class="hc-ico">✅</span>
+                <span class="hc-t">字幕校对</span>
+                <span class="hc-d">与剧本 docx 词级对齐，找出听错 / 漏词 / 幻觉重复</span>
+            </button>
+            <button type="button" class="home-card" data-goto="audio">
+                <span class="hc-ico">🎙</span>
+                <span class="hc-t">语音克隆</span>
+                <span class="hc-d">参考音色 + 任意文本合成（CosyVoice3 本地引擎）</span>
+            </button>
+        </div>
+
+        <div class="home-sec">快速上手</div>
+        <div class="home-steps">
+            <div class="home-step"><b>1</b><div><span>识别字幕</span><i>「字幕识别」里选序列，中文或英文，导出 SRT</i></div></div>
+            <div class="home-step"><b>2</b><div><span>对剧本校对</span><i>「字幕校对」加载剧本 docx，逐词比对，打勾回写</i></div></div>
+            <div class="home-step"><b>3</b><div><span>需要时配音</span><i>「语音克隆」用参考音色 + 文字合成，导入时间轴</i></div></div>
+        </div>
+
+        <div class="home-foot">
+            <span id="homeVer">vh-Subtitle</span>
+            <span class="home-links">
+                <a href="#" id="homeUpd">检查更新</a>
+            </span>
+        </div>
     </div>
     <div class="tabs ws-subtabs" data-group="sub" style="display:none;">
         <button class="tab active" data-tab="subtitle">字幕识别</button>

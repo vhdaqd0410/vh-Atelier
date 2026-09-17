@@ -13,6 +13,24 @@
 """
 import io, sys, json, os, time, base64, argparse, urllib.request, urllib.parse
 
+# ---------- 输出编码修正（重要）----------
+# 中文 Windows 控制台默认 GBK(cp936)，直接 print 含 emoji（❌/✅/⚠）的文本会抛
+# UnicodeEncodeError；而 out() 会静默忽略异常，导致前端拿不到任何错误信息，
+# 只能显示兜底文案「请检查账号密码」，掩盖真实原因。
+#
+# 用 reconfigure() 原地改编码（不能用 sys.stdout = TextIOWrapper(sys.stdout.buffer)，
+# 那样旧 stdout 被 GC 回收时会关掉底层 buffer，后续写入全部失败）。
+# 同时保留原对象引用，避免意外回收。
+_stdout_orig = sys.stdout
+_stderr_orig = sys.stderr
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        enc = (_stream.encoding or '').lower()
+        if enc not in ('utf-8', 'utf8') and hasattr(_stream, 'reconfigure'):
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 BASE = 'http://subtitle.zztianqiao.com'
 # token 缓存放 collect/（插件运行时数据目录，源码同步会排除，不污染 git）
 _py_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,8 +40,27 @@ TOKEN_FILE = os.path.join(_cfg_dir, '_enhance_token.json')
 FOLDER_FILE = os.path.join(_cfg_dir, '_enhance_folder.json')
 
 def out(*a):
+    """打印到 stdout。
+    优先 UTF-8；若仍失败（极窄情况），逐级降级，保证前端一定拿得到一行结果。
+    """
+    msg = ' '.join(str(x) for x in a)
     try:
-        print(*a)
+        print(msg)
+        return
+    except Exception:
+        pass
+    # 降级 1：写入底层 buffer（UTF-8 字节）
+    try:
+        sys.stdout.buffer.write((msg + '\n').encode('utf-8', 'replace'))
+        sys.stdout.buffer.flush()
+        return
+    except Exception:
+        pass
+    # 降级 2：丢掉无法编码的字符后再试
+    try:
+        safe = msg.encode(sys.stdout.encoding or 'ascii', 'replace').decode(
+            sys.stdout.encoding or 'ascii', 'replace')
+        print(safe)
     except Exception:
         pass
 
