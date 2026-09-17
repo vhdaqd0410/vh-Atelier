@@ -12,6 +12,7 @@
         script: document.getElementById('panel-script'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
+        feedback: document.getElementById('panel-feedback')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
@@ -21,7 +22,8 @@
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
-        upscale: { members: ['upscale'], default: 'upscale' }
+        upscale: { members: ['upscale'], default: 'upscale' },
+        feedback: { members: ['feedback'], default: 'feedback' }
     };
     // tab 归属映射
     var groupOf = {};
@@ -96,6 +98,10 @@
         // 超分面板：切到时刷新序列列表
         if (name === 'upscale' && window.__enhanceOnShow) {
             try { window.__enhanceOnShow(); } catch (e) {}
+        }
+        // 反馈中心：切到时把 iframe 拉起来
+        if (name === 'feedback' && window.__feedbackPanelOnShow) {
+            try { window.__feedbackPanelOnShow(); } catch (e) {}
         }
     }
 

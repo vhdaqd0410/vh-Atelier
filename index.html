@@ -39,6 +39,7 @@
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
+        <button class="ws-group" data-group="feedback">📮 反馈</button>
     </div>
 
     
@@ -62,6 +63,9 @@
     </div>
     <div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
         <button class="tab active" data-tab="upscale">去字幕 / 超分</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="feedback" style="display:none;">
+        <button class="tab active" data-tab="feedback">反馈中心</button>
     </div>
 
     <!-- 人声分离（从字幕工作台迁至声音工作台） -->
@@ -529,6 +533,19 @@
             <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
         </div>
     </div>
+    <div class="tab-panel" id="panel-feedback" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
+            <div class="wb-nav">
+                <button class="wb-nav-btn" id="fbNavReload" title="刷新页面">&#8635;</button>
+                <button class="wb-nav-btn" id="fbNavHome" title="回到首页">&#127968;</button>
+                <button class="wb-nav-btn wb-nav-ext" id="fbNavExternal" title="在外部浏览器打开">&#8599;</button>
+                <span class="wb-nav-url" id="fbNavHint" style="display:flex;align-items:center;color:var(--muted);font-size:11px;">加载中…</span>
+                <button class="wb-nav-btn" id="fbNavSubmit" title="提交新反馈" style="color:#7fd68b;">&#128238; 提反馈</button>
+            </div>
+            <iframe id="fbFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#0f1115;" src="about:blank"></iframe>
+        </div>
+    </div>
+
 
     <!-- ==================== 超分（一键导出并超分 + 外站工具） ==================== -->
     <div class="tab-panel" id="panel-upscale" style="display:none;">
@@ -691,6 +708,7 @@
     <script src="js/iframe-nav.js"></script>
     <script src="js/feedback.js"></script>
     <script src="js/feedback-ui.js"></script>
+    <script src="js/feedback-panel.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================
