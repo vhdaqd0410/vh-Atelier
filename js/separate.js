@@ -294,9 +294,28 @@
     }
 
     // 试听：单实例，点同一个暂停，点另一个切换
+    // 关键：不能用 ws.load('file:///...') —— CEP 里 file 协议加载常被拦（本机可能碰巧能读，
+    //      别的机器就报错）。改用 XHR 读成 Blob 再 loadBlob，与音效库一致，到哪都能播。
+    function sepReadAsBlob(filePath, cb) {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'file:///' + String(filePath).replace(/\\/g, '/'), true);
+            xhr.responseType = 'blob';
+            xhr.onload = function () {
+                if (xhr.status === 0 || xhr.status === 200) cb(null, xhr.response);
+                else cb(new Error('读取失败 HTTP ' + xhr.status), null);
+            };
+            xhr.onerror = function () { cb(new Error('无法读取音频文件'), null); };
+            xhr.send();
+        } catch (e) {
+            cb(e, null);
+        }
+    }
+
     function toggleSepPlay(p, btn) {
         if (sepWsPath === p && sepWs && sepWsPlaying) { pauseSepPlay(btn); return; }
         stopSepPlay();
+        if (!p || !fs.existsSync(p)) { setSepStatus('文件不存在：' + p, 'err'); return; }
         var row = document.querySelector('#sepResultList .sep-res-item[data-path="' + cssEsc(p) + '"]');
         var holder = row ? row.querySelector('.sep-res-wave') : null;
         if (!holder) {
@@ -319,13 +338,36 @@
                 hideScrollbar: true
             });
             sepWsPath = p;
-            sepWs.load('file:///' + String(p).replace(/\\/g, '/'));
-            sepWs.on('ready', function () {
-                try { sepWs.play(); } catch (e) {}
-                sepWsPlaying = true;
-                if (btn) btn.textContent = '⏸';
+            setSepStatus('正在读取音频…', '');
+            sepReadAsBlob(p, function (err, blob) {
+                if (err || !blob) {
+                    sepWsPath = '';
+                    setSepStatus('试听失败：' + (err ? err.message : '读取为空') +
+                        '　（文件：' + p + '）', 'err');
+                    return;
+                }
+                try {
+                    sepWs.loadBlob(blob);
+                } catch (e) {
+                    setSepStatus('试听失败：' + e.message, 'err');
+                    return;
+                }
+                sepWs.on('ready', function () {
+                    try { sepWs.play(); } catch (e) {}
+                    sepWsPlaying = true;
+                    if (btn) btn.textContent = '⏸';
+                    setSepStatus('试听中…', '');
+                });
+                sepWs.on('finish', function () {
+                    sepWsPlaying = false;
+                    if (btn) btn.textContent = '▶';
+                });
+                sepWs.on('error', function (e) {
+                    sepWsPlaying = false;
+                    if (btn) btn.textContent = '▶';
+                    setSepStatus('试听出错：' + (e && e.message ? e.message : '音频解码失败'), 'err');
+                });
             });
-            sepWs.on('finish', function () { sepWsPlaying = false; if (btn) btn.textContent = '▶'; });
         } catch (e) {
             setSepStatus('试听失败：' + e.message, 'err');
         }
