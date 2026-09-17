@@ -21,6 +21,11 @@ _releases/
 .video_cookies.txt
 *.cookies.txt
 _enhance_token.json
+feedback.json
+collect/feedback.json
+
+# 但配置模板要入库（供别人参考填写）
+!feedback.example.json
 
 # 系统
 Thumbs.db

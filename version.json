@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.2.1",
-  "buildTime": "2026-09-16 22:40:00",
+  "version": "1.3.0",
+  "buildTime": "2026-09-17 10:20:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "【修复】下载结果时提示 WinError 32（另一个程序正在使用此文件）\n- 根因：下载目录是 PR 已导入的「超分结果」目录，文件被 PR 占用，旧的「先删后写」逻辑删不掉就报错\n- 修复：被占用时不再删旧文件（避免断开 PR 引用），自动改用带序号的新文件名保存\n- 加固：.part 临时文件改用唯一名，避免并发/残留相互干扰\n\n【改进】去字幕也支持「入点→出点」选取\n- 面板新增「区间来源」：选中片段 / 入点→出点\n- 选「入点→出点」时，按时间轴 I / O 设定的区间处理（超分/去字幕通用）\n- 「处理选中片段」按钮改名为「处理选中区间」，来源跟随即时切换\n\n【后台队列】提交后即可继续下一个任务，不必等云端处理完\n- 待云端 + 自动下载导入交给后台队列，界面不阻塞\n- 面板重开自动恢复未完成任务（24 小时内）\n\n剪辑工作台：素材 / 剧本 / 超分 / 声音 / 审片 / 交付 六工作台\n支持在线更新（标题栏「⬆ 更新」）"
+  "notes": "【新增】在线反馈：标题栏「📮 反馈」按钮\n- 可在插件内直接提 Bug / 需求 / 其他意见，提交到 GitHub Issues\n- 自动附带运行环境（插件版本 / 系统 / 时间）与最近 40 行日志，便于定位\n- 提交后弹窗里有链接可直接在浏览器打开跟进\n\n【使用前需配置令牌（一次性）】\n1. 插件目录里把 feedback.example.json 复制一份，改名 feedback.json\n2. 打开 https://github.com/settings/personal-access-tokens/new 生成 Fine-grained Token\n   · Repository access 选 Only select repositories，勾本插件仓库\n   · Permissions → Repository permissions → Issues 设为 Read and write\n3. 把生成的 token 填进 feedback.json 的 token 字段\n- feedback.json 已被 .gitignore 排除，不会随更新下发，令牌不外泄\n\n【修复】下载 WinError32（文件被占用）：被占用时改名保存，不删旧文件（避免断开 PR 引用）\n【改进】去字幕支持「入点→出点」选取（区间来源可选：选中片段 / 入点→出点）\n【后台队列】提交后可继续下一个任务，不必等云端处理完\n\n剪辑工作台：素材 / 剧本 / 超分 / 声音 / 审片 / 交付 六工作台\n支持在线更新（标题栏「⬆ 更新」）"
 }
