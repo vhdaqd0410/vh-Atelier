@@ -27,6 +27,50 @@
     var CFG_FILE = ROOT ? path.join(ROOT, 'version.json') : '';
     var TMP = path.join(os.tmpdir(), 'vh_update');
     var LAST_CHECK_KEY = 'vh_update_last_check';
+    // 本地更新历史（随代码下发）
+    var CHANGE_FILE = ROOT ? path.join(ROOT, 'changelog.json') : '';
+
+    function readChangelog() {
+        try {
+            if (CHANGE_FILE && fs.existsSync(CHANGE_FILE)) {
+                var j = JSON.parse(fs.readFileSync(CHANGE_FILE, 'utf8'));
+                return Array.isArray(j.versions) ? j.versions : [];
+            }
+        } catch (e) {}
+        return [];
+    }
+
+    // 版本号比较：返回 a 是否比 b 新
+    function verNum(v) {
+        return String(v || '0').replace(/^v/i, '').split('.').map(function (x) {
+            var n = parseInt(x, 10); return isNaN(n) ? 0 : n;
+        });
+    }
+    function verGt(a, b) {
+        var A = verNum(a), B = verNum(b);
+        var len = Math.max(A.length, B.length);
+        for (var i = 0; i < len; i++) {
+            var x = A[i] || 0, y = B[i] || 0;
+            if (x > y) return true;
+            if (x < y) return false;
+        }
+        return false;
+    }
+
+    // 取「本地版本 → 目标版本」之间的所有变更条目（含目标版）
+    function changesBetween(localVer, targetVer) {
+        var all = readChangelog();
+        if (!all.length) return [];
+        var out = [];
+        for (var i = 0; i < all.length; i++) {
+            var it = all[i];
+            // 只取比本地新、且不比目标新的
+            if (verGt(it.version, localVer) && !verGt(it.version, targetVer)) out.push(it);
+        }
+        // 按版本从新到旧
+        out.sort(function (a, b) { return verGt(a.version, b.version) ? -1 : 1; });
+        return out;
+    }
 
     // 不参与更新的目录（大文件 + 用户数据）
     var SKIP = ['collect', 'bin', 'models', 'engine', 'ncm', 'runtime', 'stubs',
@@ -73,7 +117,17 @@
             '.vhu-btn.pri:disabled{filter:grayscale(.6);cursor:not-allowed;}',
             '.vhu-btn.sec{background:#3a3a3a;color:#c8c8c8;}',
             '.vhu-btn.sec:hover{background:#464646;}',
-            '.vhu-files{font-family:Consolas,monospace;font-size:11px;color:#8a8a8a;}'
+            '.vhu-files{font-family:Consolas,monospace;font-size:11px;color:#8a8a8a;}',
+            '.vhu-verblock{border-top:1px solid #2c2c2c;padding:10px 0 4px;}',
+            '.vhu-verblock:first-child{border-top:none;}',
+            '.vhu-verhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px;}',
+            '.vhu-verhead b{font-size:12.5px;color:#7fd68b;font-family:Consolas,monospace;}',
+            '.vhu-vtitle{font-size:11.5px;color:#cfcfcf;}',
+            '.vhu-verhead time{margin-left:auto;font-size:10.5px;color:#6a6a6a;font-family:Consolas,monospace;}',
+            '.vhu-items{list-style:none;margin:0;padding:0;display:grid;gap:4px;}',
+            '.vhu-items li{display:flex;gap:7px;font-size:12px;line-height:1.6;color:#b8b8b8;}',
+            '.vhu-items em{flex:0 0 auto;font-style:normal;font-size:10.5px;font-weight:600;padding-top:1px;}',
+            '.vhu-items span{flex:1 1 auto;}'
         ].join('');
         document.head.appendChild(st);
     }
@@ -126,7 +180,35 @@
         });
     }
 
-    // 把更新说明（可能是 markdown 列表）渲染成 HTML
+    // 渲染「跨版本变更」：标题 + 每个版本的条目，带类型配色
+    var KIND_LABEL = { feat: '新增', fix: '修复', impr: '改进', note: '说明' };
+    var KIND_COLOR = { feat: '#56d364', fix: '#ff8a80', impr: '#7fb2ff', note: '#9aa3b2' };
+
+    function renderChanges(list) {
+        if (!list || !list.length) return '';
+        var h = '';
+        list.forEach(function (v) {
+            h += '<div class="vhu-verblock">';
+            h += '<div class="vhu-verhead"><b>v' + esc(v.version) + '</b>' +
+                 (v.title ? '<span class="vhu-vtitle">' + esc(v.title) + '</span>' : '') +
+                 (v.date ? '<time>' + esc(v.date) + '</time>' : '') + '</div>';
+            var items = v.items || [];
+            if (items.length) {
+                h += '<ul class="vhu-items">';
+                items.forEach(function (it) {
+                    var c = KIND_COLOR[it.kind] || '#9aa3b2';
+                    var lb = KIND_LABEL[it.kind] || '';
+                    h += '<li>' + (lb ? '<em style="color:' + c + '">' + lb + '</em>' : '') +
+                         '<span>' + esc(it.text) + '</span></li>';
+                });
+                h += '</ul>';
+            }
+            h += '</div>';
+        });
+        return h;
+    }
+
+    // 兼容旧的纯文本说明（远端 version.json 的 notes）
     function renderNotes(notes) {
         if (!notes) return '<div class="vhu-note">本次更新无详细说明。</div>';
         var txt = String(notes).trim();
@@ -138,6 +220,28 @@
         });
         html += '</div>';
         return html;
+    }
+
+    // 更新历史弹窗（只看，不更新）
+    function showHistoryUI() {
+        var localVer = (readCfg() || {}).version || '?';
+        modal({
+            title: '更新历史',
+            onReady: function (api) {
+                var all = readChangelog();
+                if (!all.length) {
+                    api.el.innerHTML = '<div class="vhu-note">未找到更新历史文件（changelog.json）。</div>';
+                    api.addBtn('关闭', true, api.close);
+                    return;
+                }
+                all.sort(function (a, b) { return verGt(a.version, b.version) ? -1 : 1; });
+                api.el.innerHTML =
+                    '<div class="vhu-files" style="margin-bottom:10px;">当前版本 v' + esc(localVer) +
+                    '　共 ' + all.length + ' 个版本记录</div>' +
+                    renderChanges(all);
+                api.addBtn('关闭', true, api.close);
+            }
+        });
     }
 
     // ============ 版本检查 ============
@@ -345,20 +449,32 @@
                             '<div class="vhu-ver"><span class="vhu-badge vhu-new">已是最新</span>' +
                             '<span class="vhu-files">v' + esc(cur) + '</span></div>' +
                             '<div class="vhu-note">当前已是最新版本，无需更新。</div>';
+                        api.addBtn('查看更新历史', false, function () {
+                            api.close();
+                            setTimeout(showHistoryUI, 150);
+                        });
                         api.addBtn('关闭', true, api.close);
                         return;
                     }
-                    // 有更新：展示版本 + 更新说明
-                    api.el.innerHTML =
-                        '<div class="vhu-ver">' +
+                    // 有更新：展示版本 + 跨版本文更（本地→最新之间的全部）
+                    var changes = changesBetween(cur, r.remote.version);
+                    var bodyHtml = '';
+                    bodyHtml += '<div class="vhu-ver">' +
                           '<span class="vhu-badge vhu-old">当前 v' + esc(cur) + '</span>' +
                           '<span class="vhu-arrow">→</span>' +
                           '<span class="vhu-badge vhu-new">最新 v' + esc(r.remote.version || '?') + '</span>' +
-                        '</div>' +
-                        '<div class="vhu-sec">本次更新内容</div>' +
-                        renderNotes(r.notes) +
-                        (r.remoteTime ? '<div class="vhu-sec">发布时间</div><div class="vhu-files">' + esc(r.remoteTime) + '</div>' : '') +
-                        '<div class="vhu-note" style="margin-top:12px;">更新只同步代码（几百 KB），不动模型、引擎与你的数据。<br>更新后请关闭并重开面板；若涉及 JSX，需重启 Premiere Pro。</div>';
+                        '</div>';
+                    if (changes.length) {
+                        bodyHtml += '<div class="vhu-sec">本次更新内容（共 ' + changes.length + ' 个版本）</div>';
+                        bodyHtml += renderChanges(changes);
+                    } else {
+                        bodyHtml += '<div class="vhu-sec">本次更新内容</div>' + renderNotes(r.notes);
+                    }
+                    if (r.remoteTime) {
+                        bodyHtml += '<div class="vhu-sec">发布时间</div><div class="vhu-files">' + esc(r.remoteTime) + '</div>';
+                    }
+                    bodyHtml += '<div class="vhu-note" style="margin-top:12px;">更新只同步代码（几百 KB），不动模型、引擎与你的数据。<br>更新后请关闭并重开面板；若涉及 JSX，需重启 Premiere Pro。</div>';
+                    api.el.innerHTML = bodyHtml;
                     var btnDo = api.addBtn('立即更新', true, function () {
                         btnDo.disabled = true;
                         btnDo.textContent = '更新中…';
@@ -397,25 +513,29 @@
                         });
                     });
                     api.addBtn('稍后', false, api.close);
+                    api.addBtn('更新历史', false, function () {
+                        api.close();
+                        setTimeout(showHistoryUI, 150);
+                    });
                 });
             }
         });
         return m;
     }
 
-    // 自动检查（启动时静默检查，有新版本才弹窗）
+    // 自动检查（每次打开面板都检查一次，有新版本才弹窗）
+    // 注：不用 sessionStorage 做“本次会话只查一次”——CEP 面板里 sessionStorage
+    // 会跨会话保留，导致第一次查过后以后永远不再查。用内存标记足矣。
+    var autoChecked = false;
     function autoCheck() {
         var cfg = readCfg();
         if (!cfg) return;
-        // 同一次会话只自动检查一次
-        try {
-            if (sessionStorage.getItem('vh_update_autochecked') === '1') return;
-            sessionStorage.setItem('vh_update_autochecked', '1');
-        } catch (e) {}
+        if (autoChecked) return;
+        autoChecked = true;
         setTimeout(function () {
             checkUpdate(function (err, r) {
                 if (err || !r || !r.hasUpdate) return;
-                showUpdateUI(true);
+                showUpdateUI(true);   // true = 自动检查触发（弹窗展示详情，可选立即更新/稍后）
             });
         }, 2500);
     }
@@ -424,6 +544,7 @@
         check: checkUpdate,
         run: doUpdate,
         show: showUpdateUI,
+        history: showHistoryUI,
         autoCheck: autoCheck,
         version: function () { var c = readCfg(); return c ? c.version : ''; },
         info: function () { return readCfg(); }
