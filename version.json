@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.3.0",
-  "buildTime": "2026-09-17 10:20:00",
+  "version": "1.3.1",
+  "buildTime": "2026-09-17 11:00:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "【新增】在线反馈：标题栏「📮 反馈」按钮\n- 可在插件内直接提 Bug / 需求 / 其他意见，提交到 GitHub Issues\n- 自动附带运行环境（插件版本 / 系统 / 时间）与最近 40 行日志，便于定位\n- 提交后弹窗里有链接可直接在浏览器打开跟进\n\n【使用前需配置令牌（一次性）】\n1. 插件目录里把 feedback.example.json 复制一份，改名 feedback.json\n2. 打开 https://github.com/settings/personal-access-tokens/new 生成 Fine-grained Token\n   · Repository access 选 Only select repositories，勾本插件仓库\n   · Permissions → Repository permissions → Issues 设为 Read and write\n3. 把生成的 token 填进 feedback.json 的 token 字段\n- feedback.json 已被 .gitignore 排除，不会随更新下发，令牌不外泄\n\n【修复】下载 WinError32（文件被占用）：被占用时改名保存，不删旧文件（避免断开 PR 引用）\n【改进】去字幕支持「入点→出点」选取（区间来源可选：选中片段 / 入点→出点）\n【后台队列】提交后可继续下一个任务，不必等云端处理完\n\n剪辑工作台：素材 / 剧本 / 超分 / 声音 / 审片 / 交付 六工作台\n支持在线更新（标题栏「⬆ 更新」）"
+  "notes": "【修复】「导出并超分/去字幕」忽略区间来源的问题\n- 之前：区间来源选了「入点→出点」，但点「导出并超分」仍然导出整个序列（写死 exportType=0）\n- 现在：选「入点→出点」时，导出并超分也只处理该区间\n- 附带：入点出点模式只对当前序列生效，多选会自动收敛到第一个并给出提醒\n\n【改进】在线反馈改为「中转服务」模式，插件端不再需要任何令牌\n- 之前：插件直连 GitHub，别人必须拿到你的令牌才能提交\n- 现在：插件提交到自建中转服务，令牌只存在服务器上，别人拿不到\n- 面板新增「测试连接」按钮，可当场检查服务是否可达\n- 中转地址可通过插件目录 feedback.json 覆盖（不参与更新，不影响别人）\n\n【服务器端】配套服务 feedback-server.js（零依赖 Node 单文件，路由见 README）\n\n剪辑工作台：素材 / 剧本 / 超分 / 声音 / 审片 / 交付 六工作台\n支持在线更新（标题栏「⬆ 更新」）"
 }
