@@ -178,7 +178,17 @@
   el.rootSel.addEventListener('change', function () {
     currentRoot = el.rootSel.value || 'COMPUTER';
     saveCur(currentRoot);
-    if (currentRoot === 'COMPUTER') { browseDir = 'COMPUTER'; renderNav(); if (el.detail) el.detail.innerHTML = '<div class="hint" style="padding:10px;">选择磁盘开始浏览</div>'; }
+    if (currentRoot === 'COMPUTER') {
+      browseDir = 'COMPUTER';
+      renderNav();
+      // 注意：el.detail 是 mdFHead + mdFList 的父容器，直接写它的 innerHTML 会把
+      // 这两个子元素一起销毁，导致后续 renderFilePanel 写入不可见的游离节点，
+      // 右侧列表就再也不显示了。所以只更新 mdFHead，保留 mdFList 结构。
+      if (el.fhead) {
+        el.fhead.innerHTML = '<span class="hint" style="padding:6px 4px;">← 选择左侧磁盘或文件夹查看内容</span>';
+      }
+      if (el.flist) el.flist.innerHTML = '';
+    }
     else if (currentRoot) { browseDir = currentRoot; renderNav(); showDirDetail(browseDir); }
   });
 
@@ -525,6 +535,14 @@
     renderFilePanel(dir);
   }
   function renderFilePanel(dir) {
+    // 自愈：若 mdFHead/mdFList 曾被误抹掉（旧版 bug），重新取引用并重建结构
+    if (!el.fhead || !el.fhead.parentNode) el.fhead = document.getElementById('mdFHead');
+    if (!el.flist || !el.flist.parentNode) el.flist = document.getElementById('mdFList');
+    if (el.detail && (!el.fhead || !el.flist)) {
+      el.detail.innerHTML = '<div class="md-fhead" id="mdFHead"></div><div class="md-flist" id="mdFList"></div>';
+      el.fhead = document.getElementById('mdFHead');
+      el.flist = document.getElementById('mdFList');
+    }
     if (!el.fhead || !el.flist) return;
     curDirPath = dir;
     el.fhead.innerHTML = '';
