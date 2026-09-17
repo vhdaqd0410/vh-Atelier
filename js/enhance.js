@@ -301,14 +301,25 @@
   }
 
   // 激活序列 + 导出到临时目录
-  function exportOne(seqName, presetPath, outFile) {
+  // range 可选：{ startSec, endSec } —— 传了则只导出该区间（设入出点→导出→还原），
+  // 不传则导出整序列（exportType=0）
+  function exportOne(seqName, presetPath, outFile, range) {
     return new Promise(function (resolve, reject) {
       (async function () {
         var act = await evalHost('meActivateSequence(' + JSON.stringify(seqName) + ')');
         if (act.indexOf('OK:') !== 0) return reject(new Error('激活序列失败：' + act));
-        log('▶ 导出 ' + seqName + '（无字幕）…');
-        var r = await evalHost('meExport(' + JSON.stringify(outFile) + ', ' + JSON.stringify(presetPath) + ', 0)');
-        if (r.indexOf('OK:') !== 0) return reject(new Error('导出提交失败：' + r));
+        if (range && (range.startSec != null) && (range.endSec != null)) {
+          log('▶ 导出区间 ' + fmtSec(range.startSec) + ' → ' + fmtSec(range.endSec) + '：' + seqName);
+          try {
+            await exportRange(seqName, range.startSec, range.endSec, presetPath, outFile);
+          } catch (e) {
+            return reject(e);
+          }
+        } else {
+          log('▶ 导出整序列（无字幕）：' + seqName);
+          var r = await evalHost('meExport(' + JSON.stringify(outFile) + ', ' + JSON.stringify(presetPath) + ', 0)');
+          if (r.indexOf('OK:') !== 0) return reject(new Error('导出提交失败：' + r));
+        }
         // 等文件出现
         var deadline = Date.now() + 30 * 60 * 1000;
         var timer = setInterval(function () {
@@ -519,6 +530,29 @@
       // 结果目录（项目根/超分结果）
       await resolveResultDir();
 
+      // 区间来源：选了「入点→出点」则只导出该区间（而不是整集）
+      var useRange = (enClipSrcMode() === 'inout');
+      var inoutInfo = null;
+      if (useRange) {
+        // 入点出点是当前活动序列的时间区间，多选无意义 → 只处理第一个签选项
+        if (checked.length > 1) {
+          log('⚠ 入点→出点模式只对当前序列生效，将只处理第一个签选项：' + checked[0] + '（其余忽略）', 'warn');
+          checked = [checked[0]];
+          syncCheck(); updateHint();
+        }
+        var ir = await evalHost('meGetSequenceInOut()');
+        if (!ir || ir.indexOf('OK:') !== 0) {
+          log('✗ 入点→出点模式：' + (ir ? ir.replace(/^ERR:/, '') : '读取失败') + '。请先在时间轴按 I / O 设好入出点', 'err');
+          return;
+        }
+        try { inoutInfo = JSON.parse(ir.slice(3)); } catch (e) {
+          log('✗ 解析入出点失败：' + e.message, 'err');
+          return;
+        }
+        log('📐 区间来源：入点→出点　' + fmtSec(inoutInfo.inSec) + ' → ' + fmtSec(inoutInfo.outSec) +
+            '（' + fmtSec(inoutInfo.durationSec) + '）', 'ok');
+      }
+
       // ===== 阶段1：逐集 导出 → 提交任务（导出串行，因为 AME 一次一个） =====
       var totalN = checked.length;
       var tasks = [];   // { seqName, taskId, status }
@@ -529,7 +563,7 @@
         var outFile = path.join(tmpRoot, safe + (isErase ? '.mp4' : '_nosub.mp4'));
         try { if (fs.existsSync(outFile)) fs.unlinkSync(outFile); } catch (e) {}
         setProg((i / totalN) * 55, '[' + (i + 1) + '/' + totalN + '] 导出 ' + seqName + ' …');
-        log('▶ [' + (i + 1) + '/' + totalN + '] 导出（' + (isErase ? '含字幕' : '无字幕') + '）：' + seqName);
+        var rangeArg = useRange ? { startSec: inoutInfo.inSec, endSec: inoutInfo.outSec } : null;
         try { await exportOne(seqName, presetPath, outFile); } catch (e) {
           if (e && e.message === '__STOPPED__') break;
           log('✗ 导出失败 ' + seqName + '：' + e.message, 'err');

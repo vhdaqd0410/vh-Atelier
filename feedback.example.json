@@ -1,9 +1,9 @@
 {
-  "_说明": "在线反馈配置模板。把本文件复制一份、改名为 feedback.json，填上 token 即可启用标题栏「📮 反馈」按钮。",
-  "_说明2": "feedback.json 已被 .gitignore 排除，不会随更新下发，你的令牌不会外泄。",
-  "_生成方法": "GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token；Repository access 选 Only select repositories（勾本仓库）；Permissions → Repository permissions → Issues 设为 Read and write。",
-  "_权限说明": "该令牌只能操作本仓库的 Issue；即使泄露也无法改动代码。",
-  "token": "在这里填你的 Fine-grained Token",
-  "repo": "vhdaqd0410/vh-Atelier",
-  "labelPrefix": ""
+  "_说明": "在线反馈配置（可选）。不填也能用，会走插件内置的默认中转地址。",
+  "_要改地址": "如果你把反馈中转服务部署在别处，在这里覆盖 endpoint 即可，不必重新分发插件。",
+  "_endpoint": "反馈中转服务的提交地址，形如 http://你的域名或IP:17893/api/feedback",
+  "_secret": "若服务端 config 里启用了 secret 口令，这里填同样的值",
+  "endpoint": "",
+  "secret": "",
+  "timeout": 20000
 }
