@@ -28,6 +28,10 @@
   var btnRefresh = document.getElementById('btn-refresh');
   var btnRefreshSeq = document.getElementById('btn-refresh-seq');
   var btnOpenOut = document.getElementById('btn-open-out');
+  var btnPreflight = document.getElementById('btn-preflight');
+  var preflightBox = document.getElementById('preflight-box');
+  var preflightList = document.getElementById('preflight-list');
+  var preflightSum = document.getElementById('preflight-sum');
   var statusDot = document.getElementById('status-dot');
   var progressArea = document.getElementById('progress-area');
   var progressFill = document.getElementById('progress-fill');
@@ -117,6 +121,13 @@
     var m = Math.floor(sec / 60), s = sec % 60;
     return m + '分' + (s < 10 ? '0' : '') + s + '秒';
   }
+  // HTML 转义：体检结果里有用户填的路径，必须转义后再拼进 innerHTML
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
   function csvEscape(v) {
     v = String(v == null ? '' : v);
     if (/[",\n\r]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
@@ -984,12 +995,16 @@
     var evs = enabledVersions();
     if (evs.length === 0) { setLog('请至少启用一个版本（勾选版本卡片前的复选框）', true); return; }
 
-    // 校验每个启用的版本
+    // 校验每个启用的版本（与「导出前体检」同一套规则，这里做兜底）
     for (var i = 0; i < evs.length; i++) {
       var v = evs[i];
       if (!v.name) { setLog('第 ' + (i + 1) + ' 个版本缺名称', true); return; }
-      if (!v.preset || !fs.existsSync(v.preset)) { setLog('版本「' + v.name + '」导出预设无效', true); return; }
-      if (!v.outDir || !fs.existsSync(v.outDir)) { setLog('版本「' + v.name + '」输出目录不存在：' + v.outDir, true); return; }
+      if (!v.preset || !fs.existsSync(v.preset)) {
+        setLog('版本「' + v.name + '」导出预设无效（点「🔍 导出前体检」可看到全部问题）', true); return;
+      }
+      if (!v.outDir || !fs.existsSync(v.outDir)) {
+        setLog('版本「' + v.name + '」输出目录不存在：' + v.outDir, true); return;
+      }
       if (v.muteMode === 'mute' && v.keepList.length === 0) { setLog('版本「' + v.name + '」选了静音但没勾保留轨', true); return; }
     }
 
@@ -1001,7 +1016,20 @@
     var startTime = Date.now();
     var doneSeq = 0;
 
-    function overallPercent(seqIdx, inSeqPercent) {
+    // 一键导出时先自动体检：有硬错误就拦下，让用户决定是否继续
+  function guardBeforeExport() {
+    var r = preflight();
+    renderPreflight(r);
+    if (!r.errs.length) return true;
+    try {
+      return window.confirm('导出前体检发现 ' + r.errs.length + ' 个问题：\n\n' +
+        r.errs.slice(0, 6).map(function (t) { return '· ' + t; }).join('\n') +
+        (r.errs.length > 6 ? '\n…还有 ' + (r.errs.length - 6) + ' 个' : '') +
+        '\n\n仍然继续导出？（建议先修正）');
+    } catch (e) { return true; }
+  }
+
+  function overallPercent(seqIdx, inSeqPercent) {
       var base = (seqIdx / totalSeq) * 100;
       var span = (1 / totalSeq) * 100;
       return base + span * (inSeqPercent / 100);
@@ -1169,7 +1197,11 @@
     if (e.target && e.target.closest && e.target.closest('#panel-export')) captureBaseline();
   });
 
-  btnGo.addEventListener('click', runExport);
+  btnGo.addEventListener('click', function () {
+    // 先体检：有硬错误时让用户确认是否仍要继续（避免导到一半才失败）
+    if (!guardBeforeExport()) return;
+    runExport();
+  });
   btnStop.addEventListener('click', function () {
     if (!btnStop.disabled) {
       stopRequested = true;
@@ -1233,6 +1265,123 @@
   }
   if (btnOpenOut) {
     btnOpenOut.addEventListener('click', openOutputDir);
+  }
+
+  // ── 导出前体检 ──────────────────────────────
+  // 批量导出最烦的是「跑一半才失败」：某个版本没配输出目录、预设文件被删、
+  // 目录没写权限……。这里在开跑前一次性把所有问题列出来。
+  function preflight() {
+    var errs = [], warns = [], oks = [];
+
+    // 1) 序列
+    var seqs = [];
+    try { seqs = getCheckedSeqs(); } catch (e) {}
+    if (!seqs.length) errs.push('没有勾选任何序列（在上方「序列」里勾选要导出的）');
+    else oks.push('已勾选 ' + seqs.length + ' 个序列：' + seqs.join('、'));
+
+    // 2) 启用版本
+    var evs = [];
+    try { evs = enabledVersions(); } catch (e) {}
+    if (!evs.length) errs.push('没有启用任何版本（每个版本卡片右上角要勾「启用」）');
+    else oks.push('已启用 ' + evs.length + ' 个版本：' + evs.map(function (v) { return v.name; }).join('、'));
+
+    // 3) 逐版本检查：输出目录 / 预设
+    evs.forEach(function (v, i) {
+      var tag = '版本「' + v.name + '」';
+
+      // 3a 输出目录
+      var dir = (v.outDir || '').trim();
+      if (!dir) {
+        errs.push(tag + ' 没填输出目录');
+      } else if (!fs.existsSync(dir)) {
+        errs.push(tag + ' 输出目录不存在：' + dir);
+      } else {
+        // 可写性实测：写一个临时文件再删
+        var probe = path.join(dir, '.vh_write_test_' + Date.now() + '.tmp');
+        try {
+          fs.writeFileSync(probe, 't');
+          fs.unlinkSync(probe);
+          oks.push(tag + ' 输出目录可写：' + dir);
+        } catch (e) {
+          try { fs.unlinkSync(probe); } catch (_) {}
+          errs.push(tag + ' 输出目录不可写：' + dir + '（' + e.message + '）');
+        }
+      }
+
+      // 3b 预设
+      var preset = (v.preset || '').trim();
+      if (!preset) {
+        errs.push(tag + ' 没选导出预设');
+      } else if (!fs.existsSync(preset)) {
+        errs.push(tag + ' 预设文件不存在：' + preset);
+      } else {
+        oks.push(tag + ' 预设存在：' + path.basename(preset));
+      }
+
+      // 3c 目录冲突：多个版本指向同一目录且文件名相同会互相覆盖
+      evs.forEach(function (w, j) {
+        if (j <= i) return;
+        var d1 = (v.outDir || '').trim().toLowerCase();
+        var d2 = (w.outDir || '').trim().toLowerCase();
+        if (d1 && d1 === d2) {
+          warns.push('版本「' + v.name + '」与「' + w.name + '」输出目录相同，' +
+                     '若文件名一致会互相覆盖（可留空让程序自动加后缀区分）');
+        }
+      });
+    });
+
+    // 4) 字幕开关：开了但没配目录 → 仅提醒
+    try {
+      var sc = getSubtitleCfg();
+      if (sc.enabled && !(sc.dir || '').trim()) {
+        warns.push('已开启「导出字幕 srt」但没配字幕输出目录，字幕会留在视频同目录');
+      }
+    } catch (e) {}
+
+    // 5) 交付根目录（选了但不存在）
+    var root = (deliveryRoot.value || '').trim();
+    if (root && !fs.existsSync(root)) {
+      warns.push('交付根目录不存在：' + root);
+    }
+
+    return { errs: errs, warns: warns, oks: oks };
+  }
+
+  function renderPreflight(r) {
+    if (!preflightBox || !preflightList) return;
+    preflightBox.style.display = '';
+    var html = '';
+    r.errs.forEach(function (t) {
+      html += '<div style="color:#fca5a5;">✗ ' + esc(t) + '</div>';
+    });
+    r.warns.forEach(function (t) {
+      html += '<div style="color:#fcd34d;">⚠ ' + esc(t) + '</div>';
+    });
+    r.oks.forEach(function (t) {
+      html += '<div style="color:#7fd68b;">✓ ' + esc(t) + '</div>';
+    });
+    preflightList.innerHTML = html;
+
+    if (preflightSum) {
+      preflightSum.textContent = r.errs.length
+        ? ('发现 ' + r.errs.length + ' 个问题，需先修正')
+        : (r.warns.length ? ('通过（' + r.warns.length + ' 条提醒）') : '全部通过，可以开始导出');
+      preflightSum.style.color = r.errs.length ? '#fca5a5' : (r.warns.length ? '#fcd34d' : '#7fd68b');
+    }
+
+    if (r.errs.length) {
+      setLog('体检发现 ' + r.errs.length + ' 个问题（见上方列表）', 'error');
+    } else if (r.warns.length) {
+      setLog('体检通过，有 ' + r.warns.length + ' 条提醒', 'warn');
+    } else {
+      setLog('体检全部通过，可以开始导出', 'success');
+    }
+  }
+
+  if (btnPreflight) {
+    btnPreflight.addEventListener('click', function () {
+      renderPreflight(preflight());
+    });
   }
 
   // 版本卡片内部 input/change 实时同步到 versions

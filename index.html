@@ -532,9 +532,19 @@
 
         <div class="btns">
             <button id="btn-go">一键导出</button>
+            <button id="btn-preflight" title="导出前先检查配置：序列/目录/预设/权限，避免导到一半才失败">🔍 导出前体检</button>
             <button id="btn-stop" disabled>停止</button>
             <button id="btn-refresh">刷新</button>
             <button id="btn-open-out" title="导出完成后用文件管理器打开输出文件夹">📂 打开输出目录</button>
+        </div>
+
+        <!-- 体检结果面板 -->
+        <div class="group" id="preflight-box" style="display:none;">
+            <div class="group-title">
+                <span>导出前体检</span>
+                <span id="preflight-sum"></span>
+            </div>
+            <div id="preflight-list" style="font-size:12px;line-height:1.85;"></div>
         </div>
 
         <div class="log" id="log"></div>
