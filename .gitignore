@@ -51,3 +51,9 @@ collect/enhance_results/
 feedback.json
 collect/feedback.json
 !feedback.example.json
+
+# 备份文件不入库
+*.bak
+*.pregv.bak
+*.precache.bak
+*.v4bak
