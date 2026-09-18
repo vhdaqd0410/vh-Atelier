@@ -59,6 +59,9 @@
     }
 
     var mask = null;
+    // 待展示提示：某些操作（兑换/申请）完成后会立刻重渲染界面，
+    // 直接写进 msgHost 会被冲掉，用这个槽位带到下一次渲染顶部显示。
+    var _pendingNotice = null;
 
     function el(tag, cls, html) {
         var d = document.createElement(tag);
@@ -146,6 +149,15 @@
 
         body.innerHTML = '';
 
+        // 先展示上一次操作留下的成功提示（只显示一次）
+        if (_pendingNotice) {
+            var nb = el('div');
+            nb.className = 'vhl-msg-host';
+            nb.innerHTML = '<div class="msg ok">' + esc(_pendingNotice) + '</div>';
+            body.appendChild(nb);
+            _pendingNotice = null;
+        }
+
         // ---------- 状态区 ----------
         var stBox = el('div');
         stBox.innerHTML =
@@ -177,7 +189,8 @@
                             '<button class="vhl-btn sec" data-act="logout">退出登录</button> ' +
                             '<button class="vhl-btn link" data-act="center">打开网页用户中心 →</button>' +
                             '<div style="margin-top:8px">' +
-                            '<button class="vhl-btn sec" data-act="apply">📩 申请授权 / 续期</button>' +
+                            '<button class="vhl-btn sec" data-act="apply">📩 申请授权 / 续期</button> ' +
+                            '<button class="vhl-btn sec" data-act="card">🎟 激活码兑换</button>' +
                             '</div>';
             body.appendChild(ops);
 
@@ -203,6 +216,9 @@
             ops.querySelector('[data-act="center"]').onclick = function () { L.openCenter(); };
             ops.querySelector('[data-act="apply"]').onclick = function () {
                 renderApplyForm(body, msgHost);
+            };
+            ops.querySelector('[data-act="card"]').onclick = function () {
+                renderRedeemForm(body, msgHost);
             };
 
             if (st.status !== 'active' && st.status !== 'bypass') {
@@ -232,6 +248,7 @@
                 '</div>' +
                 '<div style="margin-top:4px;text-align:center">' +
                 '<button class="vhl-btn link" data-act="apply">试用到期 / 想申请授权？点这里 →</button>' +
+                '<button class="vhl-btn link" data-act="card">有激活码？点此兑换 →</button>' +
                 '</div>';
             body.appendChild(form);
             body.appendChild(msgHost);
@@ -262,6 +279,9 @@
             form.querySelector('[data-act="reg"]').onclick = function () { L.openCenter(); };
             form.querySelector('[data-act="apply"]').onclick = function () {
                 renderApplyForm(body, msgHost);
+            };
+            form.querySelector('[data-act="card"]').onclick = function () {
+                renderRedeemForm(body, msgHost);
             };
             setTimeout(function () { try { emailI.focus(); } catch (e) {} }, 60);
         }
@@ -302,6 +322,102 @@
         }, 30);
     }
 
+    // ---------- 激活码兑换 ----------
+    function openRedeem() {
+        show();
+        setTimeout(function () {
+            var body = document.querySelector('.vhl-body');
+            var host = document.querySelector('.vhl-msg-host') || (function () {
+                var d = document.createElement('div');
+                d.className = 'vhl-msg-host';
+                if (body) body.appendChild(d);
+                return d;
+            })();
+            if (body) renderRedeemForm(body, host);
+        }, 30);
+    }
+
+    function renderRedeemForm(body, msgHost) {
+        var L = window.__vhLicense;
+        var st = L.state();
+        var email = st.email || '';
+
+        var box = el('div');
+        box.innerHTML =
+            '<div class="vhl-hr"></div>' +
+            '<div style="font-size:12.5px;color:#b8b8b8;line-height:1.7">' +
+            '输入激活码即可开通 / 续期。激活码一个只能用一次，会绑定到你填写的邮箱。' +
+            (email ? '' : '<br><span style="color:#fcd34d">提示：请填写你的邮箱与密码。</span>') +
+            '</div>' +
+            '<label class="vhl-lab">激活码</label>' +
+            '<input class="vhl-in" id="vhlCardCode" type="text" placeholder="VHA-XXXXX-XXXXX-XXXXX" ' +
+            'style="font-family:Consolas,monospace;letter-spacing:1px;text-transform:uppercase">' +
+            '<label class="vhl-lab">邮箱</label>' +
+            '<input class="vhl-in" id="vhlCardEmail" type="email" placeholder="you@example.com" value="' + esc(email) + '">' +
+            '<label class="vhl-lab">密码（已有账号请填原密码；新账号将以此密码创建）</label>' +
+            '<input class="vhl-in" id="vhlCardPwd" type="password" placeholder="至少 6 位">' +
+            '<div style="margin-top:14px">' +
+            '<button class="vhl-btn pri" data-act="redeem" style="width:100%">兑换并开通</button>' +
+            '</div>';
+
+        body.appendChild(box);
+        body.appendChild(msgHost);
+
+        var codeI = box.querySelector('#vhlCardCode');
+        var emailI = box.querySelector('#vhlCardEmail');
+        var pwdI = box.querySelector('#vhlCardPwd');
+        var btn = box.querySelector('[data-act="redeem"]');
+
+        // 输入时自动大写 + 补前缀，减少抄错
+        codeI.oninput = function () {
+            var v = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (v && v.indexOf('VHA') !== 0) v = 'VHA' + v;
+            v = v.slice(0, 18);
+            var body15 = v.slice(3);
+            var out = 'VHA';
+            for (var i = 0; i < body15.length && i < 15; i++) {
+                if (i % 5 === 0 && i > 0) out += '-';
+                out += body15[i];
+            }
+            this.value = out;
+        };
+
+        function doRedeem() {
+            var code = codeI.value.trim();
+            var em = emailI.value.trim();
+            var pw = pwdI.value;
+            if (!code) { setMsg(msgHost, '请输入激活码', 'err'); return; }
+            if (!em) { setMsg(msgHost, '请输入邮箱', 'err'); return; }
+            if (!pw || pw.length < 6) { setMsg(msgHost, '请输入密码（至少 6 位）', 'err'); return; }
+            btn.disabled = true; btn.textContent = '兑换中…';
+
+            doPost((window.__vhLicense.base ? window.__vhLicense.base() : '').replace(/\/+$/, '') + '/api/redeem',
+                { code: code, email: em, password: pw, plugin: L.pluginId || '' },
+                function (err, j) {
+                    btn.disabled = false; btn.textContent = '兑换并开通';
+                    if (err) { setMsg(msgHost, err.message || '兑换失败', 'err'); return; }
+                    var msg = j.message || '兑换成功';
+                    if (j.createdAccount) msg += '（已为你创建账号）';
+                    msg += '　有效期至 ' + fmtDate((j.license || {}).expiresAt);
+                    setMsg(msgHost, msg, 'ok');
+                    _pendingNotice = msg;     // 重渲染后仍在顶部显示
+                    pwdI.value = '';
+                    // 兑换即等于登录：把凭据落盘，界面立刻变已授权
+                    if (window.__vhLicense.adoptSession) {
+                        window.__vhLicense.adoptSession(em, pw, function () {
+                            setTimeout(function () { renderBody(body, L.refresh()); }, 1200);
+                        });
+                    } else {
+                        setTimeout(function () { renderBody(body, L.refresh()); }, 1200);
+                    }
+                });
+        }
+        btn.onclick = doRedeem;
+        pwdI.onkeydown = function (e) { if (e.key === 'Enter') doRedeem(); };
+
+        setTimeout(function () { try { codeI.focus(); } catch (e) {} }, 60);
+    }
+
     function renderApplyForm(body, msgHost) {
         var L = window.__vhLicense;
         var st = L.state();
@@ -322,6 +438,8 @@
             '<input class="vhl-in" id="vhlApplyEmail" type="email" placeholder="you@example.com" value="' + esc(email) + '">' +
             '<label class="vhl-lab">申请类型</label>' +
             '<select class="vhl-in" id="vhlApplyType">' + opts + '</select>' +
+            '<label class="vhl-lab">希望开通时长（续期时填，单位天）</label>' +
+            '<input class="vhl-in" id="vhlApplyDays" type="number" min="0" max="3650" placeholder="例如 90（留空则用管理员默认）">' +
             '<label class="vhl-lab">补充说明（可选）</label>' +
             '<textarea class="vhl-in" id="vhlApplyMsg" rows="3" placeholder="例如：我是做短剧剪辑的，需要长期使用超分和字幕校对"></textarea>' +
             '<div style="margin-top:14px;display:flex;gap:8px">' +
@@ -335,6 +453,7 @@
         var emailI = box.querySelector('#vhlApplyEmail');
         var typeI = box.querySelector('#vhlApplyType');
         var msgI = box.querySelector('#vhlApplyMsg');
+        var daysI = box.querySelector('#vhlApplyDays');
 
         // 依据当前状态预选类型
         if (st.status === 'expired' || st.status === 'grace_over') typeI.value = 'trial-expired';
@@ -347,7 +466,7 @@
             b.disabled = true; b.textContent = '提交中…';
 
             // 允许未登录提交：直接调服务端接口，用表单里的邮箱
-            applyDirect(em, typeI.value, msgI.value, function (err, j) {
+            applyDirect(em, typeI.value, msgI.value, Number(daysI.value) || 0, function (err, j) {
                 b.disabled = false; b.textContent = '提交申请';
                 if (err) { setMsg(msgHost, err.message || '提交失败', 'err'); return; }
                 setMsg(msgHost, j && j.duplicated
@@ -377,12 +496,13 @@
     }
 
     // 直接调服务端（不依赖模块内部 email，支持未登录提交）
-    function applyDirect(email, type, message, cb) {
+    function applyDirect(email, type, message, wantDays, cb) {
         var L = window.__vhLicense;
         var base = (L.base ? L.base() : '').replace(/\/+$/, '');
         if (!base) return cb(new Error('未配置授权服务地址'));
         var body = {
             email: email, type: type, message: message,
+            wantDays: Number(wantDays) || 0,
             plugin: L.pluginId || '',
             deviceId: L.deviceId ? L.deviceId() : '',
             deviceName: L.deviceName ? L.deviceName() : ''
@@ -479,6 +599,7 @@
             '<button class="vhl-x">✕</button></div>' +
             '<div class="vhl-body">' + detail + '</div>' +
             '<div class="vhl-foot">' +
+            '<button class="vhl-btn sec" data-act="card">激活码</button>' +
             '<button class="vhl-btn sec" data-act="apply">申请授权</button>' +
             '<button class="vhl-btn sec" data-act="center">用户中心</button>' +
             '<button class="vhl-btn pri" data-act="login">' + (st.loggedIn ? '查看授权' : '去登录') + '</button>' +
@@ -489,6 +610,7 @@
         card.querySelector('[data-act="center"]').onclick = function () { window.__vhLicense.openCenter(); };
         card.querySelector('[data-act="login"]').onclick = function () { shut(); show(); };
         card.querySelector('[data-act="apply"]').onclick = function () { shut(); show(); openApply(); };
+        card.querySelector('[data-act="card"]').onclick = function () { shut(); show(); openRedeem(); };
         m.onclick = function (e) { if (e.target === m) shut(); };
         m.appendChild(card);
         document.body.appendChild(m);
@@ -532,7 +654,9 @@
 
     window.__vhLicenseUI = {
         show: show,
+        pendingNotice: function () { return _pendingNotice; },
         openApply: openApply,
+        openRedeem: openRedeem,
         close: close,
         blocked: blocked,
         bindTop: bindTop,

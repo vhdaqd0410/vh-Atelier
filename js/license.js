@@ -484,6 +484,34 @@
         }, HEARTBEAT_MS);
     }
 
+    // ---------- 兑换后接管会话 ----------
+    // 用户用激活码开通后，顺手用同一套凭据登录一次，这样插件立刻就是已授权状态，
+    // 不用让用户再手动登录一遍。
+    function adoptSession(email, password, cb) {
+        cb = cb || function () {};
+        var b = base();
+        request('POST', b + '/api/auth/login', {
+            email: String(email || '').trim(),
+            password: String(password || ''),
+            deviceId: deviceId(),
+            deviceName: deviceName(),
+            plugin: PLUGIN_ID
+        }, 20000, function (err, j) {
+            if (err) { refresh(); return cb(err); }
+            var cred = {
+                base: b,
+                token: j.token,
+                email: (j.receipt && j.receipt.email) || email,
+                issuedAt: Date.now(),
+                lastCheck: Date.now(),
+                receipt: j.receipt
+            };
+            writeJson(CRED_FILE, cred);
+            refresh();
+            cb(null, _state);
+        });
+    }
+
     // ---------- 授权申请（试用到期 / 想加插件时用）----------
     // 提交到服务端，管理台（含主插件里的面板）会看到并处理。
     // 允许未登录提交：否则「到期后登不进来」就没法申请了。
@@ -582,6 +610,7 @@
         logout: logout,
         verify: verify,
         applyFor: applyFor,
+        adoptSession: adoptSession,
         applyStatus: applyStatus,
         openCenter: openCenter,
         credFile: function () { return CRED_FILE; },
