@@ -437,11 +437,13 @@
     // ---------- 初始化 ----------
     refresh();
     startHeartbeat();
-    // 启动后延迟心跳一次，避开插件启动高峰
+    // 启动后尽快心跳一次：
+    // 若上次使用已超过离线宽限，这个请求能把状态拉回 active，
+    // 否则用户会看到一段“需联网验证”的锁定，所以延迟不宜长。
     setTimeout(function () {
         var st = refresh();
         if (st.loggedIn) verify(function () {});
-    }, 8000);
+    }, 1500);
 
     window.__vhLicense = {
         available: true,
