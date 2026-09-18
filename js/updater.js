@@ -141,31 +141,111 @@
     }
 
     // ============ 版本检查 ============
+    // 一次 HTTP GET 拿 JSON（超时可调：检测要短、下载要长）
+    function fetchJsonOnce(url, timeout, cb) {
+        var xhr = new XMLHttpRequest();
+        var done = false;
+        function fin(err, j) { if (done) return; done = true; cb(err, j); }
+        try {
+            xhr.open('GET', url, true);
+            xhr.timeout = timeout || 8000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                if (xhr.status !== 200) { fin(new Error('HTTP ' + xhr.status)); return; }
+                var j = null;
+                try { j = JSON.parse(xhr.responseText); } catch (e) { fin(new Error('解析失败')); return; }
+                fin(null, j);
+            };
+            xhr.onerror = function () { fin(new Error('网络错误')); };
+            xhr.ontimeout = function () { fin(new Error('请求超时')); };
+            xhr.send();
+        } catch (e) { fin(new Error('请求异常：' + e.message)); }
+    }
+
+    // 记住上次成功的线路：raw.githubusercontent.com 在国内常被墙，
+    // 而 api.github.com 通常可直连，避免每次都先撞一遍墙。
+    var LAST_GOOD_KEY = 'vh_update_last_route';
+    function lastGoodRoute() {
+        try { return localStorage.getItem(LAST_GOOD_KEY) || ''; } catch (e) { return ''; }
+    }
+    function setLastGoodRoute(r) {
+        try { localStorage.setItem(LAST_GOOD_KEY, r || ''); } catch (e) {}
+    }
+
+    function decodeB64Utf8(b64) {
+        try {
+            var clean = String(b64 || '').replace(/\s/g, '');
+            if (typeof atob === 'function') return decodeURIComponent(escape(atob(clean)));
+        } catch (e) {}
+        return '';
+    }
+
+    // 读远端 version.json：api / raw 两条线路依次尝试，错误信息全部收集
+    function fetchRemoteVersion(cfg, cb) {
+        var stamp = Date.now();
+        var raw = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
+                  '/version.json?_=' + stamp;
+        var api = 'https://api.github.com/repos/' + cfg.repo + '/contents/version.json?ref=' +
+                  encodeURIComponent(cfg.branch) + '&_=' + stamp;
+
+        var routes = [
+            {
+                id: 'api', label: 'api.github.com',
+                fn: function (next) {
+                    fetchJsonOnce(api, 8000, function (e, j) {
+                        if (e) return next(e);
+                        var txt = decodeB64Utf8(j && j.content);
+                        if (!txt) return next(new Error('返回内容为空'));
+                        try {
+                            var jr = JSON.parse(txt);
+                            if (jr && jr.version) return next(null, jr);
+                            next(new Error('缺少 version 字段'));
+                        } catch (err) { next(new Error('解析失败')); }
+                    });
+                }
+            },
+            {
+                id: 'raw', label: 'raw.githubusercontent.com',
+                fn: function (next) {
+                    fetchJsonOnce(raw, 8000, function (e, j) {
+                        if (e) return next(e);
+                        if (j && j.version) return next(null, j);
+                        next(new Error('返回内容无 version'));
+                    });
+                }
+            }
+        ];
+
+        if (lastGoodRoute() === 'raw') routes.reverse();
+
+        var errs = [], i = 0;
+        function tryNext() {
+            if (i >= routes.length) return cb(new Error('无法读取远程版本（' + errs.join('；') + '）'));
+            var r = routes[i++];
+            r.fn(function (err, j) {
+                if (!err && j) { setLastGoodRoute(r.id); return cb(null, j, r.id); }
+                errs.push(r.label + ' → ' + (err ? err.message : '无数据'));
+                tryNext();
+            });
+        }
+        tryNext();
+    }
+
     function checkUpdate(cb) {
         var cfg = readCfg();
         if (!cfg || !cfg.repo || !cfg.branch) { cb(new Error('未配置更新源（缺 version.json）')); return; }
-        var url = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
-                  '/version.json?_=' + Date.now();
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.timeout = 20000;
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState !== 4) return;
-            if (xhr.status !== 200) { cb(new Error('读取远程版本失败（HTTP ' + xhr.status + '）')); return; }
-            var remote = null;
-            try { remote = JSON.parse(xhr.responseText); } catch (e) { cb(new Error('远程版本文件解析失败')); return; }
+        fetchRemoteVersion(cfg, function (err, remote, src) {
+            if (err) { cb(err); return; }
             try { localStorage.setItem(LAST_CHECK_KEY, String(Date.now())); } catch (e) {}
             cb(null, {
                 local: cfg,
                 remote: remote,
+                src: src || 'api',
                 hasUpdate: String(remote.version || '') !== String(cfg.version || ''),
                 remoteTime: remote.buildTime || '',
                 notes: remote.notes || ''
             });
-        };
-        xhr.onerror = function () { cb(new Error('网络错误（无法访问 GitHub）')); };
-        xhr.ontimeout = function () { cb(new Error('请求超时')); };
-        xhr.send();
+        });
     }
 
     // ============ 执行更新 ============
@@ -350,21 +430,65 @@
         return m;
     }
 
-    // 自动检查（启动时静默检查，有新版本才弹窗）
+    // 自动检查（每次打开面板检查一次；有新版本弹窗，失败留痕但不打扰）
+    // 注意：不能用 sessionStorage 当「本次会话只查一次」的锁——
+    // CEP 面板里 sessionStorage 会跨会话保留，第一次查过之后就永远不再查了，
+    // 表现就是"自动更新不生效"。用内存标记即可。
+    var autoChecked = false;
+    var lastAutoResult = null;
+
     function autoCheck() {
         var cfg = readCfg();
         if (!cfg) return;
-        // 同一次会话只自动检查一次
-        try {
-            if (sessionStorage.getItem('vh_update_autochecked') === '1') return;
-            sessionStorage.setItem('vh_update_autochecked', '1');
-        } catch (e) {}
+        if (autoChecked) return;
+        autoChecked = true;
         setTimeout(function () {
             checkUpdate(function (err, r) {
-                if (err || !r || !r.hasUpdate) return;
-                showUpdateUI(true);
+                if (err) {
+                    lastAutoResult = { ok: false, at: Date.now(), error: err.message };
+                    markUpdateState('error', err.message);
+                    try {
+                        if (window.__vhLog && window.__vhLog.warn) {
+                            window.__vhLog.warn('自动检查更新失败：' + err.message);
+                        }
+                    } catch (e) {}
+                    return;
+                }
+                lastAutoResult = { ok: true, at: Date.now(), hasUpdate: !!r.hasUpdate,
+                                   local: (r.local || {}).version, remote: (r.remote || {}).version };
+                if (r.hasUpdate) {
+                    markUpdateState('has-update', '新版本 v' + ((r.remote || {}).version || ''));
+                    showUpdateUI(true);
+                } else {
+                    markUpdateState('latest', '已是最新 v' + ((r.local || {}).version || ''));
+                }
             });
         }, 2500);
+    }
+
+    // 在「⬆ 更新」按钮上给出可见状态，让用户一眼知道检测结果
+    function markUpdateState(state, tip) {
+        try {
+            var btn = document.getElementById('btnUpdate');
+            if (!btn) return;
+            btn.setAttribute('data-update-state', state);
+            var dotId = 'vhUpdateDot';
+            var old = document.getElementById(dotId);
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+            if (state === 'has-update') {
+                btn.style.color = '#7fd68b';
+                var dot = document.createElement('span');
+                dot.id = dotId;
+                dot.style.cssText = 'display:inline-block;width:6px;height:6px;border-radius:50%;' +
+                    'background:#7fd68b;margin-left:4px;vertical-align:middle;';
+                btn.appendChild(dot);
+            } else if (state === 'error') {
+                btn.style.color = '#fca5a5';
+            } else {
+                btn.style.color = '';
+            }
+            btn.title = tip ? ('在线更新 · ' + tip) : '在线更新';
+        } catch (e) {}
     }
 
     window.__vhUpdate = {
@@ -372,6 +496,7 @@
         run: doUpdate,
         show: showUpdateUI,
         autoCheck: autoCheck,
+        lastResult: function () { return lastAutoResult; },
         version: function () { var c = readCfg(); return c ? c.version : ''; },
         info: function () { return readCfg(); }
     };
