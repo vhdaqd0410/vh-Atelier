@@ -126,6 +126,15 @@
         mask.onclick = function (e) { if (e.target === mask) close(); };
         document.body.appendChild(mask);
         document.addEventListener('keydown', onKey);
+
+        // 已登录但状态不可用（如超离线宽限）时，自动补一次心跳，
+        // 用户就不用自己点「重新验证」了。
+        if (st.loggedIn && st.status !== 'active' && st.status !== 'bypass') {
+            L.verify(function (err, s2) {
+                if (!mask) return;              // 已关窗
+                if (!err && s2) renderBody(body, s2);
+            });
+        }
     }
 
     function renderBody(body, st) {
