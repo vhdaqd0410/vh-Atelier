@@ -484,6 +484,43 @@
         }, HEARTBEAT_MS);
     }
 
+    // ---------- 授权申请（试用到期 / 想加插件时用）----------
+    // 提交到服务端，管理台（含主插件里的面板）会看到并处理。
+    // 允许未登录提交：否则「到期后登不进来」就没法申请了。
+    function applyFor(type, message, cb) {
+        cb = cb || function () {};
+        var cred = readJson(CRED_FILE);
+        var email = (cred && (cred.email || (cred.receipt && cred.receipt.email))) || '';
+        if (!email) {
+            return cb(new Error('请先用你的账号登录一次插件，再提交申请'));
+        }
+        var payload = {
+            email: email,
+            type: type || 'other',
+            message: String(message || '').slice(0, 1000),
+            plugin: PLUGIN_ID,
+            deviceId: deviceId(),
+            deviceName: deviceName()
+        };
+        request('POST', base() + '/api/request', payload, 15000, function (err, j) {
+            if (err) return cb(err);
+            cb(null, j);
+        });
+    }
+
+    // 查询自己申请的处理进度 + 当前授权状态
+    function applyStatus(cb) {
+        cb = cb || function () {};
+        var cred = readJson(CRED_FILE);
+        var email = (cred && (cred.email || (cred.receipt && cred.receipt.email))) || '';
+        if (!email) return cb(new Error('尚未登录'));
+        var url = base() + '/api/request/status?email=' + encodeURIComponent(email);
+        request('GET', url, null, 12000, function (err, j) {
+            if (err) return cb(err);
+            cb(null, j);
+        });
+    }
+
     function openCenter() {
         var u = base() + '/';
         try {
@@ -544,6 +581,8 @@
         login: login,
         logout: logout,
         verify: verify,
+        applyFor: applyFor,
+        applyStatus: applyStatus,
         openCenter: openCenter,
         credFile: function () { return CRED_FILE; },
         cfgFile: function () { return CFG_FILE; },
