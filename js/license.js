@@ -152,16 +152,21 @@
         return '';
     }
     function primaryMac() {
+        // 收集所有非内部 MAC，排序后取最小。
+        // 为什么不用「第一个遇到的」：机器上常有多个虚拟网卡（VMware/Tailscale/VPN），
+        // 它们的枚举顺序会随软件安装、启停而变，取第一个会导致设备码漂移，
+        // 表现为「同一台电脑被判成新设备」，白吃一个设备名额。
+        // 取排序最小者与顺序无关，结果稳定。
         try {
             var ifs = os.networkInterfaces();
-            var names = Object.keys(ifs).sort();
-            for (var i = 0; i < names.length; i++) {
-                var arr = ifs[names[i]] || [];
-                for (var k = 0; k < arr.length; k++) {
-                    var a = arr[k];
-                    if (!a.internal && a.mac && a.mac !== '00:00:00:00:00:00') return a.mac.toLowerCase();
-                }
-            }
+            var all = [];
+            Object.keys(ifs).forEach(function (name) {
+                (ifs[name] || []).forEach(function (a) {
+                    if (!a.internal && a.mac && a.mac !== '00:00:00:00:00:00') all.push(a.mac.toLowerCase());
+                });
+            });
+            all.sort();
+            return all[0] || '';
         } catch (e) {}
         return '';
     }
