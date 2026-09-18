@@ -247,47 +247,112 @@
     // ============ 版本检查 ============
     // 注：raw.githubusercontent.com 是 CDN，发布后可能有几分钟到几小时缓存，
     // 导致刚发新版本时检查不到。所以主地址之外再回退到 GitHub API（无 CDN 缓存）。
-    function fetchJson(url, cb) {
+    // 一次 HTTP GET 拿 JSON。timeout 可调：检测阶段要短（快速切换线路），
+    // 下载阶段要长（zip 体积大）。
+    function fetchJsonOnce(url, timeout, cb) {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.timeout = 20000;
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState !== 4) return;
-            if (xhr.status !== 200) { cb(new Error('HTTP ' + xhr.status)); return; }
-            var j = null;
-            try { j = JSON.parse(xhr.responseText); } catch (e) { cb(new Error('解析失败')); return; }
-            cb(null, j);
-        };
-        xhr.onerror = function () { cb(new Error('网络错误')); };
-        xhr.ontimeout = function () { cb(new Error('请求超时')); };
-        xhr.send();
+        var done = false;
+        function fin(err, j) { if (done) return; done = true; cb(err, j); }
+        try {
+            xhr.open('GET', url, true);
+            xhr.timeout = timeout || 8000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                if (xhr.status !== 200) { fin(new Error('HTTP ' + xhr.status)); return; }
+                var j = null;
+                try { j = JSON.parse(xhr.responseText); } catch (e) { fin(new Error('解析失败')); return; }
+                fin(null, j);
+            };
+            xhr.onerror = function () { fin(new Error('网络错误')); };
+            xhr.ontimeout = function () { fin(new Error('请求超时')); };
+            xhr.send();
+        } catch (e) { fin(new Error('请求异常：' + e.message)); }
     }
 
-    // 读远端 version.json：先 raw（快），拿到的版本若与本地相同再查 API 复核（防 CDN 缓存）
-    function fetchRemoteVersion(cfg, cb) {
-        var raw = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
-                  '/version.json?_=' + Date.now();
-        fetchJson(raw, function (e1, j1) {
-            if (!e1 && j1 && j1.version) {
-                if (String(j1.version) !== String(cfg.version)) { cb(null, j1, 'raw'); return; }
+    // 带「最后成功线路」记忆的取数：
+    // raw.githubusercontent.com 在国内常被墙（实测直连 TLS 握手超时），
+    // 而 api.github.com 通常可直连。所以候选线路按可达性排序，
+    // 并把上次成功的线路提到最前，避免每次都先撞一遍墙。
+    var LAST_GOOD_KEY = 'vh_update_last_route';
+    function lastGoodRoute() {
+        try { return localStorage.getItem(LAST_GOOD_KEY) || ''; } catch (e) { return ''; }
+    }
+    function setLastGoodRoute(r) {
+        try { localStorage.setItem(LAST_GOOD_KEY, r || ''); } catch (e) {}
+    }
+
+    function fetchJson(url, cb) { fetchJsonOnce(url, 12000, cb); }
+
+    // 解码 GitHub contents API 返回的 base64 内容（UTF-8 安全）
+    function decodeB64Utf8(b64) {
+        try {
+            var clean = String(b64 || '').replace(/\s/g, '');
+            if (typeof atob === 'function') {
+                return decodeURIComponent(escape(atob(clean)));
             }
-            // raw 失败，或版本与本地相同（可能被缓存）：再问 API
-            var api = 'https://api.github.com/repos/' + cfg.repo + '/contents/version.json?ref=' +
-                      encodeURIComponent(cfg.branch) + '&_=' + Date.now();
-            fetchJson(api, function (e2, j2) {
-                try {
-                    if (!e2 && j2 && j2.content) {
-                        var txt = (typeof atob === 'function')
-                            ? decodeURIComponent(escape(atob(String(j2.content).replace(/\s/g, ''))))
-                            : '';
-                        var jr = JSON.parse(txt);
-                        if (jr && jr.version) { cb(null, jr, 'api'); return; }
-                    }
-                } catch (e) {}
-                if (!e1 && j1 && j1.version) { cb(null, j1, 'raw'); return; }
-                cb(e1 || e2 || new Error('无法读取远程版本'));
+        } catch (e) {}
+        return '';
+    }
+
+    // 读远端 version.json。三条线路依次尝试，出错信息全部收集起来，
+    // 便于把「到底卡在哪」展示给用户，而不是笼统一句"检查失败"。
+    function fetchRemoteVersion(cfg, cb) {
+        var stamp = Date.now();
+        var raw = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
+                  '/version.json?_=' + stamp;
+        var api = 'https://api.github.com/repos/' + cfg.repo + '/contents/version.json?ref=' +
+                  encodeURIComponent(cfg.branch) + '&_=' + stamp;
+
+        // 线路定义：id 用于记忆，fn 执行取数
+        var routes = [
+            {
+                id: 'api', label: 'api.github.com',
+                fn: function (next) {
+                    fetchJsonOnce(api, 8000, function (e, j) {
+                        if (e) return next(e);
+                        var txt = decodeB64Utf8(j && j.content);
+                        if (!txt) return next(new Error('返回内容为空'));
+                        try {
+                            var jr = JSON.parse(txt);
+                            if (jr && jr.version) return next(null, jr);
+                            next(new Error('version.json 缺少 version 字段'));
+                        } catch (err) { next(new Error('解析失败')); }
+                    });
+                }
+            },
+            {
+                id: 'raw', label: 'raw.githubusercontent.com',
+                fn: function (next) {
+                    fetchJsonOnce(raw, 8000, function (e, j) {
+                        if (e) return next(e);
+                        if (j && j.version) return next(null, j);
+                        next(new Error('返回内容无 version'));
+                    });
+                }
+            }
+        ];
+
+        // 上次成功的线路优先，减少无谓等待
+        var good = lastGoodRoute();
+        if (good === 'raw') routes.reverse();
+
+        var errs = [];
+        var i = 0;
+        function tryNext() {
+            if (i >= routes.length) {
+                return cb(new Error('无法读取远程版本（' + errs.join('；') + '）'));
+            }
+            var r = routes[i++];
+            r.fn(function (err, j) {
+                if (!err && j) {
+                    setLastGoodRoute(r.id);
+                    return cb(null, j, r.id);
+                }
+                errs.push(r.label + ' → ' + (err ? err.message : '无数据'));
+                tryNext();
             });
-        });
+        }
+        tryNext();
     }
 
     function checkUpdate(cb) {
@@ -523,10 +588,12 @@
         return m;
     }
 
-    // 自动检查（每次打开面板都检查一次，有新版本才弹窗）
+    // 自动检查（每次打开面板都检查一次；有新版本弹窗，失败留痕但不打扰）
     // 注：不用 sessionStorage 做“本次会话只查一次”——CEP 面板里 sessionStorage
     // 会跨会话保留，导致第一次查过后以后永远不再查。用内存标记足矣。
     var autoChecked = false;
+    var lastAutoResult = null;   // 供状态栏/调试查看上次自动检查结果
+
     function autoCheck() {
         var cfg = readCfg();
         if (!cfg) return;
@@ -534,10 +601,59 @@
         autoChecked = true;
         setTimeout(function () {
             checkUpdate(function (err, r) {
-                if (err || !r || !r.hasUpdate) return;
-                showUpdateUI(true);   // true = 自动检查触发（弹窗展示详情，可选立即更新/稍后）
+                if (err) {
+                    // 以前这里直接 return，用户完全不知道检查失败了，
+                    // 看起来就像"自动更新没生效"。现在记录下来并在按钮上提示。
+                    lastAutoResult = { ok: false, at: Date.now(), error: err.message };
+                    markUpdateState('error', err.message);
+                    try {
+                        if (window.__vhLog && window.__vhLog.warn) {
+                            window.__vhLog.warn('自动检查更新失败：' + err.message);
+                        }
+                    } catch (e) {}
+                    return;
+                }
+                lastAutoResult = { ok: true, at: Date.now(), hasUpdate: !!r.hasUpdate,
+                                   local: (r.local || {}).version, remote: (r.remote || {}).version };
+                if (r.hasUpdate) {
+                    markUpdateState('has-update', '新版本 v' + ((r.remote || {}).version || ''));
+                    showUpdateUI(true);   // true = 自动检查触发
+                } else {
+                    markUpdateState('latest', '已是最新 v' + ((r.local || {}).version || ''));
+                }
             });
         }, 2500);
+    }
+
+    // 在「⬆ 更新」按钮上给出可见状态，让用户一眼知道检测结果
+    function markUpdateState(state, tip) {
+        try {
+            var btn = document.getElementById('btnUpdate');
+            if (!btn) return;
+            btn.setAttribute('data-update-state', state);
+            if (state === 'has-update') {
+                btn.style.color = '#7fd68b';
+                btn.textContent = '⬆ 更新';
+                if (!document.getElementById('vhUpdateDot')) {
+                    var dot = document.createElement('span');
+                    dot.id = 'vhUpdateDot';
+                    dot.style.cssText = 'display:inline-block;width:6px;height:6px;border-radius:50%;' +
+                        'background:#7fd68b;margin-left:4px;vertical-align:middle;';
+                    btn.appendChild(dot);
+                }
+            } else if (state === 'error') {
+                btn.style.color = '#fca5a5';
+                btn.textContent = '⬆ 更新';
+                var d2 = document.getElementById('vhUpdateDot');
+                if (d2 && d2.parentNode) d2.parentNode.removeChild(d2);
+            } else {
+                btn.style.color = '';
+                btn.textContent = '⬆ 更新';
+                var d3 = document.getElementById('vhUpdateDot');
+                if (d3 && d3.parentNode) d3.parentNode.removeChild(d3);
+            }
+            btn.title = tip ? ('在线更新 · ' + tip) : '在线更新';
+        } catch (e) {}
     }
 
     window.__vhUpdate = {
@@ -546,6 +662,7 @@
         show: showUpdateUI,
         history: showHistoryUI,
         autoCheck: autoCheck,
+        lastResult: function () { return lastAutoResult; },
         version: function () { var c = readCfg(); return c ? c.version : ''; },
         info: function () { return readCfg(); }
     };
