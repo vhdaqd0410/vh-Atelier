@@ -1,0 +1,6 @@
+{
+  "_说明": "授权服务地址与受限工作台配置。改这个文件不需要动代码。",
+  "base": "http://47.122.108.231:17894",
+  "gatedGroups": ["upscale", "audio", "deliver"],
+  "_gatedGroups说明": "需要授权才能使用的工作台组。A 插件锁：超分(upscale) / 声音(audio) / 交付(deliver)。留空数组 = 全部解锁。"
+}

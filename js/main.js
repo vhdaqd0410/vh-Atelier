@@ -107,11 +107,27 @@
         }
     }
 
+    // 授权门：判断某个组是否解锁
+    // 未配置 __vhLicense（如浏览器直接调试）时一律放行，不干扰开发
+    function groupUnlocked(g) {
+        try {
+            if (!window.__vhLicense) return true;
+            return window.__vhLicense.isGroupAllowed(g) !== false;
+        } catch (e) { return true; }
+    }
+
     // 切到某个 tab（面板 + 组条 + 高亮同步）
     function switchTab(name) {
         if (!panels[name]) return;
         var g = groupOf[name];
         if (!g) return;
+        // 授权门：受限组未解锁时仅提示，不切换面板
+        if (!groupUnlocked(g)) {
+            if (window.__vhLicenseUI && window.__vhLicenseUI.blocked) {
+                window.__vhLicenseUI.blocked(g);
+            }
+            return;
+        }
         currentInGroup[g] = name;
         showPanel(name);
         showGroupBar(g);
@@ -123,8 +139,28 @@
     // 切工作台：显示该组子 tab 条 + 切到该组记忆的 tab
     function switchGroup(g) {
         if (!groups[g]) return;
+        if (!groupUnlocked(g)) {
+            if (window.__vhLicenseUI && window.__vhLicenseUI.blocked) {
+                window.__vhLicenseUI.blocked(g);
+            }
+            return;
+        }
         var target = currentInGroup[g] || groups[g].default;
         switchTab(target);
+    }
+
+    // 授权状态变化时：若当前正停在受限组且授权失效，退回首页
+    // （比如管理员中途吊销、或换机导致本机名额失效时能及时反映）
+    if (window.__vhLicense && window.__vhLicense.on) {
+        window.__vhLicense.on(function () {
+            var active = null;
+            allTabs.forEach(function (t) { if (t.classList.contains('active')) active = t.dataset.tab; });
+            if (!active) return;
+            var ag = groupOf[active];
+            if (ag && !groupUnlocked(ag)) {
+                if (window.__atShowHome) { try { window.__atShowHome(); } catch (e) {} }
+            }
+        });
     }
 
     // 事件：组按钮

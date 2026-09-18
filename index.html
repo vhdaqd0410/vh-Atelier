@@ -12,6 +12,7 @@
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8c2.5 3 3.8 5.9 3.8 9.2S14.5 18.2 12 21.2c-2.5-3-3.8-5.9-3.8-9.2S9.5 5.8 12 2.8z"/></svg>
             官网<span class="sd"></span>
         </button>
+        <button type="button" id="btnLicense" class="log-btn" title="授权：登录账号解锁受限功能">🔑 授权</button>
         <span class="sep"></span>
         <button type="button" id="btnHistory" class="log-btn" title="版本更新历史：每个版本改了什么、修了什么">📋 历史</button>
         <button type="button" id="btnUpdate" class="log-btn" title="在线更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
@@ -755,6 +756,8 @@
 
     <script src="js/CSInterface.js"></script>
     <script src="js/errorlog.js"></script>
+    <!-- license.js 必须在 main.js 之前：main.js 启动时会注册授权状态回调 -->
+    <script src="js/license.js"></script>
     <script src="js/updater.js"></script>
     <script src="js/main.js"></script>
     <script src="js/utils.js"></script>
@@ -774,6 +777,7 @@
     <script src="js/feedback.js"></script>
     <script src="js/feedback-ui.js"></script>
     <script src="js/feedback-panel.js"></script>
+    <script src="js/license-ui.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================
