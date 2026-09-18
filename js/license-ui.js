@@ -310,8 +310,12 @@
         var btn = document.getElementById('btnLicense');
         if (!btn) return;
         var L = window.__vhLicense;
-        function paint() {
-            var st = L.refresh();
+        // 注意：paint 会被注册为状态变化监听器，运行在 emit 过程中。
+        // 因此这里绝不能再调 L.refresh()，否则形成 refresh→emit→paint→refresh
+        // 的无界递归；emit 里的 try/catch 会吞掉栈溢出，表现为界面卡死。
+        // 直接用传入的状态对象。
+        function paint(st) {
+            st = st || L.state();
             var ok = (st.status === 'active' || st.status === 'bypass');
             btn.classList.toggle('lic-ok', ok);
             btn.classList.toggle('lic-locked', !ok);
@@ -334,7 +338,7 @@
             btn.addEventListener('click', function () { show(); });
             L.on(paint);
         }
-        paint();
+        paint(L.state());
     }
 
     window.__vhLicenseUI = {

@@ -137,8 +137,9 @@
     }
 
     // ---------- 机器码 ----------
-    // 只用「重装系统才会变」的稳定项：注册表 MachineGuid + CPU 型号 + 首选物理 MAC。
-    // 不掺主机名/用户名（可改，会让同一台机器被反复认成新设备、白耗名额）。
+    // 重要：此函数会调 execSync（读注册表），是同步阻塞操作（实测 30ms 左右）。
+    // 绝不能放在 computeState 这类高频路径上，否则每次刷新状态都阻塞一次。
+    // 结果缓存到 collect/device.id，只需算一次。
     function registryMachineGuid() {
         try {
             var out = cp.execSync(
@@ -173,14 +174,35 @@
     }
 
     var _deviceId = '';
-    function deviceId() {
-        if (_deviceId) return _deviceId;
+    function computeDeviceId() {
         try {
             var crypto = require('crypto');
             var seed = [registryMachineGuid() || 'noguid', cpuModel(), primaryMac()].join('|');
-            _deviceId = crypto.createHash('sha256').update(seed, 'utf8').digest('hex').slice(0, 32);
+            return crypto.createHash('sha256').update(seed, 'utf8').digest('hex').slice(0, 32);
         } catch (e) {
-            _deviceId = 'unknown-device';
+            return 'unknown-device';
+        }
+    }
+
+    function deviceId() {
+        if (_deviceId) return _deviceId;
+        // 缓存优先：避免每次刷新状态都去读注册表（那会卡界面）
+        var cacheFile = DATA_DIR ? path.join(DATA_DIR, 'device.id') : '';
+        if (cacheFile) {
+            try {
+                if (fs.existsSync(cacheFile)) {
+                    var cached = String(fs.readFileSync(cacheFile, 'utf8')).trim();
+                    if (/^[0-9a-f]{32}$/.test(cached)) { _deviceId = cached; return _deviceId; }
+                }
+            } catch (e) {}
+        }
+        _deviceId = computeDeviceId();
+        // 写缓存（失败不影响功能）
+        if (cacheFile && _deviceId !== 'unknown-device') {
+            try {
+                if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+                fs.writeFileSync(cacheFile, _deviceId, 'utf8');
+            } catch (e) {}
         }
         return _deviceId;
     }
@@ -244,11 +266,20 @@
     }
 
     // ---------- 回执验签 ----------
+    var _pubKeyCache = null;
+    function publicKey() {
+        // createPublicKey 有解析开销（数毫秒），而状态每次刷新都要验签，缓存起来
+        if (!_pubKeyCache) {
+            _pubKeyCache = require('crypto').createPublicKey(PUBKEY);
+        }
+        return _pubKeyCache;
+    }
+
     function verifyReceipt(receipt) {
         if (!receipt || !receipt.sig || !receipt.data) return false;
         try {
             var crypto = require('crypto');
-            var pub = crypto.createPublicKey(PUBKEY);
+            var pub = publicKey();
             var raw = Buffer.from(receipt.data, 'base64');
             var sig = Buffer.from(receipt.sig, 'base64');
             var alg = String(receipt.alg || 'rsa-sha256');
@@ -269,17 +300,30 @@
     // mismatch 机器码不符 / invalid 回执无效 / grace_over 超离线宽限 / bypass 非插件环境
     var _state = null;
     var _listeners = [];
+    var _emitting = false;
     var HEARTBEAT_MS = 12 * 3600 * 1000;
 
     function emit() {
-        for (var i = 0; i < _listeners.length; i++) {
-            try { _listeners[i](_state); } catch (e) {}
+        // 重入保护（重要）：监听器内部若再触发 refresh/emit，直接忽略。
+        // 否则会形成 refresh → emit → 监听器 → refresh 的无界递归。
+        // 危险之处在于下面那个 try/catch 会吞掉栈溢出错误，
+        // 表现为插件「卡很久」而不报错，很难定位。
+        if (_emitting) return;
+        _emitting = true;
+        try {
+            for (var i = 0; i < _listeners.length; i++) {
+                try { _listeners[i](_state); } catch (e) {}
+            }
+        } finally {
+            _emitting = false;
         }
     }
 
     function computeState() {
-        var base_ = { deviceId: deviceId(), deviceName: deviceName(), email: '', plan: '', expiresAt: 0, plugins: [], note: '' };
         var cred = readJson(CRED_FILE);
+        // 设备码：优先用凭据里已绑定的值，避免在状态判定路径上触发注册表读取
+        var dev = (cred && cred.receipt && cred.receipt.deviceId) ? cred.receipt.deviceId : deviceId();
+        var base_ = { deviceId: dev, deviceName: deviceName(), email: '', plan: '', expiresAt: 0, plugins: [], note: '' };
         if (!cred || !cred.token || !cred.receipt) {
             return mix(base_, 'unbound', '尚未登录');
         }
@@ -293,7 +337,7 @@
         base_.lastCheck = cred.lastCheck || 0;
         base_.graceDays = r.offlineGraceDays || 7;
 
-        if (r.deviceId && r.deviceId !== base_.deviceId) {
+        if (r.deviceId && r.deviceId !== deviceId()) {
             return mix(base_, 'mismatch', '本机与授权绑定的设备不一致，请重新登录');
         }
         if (!verifyReceipt(cred.receipt)) {
