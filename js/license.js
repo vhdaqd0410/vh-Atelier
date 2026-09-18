@@ -105,16 +105,34 @@
         } catch (e) {}
         return null;
     }
+    // 原子写：先写临时文件再改名。
+    // 临时文件名带 pid + 递增序号：并发写（例如连点两次登录、登录与心跳同时落盘）
+    // 不会互相踩。早期版本共用同一个 .tmp，先改名的成功、后改名的会 ENOENT 误报失败。
+    var _writeSeq = 0;
+    var _lastWriteError = '';
     function writeJson(p, obj) {
+        var txt = JSON.stringify(obj, null, 2);
+        var pid = (typeof process !== 'undefined' && process.pid) ? process.pid : 'x';
+        var tmp = p + '.' + pid + '.' + (++_writeSeq) + '.tmp';
         try {
             var d = path.dirname(p);
             if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-            var tmp = p + '.tmp';
-            fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), 'utf8');
+            fs.writeFileSync(tmp, txt, 'utf8');
             fs.renameSync(tmp, p);
+            _lastWriteError = '';
             return true;
         } catch (e) {
-            return false;
+            // 改名失败（临时文件被占、目标被锁等）时退回直接写目标：
+            // 牺牲原子性换可用性，凭据文件很小，撕裂概率极低。
+            try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (e2) {}
+            try {
+                fs.writeFileSync(p, txt, 'utf8');
+                _lastWriteError = '';
+                return true;
+            } catch (e3) {
+                _lastWriteError = (e3 && e3.message) ? e3.message : String(e3);
+                return false;
+            }
         }
     }
 
@@ -336,7 +354,13 @@
                 receipt: j.receipt
             };
             if (!writeJson(CRED_FILE, cred)) {
-                return cb(new Error('授权信息写入失败，请检查插件目录权限'));
+                // 写入报错时回读一次：并发场景下可能被另一次写抢先完成，
+                // 只要磁盘上已是本次凭据就按成功处理，避免误报「写入失败」。
+                var back = readJson(CRED_FILE);
+                if (!(back && back.token && back.token === cred.token)) {
+                    return cb(new Error('授权信息写入失败：' + (_lastWriteError || '未知原因') +
+                        '（目标目录 ' + CRED_FILE + '）'));
+                }
             }
             // 写入后立刻验一次回执，确保链路可信
             refresh();
@@ -435,6 +459,19 @@
     }
 
     // ---------- 初始化 ----------
+    // 清理历史遗留的 .tmp（早期版本并发写可能留下的残片）
+    try {
+        if (DATA_DIR && fs.existsSync(DATA_DIR)) {
+            var leftovers = fs.readdirSync(DATA_DIR);
+            for (var li = 0; li < leftovers.length; li++) {
+                var lf = leftovers[li];
+                if (/^license\.json.*\.tmp$/.test(lf)) {
+                    try { fs.unlinkSync(path.join(DATA_DIR, lf)); } catch (e) {}
+                }
+            }
+        }
+    } catch (e) {}
+
     refresh();
     startHeartbeat();
     // 启动后尽快心跳一次：
@@ -461,6 +498,7 @@
         openCenter: openCenter,
         credFile: function () { return CRED_FILE; },
         cfgFile: function () { return CFG_FILE; },
+        lastWriteError: function () { return _lastWriteError; },
         on: function (cb) { if (typeof cb === 'function') _listeners.push(cb); }
     };
 })();
