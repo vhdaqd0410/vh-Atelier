@@ -13,6 +13,7 @@
             官网<span class="sd"></span>
         </button>
         <span class="sep"></span>
+        <button type="button" id="btnLicense" class="log-btn" title="授权：登录账号解锁功能">🔑 授权</button>
         <button type="button" id="btnUpdate" class="log-btn" title="在线更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
         <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">📄<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
     </div>
@@ -357,6 +358,8 @@
 
     <script src="js/CSInterface.js"></script>
     <script src="js/errorlog.js"></script>
+    <!-- license.js 必须在 main.js 之前：main.js 启动时会注册授权状态回调 -->
+    <script src="js/license.js"></script>
     <script src="js/updater.js"></script>
     <script src="js/main.js"></script>
     <script src="js/utils.js"></script>
@@ -365,6 +368,7 @@
     <script src="js/clone.js"></script>
     <script src="js/wavesurfer.js"></script>
     <script src="js/check.js"></script>
+    <script src="js/license-ui.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================
