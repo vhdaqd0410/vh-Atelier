@@ -111,6 +111,70 @@
         });
     } catch (e) {}
 
+    // ===== 本地缓存：重开面板时先秒显上次数据，避免干等扫盘 =====
+    var PG_CACHE_KEY = 'vh_progress_cache_v1';
+
+    function savePgCache(data) {
+        try {
+            // 只存渲染必需字段，避免超 localStorage 配额
+            var slim = {
+                ts: Date.now(),
+                overview_stats: data.overview_stats || {},
+                sections: (data.sections || []).map(function (s) {
+                    return {
+                        key: s.key, name: s.name, type: s.type,
+                        projects: (s.projects || []).map(function (p) {
+                            return {
+                                name: p.name,
+                                current_episodes: p.current_episodes,
+                                total_episodes: p.total_episodes,
+                                custom_status: p.custom_status,
+                                department: p.department,
+                                delivery_status: p.delivery_status,
+                                has_production_match: p.has_production_match
+                            };
+                        })
+                    };
+                })
+            };
+            localStorage.setItem(PG_CACHE_KEY, JSON.stringify(slim));
+        } catch (e) {}
+    }
+
+    function loadPgCache() {
+        try {
+            var s = localStorage.getItem(PG_CACHE_KEY);
+            if (!s) return null;
+            var d = JSON.parse(s);
+            if (!d || !d.sections) return null;
+            return d;
+        } catch (e) { return null; }
+    }
+
+    // 把时间戳转成「x 分钟前」
+    function agoText(ts) {
+        var d = Date.now() - (ts || 0);
+        if (d < 60000) return '刚刚';
+        if (d < 3600000) return Math.floor(d / 60000) + ' 分钟前';
+        if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
+        return Math.floor(d / 86400000) + ' 天前';
+    }
+
+    // 渲染缓存数据（快速铺屏）
+    function renderFromCache(c) {
+        try {
+            lastData = c;
+            renderOverview(c.overview_stats || {});
+            renderActive(c.sections || []);
+            el.statusText.textContent = '显示缓存数据（' + agoText(c.ts) + '）· 正在后台刷新…';
+            el.dot.className = 'prg-dot on';
+            el.offline.style.display = 'none';
+            el.overview.style.display = '';
+            el.activeWrap.style.display = '';
+            return true;
+        } catch (e) { return false; }
+    }
+
     // 工作流状态排序权重（越小越靠前 = 越接近交付越优先展示）
     var STATE_ORDER = ['剪辑中', '分集中', '制作中', '审核中', '修改中', '交付中', '质检中', '已完成'];
     function stateWeight(st) {
@@ -1946,6 +2010,11 @@
         if (busy) { dbg('refresh 跳过：busy=true'); return; }
         busy = true;
         if (el.refresh) el.refresh.disabled = true;
+        // 首次进入：若有本地缓存，先秒显，避免干等扫盘
+        if (!lastData) {
+            var _c = loadPgCache();
+            if (_c) renderFromCache(_c);
+        }
         dbg('正在拉取项目数据…');
         // 看门狗兜底：最多 150 秒后强制解锁，避免中途关面板导致 busy 卡死
         if (busyWatchdog) { clearTimeout(busyWatchdog); }
@@ -1961,6 +2030,12 @@
             if (busyWatchdog) { clearTimeout(busyWatchdog); busyWatchdog = null; }
             if (el.refresh) el.refresh.disabled = false;
             if (err) {
+                // 若已有缓存铺屏，失败时不要清空，只把状态改成离线提示
+                if (lastData) {
+                    el.statusText.textContent = '离线（显示 ' + agoText((loadPgCache() || {}).ts) + ' 的缓存）· ' + (err.message || err);
+                    el.dot.className = 'prg-dot off';
+                    return;
+                }
                 // 尝试区分：服务没起 vs 鉴权失败
                 var secret = readSecret();
                 if (!secret) {
@@ -1973,6 +2048,7 @@
                 return;
             }
             lastData = data;
+            savePgCache(data);   // 落本地缓存，供下次打开面板秒显
             setOnline(true, '视频工作台在线 · ' + new Date().toLocaleTimeString());
             renderOverview(data.overview_stats || {});
             renderActive(data.sections || []);

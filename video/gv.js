@@ -113,7 +113,8 @@ async function gvExtract(input) {
     })
     const j = await r.json()
     if (j.code === 200 && j.data) return normalize(j.data, input)
-    if (j.code === 530) throw new Error('greenvideo 密钥过期(530)，请重试')
+    if (j.code === 530) throw new Error(
+      'greenvideo 接口已变更（530），免登录解析不可用')
     throw new Error('greenvideo 解析失败: ' + (j.message || ('code=' + j.code)))
   } finally {
     clearTimeout(timer)

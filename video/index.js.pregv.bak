@@ -16,16 +16,6 @@ const childProcess = require('child_process')
 
 const gv = require('./gv.js')
 
-// ===== 免登录兜底开关 =====
-// greenvideo.cc 的 /api/video/cnSimpleExtract 已下线（返回 404），且其前端
-// 新增了验证码（useExtractWithCaptcha），免登录通道实际不可用。
-// 保持代码以便日后对方接口恢复；默认关闭，避免误导与无谓等待（曾出现 60s 超时）。
-// 需要临时启用：把环境变量 VH_GV=1 或此处改为 true。
-const GV_ENABLED = process.env.VH_GV === '1'
-// 统一提示：说明真实原因与替代做法
-const GV_DISABLED_MSG = '免登录通道已停用（greenvideo 接口下线并启用验证码）。'
-  + '请配置浏览器 Cookie 后重试，或换用支持直链的地址。'
-
 const PORT = 17892
 const HOST = '127.0.0.1'
 
@@ -119,8 +109,6 @@ function baseArgs() {
 // 兜底引擎都是零成本的额外尝试（多一次免登录解析请求而已）。
 // 例外：gv 模块本身不可用时不降级。
 function shouldFallbackToGv(errText) {
-  // 免登录通道已失效：直接不降级，避免走一条注定失败的路径
-  if (!GV_ENABLED) return false
   const s = String(errText || '').toLowerCase()
   // 明确属于"链接不是视频平台/用户输入错误"时才不降级（避免用 gv 掩盖脏输入）
   if (/not a valid url|unsupported url|no video formats found/i.test(s)) return false
@@ -215,7 +203,6 @@ const server = http.createServer(function (req, res) {
 // engine: 'auto'（默认，yt-dlp 优先，失败降级 gv）/ 'yt-dlp'（强制主引擎）/ 'gv'（强制兜底）
 function parseSmart(link, engine, cb) {
   const runGv = function (reason) {
-    if (!GV_ENABLED) { cb(new Error(GV_DISABLED_MSG)); return }
     gv.gvExtract(link).then(function (info) {
       info._fallbackReason = reason || ''
       cb(null, info)
@@ -347,11 +334,6 @@ function startDownload(link, quality, engine, cb) {
 //       B站（bilivideo）需带 Referer: https://www.bilibili.com。
 // 下载期间同步更新任务进度。
 function startGvDownload(id, link, quality, cb) {
-  if (!GV_ENABLED) {
-    tasks[id] = { url: link, status: 'error', title: '', outPath: '', err: GV_DISABLED_MSG,
-      progress: 0, log: [], engine: 'greenvideo' }
-    return cb(null, id)
-  }
   const task = { url: link, status: 'downloading', title: '', outPath: '', err: '', progress: 0, log: [], engine: 'greenvideo' }
   tasks[id] = task
 
@@ -488,5 +470,5 @@ function findOutput(dir, log) {
 
 server.listen(PORT, HOST, function () {
   console.log('[video-server] listening on http://' + HOST + ':' + PORT)
-  console.log('[video-server] engines: yt-dlp (default)' + (GV_ENABLED ? ' + greenvideo (fallback, no-login)' : '  [greenvideo 免登录通道已停用]'))
+  console.log('[video-server] engines: yt-dlp (default) + greenvideo (fallback, no-login)')
 })
