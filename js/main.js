@@ -17,7 +17,8 @@
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
         todo: document.getElementById('panel-todo'),
-        feedback: document.getElementById('panel-feedback')
+        feedback: document.getElementById('panel-feedback'),
+        admin: document.getElementById('panel-admin')
     };
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
@@ -31,7 +32,8 @@
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' },
-        feedback: { members: ['feedback'], default: 'feedback' }
+        feedback: { members: ['feedback'], default: 'feedback' },
+        admin: { members: ['admin'], default: 'admin' }
     };
     // tab 归属映射
     var groupOf = {};
@@ -116,6 +118,10 @@
         // 反馈中心：切到时把 iframe 拉起来
         if (name === 'feedback' && window.__feedbackPanelOnShow) {
             try { window.__feedbackPanelOnShow(); } catch (e) {}
+        }
+        // 管理台：切到时把 iframe 拉起来并刷新待处理数
+        if (name === 'admin' && window.__adminPanelOnShow) {
+            try { window.__adminPanelOnShow(); } catch (e) {}
         }
     }
 

@@ -49,6 +49,7 @@
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
+        <button class="ws-group" data-group="admin">⚙ 管理<span id="adminBadge" class="ws-badge" style="display:none;">0</span></button>
     </div>
 
     <div class="tabs ws-subtabs" data-group="progress">
@@ -955,6 +956,20 @@
         </div>
     </div>
 
+    <!-- ==================== 管理（内嵌授权管理台；主插件专用，不参与授权管控） ==================== -->
+    <div class="tab-panel" id="panel-admin" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
+            <div class="wb-nav">
+                <button class="wb-nav-btn" id="adNavReload" title="刷新页面">↻</button>
+                <button class="wb-nav-btn" id="adNavHome" title="回到管理台首页">🏠</button>
+                <button class="wb-nav-btn wb-nav-ext" id="adNavExternal" title="在外部浏览器打开">↗</button>
+                <span class="wb-nav-url" id="adNavHint" style="display:flex;align-items:center;color:var(--muted);font-size:11px;">加载中…</span>
+                <button class="wb-nav-btn" id="adNavReqs" title="待处理申请" style="color:#fcd34d;">📩 申请 <span id="adReqCount">0</span></button>
+            </div>
+            <iframe id="adFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#0f1115;" src="about:blank"></iframe>
+        </div>
+    </div>
+
     <!-- ==================== 超分（一键导出并超分 + 外站工具） ==================== -->
     <div class="tab-panel" id="panel-upscale" style="display:none;">
         <!-- 操作区卡片（滚动） -->
@@ -1121,6 +1136,7 @@
     <script src="js/feedback.js"></script>
     <script src="js/feedback-ui.js"></script>
     <script src="js/feedback-panel.js"></script>
+    <script src="js/admin-panel.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================
