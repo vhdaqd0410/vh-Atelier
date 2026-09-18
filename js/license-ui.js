@@ -37,6 +37,9 @@
             '.vhl-lab{display:block;font-size:12px;color:#9a9a9a;margin:12px 0 5px;}',
             '.vhl-in{width:100%;padding:9px 11px;background:#131316;color:#eaeaea;border:1px solid #45454f;border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;}',
             '.vhl-in:focus{border-color:#8b5cf6;}',
+            '.vhl-in[type=email],.vhl-in[type=password],.vhl-in[type=text]{height:36px;}',
+            'textarea.vhl-in{resize:vertical;min-height:64px;line-height:1.6;}',
+            'select.vhl-in{height:36px;cursor:pointer;}',
             '.vhl-msg{margin-top:12px;padding:8px 11px;border-radius:6px;font-size:12px;line-height:1.6;}',
             '.vhl-msg.err{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#fca5a5;}',
             '.vhl-msg.ok{background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3);color:#86efac;}',
@@ -172,7 +175,10 @@
             ops.style.marginTop = '14px';
             ops.innerHTML = '<button class="vhl-btn sec" data-act="verify">重新验证</button> ' +
                             '<button class="vhl-btn sec" data-act="logout">退出登录</button> ' +
-                            '<button class="vhl-btn link" data-act="center">打开网页用户中心 →</button>';
+                            '<button class="vhl-btn link" data-act="center">打开网页用户中心 →</button>' +
+                            '<div style="margin-top:8px">' +
+                            '<button class="vhl-btn sec" data-act="apply">📩 申请授权 / 续期</button>' +
+                            '</div>';
             body.appendChild(ops);
 
             ops.querySelector('[data-act="verify"]').onclick = function () {
@@ -195,6 +201,9 @@
                 });
             };
             ops.querySelector('[data-act="center"]').onclick = function () { L.openCenter(); };
+            ops.querySelector('[data-act="apply"]').onclick = function () {
+                renderApplyForm(body, msgHost);
+            };
 
             if (st.status !== 'active' && st.status !== 'bypass') {
                 body.appendChild(el('div', 'vhl-note',
@@ -220,6 +229,9 @@
                 '</div>' +
                 '<div style="margin-top:10px;text-align:center">' +
                 '<button class="vhl-btn link" data-act="reg">还没有账号？去注册 →</button>' +
+                '</div>' +
+                '<div style="margin-top:4px;text-align:center">' +
+                '<button class="vhl-btn link" data-act="apply">试用到期 / 想申请授权？点这里 →</button>' +
                 '</div>';
             body.appendChild(form);
             body.appendChild(msgHost);
@@ -248,6 +260,9 @@
             pwdI.onkeydown = function (e) { if (e.key === 'Enter') doLogin(); };
             emailI.onkeydown = function (e) { if (e.key === 'Enter') pwdI.focus(); };
             form.querySelector('[data-act="reg"]').onclick = function () { L.openCenter(); };
+            form.querySelector('[data-act="apply"]').onclick = function () {
+                renderApplyForm(body, msgHost);
+            };
             setTimeout(function () { try { emailI.focus(); } catch (e) {} }, 60);
         }
 
@@ -261,6 +276,178 @@
 
     function setMsg(host, text, kind) {
         host.innerHTML = text ? '<div class="vhl-msg ' + (kind || 'info') + '">' + esc(text) + '</div>' : '';
+    }
+
+    // ---------- 申请授权表单 ----------
+    var APPLY_TYPES = [
+        ['trial-expired', '试用到期，申请正式授权'],
+        ['new', '首次申请授权'],
+        ['add-plugin', '申请增加插件'],
+        ['renew', '申请续期'],
+        ['other', '其他']
+    ];
+
+    // 打开弹窗并直接跳到申请表单（供被锁提示调用）
+    function openApply() {
+        show();
+        setTimeout(function () {
+            var body = document.querySelector('.vhl-body');
+            var host = document.querySelector('.vhl-msg-host') || (function () {
+                var d = document.createElement('div');
+                d.className = 'vhl-msg-host';
+                if (body) body.appendChild(d);
+                return d;
+            })();
+            if (body) renderApplyForm(body, host);
+        }, 30);
+    }
+
+    function renderApplyForm(body, msgHost) {
+        var L = window.__vhLicense;
+        var st = L.state();
+        var email = st.email || '';
+
+        var opts = APPLY_TYPES.map(function (t) {
+            return '<option value="' + t[0] + '">' + esc(t[1]) + '</option>';
+        }).join('');
+
+        var box = el('div');
+        box.innerHTML =
+            '<div class="vhl-hr"></div>' +
+            '<div style="font-size:12.5px;color:#b8b8b8;line-height:1.7">' +
+            '提交申请后，管理员会在后台看到并为你开通。' +
+            (email ? '' : '<br><span style="color:#fcd34d">提示：还没登录过，请先在下方填写邮箱。</span>') +
+            '</div>' +
+            '<label class="vhl-lab">邮箱</label>' +
+            '<input class="vhl-in" id="vhlApplyEmail" type="email" placeholder="you@example.com" value="' + esc(email) + '">' +
+            '<label class="vhl-lab">申请类型</label>' +
+            '<select class="vhl-in" id="vhlApplyType">' + opts + '</select>' +
+            '<label class="vhl-lab">补充说明（可选）</label>' +
+            '<textarea class="vhl-in" id="vhlApplyMsg" rows="3" placeholder="例如：我是做短剧剪辑的，需要长期使用超分和字幕校对"></textarea>' +
+            '<div style="margin-top:14px;display:flex;gap:8px">' +
+            '<button class="vhl-btn pri" data-act="send" style="flex:1">提交申请</button>' +
+            '<button class="vhl-btn sec" data-act="status">查看进度</button>' +
+            '</div>';
+
+        body.appendChild(box);
+        body.appendChild(msgHost);
+
+        var emailI = box.querySelector('#vhlApplyEmail');
+        var typeI = box.querySelector('#vhlApplyType');
+        var msgI = box.querySelector('#vhlApplyMsg');
+
+        // 依据当前状态预选类型
+        if (st.status === 'expired' || st.status === 'grace_over') typeI.value = 'trial-expired';
+        else if (!st.loggedIn) typeI.value = 'new';
+
+        box.querySelector('[data-act="send"]').onclick = function () {
+            var em = emailI.value.trim();
+            if (!em) { setMsg(msgHost, '请填写邮箱', 'err'); return; }
+            var b = this;
+            b.disabled = true; b.textContent = '提交中…';
+
+            // 允许未登录提交：直接调服务端接口，用表单里的邮箱
+            applyDirect(em, typeI.value, msgI.value, function (err, j) {
+                b.disabled = false; b.textContent = '提交申请';
+                if (err) { setMsg(msgHost, err.message || '提交失败', 'err'); return; }
+                setMsg(msgHost, j && j.duplicated
+                    ? '你之前已提交过相同申请，正在处理中'
+                    : '申请已提交 ✅ 管理员处理后插件会自动解锁', 'ok');
+            });
+        };
+
+        box.querySelector('[data-act="status"]').onclick = function () {
+            var b = this;
+            b.disabled = true; b.textContent = '查询中…';
+            applyStatusDirect(emailI.value.trim(), function (err, j) {
+                b.disabled = false; b.textContent = '查看进度';
+                if (err) { setMsg(msgHost, err.message || '查询失败', 'err'); return; }
+                var l = j.latest;
+                if (!l) { setMsg(msgHost, '还没有提交过申请', 'info'); return; }
+                var txt = { pending: '待处理', approved: '已通过', rejected: '已拒绝' }[l.status] || l.status;
+                var line = '申请状态：' + txt + '（' + l.typeText + '）';
+                if (l.status === 'approved' && j.license) {
+                    line += '　授权已开通，剩余 ' +
+                        (j.license.expiresAt ? Math.max(0, Math.ceil((j.license.expiresAt - Date.now()) / 86400000)) + ' 天' : '永久');
+                    refresh();   // 已开通 → 立刻刷新界面状态
+                }
+                setMsg(msgHost, line, l.status === 'approved' ? 'ok' : 'info');
+            });
+        };
+    }
+
+    // 直接调服务端（不依赖模块内部 email，支持未登录提交）
+    function applyDirect(email, type, message, cb) {
+        var L = window.__vhLicense;
+        var base = (L.base ? L.base() : '').replace(/\/+$/, '');
+        if (!base) return cb(new Error('未配置授权服务地址'));
+        var body = {
+            email: email, type: type, message: message,
+            plugin: L.pluginId || '',
+            deviceId: L.deviceId ? L.deviceId() : '',
+            deviceName: L.deviceName ? L.deviceName() : ''
+        };
+        doPost(base + '/api/request', body, cb);
+    }
+
+    function applyStatusDirect(email, cb) {
+        var L = window.__vhLicense;
+        var base = (L.base ? L.base() : '').replace(/\/+$/, '');
+        if (!base) return cb(new Error('未配置授权服务地址'));
+        if (!email) return cb(new Error('请填写邮箱'));
+        doGet(base + '/api/request/status?email=' + encodeURIComponent(email), cb);
+    }
+
+    function doPost(url, body, cb) {
+        try {
+            var http = require('http'), https = require('https');
+            var u = new URL(url);
+            var mod = (u.protocol === 'https:') ? https : http;
+            var data = JSON.stringify(body);
+            var req = mod.request({
+                hostname: u.hostname,
+                port: u.port || (u.protocol === 'https:' ? 443 : 80),
+                path: (u.pathname || '/') + (u.search || ''),
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+                timeout: 15000
+            }, function (res) {
+                var b = '';
+                res.on('data', function (d) { b += d; });
+                res.on('end', function () {
+                    var j = null; try { j = JSON.parse(b); } catch (e) {}
+                    if (res.statusCode >= 200 && res.statusCode < 300 && j && j.ok) return cb(null, j);
+                    cb(new Error((j && j.error) || ('HTTP ' + res.statusCode)));
+                });
+            });
+            req.on('error', function (e) { cb(new Error('连不上授权服务（' + e.message + '）')); });
+            req.on('timeout', function () { try { req.destroy(); } catch (e) {} cb(new Error('请求超时')); });
+            req.write(data); req.end();
+        } catch (e) { cb(new Error('提交失败：' + e.message)); }
+    }
+
+    function doGet(url, cb) {
+        try {
+            var http = require('http'), https = require('https');
+            var u = new URL(url);
+            var mod = (u.protocol === 'https:') ? https : http;
+            var req = mod.get({
+                hostname: u.hostname,
+                port: u.port || (u.protocol === 'https:' ? 443 : 80),
+                path: (u.pathname || '/') + (u.search || ''),
+                timeout: 12000
+            }, function (res) {
+                var b = '';
+                res.on('data', function (d) { b += d; });
+                res.on('end', function () {
+                    var j = null; try { j = JSON.parse(b); } catch (e) {}
+                    if (res.statusCode >= 200 && res.statusCode < 300 && j && j.ok) return cb(null, j);
+                    cb(new Error((j && j.error) || ('HTTP ' + res.statusCode)));
+                });
+            });
+            req.on('error', function (e) { cb(new Error('连不上授权服务（' + e.message + '）')); });
+            req.on('timeout', function () { try { req.destroy(); } catch (e) {} cb(new Error('请求超时')); });
+        } catch (e) { cb(new Error('查询失败：' + e.message)); }
     }
 
     // ---------- 被锁提示 ----------
@@ -292,6 +479,7 @@
             '<button class="vhl-x">✕</button></div>' +
             '<div class="vhl-body">' + detail + '</div>' +
             '<div class="vhl-foot">' +
+            '<button class="vhl-btn sec" data-act="apply">申请授权</button>' +
             '<button class="vhl-btn sec" data-act="center">用户中心</button>' +
             '<button class="vhl-btn pri" data-act="login">' + (st.loggedIn ? '查看授权' : '去登录') + '</button>' +
             '</div>';
@@ -300,6 +488,7 @@
         card.querySelector('.vhl-x').onclick = shut;
         card.querySelector('[data-act="center"]').onclick = function () { window.__vhLicense.openCenter(); };
         card.querySelector('[data-act="login"]').onclick = function () { shut(); show(); };
+        card.querySelector('[data-act="apply"]').onclick = function () { shut(); show(); openApply(); };
         m.onclick = function (e) { if (e.target === m) shut(); };
         m.appendChild(card);
         document.body.appendChild(m);
@@ -343,6 +532,7 @@
 
     window.__vhLicenseUI = {
         show: show,
+        openApply: openApply,
         close: close,
         blocked: blocked,
         bindTop: bindTop,
