@@ -45,6 +45,7 @@
         el.localMore = document.getElementById('pjLocalMore');
         el.localSort = document.getElementById('pjLocalSort');
         el.localSortDir = document.getElementById('pjLocalSortDir');
+        el.localSearch = document.getElementById('pjLocalSearch');
         el.scanInterval = document.getElementById('pjScanInterval');
         el.scanHint = document.getElementById('pjScanHint');
         el.progWrap = document.getElementById('pjProgWrap');
@@ -662,9 +663,17 @@
                 list.forEach(function (p, i) { if (p.dir === lastCreated) k = i; });
                 if (k > 0) { var one = list.splice(k, 1)[0]; list.unshift(one); }
             }
-            // 排序（默认名称降序）
+            // 搜索 + 排序（默认名称升序）
+            var lkw = (el.localSearch && el.localSearch.value || '').trim().toLowerCase();
+            if (lkw) {
+                list = list.filter(function (p) {
+                    var hay = (String(p.dirName || '') + ' ' + String(p.title || '')).toLowerCase();
+                    var kws = lkw.split(/[\s,，]+/).filter(Boolean);
+                    return kws.every(function (k) { return hay.indexOf(k) >= 0; });
+                });
+            }
             var lk = el.localSort ? el.localSort.value : 'name';
-            var ld = el.localSortDir ? el.localSortDir.value === 'asc' : false;   // 默认 desc
+            var ld = el.localSortDir ? el.localSortDir.value === 'desc' : false;   // 默认 asc（升序）
             var keepTop = lastCreated && list.length ? list[0].dir === lastCreated : false;
             var topOne = keepTop ? list.shift() : null;
             list = P.sortLocalProjects(list, lk, ld);
@@ -722,7 +731,7 @@
                 html += '</div>';
             }
 
-            el.localInfo.textContent = '共 ' + list.length + ' 个';
+            el.localInfo.textContent = '共 ' + list.length + ' 个' + (lkw ? '（筛选后）' : '');
             el.localList.innerHTML = html;
 
             bindLocalCards();
@@ -847,6 +856,7 @@
         if (el.sortDir) el.sortDir.onchange = applyFilter;
         if (el.localSort) el.localSort.onchange = function () { localShown = LOCAL_PAGE; renderLocalList(); };
         if (el.localSortDir) el.localSortDir.onchange = function () { localShown = LOCAL_PAGE; renderLocalList(); };
+        if (el.localSearch) el.localSearch.oninput = function () { localShown = LOCAL_PAGE; renderLocalList(); };
         if (el.btnLogMax) el.btnLogMax.onclick = toggleLogMax;
         if (el.cfgToggle) {
             el.cfgToggle.onclick = function () {
