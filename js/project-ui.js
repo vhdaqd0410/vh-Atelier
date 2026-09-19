@@ -22,6 +22,7 @@
         el.excludeDirs = document.getElementById('pjExcludeDirs');
         el.autoOpen = document.getElementById('pjAutoOpen');
         el.copyTpl = document.getElementById('pjCopyTpl');
+        el.copyRough = document.getElementById('pjCopyRough');
         el.btnSaveCfg = document.getElementById('pjSaveCfg');
         el.btnScan = document.getElementById('pjScan');
         el.search = document.getElementById('pjSearch');
@@ -146,6 +147,7 @@
         el.excludeDirs.value = (c.excludeDirs || []).join('、');
         el.autoOpen.checked = c.autoOpenPR !== false;
         el.copyTpl.checked = c.copyTemplate !== false;
+        if (el.copyRough) el.copyRough.checked = c.copyRoughcut !== false;
     }
 
     function collectCfg() {
@@ -158,6 +160,7 @@
             .map(function (s) { return s.trim(); }).filter(Boolean);
         c.autoOpenPR = !!el.autoOpen.checked;
         c.copyTemplate = !!el.copyTpl.checked;
+        if (el.copyRough) c.copyRoughcut = !!el.copyRough.checked;
         return c;
     }
 

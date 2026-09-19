@@ -51,7 +51,8 @@
         prTemplate: '',         // PR 模板工程 .prproj
         excludeDirs: ['00已完成', '0000新人'],   // 扫描时排除的目录名
         autoOpenPR: true,       // 创建后自动用 PR 打开工程
-        copyTemplate: true      // 复制模板结构
+        copyTemplate: true,     // 复制模板结构
+        copyRoughcut: true      // 同时把粗剪拉到 02粗剪
     };
 
     function readCfg() {
@@ -120,7 +121,7 @@
         return false;
     }
 
-    function extractEpisode(name) {
+    function extractEpisode(name, allowBare) {
         if (!name) return null;
         var s = String(name);
         // 1) 「第N集」最明确
@@ -132,18 +133,28 @@
         // 3) 「N-中文」/「N 中文」
         m = s.match(/^(\d{1,3})\s*[-　 ]\s*([\u4e00-\u9fff].*)$/);
         if (m) return isStructName(m[2]) ? null : parseInt(m[1], 10);
-        // 4) 其余带下划线的数字前缀（01_abc）一律当结构目录
-        if (/^\d{1,3}_/.test(s)) return null;
+        // 4) 纯数字（如粗剪目录里的 19.mp4 / 19）
+        //    只在「已确定是粗剪上下文」时启用：那里不可能出现结构目录序号
+        if (allowBare) {
+            m = s.match(/^(\d{1,3})$/);
+            if (m) return parseInt(m[1], 10);
+            m = s.match(/^(\d{1,3})\s*[-_　 ]+$/);
+            if (m) return parseInt(m[1], 10);
+        }
+        // 5) 其余带下划线的数字前缀（01_abc）当结构目录
         return null;
     }
 
-    // 从「第3集 张三」/「07_范堉淼」里取出名字（没有就返回空）
+    // 从「第3集 张三」/「07_范堉淼」里取出名字（没有/纯数字就返回空）
     function extractEditorFromDir(name) {
         var s = String(name || '');
         s = s.replace(/^第\s*\d{1,3}\s*集/, '');
         s = s.replace(/^\d{1,3}\s*[-_　 ]\s*/, '');
         s = s.replace(/^[-_\s]+/, '');
-        return s.trim().replace(/^-+|-+$/g, '').trim();
+        s = s.trim().replace(/^-+|-+$/g, '').trim();
+        // 纯数字/空不算名字（如 19.mp4 → "19"，或「第19集」本身）
+        if (/^\d+$/.test(s)) return '';
+        return s;
     }
 
     // ---------- fs 异步小工具 ----------
@@ -207,8 +218,11 @@
     }
 
     // 在 folder 下递归找集号目录 → { 集号: {dir, editor} }
-    // 结构目录（集号为 null）继续往下钻
-    async function findEpisodeDirsAsync(folder, maxDepth) {
+    // opts.allowBare  允许把纯数字目录名当集号（粗剪上下文）
+    // opts.skipDir    命中则整棵跳过（如素材里嵌套的粗剪目录）
+    async function findEpisodeDirsAsync(folder, maxDepth, opts) {
+        if (typeof opts === 'boolean') opts = { allowBare: opts };
+        opts = opts || {};
         var result = {};
         var limit = (typeof maxDepth === 'number') ? maxDepth : 4;
         async function walk(p, depth) {
@@ -217,7 +231,8 @@
             for (var i = 0; i < names.length; i++) {
                 var name = names[i];
                 var full = path.join(p, name);
-                var ep = extractEpisode(name);
+                if (opts.skipDir && opts.skipDir(name)) continue;
+                var ep = extractEpisode(name, opts.allowBare);
                 if (ep !== null) {
                     if (!result[ep]) result[ep] = { dir: full, editor: extractEditorFromDir(name) };
                 } else {
@@ -231,13 +246,15 @@
     }
 
     // 收集「集号-剪辑师.扩展名」形式的文件（粗剪常见）
-    async function collectEpisodeFilesAsync(folder) {
+    // fallbackEp：文件名本身没带集号时，用父目录的集号（如 第19集\粗剪\final.mp4）
+    async function collectEpisodeFilesAsync(folder, fallbackEp, allowBare) {
         var result = {};
         var names = await listFiles(folder);
         for (var i = 0; i < names.length; i++) {
             var name = names[i];
             var stem = name.replace(/\.[^.]+$/, '');
-            var ep = extractEpisode(stem);
+            var ep = extractEpisode(stem, allowBare);
+            if (ep === null && fallbackEp !== null && fallbackEp !== undefined) ep = fallbackEp;
             if (ep !== null && !result[ep]) {
                 result[ep] = { file: path.join(folder, name), editor: extractEditorFromDir(stem) };
             }
@@ -247,26 +264,41 @@
 
     // ---------- 项目扫描 ----------
     var MATERIAL_KW = ['抽卡素材', '抽卡', '视频素材', '素材'];
-    var ROUGHCUT_KW = ['粗剪', '初剪', '粗减'];
+    var ROUGHCUT_KW = ['粗剪', '初剪', '粗减', '精剪', '定剪'];
     var SCRIPT_KW = ['剧本', '分集', '脚本'];
+
+    function isRoughcutName(n) {
+        if (!n) return false;
+        var s = String(n);
+        for (var i = 0; i < ROUGHCUT_KW.length; i++) {
+            if (s.indexOf(ROUGHCUT_KW[i]) >= 0) return true;
+        }
+        return false;
+    }
 
     // 探测单个项目（异步）
     async function inspectProjectAsync(projDir, onSub) {
         var eps = {};
         var st = await dirStat(projDir);
 
-        var materialDirs = await findDirsAsync(projDir, MATERIAL_KW);
+        // 素材（排除粗剪类目录，避免粗剪被计入素材集）
+        var allMaterial = await findDirsAsync(projDir, MATERIAL_KW);
+        var materialDirs = allMaterial.filter(function (d) {
+            return !isRoughcutName(path.basename(d));
+        });
         for (var i = 0; i < materialDirs.length; i++) {
             if (onSub) onSub('素材');
-            var found = await findEpisodeDirsAsync(materialDirs[i]);
+            var found = await findEpisodeDirsAsync(materialDirs[i], 4, { skipDir: isRoughcutName });
             Object.keys(found).forEach(function (k) { eps[k] = true; });
         }
         var roughDirs = await findDirsAsync(projDir, ROUGHCUT_KW);
         for (var j = 0; j < roughDirs.length; j++) {
             if (onSub) onSub('粗剪');
-            var f1 = await findEpisodeDirsAsync(roughDirs[j]);
+            var rd = roughDirs[j];
+            var parentEp = extractEpisode(path.basename(path.dirname(rd)), true);
+            var f1 = await findEpisodeDirsAsync(rd, 4, { allowBare: true });
             Object.keys(f1).forEach(function (k) { eps[k] = true; });
-            var f2 = await collectEpisodeFilesAsync(roughDirs[j]);
+            var f2 = await collectEpisodeFilesAsync(rd, parentEp, true);
             Object.keys(f2).forEach(function (k) { eps[k] = true; });
         }
         if (onSub) onSub('剧本');
@@ -387,17 +419,18 @@
     }
 
     // 扁平复制：srcDir 下所有文件（递归）复制到 dstDir，去掉中间层级
-    // ctx: { used:{}, onFile(n) }
+    // ctx: { used:{}, onFile(n), skipDir(name) }
+    // 只有真的复制了文件才创建目标目录（避免拉出一堆空目录）
     async function flattenCopyAsync(srcDir, dstDir, ctx) {
         ctx = ctx || {};
         if (!ctx.used) ctx.used = {};
         if (!(await isDir(srcDir))) return 0;
-        try { await fsp.mkdir(dstDir, { recursive: true }); } catch (e) { return 0; }
 
         var count = 0;
         async function walk(p) {
             var names = await listFiles(p);
             for (var i = 0; i < names.length; i++) {
+                try { await fsp.mkdir(dstDir, { recursive: true }); } catch (e) {}
                 var target = uniquePath(dstDir, names[i], ctx.used);
                 try {
                     await fsp.copyFile(path.join(p, names[i]), target);
@@ -407,6 +440,7 @@
             }
             var subs = await listDirs(p);
             for (var j = 0; j < subs.length; j++) {
+                if (ctx.skipDir && ctx.skipDir(subs[j])) continue;
                 await walk(path.join(p, subs[j]));
             }
         }
@@ -414,9 +448,33 @@
         return count;
     }
 
+    // 目录里除了被 skipDir 排除的子目录外，还有没有文件（含更深层）
+    async function hasFilesExcept(srcDir, skipDir) {
+        async function walk(p) {
+            var names = await listFiles(p);
+            if (names.length) return true;
+            var subs = await listDirs(p);
+            for (var j = 0; j < subs.length; j++) {
+                if (skipDir && skipDir(subs[j])) continue;
+                if (await walk(path.join(p, subs[j]))) return true;
+            }
+            return false;
+        }
+        if (!(await isDir(srcDir))) return false;
+        return await walk(srcDir);
+    }
+
     // ---------- 建素材源索引（按集号归并） ----------
+    // 三类来源（对照真实 NAS 实测结构）：
+    //   素材目录  02_抽卡素材\01_抽卡素材\07_范堉淼\*.mp4
+    //   粗剪-文件 02_抽卡素材\03_粗剪\1-徐祥伟.mp4
+    //   粗剪-每集 03 视频素材\第19集\粗剪\19.mp4   ← 父目录才是集号，文件名是纯数字
     async function buildSourceIndex(projDir, onSub) {
-        var materialDirs = await findDirsAsync(projDir, MATERIAL_KW);
+        // 素材目录：排除本身就是粗剪的目录（否则粗剪会被当成素材）
+        var allMaterial = await findDirsAsync(projDir, MATERIAL_KW);
+        var materialDirs = allMaterial.filter(function (d) {
+            return !isRoughcutName(path.basename(d));
+        });
         var roughDirs = await findDirsAsync(projDir, ROUGHCUT_KW);
         var scriptDirs = await findDirsAsync(projDir, SCRIPT_KW);
         var byEp = {};
@@ -428,7 +486,8 @@
 
         for (var i = 0; i < materialDirs.length; i++) {
             if (onSub) onSub('索引素材 ' + (i + 1) + '/' + materialDirs.length);
-            var m = await findEpisodeDirsAsync(materialDirs[i]);
+            // 素材里遇到粗剪类子目录要跳过（它归粗剪管）
+            var m = await findEpisodeDirsAsync(materialDirs[i], 4, { skipDir: isRoughcutName });
             Object.keys(m).forEach(function (k) {
                 push(k, { dir: m[k].dir, editor: m[k].editor, kind: 'material' });
             });
@@ -436,11 +495,14 @@
         }
         for (var j = 0; j < roughDirs.length; j++) {
             if (onSub) onSub('索引粗剪 ' + (j + 1) + '/' + roughDirs.length);
-            var d = await findEpisodeDirsAsync(roughDirs[j]);
+            var rd = roughDirs[j];
+            // 父目录是集号时（第19集\粗剪），用父目录集号兜底文件名
+            var parentEp = extractEpisode(path.basename(path.dirname(rd)), true);
+            var d = await findEpisodeDirsAsync(rd, 4, { allowBare: true });
             Object.keys(d).forEach(function (k) {
                 push(k, { dir: d[k].dir, editor: d[k].editor, kind: 'rough' });
             });
-            var f = await collectEpisodeFilesAsync(roughDirs[j]);
+            var f = await collectEpisodeFilesAsync(rd, parentEp, true);
             Object.keys(f).forEach(function (k) {
                 push(k, { file: f[k].file, editor: f[k].editor, kind: 'roughfile' });
             });
@@ -496,39 +558,83 @@
 
             // 4) 按集拉素材
             var materialTarget = path.join(projDir, '01原素材');
+            var roughTarget = path.join(projDir, '02粗剪');
             try { await fsp.mkdir(materialTarget, { recursive: true }); } catch (e) {}
             var usedM = {};
             var totalFiles = 0;
             var epWithSrc = 0;
+
+            function epEditor(srcs) {
+                for (var k = 0; k < srcs.length; k++) {
+                    if (srcs[k].editor) return srcs[k].editor;
+                }
+                return '';
+            }
+            function epDirName(ep, ed) {
+                return '第' + ep + '集' + (ed ? ' ' + ed : '');
+            }
+
+            // 4a) 素材 → 01原素材
             for (var i = 0; i < wantEps.length; i++) {
                 var ep = wantEps[i];
-                var srcs = idx.byEp[ep] || [];
-                var editor = '';
-                for (var k = 0; k < srcs.length; k++) {
-                    if (srcs[k].editor) { editor = srcs[k].editor; break; }
-                }
-                var tdir = path.join(materialTarget, '第' + ep + '集' + (editor ? ' ' + editor : ''));
+                var all = idx.byEp[ep] || [];
+                // 只取素材类（粗剪另走 4b）
+                var srcs = all.filter(function (x) { return x.kind === 'material'; });
                 onProgress('拉取素材', i, wantEps.length, '第' + ep + '集');
-
                 if (!srcs.length) { await tick(); continue; }
-                epWithSrc++;
+                var editor = epEditor(srcs);
+                var tdir = path.join(materialTarget, epDirName(ep, editor));
+                var got = 0;
                 for (var s = 0; s < srcs.length; s++) {
                     var item = srcs[s];
-                    if (item.file) {
-                        try {
-                            await fsp.mkdir(tdir, { recursive: true });
-                            var tp = uniquePath(tdir, path.basename(item.file), usedM);
-                            await fsp.copyFile(item.file, tp);
-                            totalFiles++;
-                        } catch (e) {}
-                    } else if (item.dir) {
-                        totalFiles += await flattenCopyAsync(item.dir, tdir, { used: usedM });
-                    }
+                    if (!item.dir) continue;
+                    // 该目录里除了粗剪之外还有文件吗？（如 第19集\粗剪 里只有粗剪）
+                    if (!(await hasFilesExcept(item.dir, isRoughcutName))) continue;
+                    // 跳过目录内嵌套的粗剪子目录，避免粗剪流进素材
+                    got += await flattenCopyAsync(item.dir, tdir, {
+                        used: usedM, skipDir: isRoughcutName
+                    });
                     await tick();
                 }
+                if (got > 0) { epWithSrc++; totalFiles += got; }
                 onProgress('拉取素材', i + 1, wantEps.length, '第' + ep + '集');
             }
             steps.push('素材：' + epWithSrc + '/' + wantEps.length + ' 集，共 ' + totalFiles + ' 个文件');
+
+            // 4b) 粗剪 → 02粗剪（默认开启，可在配置里关掉）
+            var roughFiles = 0, roughEp = 0;
+            if (cfg.copyRoughcut !== false) {
+                try { await fsp.mkdir(roughTarget, { recursive: true }); } catch (e) {}
+                var usedR = {};
+                for (var r = 0; r < wantEps.length; r++) {
+                    var rep = wantEps[r];
+                    var rall = idx.byEp[rep] || [];
+                    var rsrc = rall.filter(function (x) { return x.kind === 'rough' || x.kind === 'roughfile'; });
+                    onProgress('拉取粗剪', r, wantEps.length, '第' + rep + '集');
+                    if (!rsrc.length) { await tick(); continue; }
+                    roughEp++;
+                    var reditor = epEditor(rsrc);
+                    var rdir = path.join(roughTarget, epDirName(rep, reditor));
+                    for (var rs = 0; rs < rsrc.length; rs++) {
+                        var ri = rsrc[rs];
+                        if (ri.file) {
+                            try {
+                                await fsp.mkdir(rdir, { recursive: true });
+                                var rp = uniquePath(rdir, path.basename(ri.file), usedR);
+                                await fsp.copyFile(ri.file, rp);
+                                roughFiles++;
+                            } catch (e) {}
+                        } else if (ri.dir) {
+                            roughFiles += await flattenCopyAsync(ri.dir, rdir, { used: usedR });
+                        }
+                        await tick();
+                    }
+                    onProgress('拉取粗剪', r + 1, wantEps.length, '第' + rep + '集');
+                }
+                steps.push('粗剪：' + roughEp + '/' + wantEps.length + ' 集，共 ' + roughFiles + ' 个文件');
+            } else {
+                steps.push('粗剪：已关闭，跳过');
+            }
 
             // 5) 拉剧本
             if (idx.scriptDirs.length) {
@@ -570,6 +676,7 @@
                 dirName: dirName,
                 projDir: projDir,
                 materialTarget: materialTarget,
+                roughTarget: roughTarget,
                 prproj: prPath,
                 seq: seq,
                 steps: steps,
