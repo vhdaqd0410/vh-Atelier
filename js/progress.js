@@ -605,6 +605,16 @@
                 importMaterialsForProject(p.name || '');
             });
             opsMore.appendChild(impBtn);
+            var prjBtn = document.createElement('button');
+            prjBtn.type = 'button';
+            prjBtn.className = 'prg-open-btn prg-ops-icon';
+            prjBtn.textContent = '🎬 工程';
+            prjBtn.title = '找该项目的本地工程文件(.prproj)并用当前 PR 版本打开';
+            prjBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openLocalProjectFile(p.name || '');
+            });
+            opsMore.appendChild(prjBtn);
             var openBtn = document.createElement('button');
             openBtn.type = 'button';
             openBtn.className = 'prg-open-btn prg-ops-icon';
@@ -850,6 +860,178 @@
                 el.statusText.textContent = (data && data.message) || '打开失败';
             }
         });
+    }
+
+    // ===== 打开本地工程文件（.prproj），默认用当前 PR 版本 =====
+
+    // 当前宿主 PR 的可执行文件（即"当前这个版本"）
+    function currentPrExe() {
+        try {
+            if (!csInterface) return '';
+            var p = csInterface.getSystemPath(SystemPath.HOST_APPLICATION);
+            if (p && /\.[Ee][Xx][Ee]$/.test(p)) return p;
+        } catch (e) {}
+        return '';
+    }
+
+    // 在目录里递归找 .prproj（跳过自动保存目录）
+    function findPrprojIn(root, maxDepth) {
+        var fs2, path2;
+        try { fs2 = require('fs'); path2 = require('path'); } catch (e) { return ''; }
+        if (!root || !fs2.existsSync(root)) return '';
+        var limit = (typeof maxDepth === 'number') ? maxDepth : 3;
+        var hit = '';
+        (function walk(dir, depth) {
+            if (hit || depth > limit) return;
+            var ents;
+            try { ents = fs2.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+            for (var i = 0; i < ents.length; i++) {
+                var e = ents[i];
+                if (e.name.charAt(0) === '.' || e.name.charAt(0) === '~') continue;
+                var full = path2.join(dir, e.name);
+                if (e.isDirectory()) {
+                    var ln = e.name.toLowerCase();
+                    if (ln.indexOf('auto-save') >= 0) continue;
+                    walk(full, depth + 1);
+                    if (hit) return;
+                } else if (/\.prproj$/i.test(e.name)) {
+                    hit = full;
+                    return;
+                }
+            }
+        })(root, 0);
+        return hit;
+    }
+
+    // 候选项目盘：优先读 A 插件的项目配置（同一台机器两边都有）
+    function localProjectRoots() {
+        var out = [];
+        var fs2, path2;
+        try { fs2 = require('fs'); path2 = require('path'); } catch (e) { return out; }
+
+        function add(p) {
+            p = String(p || '').trim();
+            if (p && out.indexOf(p) < 0) out.push(p);
+        }
+
+        // 1) A 插件的 collect/project.json（用户在那里配了「本地项目根目录」）
+        try {
+            var root = '';
+            try { root = csInterface.getSystemPath('extension'); } catch (e) {}
+            // A 插件与本插件同级：...\extensions\com.vh.atelier -> ...\extensions\com.vh.ate
+            if (root) {
+                var sib = path2.join(path2.dirname(root), 'com.vh.ate', 'collect', 'project.json');
+                if (fs2.existsSync(sib)) {
+                    var cfg = JSON.parse(fs2.readFileSync(sib, 'utf8'));
+                    if (cfg && cfg.localRoot) add(cfg.localRoot);
+                }
+            }
+        } catch (e) {}
+
+        // 2) 本插件自己存过的（用户可在控制台设 localStorage）
+        try {
+            var raw = localStorage.getItem('vh_proj_roots') || '';
+            raw.split(/[;；\n]/).forEach(function (x) { add(x); });
+        } catch (e) {}
+
+        // 3) 兜底：常见项目盘（只在前面都没取到时才用）
+        if (!out.length) {
+            ['F:\\001ai漫剧', 'F:\\001AI漫剧', 'D:\\剪辑项目',
+             'E:\\剪辑项目', 'F:\\剪辑项目'].forEach(function (p) {
+                try { if (fs2.existsSync(p)) add(p); } catch (e) {}
+            });
+        }
+        return out;
+    }
+
+    // 在候选盘里按「序号-项目名」定位项目目录
+    function locateLocalProject(projectName) {
+        var fs2, path2;
+        try { fs2 = require('fs'); path2 = require('path'); } catch (e) { return ''; }
+        if (!projectName) return '';
+        var roots = localProjectRoots();
+        for (var r = 0; r < roots.length; r++) {
+            var root = roots[r];
+            if (!fs2.existsSync(root)) continue;
+            var names;
+            try { names = fs2.readdirSync(root); } catch (e) { continue; }
+            for (var i = 0; i < names.length; i++) {
+                var nm = names[i];
+                if (nm.charAt(0) === '.') continue;
+                // 「001-项目名」：去掉序号前缀后与项目名比对
+                var bare = nm.replace(/^\d{1,4}[-_\s]*/, '');
+                if (bare === projectName || nm === projectName ||
+                    bare.indexOf(projectName) >= 0 || projectName.indexOf(bare) >= 0) {
+                    var full = path2.join(root, nm);
+                    try { if (fs2.statSync(full).isDirectory()) return full; } catch (e) {}
+                }
+            }
+        }
+        return '';
+    }
+
+    // 用指定 exe 打开文件（detached，避免阻塞面板）
+    function spawnOpen(exe, file) {
+        try {
+            var cp2 = require('child_process');
+            cp2.spawn(exe, [file], { detached: true, stdio: 'ignore' }).unref();
+            return true;
+        } catch (e) { return false; }
+    }
+
+    // 主入口：找工程 → 用当前 PR 版本打开
+    function openLocalProjectFile(projectName) {
+        var fs2;
+        try { fs2 = require('fs'); } catch (e) { return; }
+
+        function finish(prproj) {
+            if (!prproj || !fs2.existsSync(prproj)) {
+                el.statusText.textContent = '「' + projectName + '」未找到本地工程文件(.prproj)。' +
+                    '先在插件 A 的「项目」里创建本地项目试试。';
+                return;
+            }
+            var exe = currentPrExe();
+            el.statusText.textContent = '正在用当前 PR 版本打开：' + prproj;
+            if (!exe) {
+                // 拿不到宿主 exe 时，退回用系统默认程序打开
+                try {
+                    var cp3 = require('child_process');
+                    cp3.spawn('cmd', ['/c', 'start', '', prproj], { windowsHide: true });
+                    el.statusText.textContent = '已调起系统默认方式打开工程（未能识别当前 PR 版本）';
+                } catch (e2) {
+                    el.statusText.textContent = '打开失败：' + e2.message;
+                }
+                return;
+            }
+            if (spawnOpen(exe, prproj)) {
+                var m = exe.match(/Premiere Pro (\d{4})/i);
+                el.statusText.textContent = '🎬 已用 PR ' + (m ? m[1] : '') + ' 打开工程：' + prproj;
+            } else {
+                el.statusText.textContent = '打开工程失败（启动 ' + exe + ' 被拒绝）';
+            }
+        }
+
+        // 1) 先看本机项目盘
+        var dir = locateLocalProject(projectName);
+        if (dir) {
+            var found = findPrprojIn(dir, 3);
+            if (found) { finish(found); return; }
+        }
+
+        // 2) 退回问后端要（最近一次创建记录的 prproj_path）
+        if (typeof apiGet === 'function') {
+            apiGet('/api/project/' + encodeURIComponent(projectName) + '/local_materials', function (err, d) {
+                if (!err && d && d.prproj_path) { finish(d.prproj_path); return; }
+                finish(found0(dir, fs2));
+            });
+            return;
+        }
+        finish('');
+    }
+
+    function found0(dir, fs2) {
+        if (!dir) return '';
+        return findPrprojIn(dir, 3);
     }
 
     // 导入素材到当前 PR 工程素材箱（保留目录结构：按相对根目录分组 → meImportTreePlanStr）

@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "进度面板新增「🎬 工程」：检测工程文件并用当前 PR 版本打开",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "项目卡片新增「🎬 工程」按钮"
+        },
+        {
+          "kind": "feat",
+          "text": "自动检测项目里的 .prproj（跳过自动保存目录）"
+        },
+        {
+          "kind": "feat",
+          "text": "用当前运行的 PR 版本打开，不再默认跳最新版"
+        },
+        {
+          "kind": "feat",
+          "text": "项目盘位置优先读插件 A 的本地项目根目录配置"
+        }
+      ],
+      "version": "1.8.0",
+      "date": "2026-09-19"
+    },
+    {
       "version": "1.7.0",
       "date": "2026-09-19",
       "title": "修复检测更新 403（改走自建镜像）",
