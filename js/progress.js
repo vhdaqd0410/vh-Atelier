@@ -96,6 +96,10 @@
     var allActiveProjects = [];   // 最近一次拉到的 group_active 全量（供筛选/排序）
     var myProjects = {};          // 「我参与」的项目：{ 项目名: {eps, total, list} }
     var myEditorName = '';        // 我的剪辑师名（来自工作台设置）
+    // 实扫结果缓存：{ 项目名: {total, current_count, missing, editor_plan} }
+    // 切换筛选会重建卡片，必须从这里回填，否则进度会退回「待扫描」
+    var scanCache = {};
+    var myProjectsErr = '';       // 「我参与」取数失败原因（用于提示）
 
     // ===== 可视诊断：把点击/播放链路每步状态写进面板顶部，不再静默 =====
     function dbg(msg) {
@@ -442,7 +446,9 @@
         el.activeCount.textContent = '共 ' + list.length + ' 个' + (list.length !== allActiveProjects.length ? '（筛选中）' : '');
         el.activeList.innerHTML = '';
         if (list.length === 0) {
-            el.activeList.innerHTML = '<div class="prg-empty">没有符合条件的项目</div>';
+            var _why = fMine ? (mineHintText() || '没有我参与的项目') : '没有符合条件的项目';
+            var _warn = fMine && mineHintText() ? ' prg-empty-warn' : '';
+            el.activeList.innerHTML = '<div class="prg-empty' + _warn + '">' + _why + '</div>';
             return;
         }
         list.forEach(function (p) {
@@ -510,8 +516,23 @@
             var ep = document.createElement('span');
             ep.className = 'prg-ep-text';
             ep.setAttribute('data-proj', p.name || '');
-            // 剪辑中项目：DB 缓存 current_episodes 不可靠，初始显示待扫描，等实扫回填
-            if (isClip && total > 0) {
+            // 优先用实扫缓存（切换筛选重渲染后仍保留）；没有缓存才退回「待扫描」
+            var _sc = scanCache[p.name || ''];
+            if (_sc && _sc.ok) {
+                var _st = parseInt(_sc.total, 10) || 0;
+                var _scur = parseInt(_sc.current_count, 10) || 0;
+                var _spct = _st > 0 ? Math.min(100, Math.round(_scur / _st * 100)) : 0;
+                ep.textContent = _st > 0 ? (_scur + ' / ' + _st + ' 集 · ' + _spct + '%') : '未设总集数';
+                // 进度条也用实扫值（覆盖上面 DB 的宽度）
+                var _fill0 = item.querySelector('.prg-bar-fill');
+                if (_fill0) {
+                    _fill0.style.width = _spct + '%';
+                    _fill0.className = 'prg-bar-fill' + (_spct >= 100 && _st > 0 ? ' prg-done' : '');
+                }
+                if (_sc.missing && _sc.missing.length) {
+                    ep.title = '缺 ' + _sc.missing.length + ' 集：' + _sc.missing.join(', ');
+                }
+            } else if (isClip && total > 0) {
                 ep.textContent = '待扫描…';
                 ep.title = '点「🔄 刷新」或稍候自动扫描输出目录';
             } else {
@@ -529,6 +550,25 @@
             missRow.className = 'prg-miss-row';
             missRow.style.display = 'none';
             item.appendChild(missRow);
+            // 缺集摘要也从缓存回填（否则每次切换筛选就消失）
+            if (_sc && _sc.ok && _sc.total > 0 && (_sc.missing || []).length) {
+                (function (mr, sc) {
+                    var planMap = sc.editor_plan || {};
+                    var mg = {};
+                    sc.missing.forEach(function (epn) {
+                        var ed = planMap[String(epn)] || planMap[epn] || '未分配';
+                        if (!mg[ed]) mg[ed] = [];
+                        mg[ed].push(parseInt(epn, 10));
+                    });
+                    var parts = [];
+                    Object.keys(mg).forEach(function (ed) {
+                        parts.push(esc(ed) + ' 缺 ' + compactEpList(mg[ed]));
+                    });
+                    mr.innerHTML = '⚠️ ' + parts.join('　');
+                    mr.style.display = 'block';
+                    mr.title = '点「📋 明细」看完整缺集 + 成片 + 修改';
+                })(missRow, _sc);
+            }
 
             // 操作区：主操作行（明细/查剪辑/刷新） + 辅助操作行（目录/素材/剧本/跳转）
             var openRow = document.createElement('div');
@@ -798,6 +838,8 @@
     // 把磁盘实扫结果应用到对应卡片（进度条 + 文字）
     function applyScanToCard(projectName, data) {
         if (!data || !data.ok) return;
+        // 存进缓存：这样切换筛选/重渲染后仍能显示实扫值
+        scanCache[projectName] = data;
         var total = parseInt(data.total, 10) || 0;
         var cur = parseInt(data.current_count, 10) || 0;
         var pct = total > 0 ? Math.min(100, Math.round(cur / total * 100)) : 0;
@@ -852,14 +894,31 @@
     function fetchMyProjects(cb) {
         apiGet('/api/my/projects', function (err, d) {
             if (err || !d || !d.ok) {
-                // 取不到不算错：可能没配剪辑师名，静默降级
+                // 记下原因：勾「只看我参与」时若为空，要能说清为什么
+                var m = err ? (err.message || String(err)) : '返回数据异常';
+                if (/404/.test(m)) {
+                    myProjectsErr = '视频工作台还是旧版（缺 /api/my/projects），请重启一次工作台';
+                } else {
+                    myProjectsErr = m;
+                }
+                myProjects = {};
+                myEditorName = '';
                 if (cb) cb(false);
                 return;
             }
+            myProjectsErr = '';
             myEditorName = d.editor || '';
             myProjects = d.mine || {};
+            if (!myEditorName) myProjectsErr = '未设置「我的剪辑师名」（视频工作台设置里配置）';
             if (cb) cb(true);
         });
+    }
+
+    // 筛选后为空时，说明原因（避免「勾了却没反应」）
+    function mineHintText() {
+        if (myEditorName) return '';
+        if (myProjectsErr) return '⚠️ ' + myProjectsErr;
+        return '⚠️ 暂无「我参与」信息';
     }
 
     // 该项目我参与吗？→ 返回 {eps,total} 或 null
