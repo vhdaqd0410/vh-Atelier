@@ -4,6 +4,7 @@
     var panels = {
         home: document.getElementById('panel-home'),
         media: document.getElementById('panel-media'),
+        project: document.getElementById('panel-project'),
         separate: document.getElementById('panel-sep'),
         sfx: document.getElementById('panel-sfx'),
         musiclib: document.getElementById('panel-musiclib'),
@@ -19,7 +20,7 @@
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
         home: { members: ['home'], default: 'home' },
-        media: { members: ['media'], default: 'media' },
+        media: { members: ['media', 'project'], default: 'media' },
         audio: { members: ['separate', 'sfx', 'musiclib', 'music'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
@@ -92,6 +93,10 @@
         // 素材库：切到时自动刷新（保持目录状态）
         if (name === 'media' && window.__mediaOnShow) {
             try { window.__mediaOnShow(); } catch (e) {}
+        }
+        // 项目面板：切到时刷新本地项目列表
+        if (name === 'project' && window.__projectOnShow) {
+            try { window.__projectOnShow(); } catch (e) {}
         }
         // 超分：切到时自动加载去字幕/超分站
         if (name === 'upscale' && window.__upscaleAutoLoad) {

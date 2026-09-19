@@ -994,6 +994,13 @@
   }
   // ===== 初始化 =====
   window.__mediaOnShow = function () { refreshProjInfo(); if (!el.tree.innerHTML.trim() || !currentRoot) renderRootSel(); restoreLastDir(); };
+
+  // 暴露给「项目」面板复用：把某个文件夹（含子目录）整体导入 PR 素材箱
+  // 保留目录结构，逻辑与本面板的「导入文件夹」完全一致。
+  window.__vhMedia = {
+    importFolderTree: function (folderPath, binName) { importFolderTree(folderPath, binName); },
+    importing: function () { return importing; }
+  };
   renderRootSel();
   refreshProjInfo();
 })();

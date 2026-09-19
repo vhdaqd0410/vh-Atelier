@@ -121,6 +121,10 @@
         <button class="tab" data-tab="export">多版本导出</button>
         <button class="tab" data-tab="video">视频下载</button>
     </div>
+    <div class="tabs ws-subtabs" data-group="media" style="display:none;">
+        <button class="tab active" data-tab="media">素材库</button>
+        <button class="tab" data-tab="project">项目</button>
+    </div>
     <div class="tabs ws-subtabs" data-group="script" style="display:none;">
         <button class="tab" data-tab="script">剧本阅读</button>
     </div>
@@ -550,6 +554,90 @@
         <div class="log" id="log"></div>
     </div>
 
+    <!-- ==================== 项目（NAS 拉素材 + 建本地项目） ==================== -->
+    <div class="tab-panel" id="panel-project" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:8px;overflow-y:auto;">
+
+            <!-- 配置区 -->
+            <div class="pj-group">
+                <div class="pj-ghead">
+                    <span>路径配置</span>
+                    <button id="pjSaveCfg" class="secondary mini" style="margin-left:auto;">保存配置</button>
+                </div>
+                <div class="pj-row">
+                    <label class="pj-lb">组内 NAS 目录</label>
+                    <input type="text" id="pjNasDir" placeholder="例：\\NAS\短剧\进行中">
+                    <button id="pjBrowseNas" class="secondary mini">浏览…</button>
+                </div>
+                <div class="pj-row">
+                    <label class="pj-lb">本地项目根目录</label>
+                    <input type="text" id="pjLocalRoot" placeholder="例：D:\剪辑项目">
+                    <button id="pjBrowseLocal" class="secondary mini">浏览…</button>
+                </div>
+                <div class="pj-row">
+                    <label class="pj-lb">项目模板结构</label>
+                    <input type="text" id="pjTemplateDir" placeholder="可选：新人模板目录">
+                    <button id="pjBrowseTemplate" class="secondary mini">浏览…</button>
+                </div>
+                <div class="pj-row">
+                    <label class="pj-lb">PR 模板工程</label>
+                    <input type="text" id="pjPrTemplate" placeholder="可选：xxx.prproj">
+                    <button id="pjBrowsePr" class="secondary mini">浏览…</button>
+                </div>
+                <div class="pj-row2">
+                    <div style="flex:1 1 140px;">
+                        <label class="pj-lb">我的剪辑师名</label>
+                        <input type="text" id="pjEditorName" placeholder="用于匹配集号目录">
+                    </div>
+                    <div style="flex:1 1 160px;">
+                        <label class="pj-lb">排除目录（、分隔）</label>
+                        <input type="text" id="pjExcludeDirs" placeholder="00已完成、0000新人">
+                    </div>
+                </div>
+                <div class="pj-checks">
+                    <label class="pj-ck"><input type="checkbox" id="pjCopyTpl" checked> 复制模板结构</label>
+                    <label class="pj-ck"><input type="checkbox" id="pjAutoOpen" checked> 创建后用 PR 打开工程</label>
+                </div>
+            </div>
+
+            <!-- 项目选择 -->
+            <div class="pj-group">
+                <div class="pj-ghead">
+                    <span>选择项目</span>
+                    <button id="pjScan" class="secondary mini" style="margin-left:auto;">开始扫描</button>
+                </div>
+                <select id="pjProjSel" style="width:100%;margin-bottom:6px;">
+                    <option value="">（先设好 NAS 目录，再点「开始扫描」）</option>
+                </select>
+                <div class="pj-ephead">
+                    <span id="pjEpInfo" style="font-size:10px;color:#9a9a9a;"></span>
+                    <span style="margin-left:auto;display:flex;gap:4px;">
+                        <button id="pjEpAll" class="secondary mini">全选</button>
+                        <button id="pjEpNone" class="secondary mini">全不选</button>
+                    </span>
+                </div>
+                <div id="pjEpBox" class="pj-epbox"></div>
+                <button id="pjCreate" class="pj-main" disabled>创建本地项目</button>
+            </div>
+
+            <!-- 日志 -->
+            <div class="pj-group">
+                <div class="pj-ghead"><span>运行日志</span></div>
+                <div id="pjLog" class="pj-log"></div>
+            </div>
+
+            <!-- 本地项目列表 -->
+            <div class="pj-group">
+                <div class="pj-ghead">
+                    <span>本地项目</span>
+                    <span id="pjLocalInfo" style="font-size:10px;color:#9a9a9a;margin-left:8px;"></span>
+                    <button id="pjRefreshLocal" class="secondary mini" style="margin-left:auto;">刷新</button>
+                </div>
+                <div id="pjLocalList"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== 板块六：视频下载 ==================== -->
     <div class="tab-panel" id="panel-video" style="display:none;">
         <div class="v-cookiebar">
@@ -781,6 +869,8 @@
     <script src="js/export.js"></script>
     <script src="js/enhance.js"></script>
     <script src="js/media.js"></script>
+    <script src="js/project.js"></script>
+    <script src="js/project-ui.js"></script>
     <script src="js/video.js"></script>
     <script src="js/script.js"></script>
     <script src="js/iframe-nav.js"></script>
