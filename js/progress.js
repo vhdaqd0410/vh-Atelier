@@ -84,6 +84,7 @@
         activeList: document.getElementById('prgActiveList'),
         filterState: document.getElementById('prgFilterState'),
         filterProgress: document.getElementById('prgFilterProgress'),
+        filterMine: document.getElementById('prgFilterMine'),
         search: document.getElementById('prgSearch')
     };
 
@@ -93,6 +94,8 @@
     var busyWatchdog = null;
     var lastData = null;
     var allActiveProjects = [];   // 最近一次拉到的 group_active 全量（供筛选/排序）
+    var myProjects = {};          // 「我参与」的项目：{ 项目名: {eps, total, list} }
+    var myEditorName = '';        // 我的剪辑师名（来自工作台设置）
 
     // ===== 可视诊断：把点击/播放链路每步状态写进面板顶部，不再静默 =====
     function dbg(msg) {
@@ -166,6 +169,8 @@
             lastData = c;
             renderOverview(c.overview_stats || {});
             renderActive(c.sections || []);
+            // 缓存里没有我参与信息，补拉一次再重渲染
+            fetchMyProjects(function (ok) { if (ok) renderActive(c.sections || []); });
             el.statusText.textContent = '显示缓存数据（' + agoText(c.ts) + '）· 正在后台刷新…';
             el.dot.className = 'prg-dot on';
             el.offline.style.display = 'none';
@@ -358,7 +363,11 @@
         (sections || []).forEach(function (s) { if (s && s.key === 'group_active') sec = s; });
         allActiveProjects = sec ? (sec.projects || []) : [];
         el.activeWrap.style.display = allActiveProjects.length ? '' : 'none';
-        el.activeCount.textContent = allActiveProjects.length ? '共 ' + allActiveProjects.length + ' 个' : '';
+        var _mineN = 0;
+        allActiveProjects.forEach(function (p) { if (mineInfo(p.name)) _mineN++; });
+        el.activeCount.textContent = allActiveProjects.length
+            ? ('共 ' + allActiveProjects.length + ' 个' + (_mineN ? ' · ⭐ 我参与 ' + _mineN + ' 个' : ''))
+            : '';
         fillStateFilter();
         renderFilteredList();
     }
@@ -399,8 +408,10 @@
     function renderFilteredList() {
         var fState = el.filterState.value;
         var fProgress = el.filterProgress.checked;
+        var fMine = el.filterMine && el.filterMine.checked;
         var kw = (el.search && (el.search.value || '').trim().toLowerCase()) || '';
         var list = allActiveProjects.filter(function (p) {
+            if (fMine && !mineInfo(p.name)) return false;
             if (kw) {
                 var hay = String(p.name || '').toLowerCase();
                 var kws = kw.split(/[\s,，]+/).filter(Boolean);
@@ -472,6 +483,17 @@
             tag.textContent = state || '待同步';
             head.appendChild(nm);
             head.appendChild(cpBtn);
+            // ⭐ 我参与：名称旁的醒目徽标（分集里有我）
+            var _mi = mineInfo(p.name);
+            if (_mi) {
+                item.classList.add('prg-mine');
+                var myBadge = document.createElement('span');
+                myBadge.className = 'prg-mine-badge';
+                myBadge.textContent = '⭐ 我 ' + _mi.eps + '/' + _mi.total;
+                myBadge.title = '我参与的项目：我负责 ' + _mi.eps + ' 集（共 ' + _mi.total + ' 集）' +
+                    (_mi.list && _mi.list.length ? '\n我的集号：' + _mi.list.join('、') : '');
+                head.appendChild(myBadge);
+            }
             head.appendChild(tag);
             item.appendChild(head);
 
@@ -637,6 +659,7 @@
                 openFenmiaozhen(p.name || '', ev.shiftKey);
             });
             opsMore.appendChild(fmBtn);
+
             item.appendChild(openRow);
 
             // 📝 待办角标：该项目在待办板块里的未完成条数（有则显示，可点开看）
@@ -822,6 +845,28 @@
                 missRow.innerHTML = '';
             }
         }
+    }
+
+    // ===== 我参与的项目（用于标记 + 筛选）=====
+    // 数据源：工作台 /api/my/projects → { editor, mine: {项目名: {eps,total,list}} }
+    function fetchMyProjects(cb) {
+        apiGet('/api/my/projects', function (err, d) {
+            if (err || !d || !d.ok) {
+                // 取不到不算错：可能没配剪辑师名，静默降级
+                if (cb) cb(false);
+                return;
+            }
+            myEditorName = d.editor || '';
+            myProjects = d.mine || {};
+            if (cb) cb(true);
+        });
+    }
+
+    // 该项目我参与吗？→ 返回 {eps,total} 或 null
+    function mineInfo(name) {
+        if (!name || !myProjects) return null;
+        var v = myProjects[name];
+        return v || null;
     }
 
     // 批量扫描全部剪辑中项目，用实扫值覆盖 DB 缓存值；showUi 时带按钮反馈
@@ -2231,9 +2276,13 @@
             }
             lastData = data;
             savePgCache(data);   // 落本地缓存，供下次打开面板秒显
-            setOnline(true, '视频工作台在线 · ' + new Date().toLocaleTimeString());
-            renderOverview(data.overview_stats || {});
-            renderActive(data.sections || []);
+            // 先拉「我参与」，再渲染，保证徽标一次到位
+            fetchMyProjects(function () {
+                setOnline(true, '视频工作台在线 · ' + new Date().toLocaleTimeString() +
+                    (myEditorName ? ' · 我=' + myEditorName : ''));
+                renderOverview(data.overview_stats || {});
+                renderActive(data.sections || []);
+            });
             // 每次拉取渲染后都自动批量实扫剪辑中项目（避免卡片卡在"待扫描…"）
             setTimeout(function () {
                 if (el.activeList.children.length) batchScanClipProjects(false);
@@ -2285,9 +2334,10 @@
     }
     el.launch.addEventListener('click', launchWB);
     el.retry.addEventListener('click', function () { refresh(true); });
-    // 筛选：状态 / 只看有进度 → 重渲染当前列表
+    // 筛选：状态 / 只看有进度 / 只看我参与 → 重渲染当前列表
     el.filterState.addEventListener('change', function () { renderFilteredList(); });
     el.filterProgress.addEventListener('change', function () { renderFilteredList(); });
+    if (el.filterMine) el.filterMine.addEventListener('change', function () { renderFilteredList(); });
     if (el.search) {
         var _st = 0;
         el.search.addEventListener('input', function () { renderFilteredList(); });

@@ -2089,6 +2089,21 @@
         #panel-progress .prg-state.st-deliver { background: #3a1f1f; color: var(--fg-err-soft); }
         #panel-progress .prg-state.st-edit { background: #234a2a; color: var(--fg-ok-soft); }
         #panel-progress .prg-state.st-other { background: var(--gray-card); color: #ccc; }
+        /* ⭐ 我参与：卡片色条 + 醒目徽标 + 筛选勾选 */
+        #panel-progress .prg-item.prg-mine {
+            border-left: 3px solid #e0a020;
+            background: linear-gradient(90deg, rgba(224,160,32,.10), transparent 55%), var(--panel);
+        }
+        #panel-progress .prg-mine-badge {
+            flex: 0 0 auto; font-size: 10px; font-weight: 700; line-height: 1;
+            padding: 3px 7px; border-radius: 4px;
+            background: linear-gradient(90deg, #e8a020, #f0c050);
+            color: #2a1c00; white-space: nowrap;
+            box-shadow: 0 0 6px rgba(232,160,32,.35);
+            cursor: help;
+        }
+        #panel-progress .prg-chk-mine { color: #e0b050; font-weight: 600; }
+        #panel-progress .prg-chk-mine input { accent-color: #e0a020; }
         #panel-progress .prg-bar { height: 5px; background: var(--gray-deep); border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
         #panel-progress .prg-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
         #panel-progress .prg-item-foot {
