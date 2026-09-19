@@ -181,6 +181,63 @@
     }
 
     // 读远端 version.json：api / raw 两条线路依次尝试，错误信息全部收集
+    // ---------- 自建更新镜像（首选）----------
+    // 为什么加这个：GitHub 那三条路在国内都不稳——
+    //   raw 常被墙（实测直连 40 秒超时）
+    //   api.github.com 未认证仅 60 次/小时，超了就是 403（用户看到的「检测更新失败 http:403」）
+    //   jsDelivr 因仓库超 50MB 直接拒绝
+    // 自己的服务器在国内可直连 GitHub，由它代取并缓存，插件只连自己的服务器。
+    var MIRROR_BASE = 'http://47.122.108.231:17894';
+    var _mirrorProbe = null;     // 探测结果缓存：{ ok, at, base, plugin }
+
+    function mirrorBase() {
+        // 允许用插件根目录的 license-admin.json / update.json 覆盖地址
+        try {
+            if (typeof ROOT !== 'undefined' && ROOT) {
+                var f = path.join(ROOT, 'update.json');
+                if (fs.existsSync(f)) {
+                    var j = JSON.parse(fs.readFileSync(f, 'utf8'));
+                    if (j && j.mirror) return String(j.mirror).replace(/\/+$/, '');
+                }
+            }
+        } catch (e) {}
+        return MIRROR_BASE;
+    }
+
+    function pluginId() {
+        try {
+            if (typeof ROOT !== 'undefined' && ROOT) {
+                var mp = path.join(ROOT, 'CSXS', 'manifest.xml');
+                if (fs.existsSync(mp)) {
+                    var m = fs.readFileSync(mp, 'utf8').match(/ExtensionBundleId="([^"]+)"/);
+                    if (m) return m[1];
+                }
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    // 探测镜像是否可用（结果缓存 10 分钟，避免每次都问）
+    function probeMirror(cb) {
+        var now = Date.now();
+        if (_mirrorProbe && (now - _mirrorProbe.at) < 600000) return cb(_mirrorProbe);
+        var pid = pluginId();
+        var url = mirrorBase() + '/api/update/version?plugin=' + encodeURIComponent(pid);
+        fetchJsonOnce(url, 6000, function (err, j) {
+            var r = { ok: !err && j && j.ok && j.versionJson, at: now, base: mirrorBase(), plugin: pid, data: j };
+            _mirrorProbe = r;
+            cb(r);
+        });
+    }
+
+    // 从镜像取版本（成功则直接给结果）
+    function fetchFromMirror(cfg, cb) {
+        probeMirror(function (p) {
+            if (!p.ok) return cb(new Error('镜像不可用'), null);
+            cb(null, p.data.versionJson, 'mirror');
+        });
+    }
+
     function fetchRemoteVersion(cfg, cb) {
         var stamp = Date.now();
         var raw = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
@@ -234,17 +291,25 @@
     function checkUpdate(cb) {
         var cfg = readCfg();
         if (!cfg || !cfg.repo || !cfg.branch) { cb(new Error('未配置更新源（缺 version.json）')); return; }
-        fetchRemoteVersion(cfg, function (err, remote, src) {
+
+        // 把「拿到远端版本后」的处理收在一块（镜像与直连共用）
+        function done(err, remote, src) {
             if (err) { cb(err); return; }
             try { localStorage.setItem(LAST_CHECK_KEY, String(Date.now())); } catch (e) {}
             cb(null, {
                 local: cfg,
                 remote: remote,
-                src: src || 'api',
+                src: src || 'mirror',
                 hasUpdate: String(remote.version || '') !== String(cfg.version || ''),
                 remoteTime: remote.buildTime || '',
                 notes: remote.notes || ''
             });
+        }
+
+        // 首选自建镜像（国内直连、无限流、无限速），失败才回退直连 GitHub
+        fetchFromMirror(cfg, function (mErr, mVer, mSrc) {
+            if (!mErr && mVer) return done(null, mVer, mSrc);
+            fetchRemoteVersion(cfg, done);
         });
     }
 
