@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.9.1",
+      "date": "2026-09-19",
+      "title": "修复检测更新 403（改走自建镜像）",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修复检测更新报 403：改为优先走自建更新服务器，绕开 GitHub API 额度限制"
+        },
+        {
+          "kind": "impr",
+          "text": "更新包下载改由服务器代理，国内更稳定"
+        }
+      ]
+    },
+    {
       "version": "1.9.0",
       "date": "2026-09-18",
       "title": "导出前体检 + 修复自动检查更新",
