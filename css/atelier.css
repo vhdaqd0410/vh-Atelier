@@ -3005,7 +3005,7 @@
     border-radius:3px;padding:1px 5px;flex:0 0 auto;}
 
 /* ---- 选集弹窗 ---- */
-.pj-mask{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;
+.pj-mask{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.55);z-index:9999;
     display:flex;align-items:center;justify-content:center;}
 .pj-modal{background:#202020;border:1px solid #3d3d3d;border-radius:8px;
     width:min(560px,88vw);max-height:78vh;display:flex;flex-direction:column;
