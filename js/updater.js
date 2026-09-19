@@ -294,9 +294,75 @@
         return '';
     }
 
+    // ---------- 自建更新镜像（首选）----------
+    // 为什么加这个：GitHub 那三条路在国内都不稳——
+    //   raw 常被墙（实测直连 40 秒超时）
+    //   api.github.com 未认证仅 60 次/小时，超了就是 403（用户看到的「检测更新失败 http:403」）
+    //   jsDelivr 因仓库超 50MB 直接拒绝
+    // 自己的服务器在国内可直连 GitHub，由它代取并缓存，插件只连自己的服务器。
+    var MIRROR_BASE = 'http://47.122.108.231:17894';
+    var _mirrorProbe = null;     // 探测结果缓存：{ ok, at, base, plugin }
+
+    function mirrorBase() {
+        // 允许用插件根目录的 license-admin.json / update.json 覆盖地址
+        try {
+            if (typeof ROOT !== 'undefined' && ROOT) {
+                var f = path.join(ROOT, 'update.json');
+                if (fs.existsSync(f)) {
+                    var j = JSON.parse(fs.readFileSync(f, 'utf8'));
+                    if (j && j.mirror) return String(j.mirror).replace(/\/+$/, '');
+                }
+            }
+        } catch (e) {}
+        return MIRROR_BASE;
+    }
+
+    function pluginId() {
+        try {
+            if (typeof ROOT !== 'undefined' && ROOT) {
+                var mp = path.join(ROOT, 'CSXS', 'manifest.xml');
+                if (fs.existsSync(mp)) {
+                    var m = fs.readFileSync(mp, 'utf8').match(/ExtensionBundleId="([^"]+)"/);
+                    if (m) return m[1];
+                }
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    // 探测镜像是否可用（结果缓存 10 分钟，避免每次都问）
+    function probeMirror(cb) {
+        var now = Date.now();
+        if (_mirrorProbe && (now - _mirrorProbe.at) < 600000) return cb(_mirrorProbe);
+        var pid = pluginId();
+        var url = mirrorBase() + '/api/update/version?plugin=' + encodeURIComponent(pid);
+        fetchJsonOnce(url, 6000, function (err, j) {
+            var r = { ok: !err && j && j.ok && j.versionJson, at: now, base: mirrorBase(), plugin: pid, data: j };
+            _mirrorProbe = r;
+            cb(r);
+        });
+    }
+
+    // 从镜像取版本（成功则直接给结果）
+    function fetchFromMirror(cfg, cb) {
+        probeMirror(function (p) {
+            if (!p.ok) return cb(new Error('镜像不可用'), null);
+            cb(null, p.data.versionJson, 'mirror');
+        });
+    }
+
     // 读远端 version.json。三条线路依次尝试，出错信息全部收集起来，
     // 便于把「到底卡在哪」展示给用户，而不是笼统一句"检查失败"。
     function fetchRemoteVersion(cfg, cb) {
+        // 首选自建镜像：直连自己的服务器，不存在 403 / 被墙 / 长时间等待
+        return fetchFromMirror(cfg, function (mErr, mVer, mSrc) {
+            if (!mErr && mVer) return cb(null, mVer, mSrc);
+            // 镜像不可用时，才退回下面直连 GitHub 的线路
+            fetchRemoteVersionDirect(cfg, cb);
+        });
+    }
+
+    function fetchRemoteVersionDirect(cfg, cb) {
         var stamp = Date.now();
         var raw = 'https://raw.githubusercontent.com/' + cfg.repo + '/' + cfg.branch +
                   '/version.json?_=' + stamp;
@@ -304,11 +370,23 @@
                   encodeURIComponent(cfg.branch) + '&_=' + stamp;
 
         // 线路定义：id 用于记忆，fn 执行取数
+        // 顺序很重要：api.github.com 未认证仅 60 次/小时，超了返回 403，
+        // 所以它只能垫底；raw 无限流虽然有时慢，但更适合做首选直连。
         var routes = [
+            {
+                id: 'raw', label: 'raw.githubusercontent.com',
+                fn: function (next) {
+                    fetchJsonOnce(raw, 15000, function (e, j) {
+                        if (e) return next(e);
+                        if (j && j.version) return next(null, j);
+                        next(new Error('返回内容无 version'));
+                    });
+                }
+            },
             {
                 id: 'api', label: 'api.github.com',
                 fn: function (next) {
-                    fetchJsonOnce(api, 8000, function (e, j) {
+                    fetchJsonOnce(api, 6000, function (e, j) {
                         if (e) return next(e);
                         var txt = decodeB64Utf8(j && j.content);
                         if (!txt) return next(new Error('返回内容为空'));
@@ -317,16 +395,6 @@
                             if (jr && jr.version) return next(null, jr);
                             next(new Error('version.json 缺少 version 字段'));
                         } catch (err) { next(new Error('解析失败')); }
-                    });
-                }
-            },
-            {
-                id: 'raw', label: 'raw.githubusercontent.com',
-                fn: function (next) {
-                    fetchJsonOnce(raw, 8000, function (e, j) {
-                        if (e) return next(e);
-                        if (j && j.version) return next(null, j);
-                        next(new Error('返回内容无 version'));
                     });
                 }
             }
@@ -376,6 +444,16 @@
     // codeload 也可能有 CDN 缓存，所以先问一次该分支最新 commit sha，
     // 用 /zip/<sha> 这种不可变地址下载，确保拿到刚发布的代码。
     function resolveZipUrl(cfg, cb) {
+        // 优先自建镜像：由服务器代理 codeload（国内服务器直连 GitHub 约 1 秒）
+        var pid = pluginId();
+        var mirrorZip = mirrorBase() + '/api/update/zip?plugin=' + encodeURIComponent(pid) + '&_=' + Date.now();
+        probeMirror(function (p) {
+            if (p.ok) return cb(mirrorZip);
+            resolveZipUrlDirect(cfg, cb);
+        });
+    }
+
+    function resolveZipUrlDirect(cfg, cb) {
         var plain = 'https://codeload.github.com/' + cfg.repo + '/zip/refs/heads/' + cfg.branch;
         var api = 'https://api.github.com/repos/' + cfg.repo + '/commits/' +
                   encodeURIComponent(cfg.branch) + '?_=' + Date.now();
