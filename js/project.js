@@ -53,7 +53,9 @@
         autoOpenPR: true,       // 创建后自动用 PR 打开工程
         copyTemplate: true,     // 复制模板结构
         copyRoughcut: true,     // 同时把粗剪拉到 02粗剪
-        prVersion: 0            // 默认用哪个 PR 版本打开（0 = 用最新）
+        prVersion: 0,           // 默认用哪个 PR 版本打开（0 = 用最新）
+        scanIntervalMin: 30     // 自动重扫间隔（分钟）；0 = 不自动
+
     };
 
     function readCfg() {
@@ -79,6 +81,53 @@
             fs.writeFileSync(CFG_FILE, JSON.stringify(clean, null, 2), 'utf8');
             return true;
         } catch (e) { return false; }
+    }
+
+    // ---------- 扫描结果缓存（避免每次打开都重扫） ----------
+    // 存 collect/scan_cache.json：{ ts, nasDir, excludeKey, projects:[...] }
+    // nasDir 或排除目录变了 → 缓存失效（视为配置改动，必须重扫）
+    var CACHE_FILE = ROOT ? path.join(ROOT, 'collect', 'scan_cache.json') : '';
+
+    function _excludeKey(cfg) {
+        return (cfg.excludeDirs || []).map(function (x) { return String(x).trim(); })
+            .filter(Boolean).sort().join('|');
+    }
+
+    function readScanCache() {
+        try {
+            if (!CACHE_FILE || !fs.existsSync(CACHE_FILE)) return null;
+            var j = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+            if (!j || !Array.isArray(j.projects)) return null;
+            return j;
+        } catch (e) { return null; }
+    }
+
+    function writeScanCache(cfg, list) {
+        try {
+            var d = path.dirname(CACHE_FILE);
+            if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+            fs.writeFileSync(CACHE_FILE, JSON.stringify({
+                ts: Date.now(),
+                nasDir: cfg.nasDir || '',
+                excludeKey: _excludeKey(cfg),
+                projects: list || []
+            }), 'utf8');
+            return true;
+        } catch (e) { return false; }
+    }
+
+    // 缓存是否可用于当前配置（目录/排除目录未变）
+    function cacheValid(cache, cfg) {
+        if (!cache) return false;
+        if (String(cache.nasDir || '') !== String(cfg.nasDir || '')) return false;
+        if (String(cache.excludeKey || '') !== _excludeKey(cfg)) return false;
+        return true;
+    }
+
+    // 缓存年龄（分钟）
+    function cacheAgeMin(cache) {
+        if (!cache || !cache.ts) return Infinity;
+        return (Date.now() - cache.ts) / 60000;
     }
 
     // ---------- 让出事件循环（关键：保 UI 不卡） ----------
@@ -878,6 +927,27 @@
         return arr;
     }
 
+    // 本地项目排序：key = seq | name | time；默认按名称降序
+    function sortLocalProjects(list, key, desc) {
+        var arr = (list || []).slice();
+        var dir = desc ? -1 : 1;
+        arr.sort(function (a, b) {
+            var r = 0;
+            if (key === 'time') r = (a.mtime || 0) - (b.mtime || 0);
+            else if (key === 'seq') r = (a.seq || 0) - (b.seq || 0);
+            else {
+                // 名称：按项目名（去掉序号前缀后的标题）排序
+                var ta = String(a.title || a.dirName || '');
+                var tb = String(b.title || b.dirName || '');
+                try { r = ta.localeCompare(tb, 'zh-Hans-CN'); }
+                catch (e) { r = ta < tb ? -1 : (ta > tb ? 1 : 0); }
+            }
+            if (r === 0) r = (a.seq || 0) - (b.seq || 0);
+            return r * dir;
+        });
+        return arr;
+    }
+
     // ---------- 对外接口 ----------
     window.__vhProject = {
         readCfg: readCfg,
@@ -888,6 +958,15 @@
         isStructName: isStructName,
         STRUCT_WORDS: STRUCT_WORDS,
         scanProjects: scanProjects,
+        readScanCache: readScanCache,
+        writeScanCache: writeScanCache,
+        cacheValid: cacheValid,
+        cacheAgeMin: cacheAgeMin,
+        clearScanCache: function () {
+            try { if (CACHE_FILE && fs.existsSync(CACHE_FILE)) fs.unlinkSync(CACHE_FILE); return true; }
+            catch (e) { return false; }
+        },
+        scanCacheFile: function () { return CACHE_FILE; },
         inspectProjectAsync: inspectProjectAsync,
         buildSourceIndex: buildSourceIndex,
         copyTreeAsync: copyTreeAsync,
@@ -895,6 +974,7 @@
         createProject: createProject,
         listLocalProjects: listLocalProjects,
         sortProjects: sortProjects,
+        sortLocalProjects: sortLocalProjects,
         listPREXE: listPREXE,
         findPREXE: findPREXE,
         findProjectFile: findProjectFile,

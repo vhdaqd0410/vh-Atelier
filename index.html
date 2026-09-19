@@ -128,9 +128,6 @@
     <div class="tabs ws-subtabs" data-group="script" style="display:none;">
         <button class="tab" data-tab="script">剧本阅读</button>
     </div>
-    <div class="tabs ws-subtabs" data-group="media" style="display:none;">
-        <button class="tab active" data-tab="media">素材浏览</button>
-    </div>
     <div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
         <button class="tab active" data-tab="upscale">去字幕 / 超分</button>
     </div>
@@ -592,6 +589,16 @@
                         <select id="pjPrVersion" style="flex:1;min-width:0;"></select>
                     </div>
                     <div class="pj-row">
+                        <label class="pj-lb">自动重扫间隔</label>
+                        <select id="pjScanInterval" style="flex:1;min-width:0;" title="打开面板时若缓存过期会自动重扫">
+                            <option value="0">不自动（仅手动扫描）</option>
+                            <option value="10">每 10 分钟</option>
+                            <option value="30">每 30 分钟</option>
+                            <option value="60">每 1 小时</option>
+                            <option value="180">每 3 小时</option>
+                        </select>
+                    </div>
+                    <div class="pj-row">
                         <label class="pj-lb">排除目录（、分隔）</label>
                         <input type="text" id="pjExcludeDirs" placeholder="00已完成、0000新人">
                     </div>
@@ -618,6 +625,7 @@
                     <div class="pj-ghead">
                         <span>进行中项目</span>
                         <span id="pjProjCount" class="pj-cnt"></span>
+                        <span id="pjScanHint" class="pj-cnt" style="margin-left:6px;"></span>
                         <button id="pjScan" class="secondary mini" style="margin-left:auto;">开始扫描</button>
                     </div>
                     <div class="pj-toolbar">
@@ -646,6 +654,15 @@
                     <div class="pj-ghead">
                         <span>本地项目</span>
                         <span id="pjLocalInfo" class="pj-cnt"></span>
+                        <select id="pjLocalSort" class="pj-sortsel" title="排序方式" style="margin-left:8px;">
+                            <option value="name">按名称</option>
+                            <option value="seq">按序号</option>
+                            <option value="time">按时间</option>
+                        </select>
+                        <select id="pjLocalSortDir" class="pj-sortsel" title="排序方向">
+                            <option value="desc">降序</option>
+                            <option value="asc">升序</option>
+                        </select>
                         <button id="pjRefreshLocal" class="secondary mini" style="margin-left:auto;">刷新</button>
                     </div>
                     <div id="pjLocalList" class="pj-list pj-list-local"></div>

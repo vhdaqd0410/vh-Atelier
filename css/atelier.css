@@ -2931,7 +2931,8 @@
 /* ==================== 项目面板（NAS 拉素材 + 建本地项目） ==================== */
 .pj-wrap{display:flex;flex-direction:column;height:calc(100vh - 128px);gap:7px;overflow:hidden;}
 .pj-group{background:var(--panel2,#242424);border:1px solid var(--border,#3a3a3a);border-radius:6px;padding:9px 10px;}
-.pj-ghead{display:flex;align-items:center;font-size:12px;font-weight:600;color:#ddd;margin-bottom:7px;}
+.pj-ghead{display:flex;align-items:center;font-size:12px;font-weight:600;color:#ddd;margin-bottom:7px;gap:2px;}
+.pj-ghead .pj-sortsel{font-size:10px;padding:2px 3px;flex:0 0 auto;}
 .pj-cnt{font-size:10px;color:#8a8a8a;margin-left:8px;font-weight:400;}
 .pj-toggle{cursor:pointer;color:#9a9a9a;font-size:11px;width:14px;display:inline-block;user-select:none;}
 .pj-toggle:hover{color:#fff;}

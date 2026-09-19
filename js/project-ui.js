@@ -43,6 +43,10 @@
         el.localInfo = document.getElementById('pjLocalInfo');
         el.btnRefreshLocal = document.getElementById('pjRefreshLocal');
         el.localMore = document.getElementById('pjLocalMore');
+        el.localSort = document.getElementById('pjLocalSort');
+        el.localSortDir = document.getElementById('pjLocalSortDir');
+        el.scanInterval = document.getElementById('pjScanInterval');
+        el.scanHint = document.getElementById('pjScanHint');
         el.progWrap = document.getElementById('pjProgWrap');
         el.progBar = document.getElementById('pjProgBar');
         el.progTxt = document.getElementById('pjProgTxt');
@@ -141,12 +145,15 @@
     }
 
     // 选文件：用 CEP 自带对话框，不启 PowerShell（更快、更稳）
-    function pickFile(inputEl, title, filters, onPicked) {
+    // 注意 CEP 规范：fileTypes 是「扩展名字符串数组」，如 ['prproj']，
+    // 不是 Electron 那种 [{name, extensions}] 对象（传错会导致选不到任何文件）。
+    function pickFile(inputEl, title, exts, onPicked) {
         var res = null;
+        var types = (exts || []).slice();
+        if (!types.length) types = ['*'];
         try {
-            // (是否多选, 是否选目录, 标题, 初始路径, 过滤数组)
             res = window.cep.fs.showOpenDialogEx(
-                false, false, title || '选择文件', inputEl.value || '', filters || []);
+                false, false, title || '选择文件', inputEl.value || '', types, '', '选择');
         } catch (e) {
             log('打开文件选择器失败：' + e.message, 'err');
             return;
@@ -189,6 +196,7 @@
         el.autoOpen.checked = c.autoOpenPR !== false;
         el.copyTpl.checked = c.copyTemplate !== false;
         if (el.copyRough) el.copyRough.checked = c.copyRoughcut !== false;
+        if (el.scanInterval) el.scanInterval.value = String(c.scanIntervalMin == null ? 30 : c.scanIntervalMin);
         fillPrVersions(c.prVersion);
         if (el.cfgSummary) el.cfgSummary.textContent = cfgSummaryText(c);
     }
@@ -221,13 +229,25 @@
         c.autoOpenPR = !!el.autoOpen.checked;
         c.copyTemplate = !!el.copyTpl.checked;
         if (el.copyRough) c.copyRoughcut = !!el.copyRough.checked;
+        if (el.scanInterval) {
+            var _iv = parseInt(el.scanInterval.value, 10);
+            c.scanIntervalMin = isNaN(_iv) ? 30 : Math.max(0, _iv);
+        }
         c.prVersion = parseInt(el.prVersion ? el.prVersion.value : 0, 10) || 0;
         return c;
     }
 
     function saveCfg(quiet) {
+        var before = P.readCfg();
         var c = collectCfg();
         if (!P.writeCfg(c)) { log('配置保存失败（插件目录不可写？）', 'err'); return null; }
+        // NAS 目录或排除目录变了 → 原缓存失效
+        if (before.nasDir !== c.nasDir ||
+            JSON.stringify(before.excludeDirs || []) !== JSON.stringify(c.excludeDirs || [])) {
+            P.clearScanCache();
+            if (!quiet) log('扫描目录已变更，缓存已清除（下次将重新扫描）', '');
+        }
+        if (before.scanIntervalMin !== c.scanIntervalMin) scheduleAutoScan();
         if (el.cfgSummary) el.cfgSummary.textContent = cfgSummaryText(c);
         if (!quiet) {
             log('配置已保存', 'ok');
@@ -249,18 +269,20 @@
     var localShown = LOCAL_PAGE;
 
     // ---------- 扫描 ----------
-    function doScan() {
+    function doScan(silent) {
         var c = saveCfg(true);
         if (!c) return;
         if (!c.nasDir) { log('请先设置「组内 NAS 目录」', 'err'); setCfgCollapsed(false); return; }
         if (!fs.existsSync(c.nasDir)) { log('NAS 目录不存在：' + c.nasDir, 'err'); return; }
 
         busy(true, '扫描中…');
-        el.projList.innerHTML = '<div class="hint">正在扫描…</div>';
-        if (el.projCount) el.projCount.textContent = '';
-        resetSelection();
+        if (!silent) {
+            el.projList.innerHTML = '<div class="hint">正在扫描…</div>';
+            if (el.projCount) el.projCount.textContent = '';
+            resetSelection();
+        }
 
-        log('开始扫描：' + c.nasDir);
+        log((silent ? '（自动）' : '') + '开始扫描：' + c.nasDir);
         var t0 = Date.now();
         var lastUi = 0;
         P.scanProjects({
@@ -284,6 +306,9 @@
             if (err) { hideProg(0); log('扫描失败：' + err.message, 'err'); return; }
             scanned = list || [];
             log('扫描完成：' + scanned.length + ' 个项目（' + ((Date.now() - t0) / 1000).toFixed(1) + 's）', 'ok');
+            // 落缓存：下次打开秒显，配置不变不再重扫
+            if (P.writeScanCache(c, scanned)) log('已缓存扫描结果', '');
+            updateScanHint();
             showProg('扫描完成', 1, 1);
             hideProg(700);
             applyFilter();
@@ -637,6 +662,13 @@
                 list.forEach(function (p, i) { if (p.dir === lastCreated) k = i; });
                 if (k > 0) { var one = list.splice(k, 1)[0]; list.unshift(one); }
             }
+            // 排序（默认名称降序）
+            var lk = el.localSort ? el.localSort.value : 'name';
+            var ld = el.localSortDir ? el.localSortDir.value === 'asc' : false;   // 默认 desc
+            var keepTop = lastCreated && list.length ? list[0].dir === lastCreated : false;
+            var topOne = keepTop ? list.shift() : null;
+            list = P.sortLocalProjects(list, lk, ld);
+            if (topOne) list.unshift(topOne);   // 刚创建的重置最前
             localAll = list;
 
             var act = activeNames();
@@ -813,6 +845,8 @@
         if (el.search) el.search.oninput = applyFilter;
         if (el.sortSel) el.sortSel.onchange = applyFilter;
         if (el.sortDir) el.sortDir.onchange = applyFilter;
+        if (el.localSort) el.localSort.onchange = function () { localShown = LOCAL_PAGE; renderLocalList(); };
+        if (el.localSortDir) el.localSortDir.onchange = function () { localShown = LOCAL_PAGE; renderLocalList(); };
         if (el.btnLogMax) el.btnLogMax.onclick = toggleLogMax;
         if (el.cfgToggle) {
             el.cfgToggle.onclick = function () {
@@ -827,13 +861,12 @@
                 var b = document.getElementById(m[0]);
                 if (b) b.onclick = function () { pickFolder(m[1], function () { saveCfg(true); }); };
             });
-        // PR 模板：选文件（.prproj）
+        // PR 模板：选文件（.prproj）——exts 要传扩展名字符串数组
         var bp = document.getElementById('pjBrowsePr');
         if (bp) {
             bp.onclick = function () {
-                pickFile(el.prTemplate, '选择 PR 模板工程（.prproj）',
-                    [{ name: 'PR 工程', extensions: ['prproj'] }, { name: '所有文件', extensions: ['*'] }],
-                    function () { saveCfg(true); log('已选择 PR 模板工程', 'ok'); });
+                pickFile(el.prTemplate, '选择 PR 模板工程（.prproj）', ['prproj'],
+                    function (p) { saveCfg(true); log('已选择 PR 模板工程：' + p, 'ok'); });
             };
         }
 
@@ -847,11 +880,75 @@
         setCfgCollapsed(saved !== '0');
     }
 
+    // 自动重扫定时器
+    var autoScanTimer = null;
+
+    function scheduleAutoScan() {
+        if (autoScanTimer) { clearInterval(autoScanTimer); autoScanTimer = null; }
+        var c = P.readCfg();
+        var min = parseInt(c.scanIntervalMin, 10);
+        if (!min || min <= 0) { updateScanHint(); return; }
+        autoScanTimer = setInterval(function () {
+            // 只在面板可见时自动扫，避免后台白耗
+            var panel = document.getElementById('panel-project');
+            if (panel && panel.style.display === 'none') return;
+            doScan(true);
+        }, min * 60000);
+        updateScanHint();
+    }
+
+    function updateScanHint() {
+        if (!el.scanHint) return;
+        var c = P.readCfg();
+        var min = parseInt(c.scanIntervalMin, 10) || 0;
+        var cache = P.readScanCache();
+        var age = P.cacheAgeMin(cache);
+        var parts = [];
+        if (cache && P.cacheValid(cache, c)) {
+            parts.push('缓存：' + (age < 1 ? '刚刚' : Math.round(age) + ' 分钟前'));
+        } else {
+            parts.push('无可用缓存');
+        }
+        if (min > 0) parts.push('每 ' + min + ' 分钟自动重扫');
+        else parts.push('仅手动扫描');
+        el.scanHint.textContent = parts.join(' · ');
+    }
+
+    // 面板显示：先铺缓存（若有效），再按需扫描
     window.__projectOnShow = function () {
         if (!el.nasDir) pick();
         fillPrVersions(P.readCfg().prVersion);
         renderLocalList();
+        scheduleAutoScan();
+        loadFromCacheOrScan();
     };
+
+    // 用缓存铺屏；配置变了或缓存太旧则自动扫一次
+    function loadFromCacheOrScan() {
+        var c = P.readCfg();
+        if (!c.nasDir) { updateScanHint(); return; }
+        var cache = P.readScanCache();
+        if (cache && P.cacheValid(cache, c)) {
+            scanned = cache.projects || [];
+            view = scanned.slice();
+            applyFilter();
+            resetSelection();
+            updateScanHint();
+            log('已载入扫描缓存（' + scanned.length + ' 个项目，' +
+                Math.round(P.cacheAgeMin(cache)) + ' 分钟前）', 'ok');
+            // 缓存过期（超过自动重扫间隔，或超过 60 分钟）→ 后台静默重扫
+            var min = parseInt(c.scanIntervalMin, 10) || 0;
+            var limit = min > 0 ? min : 60;
+            if (P.cacheAgeMin(cache) > limit) {
+                log('缓存已过期，后台重新扫描…');
+                doScan(true);
+            }
+            return;
+        }
+        // 没有可用缓存：首次自动扫一次（不再让用户手动点）
+        updateScanHint();
+        if (!scanned.length) doScan(true);
+    }
 
     document.addEventListener('keydown', function (ev) {
         if (ev.key !== 'Escape') return;
