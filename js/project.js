@@ -84,26 +84,65 @@
         return new Promise(function (r) { setTimeout(r, 0); });
     }
 
-    // ---------- 集号识别（照搬工作台规则） ----------
+    // ---------- 集号识别 ----------
+    // 真实 NAS 命名（2026-09 实测 O:\AI漫剧剪辑一组 11 个项目）有两类
+    // 「数字_中文」，形式完全一样，只能靠后缀区分：
+    //   集号    ：07_范堉淼  /  16_杜昊天  /  1-徐祥伟
+    //   结构目录：01_抽卡素材 / 01_人物 / 02_粗剪 / 04_项目完成保存
+    // 所以结构词表必须够全，否则会把结构目录当集号、或把集号当结构目录。
+    var STRUCT_WORDS = [
+        // 素材/筹备
+        '抽卡素材', '抽卡', '单补镜头', '单补', '视频素材', '配音素材', '素材',
+        '前期筹备', '制作明细', '资产表', '资产包', '项目资产', '资产', '溶图',
+        // 剪辑/交付
+        '工程成片', '成片交付', '成片', '交付', '交片', '多版本交片',
+        '粗剪', '精剪', '定剪', '修改', '剪辑',
+        '项目完成保存', '工程打包',
+        // 文本/参考
+        '备注', '评论', '分镜', '剧本', '脚本', '参考', '模板',
+        '最终版剧本', '海报',
+        // 音频
+        '音频', '音乐', '音效',
+        // 版本/字幕/其他
+        '无音乐无字幕', '有音乐无字幕', '字幕',
+        '人名条', '预告片', '集数', '导出', '原片',
+        // 资产子类
+        '人物', '场景', '道具',
+        // 审核
+        '审核', '最终'
+    ];
+
+    function isStructName(name) {
+        if (!name) return false;
+        for (var i = 0; i < STRUCT_WORDS.length; i++) {
+            if (String(name).indexOf(STRUCT_WORDS[i]) >= 0) return true;
+        }
+        return false;
+    }
+
     function extractEpisode(name) {
         if (!name) return null;
+        var s = String(name);
         // 1) 「第N集」最明确
-        var m = String(name).match(/第\s*(\d{1,3})\s*集/);
+        var m = s.match(/第\s*(\d{1,3})\s*集/);
         if (m) return parseInt(m[1], 10);
-        // 2) 数字+下划线 → 结构目录序号，不是集号
-        if (/^\d{1,3}_/.test(name)) return null;
-        // 3) 「N-中文」或「N 中文」
-        m = String(name).match(/^(\d{1,3})\s*[- 　]\s*([\u4e00-\u9fff])/);
-        if (m) return parseInt(m[1], 10);
+        // 2) 「N_中文」：集号（07_范堉淼）还是结构目录（01_抽卡素材）靠后缀判断
+        m = s.match(/^(\d{1,3})_([\u4e00-\u9fff].*)$/);
+        if (m) return isStructName(m[2]) ? null : parseInt(m[1], 10);
+        // 3) 「N-中文」/「N 中文」
+        m = s.match(/^(\d{1,3})\s*[-　 ]\s*([\u4e00-\u9fff].*)$/);
+        if (m) return isStructName(m[2]) ? null : parseInt(m[1], 10);
+        // 4) 其余带下划线的数字前缀（01_abc）一律当结构目录
+        if (/^\d{1,3}_/.test(s)) return null;
         return null;
     }
 
-    // 从「第3集 张三」里取出「张三」（没有就返回空）
+    // 从「第3集 张三」/「07_范堉淼」里取出名字（没有就返回空）
     function extractEditorFromDir(name) {
         var s = String(name || '');
-        s = s.replace(/第\s*\d{1,3}\s*集/g, '');
-        s = s.replace(/^\d{1,3}\s*[- 　]/, '');
-        s = s.replace(/^-\s*/, '');
+        s = s.replace(/^第\s*\d{1,3}\s*集/, '');
+        s = s.replace(/^\d{1,3}\s*[-_　 ]\s*/, '');
+        s = s.replace(/^[-_\s]+/, '');
         return s.trim().replace(/^-+|-+$/g, '').trim();
     }
 
@@ -653,6 +692,8 @@
         DEFAULT_CFG: DEFAULT_CFG,
         extractEpisode: extractEpisode,
         extractEditorFromDir: extractEditorFromDir,
+        isStructName: isStructName,
+        STRUCT_WORDS: STRUCT_WORDS,
         scanProjects: scanProjects,
         inspectProjectAsync: inspectProjectAsync,
         buildSourceIndex: buildSourceIndex,
