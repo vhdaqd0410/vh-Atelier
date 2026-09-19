@@ -1,7 +1,7 @@
 // vh-Atelier A · 项目面板 UI
 // ==========================================================================
 // 依赖 js/project.js（window.__vhProject）
-// 结构：路径配置 → 项目列表（搜索/排序/选集弹窗）→ 运行进度 → 本地项目
+// 布局：配置（可折叠）→ [进行中项目 | 本地项目] 左右并排 → 日志（可最大化）
 (function () {
     if (!window.__vhProject) return;
     if (!document.getElementById('panel-project')) return;
@@ -20,10 +20,14 @@
         el.templateDir = document.getElementById('pjTemplateDir');
         el.prTemplate = document.getElementById('pjPrTemplate');
         el.excludeDirs = document.getElementById('pjExcludeDirs');
+        el.prVersion = document.getElementById('pjPrVersion');
         el.autoOpen = document.getElementById('pjAutoOpen');
         el.copyTpl = document.getElementById('pjCopyTpl');
         el.copyRough = document.getElementById('pjCopyRough');
         el.btnSaveCfg = document.getElementById('pjSaveCfg');
+        el.cfgBody = document.getElementById('pjCfgBody');
+        el.cfgToggle = document.getElementById('pjCfgToggle');
+        el.cfgSummary = document.getElementById('pjCfgSummary');
         el.btnScan = document.getElementById('pjScan');
         el.search = document.getElementById('pjSearch');
         el.sortSel = document.getElementById('pjSort');
@@ -33,9 +37,12 @@
         el.btnCreate = document.getElementById('pjCreate');
         el.selInfo = document.getElementById('pjSelInfo');
         el.log = document.getElementById('pjLog');
+        el.logWrap = document.getElementById('pjLogWrap');
+        el.btnLogMax = document.getElementById('pjLogMax');
         el.localList = document.getElementById('pjLocalList');
         el.localInfo = document.getElementById('pjLocalInfo');
         el.btnRefreshLocal = document.getElementById('pjRefreshLocal');
+        el.localMore = document.getElementById('pjLocalMore');
         el.progWrap = document.getElementById('pjProgWrap');
         el.progBar = document.getElementById('pjProgBar');
         el.progTxt = document.getElementById('pjProgTxt');
@@ -86,9 +93,8 @@
         }
     }
 
-    // ---------- 选文件夹 ----------
-    // 注意：folderpicker.ps1 写出的是「纯文本路径」（不是 JSON），
-    // 这里必须按文本读，media.js 也是这么做的。
+    // ---------- 选文件夹 / 选文件 ----------
+    // 文件夹：folderpicker.ps1（输出为纯文本路径，不是 JSON）
     function pickFolder(inputEl, onPicked) {
         var extRoot = '';
         try { if (csInterface) extRoot = csInterface.getSystemPath('extension'); } catch (e) {}
@@ -119,13 +125,10 @@
             var picked = '';
             try {
                 if (fs.existsSync(outFile)) {
-                    // 纯文本路径
                     picked = fs.readFileSync(outFile, 'utf8').replace(/^\uFEFF/, '').trim();
                 }
             } catch (e) {}
-            if (err && !picked) {
-                log('文件夹选择器执行失败：' + (err.message || err), 'err');
-            }
+            if (err && !picked) log('文件夹选择器执行失败：' + (err.message || err), 'err');
             try { fs.unlinkSync(inFile); } catch (e) {}
             try { fs.unlinkSync(outFile); } catch (e) {}
             if (picked) {
@@ -137,7 +140,45 @@
         });
     }
 
-    // ---------- 配置 ----------
+    // 选文件：用 CEP 自带对话框，不启 PowerShell（更快、更稳）
+    function pickFile(inputEl, title, filters, onPicked) {
+        var res = null;
+        try {
+            // (是否多选, 是否选目录, 标题, 初始路径, 过滤数组)
+            res = window.cep.fs.showOpenDialogEx(
+                false, false, title || '选择文件', inputEl.value || '', filters || []);
+        } catch (e) {
+            log('打开文件选择器失败：' + e.message, 'err');
+            return;
+        }
+        if (!res || (res.err && res.err !== 0)) {
+            if (res && res.err && res.err !== 0) log('文件选择器返回错误码 ' + res.err, 'err');
+            return;
+        }
+        var p = res.data && res.data.length ? res.data[0] : '';
+        if (p) {
+            inputEl.value = p;
+            if (onPicked) onPicked(p);
+        }
+    }
+
+    // ---------- 配置折叠 ----------
+    function cfgSummaryText(c) {
+        var bits = [];
+        if (c.nasDir) bits.push('NAS: ' + c.nasDir);
+        else bits.push('未设 NAS 目录');
+        if (c.localRoot) bits.push('本地: ' + c.localRoot);
+        return bits.join('　·　');
+    }
+
+    function setCfgCollapsed(collapsed) {
+        if (!el.cfgBody) return;
+        el.cfgBody.style.display = collapsed ? 'none' : '';
+        if (el.cfgToggle) el.cfgToggle.textContent = collapsed ? '▸' : '▾';
+        if (el.cfgSummary) el.cfgSummary.style.display = collapsed ? '' : 'none';
+        try { localStorage.setItem('vh_pj_cfg_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+    }
+
     function fillCfg() {
         var c = P.readCfg();
         el.nasDir.value = c.nasDir || '';
@@ -148,6 +189,25 @@
         el.autoOpen.checked = c.autoOpenPR !== false;
         el.copyTpl.checked = c.copyTemplate !== false;
         if (el.copyRough) el.copyRough.checked = c.copyRoughcut !== false;
+        fillPrVersions(c.prVersion);
+        if (el.cfgSummary) el.cfgSummary.textContent = cfgSummaryText(c);
+    }
+
+    // 填充 PR 版本下拉（扫描本机装了几个版本）
+    function fillPrVersions(curSel) {
+        if (!el.prVersion) return;
+        var all = [];
+        try { all = P.listPREXE() || []; } catch (e) {}
+        var html = '<option value="0">自动（最新版）</option>';
+        all.forEach(function (v) {
+            html += '<option value="' + v.version + '">Premiere Pro ' + v.version + '</option>';
+        });
+        el.prVersion.innerHTML = html;
+        el.prVersion.value = String(curSel || 0);
+        if (all.length && el.prVersion.title !== undefined) {
+            el.prVersion.title = '检测到 ' + all.length + ' 个版本：' +
+                all.map(function (x) { return x.version; }).join(' / ');
+        }
     }
 
     function collectCfg() {
@@ -161,35 +221,44 @@
         c.autoOpenPR = !!el.autoOpen.checked;
         c.copyTemplate = !!el.copyTpl.checked;
         if (el.copyRough) c.copyRoughcut = !!el.copyRough.checked;
+        c.prVersion = parseInt(el.prVersion ? el.prVersion.value : 0, 10) || 0;
         return c;
     }
 
     function saveCfg(quiet) {
         var c = collectCfg();
         if (!P.writeCfg(c)) { log('配置保存失败（插件目录不可写？）', 'err'); return null; }
-        if (!quiet) log('配置已保存', 'ok');
+        if (el.cfgSummary) el.cfgSummary.textContent = cfgSummaryText(c);
+        if (!quiet) {
+            log('配置已保存', 'ok');
+            // 保存后自动折叠，把空间让给列表
+            setCfgCollapsed(true);
+        }
         return c;
     }
 
     // ---------- 状态 ----------
     var scanned = [];        // 扫描到的全部项目
     var view = [];           // 搜索/排序后的视图
-    var curProject = null;   // 当前展开的项目
+    var curProject = null;   // 当前选中的 NAS 项目
     var selEps = [];         // 当前勾选的集数
-    var epModal = null;      // 选集弹窗节点
+    var epModal = null;
+    var lastCreated = '';
+    var localAll = [];       // 本地项目全量
+    var LOCAL_PAGE = 6;      // 本地项目首屏条数
+    var localShown = LOCAL_PAGE;
 
     // ---------- 扫描 ----------
     function doScan() {
         var c = saveCfg(true);
         if (!c) return;
-        if (!c.nasDir) { log('请先设置「组内 NAS 目录」', 'err'); return; }
+        if (!c.nasDir) { log('请先设置「组内 NAS 目录」', 'err'); setCfgCollapsed(false); return; }
         if (!fs.existsSync(c.nasDir)) { log('NAS 目录不存在：' + c.nasDir, 'err'); return; }
 
         busy(true, '扫描中…');
         el.projList.innerHTML = '<div class="hint">正在扫描…</div>';
         if (el.projCount) el.projCount.textContent = '';
-        curProject = null; selEps = [];
-        renderSelInfo();
+        resetSelection();
 
         log('开始扫描：' + c.nasDir);
         var t0 = Date.now();
@@ -197,7 +266,6 @@
         P.scanProjects({
             onProgress: function (done, total, name) {
                 showProg('扫描项目', done, total);
-                // 每 120ms 才刷一次文字，避免刷屏
                 var now = Date.now();
                 if (now - lastUi > 120) {
                     lastUi = now;
@@ -206,7 +274,9 @@
                 }
             },
             onSub: function (sub) {
-                if (el.progTxt) el.progTxt.textContent = el.progTxt.textContent.replace(/\s+·\s+.*$/, '') + '  · ' + sub;
+                if (el.progTxt) {
+                    el.progTxt.textContent = el.progTxt.textContent.replace(/\s+·\s+.*$/, '') + '  · ' + sub;
+                }
             }
         }, function (err, list) {
             busy(false);
@@ -217,6 +287,7 @@
             showProg('扫描完成', 1, 1);
             hideProg(700);
             applyFilter();
+            renderLocalList();     // 左右并排，扫描后一起刷新
         });
     }
 
@@ -254,48 +325,59 @@
             if (el.projCount) el.projCount.textContent = '0 / ' + scanned.length;
             return;
         }
-        if (el.projCount) el.projCount.textContent = view.length + ' / ' + scanned.length + ' 个项目';
+        if (el.projCount) el.projCount.textContent = view.length + ' / ' + scanned.length;
 
         var html = '';
         view.forEach(function (p) {
             var isCur = curProject && curProject.dir === p.dir;
-            html += '<div class="pj-item' + (isCur ? ' on' : '') + '" data-i="' + scanned.indexOf(p) + '">' +
+            var i = scanned.indexOf(p);
+            html += '<div class="pj-item' + (isCur ? ' on' : '') + '" data-i="' + i + '">' +
                 '<div class="pj-item-main">' +
                   '<div class="pj-item-name" title="' + escHtml(p.name) + '">' + escHtml(p.name) + '</div>' +
                   '<div class="pj-item-meta">' + epBadge(p) +
                     (p.hasScript ? '<span class="pj-tag script">有剧本</span>' : '') +
                   '</div>' +
                 '</div>' +
-                '<button class="pj-mini pj-pick" data-i="' + scanned.indexOf(p) + '">选集 ▸</button>' +
+                '<button class="pj-mini pj-pick" data-i="' + i + '">选集 ▸</button>' +
               '</div>';
         });
         el.projList.innerHTML = html;
 
         el.projList.querySelectorAll('.pj-item').forEach(function (node) {
             node.onclick = function (ev) {
-                // 点按钮不触发整行
-                if (ev.target && ev.target.getAttribute && ev.target.getAttribute('data-i') !== null &&
-                    ev.target.classList && ev.target.classList.contains('pj-pick')) return;
-                var i = parseInt(node.getAttribute('data-i'), 10);
-                openEpModal(scanned[i]);
+                var tgt = ev.target;
+                if (tgt && tgt.classList && tgt.classList.contains('pj-pick')) return;
+                openEpModal(scanned[parseInt(node.getAttribute('data-i'), 10)]);
             };
         });
         el.projList.querySelectorAll('.pj-pick').forEach(function (b) {
             b.onclick = function (ev) {
                 if (ev && ev.stopPropagation) ev.stopPropagation();
-                var i = parseInt(b.getAttribute('data-i'), 10);
-                openEpModal(scanned[i]);
+                openEpModal(scanned[parseInt(b.getAttribute('data-i'), 10)]);
             };
         });
     }
 
-    // ---------- 选集弹窗 ----------
+    // ---------- 选中状态 ----------
+    function resetSelection() {
+        curProject = null;
+        selEps = [];
+        renderSelInfo();
+        renderProjList();
+    }
+
     function renderSelInfo() {
         if (!el.selInfo) return;
-        if (!curProject) { el.selInfo.textContent = '未选择项目'; el.btnCreate.disabled = true; return; }
+        if (!curProject) {
+            el.selInfo.textContent = '未选择项目 · 点项目的「选集 ▸」开始';
+            el.btnCreate.disabled = true;
+            el.btnCreate.textContent = '创建本地项目';
+            return;
+        }
         if (!selEps.length) {
             el.selInfo.innerHTML = '<b>' + escHtml(curProject.name) + '</b> · 未选集';
             el.btnCreate.disabled = true;
+            el.btnCreate.textContent = '创建本地项目';
             return;
         }
         var eps = selEps.slice().sort(function (a, b) { return a - b; });
@@ -306,19 +388,27 @@
         el.btnCreate.textContent = '创建本地项目（' + eps.length + ' 集）';
     }
 
+    // ---------- 选集弹窗 ----------
     function openEpModal(proj) {
         if (!proj) return;
-        curProject = proj;
         var eps = (proj.episodes || []).slice();
-        // 默认全选
-        selEps = eps.slice();
-        renderProjList();
-        renderSelInfo();
-
         if (!eps.length) {
             log('「' + proj.name + '」未识别到集数（检查素材目录结构）', 'err');
             return;
         }
+        curProject = proj;
+        // 第一次看这个项目 → 默认全选；再看同一项目 → 保留上次勾选
+        var isSame = (window.__pjLastProj === proj.dir);
+        window.__pjLastProj = proj.dir;
+        if (!isSame) {
+            selEps = eps.slice();
+        } else {
+            selEps = selEps.filter(function (n) { return eps.indexOf(n) >= 0; });
+            if (!selEps.length) selEps = eps.slice();
+        }
+
+        renderProjList();
+        renderSelInfo();
         closeEpModal();
 
         var mx = eps[eps.length - 1];
@@ -332,8 +422,7 @@
             '<span>批量选：</span>第<input type="number" id="pjMdFrom" min="' + mn + '" max="' + mx + '" value="' + mn + '" style="width:56px;">' +
             '<span>集 到 第</span><input type="number" id="pjMdTo" min="' + mn + '" max="' + mx + '" value="' + mx + '" style="width:56px;">' +
             '<span>集</span>' +
-            '<button class="secondary mini" id="pjMdRangeOn">选中该范围</button>' +
-            '<button class="secondary mini" id="pjMdRangeOff">取消该范围</button>' +
+            '<button class="secondary mini" id="pjMdRangeOn">只选该范围</button>' +
             '<span style="margin-left:auto;display:flex;gap:4px;">' +
               '<button class="secondary mini" id="pjMdAll">全选</button>' +
               '<button class="secondary mini" id="pjMdNone">全不选</button>' +
@@ -359,6 +448,11 @@
         epModal = mask;
 
         var mdBody = document.getElementById('pjMdBody');
+
+        function cnt() {
+            var c = document.getElementById('pjMdCount');
+            if (c) c.textContent = '已选 ' + selEps.length + ' / ' + eps.length + ' 集';
+        }
         function renderEps() {
             var html = '';
             eps.forEach(function (n) {
@@ -372,22 +466,16 @@
                     var i = selEps.indexOf(n);
                     if (cb.checked && i < 0) selEps.push(n);
                     else if (!cb.checked && i >= 0) selEps.splice(i, 1);
-                    updCount();
+                    cnt();
                 };
             });
-            updCount();
-            function updCount() {
-                var c = document.getElementById('pjMdCount');
-                if (c) c.textContent = '已选 ' + selEps.length + ' / ' + eps.length + ' 集';
-            }
+            cnt();
         }
         function syncBoxes() {
             mdBody.querySelectorAll('.pj-epcb').forEach(function (cb) {
-                var n = parseInt(cb.value, 10);
-                cb.checked = selEps.indexOf(n) >= 0;
+                cb.checked = selEps.indexOf(parseInt(cb.value, 10)) >= 0;
             });
-            var c = document.getElementById('pjMdCount');
-            if (c) c.textContent = '已选 ' + selEps.length + ' / ' + eps.length + ' 集';
+            cnt();
         }
         function inRange(n, a, b) {
             var lo = Math.min(a, b), hi = Math.max(a, b);
@@ -405,10 +493,13 @@
 
         document.getElementById('pjMdX').onclick = closeEpModal;
         mask.onclick = function (ev) { if (ev.target === mask) closeEpModal(); };
+
+        // 「确定」→ 关弹窗 + 弹确认框（是否创建）
         document.getElementById('pjMdOk').onclick = function () {
             closeEpModal();
             renderSelInfo();
-            log('已选「' + curProject.name + '」' + selEps.length + ' 集');
+            if (!selEps.length) { log('没有勾选任何集数', 'err'); return; }
+            confirmCreate();
         };
         document.getElementById('pjMdAll').onclick = function () { selEps = eps.slice(); syncBoxes(); };
         document.getElementById('pjMdNone').onclick = function () { selEps = []; syncBoxes(); };
@@ -418,16 +509,10 @@
             selEps = inv;
             syncBoxes();
         };
+        // 「只选该范围」= 清掉范围外 + 选中范围内（而不是叠加）
         document.getElementById('pjMdRangeOn').onclick = function () {
             var r = readRange();
-            eps.forEach(function (n) {
-                if (inRange(n, r[0], r[1]) && selEps.indexOf(n) < 0) selEps.push(n);
-            });
-            syncBoxes();
-        };
-        document.getElementById('pjMdRangeOff').onclick = function () {
-            var r = readRange();
-            selEps = selEps.filter(function (n) { return !inRange(n, r[0], r[1]); });
+            selEps = eps.filter(function (n) { return inRange(n, r[0], r[1]); });
             syncBoxes();
         };
     }
@@ -437,23 +522,75 @@
         epModal = null;
     }
 
-    // ---------- 创建 ----------
-    var lastCreated = '';   // 刚创建的项目目录（用于标「新」）
+    // ---------- 创建确认弹窗 ----------
+    function confirmCreate() {
+        if (!curProject || !selEps.length) return;
+        var eps = selEps.slice().sort(function (a, b) { return a - b; });
+        var txt = eps.length > 30 ? (eps.slice(0, 30).join('、') + ' …（共 ' + eps.length + ' 集）')
+                                  : eps.join('、');
 
+        var mask = document.createElement('div');
+        mask.className = 'pj-mask';
+        mask.id = 'pjConfirmMask';
+        var box = document.createElement('div');
+        box.className = 'pj-modal pj-confirm';
+        box.innerHTML =
+            '<div class="pj-md-head">' +
+              '<span class="pj-md-title">确认创建本地项目</span>' +
+              '<button class="pj-md-x" id="pjCfX">✕</button>' +
+            '</div>' +
+            '<div class="pj-cf-body">' +
+              '<div class="pj-cf-row"><span class="pj-cf-k">项目</span>' +
+                '<span class="pj-cf-v">' + escHtml(curProject.name) + '</span></div>' +
+              '<div class="pj-cf-row"><span class="pj-cf-k">集数</span>' +
+                '<span class="pj-cf-v"><b>' + eps.length + '</b> 集（' + escHtml(txt) + '）</span></div>' +
+              '<div class="pj-cf-row"><span class="pj-cf-k">本地目录</span>' +
+                '<span class="pj-cf-v">' + escHtml((P.readCfg().localRoot) || '(未设置)') + '</span></div>' +
+              '<div class="pj-cf-row"><span class="pj-cf-k">PR 版本</span>' +
+                '<span class="pj-cf-v">' + escHtml(prVersionLabel()) + '</span></div>' +
+            '</div>' +
+            '<div class="pj-md-foot">' +
+              '<button class="secondary mini" id="pjCfNo">返回修改</button>' +
+              '<button class="primary mini" id="pjCfYes" style="margin-left:auto;">开始创建</button>' +
+            '</div>';
+
+        var host = document.getElementById('panel-project') || document.body;
+        mask.appendChild(box);
+        host.appendChild(mask);
+
+        function close() { if (mask.parentNode) mask.parentNode.removeChild(mask); }
+        document.getElementById('pjCfX').onclick = close;
+        document.getElementById('pjCfNo').onclick = close;
+        mask.onclick = function (ev) { if (ev.target === mask) close(); };
+        document.getElementById('pjCfYes').onclick = function () { close(); doCreate(); };
+    }
+
+    function prVersionLabel() {
+        var c = P.readCfg();
+        var v = parseInt(c.prVersion || 0, 10);
+        if (v) return 'Premiere Pro ' + v;
+        var all = [];
+        try { all = P.listPREXE() || []; } catch (e) {}
+        return all.length ? ('自动（最新：' + all[0].version + '）') : '未检测到';
+    }
+
+    // ---------- 创建 ----------
     function doCreate() {
         if (!curProject) return;
         var c = saveCfg(true);
-        if (!selEps.length) { log('请先选集（点项目的「选集 ▸」或「创建」按钮）', 'err'); return; }
-        if (!c.localRoot) { log('请先设置「本地项目根目录」', 'err'); return; }
+        if (!selEps.length) { log('请先选集', 'err'); return; }
+        if (!c.localRoot) { log('请先设置「本地项目根目录」', 'err'); setCfgCollapsed(false); return; }
         if (!fs.existsSync(c.localRoot)) { log('本地项目根目录不存在：' + c.localRoot, 'err'); return; }
 
+        var epsSnapshot = selEps.slice();
         el.btnCreate.disabled = true;
         el.btnCreate.textContent = '创建中…';
-        log('──────── 开始创建：' + curProject.name + '（' + selEps.slice().sort(function (a, b) { return a - b; }).join(',') + ' 集）────────');
+        log('──────── 开始创建：' + curProject.name + '（' +
+            epsSnapshot.sort(function (a, b) { return a - b; }).join(',') + ' 集）────────');
 
         P.createProject({
             project: curProject,
-            episodes: selEps,
+            episodes: epsSnapshot,
             onProgress: function (stage, done, total, detail) {
                 showProg(stage, done, total);
                 if (el.progTxt) el.progTxt.textContent = stage + (detail ? '  ' + detail : '') +
@@ -464,79 +601,174 @@
                 }
             }
         }, function (err, res) {
-            el.btnCreate.disabled = false;
-            if (err) { renderSelInfo(); hideProg(0); log('创建失败：' + err.message, 'err'); return; }
+            if (err) {
+                el.btnCreate.disabled = false;
+                renderSelInfo();
+                hideProg(0);
+                log('创建失败：' + err.message, 'err');
+                return;
+            }
             log('项目目录：' + res.projDir, 'ok');
             (res.steps || []).forEach(function (s) { log('  · ' + s); });
             if (res.prOpened) log('已用 Premiere Pro 打开工程', 'ok');
             log('──────── 创建完成 ────────', 'ok');
             showProg('创建完成', 1, 1);
             hideProg(900);
-            // 自动刷新本地列表 + 标「新」
             lastCreated = res.projDir;
+            // 建完就重置选择，按钮恢复初始文案
+            resetSelection();
+            localShown = LOCAL_PAGE;
             renderLocalList();
-            renderSelInfo();
         });
     }
     var lastStage = '';
 
-    // ---------- 本地项目列表 ----------
+    // ---------- 本地项目列表（折叠 + 加载更多） ----------
+    // 只默认展开「与扫描到的进行中项目对应」的那些，其余折叠
+    function activeNames() {
+        return scanned.map(function (p) { return String(p.name); });
+    }
+
     function renderLocalList() {
         P.listLocalProjects(function (err, list) {
             if (err) { el.localList.innerHTML = '<div class="hint">' + escHtml(err.message) + '</div>'; return; }
-            el.localInfo.textContent = list.length ? ('共 ' + list.length + ' 个项目') : '还没有本地项目';
-            if (!list.length) {
-                el.localList.innerHTML = '<div class="hint">还没有本地项目。上面选个 NAS 项目创建吧。</div>';
-                return;
-            }
-            // 刚创建的排最前（按 seq 已倒序，这里再把 lastCreated 提到首位）
             if (lastCreated) {
                 var k = -1;
                 list.forEach(function (p, i) { if (p.dir === lastCreated) k = i; });
                 if (k > 0) { var one = list.splice(k, 1)[0]; list.unshift(one); }
             }
+            localAll = list;
+
+            var act = activeNames();
+            function isActive(p) {
+                var t = String(p.title || '');
+                for (var i = 0; i < act.length; i++) {
+                    if (t === act[i] || t.indexOf(act[i]) >= 0 || act[i].indexOf(t) >= 0) return true;
+                }
+                return false;
+            }
+
+            var activeList = list.filter(isActive);
+            var otherList = list.filter(function (p) { return !isActive(p); });
+
+            if (!list.length) {
+                el.localInfo.textContent = '';
+                el.localList.innerHTML = '<div class="hint">还没有本地项目。左边选个 NAS 项目创建吧。</div>';
+                if (el.localMore) el.localMore.style.display = 'none';
+                return;
+            }
+
             var html = '';
-            list.forEach(function (p) {
-                var isNew = lastCreated && p.dir === lastCreated;
-                html += '<div class="pj-card' + (isNew ? ' is-new' : '') + '" data-dir="' + escHtml(p.dir) + '" data-title="' + escHtml(p.title) + '">' +
-                    '<div class="pj-card-main">' +
-                      '<div class="pj-card-name">' + escHtml(p.dirName) +
-                        (isNew ? '<span class="pj-new">NEW</span>' : '') + '</div>' +
-                      '<div class="pj-card-sub">' + escHtml(p.dir) + '</div>' +
-                    '</div>' +
-                    '<div class="pj-card-acts">' +
-                      '<button class="pj-mini" data-act="script">📖 剧本</button>' +
-                      '<button class="pj-mini" data-act="import">📥 素材</button>' +
-                      '<button class="pj-mini" data-act="open">📂 打开</button>' +
-                    '</div>' +
-                  '</div>';
-            });
+
+            // A. 进行中（默认展开）
+            html += '<div class="pj-lgroup"><div class="pj-lgroup-h">进行中' +
+                '<span class="pj-lgroup-n">' + activeList.length + '</span></div>';
+            if (!activeList.length) {
+                html += '<div class="hint" style="padding:4px 2px;">' +
+                    (scanned.length ? '没有与进行中项目对应的本地项目' : '先扫描左边的项目') + '</div>';
+            } else {
+                activeList.forEach(function (p) { html += cardHtml(p, true); });
+            }
+            html += '</div>';
+
+            // B. 其他（默认折叠）
+            if (otherList.length) {
+                var collapsed = localStorage.getItem('vh_pj_local_collapsed') !== '0';
+                var shown = collapsed ? 0 : localShown;
+                html += '<div class="pj-lgroup"><div class="pj-lgroup-h" id="pjLocalTog" style="cursor:pointer;">' +
+                    '其他（已完成）' +
+                    '<span class="pj-lgroup-n">' + otherList.length + '</span>' +
+                    '<span style="margin-left:auto;font-size:10px;color:#8a8a8a;">' +
+                    (collapsed ? '▸ 展开' : '▾ 收起') + '</span></div>';
+                if (!collapsed) {
+                    otherList.slice(0, shown).forEach(function (p) { html += cardHtml(p, false); });
+                    if (otherList.length > shown) {
+                        html += '<button class="pj-loadmore" id="pjLoadMore">加载更多（还有 ' +
+                            (otherList.length - shown) + ' 个）</button>';
+                    }
+                }
+                html += '</div>';
+            }
+
+            el.localInfo.textContent = '共 ' + list.length + ' 个';
             el.localList.innerHTML = html;
-            el.localList.querySelectorAll('.pj-card').forEach(function (card) {
-                var dir = card.getAttribute('data-dir');
-                var title = card.getAttribute('data-title');
-                card.querySelectorAll('[data-act]').forEach(function (b) {
-                    b.onclick = function () {
-                        var act = b.getAttribute('data-act');
-                        if (act === 'script') {
-                            if (window.__vhScript && window.__vhScript.openScriptForProject) {
-                                window.__vhScript.openScriptForProject(title);
-                            } else {
-                                log('剧本模块未就绪', 'err');
-                            }
-                        } else if (act === 'import') {
-                            importMaterials(dir);
-                        } else if (act === 'open') {
-                            try { require('child_process').exec('explorer "' + dir + '"', { windowsHide: true }); }
-                            catch (e) { log('打开失败：' + e.message, 'err'); }
+
+            bindLocalCards();
+
+            var tog = document.getElementById('pjLocalTog');
+            if (tog) {
+                tog.onclick = function () {
+                    var c = localStorage.getItem('vh_pj_local_collapsed') !== '0';
+                    try { localStorage.setItem('vh_pj_local_collapsed', c ? '0' : '1'); } catch (e) {}
+                    if (c) localShown = LOCAL_PAGE;
+                    renderLocalList();
+                };
+            }
+            var more = document.getElementById('pjLoadMore');
+            if (more) {
+                more.onclick = function () { localShown += LOCAL_PAGE * 2; renderLocalList(); };
+            }
+            if (el.localMore) el.localMore.style.display = 'none';
+        });
+    }
+
+    function cardHtml(p, isActive) {
+        var isNew = lastCreated && p.dir === lastCreated;
+        return '<div class="pj-card' + (isNew ? ' is-new' : '') + (isActive ? ' is-active' : '') +
+            '" data-dir="' + escHtml(p.dir) + '" data-title="' + escHtml(p.title) + '">' +
+            '<div class="pj-card-main">' +
+              '<div class="pj-card-name">' + escHtml(p.dirName) +
+                (isNew ? '<span class="pj-new">NEW</span>' : '') +
+                (p.prproj ? '<span class="pj-tag script">有工程</span>' : '') +
+              '</div>' +
+              '<div class="pj-card-sub" title="' + escHtml(p.dir) + '">' + escHtml(p.dir) + '</div>' +
+            '</div>' +
+            '<div class="pj-card-acts">' +
+              (p.prproj ? '<button class="pj-mini pj-strong" data-act="prproj">🎬 工程</button>' : '') +
+              '<button class="pj-mini" data-act="script">📖 剧本</button>' +
+              '<button class="pj-mini" data-act="import">📥 素材</button>' +
+              '<button class="pj-mini" data-act="open">📂 目录</button>' +
+            '</div>' +
+          '</div>';
+    }
+
+    function bindLocalCards() {
+        el.localList.querySelectorAll('.pj-card').forEach(function (card) {
+            var dir = card.getAttribute('data-dir');
+            var title = card.getAttribute('data-title');
+            card.querySelectorAll('[data-act]').forEach(function (b) {
+                b.onclick = function () {
+                    var act = b.getAttribute('data-act');
+                    if (act === 'prproj') {
+                        openPrproj(dir, title);
+                    } else if (act === 'script') {
+                        if (window.__vhScript && window.__vhScript.openScriptForProject) {
+                            window.__vhScript.openScriptForProject(title);
+                        } else {
+                            log('剧本模块未就绪', 'err');
                         }
-                    };
-                });
+                    } else if (act === 'import') {
+                        importMaterials(dir);
+                    } else if (act === 'open') {
+                        try { require('child_process').exec('explorer "' + dir + '"', { windowsHide: true }); }
+                        catch (e) { log('打开失败：' + e.message, 'err'); }
+                    }
+                };
             });
         });
     }
 
-    // 把项目的 01原素材 导入当前 PR 工程素材箱（复用 media.js 的能力）
+    // 打开项目里的工程文件（默认用配置的 PR 版本）
+    function openPrproj(dir, title) {
+        var prproj = '';
+        try { prproj = P.findProjectFileSync(dir, 3); } catch (e) {}
+        if (!prproj) { log('该项目里没找到 .prproj 工程文件', 'err'); return; }
+        var c = P.readCfg();
+        var r = P.openProjectFile(prproj, c.prVersion);
+        if (r.ok) log('「' + (title || '') + '」' + r.msg, 'ok');
+        else log('打开工程失败：' + r.msg, 'err');
+    }
+
     function importMaterials(projDir) {
         var matDir = path.join(projDir, '01原素材');
         if (!fs.existsSync(matDir)) { log('该项目没有 01原素材 目录', 'err'); return; }
@@ -555,40 +787,77 @@
         hideProg(1200);
     }
 
+    // ---------- 日志最大化 ----------
+    function toggleLogMax() {
+        if (!el.logWrap) return;
+        // 不依赖 classList.toggle 的返回值，用 contains 判断切换后的状态
+        var willMax = !el.logWrap.classList.contains('pj-log-max');
+        if (willMax) el.logWrap.classList.add('pj-log-max');
+        else el.logWrap.classList.remove('pj-log-max');
+        if (el.btnLogMax) el.btnLogMax.textContent = willMax ? '⤢ 还原' : '⤢ 最大化';
+        if (willMax && el.log) el.log.scrollTop = el.log.scrollHeight;
+    }
+
     // ---------- 事件绑定 ----------
     function bind() {
         pick();
-        if (!el.nasDir) return;   // 不在该面板
+        if (!el.nasDir) return;
 
         el.btnSaveCfg.onclick = function () { saveCfg(false); };
         el.btnScan.onclick = doScan;
-        el.btnRefreshLocal.onclick = function () { lastCreated = ''; renderLocalList(); };
-        el.btnCreate.onclick = doCreate;
+        el.btnRefreshLocal.onclick = function () { lastCreated = ''; localShown = LOCAL_PAGE; renderLocalList(); };
+        el.btnCreate.onclick = function () {
+            if (curProject && selEps.length) confirmCreate();
+            else log('请先点项目的「选集 ▸」选择集数', 'err');
+        };
         if (el.search) el.search.oninput = applyFilter;
         if (el.sortSel) el.sortSel.onchange = applyFilter;
         if (el.sortDir) el.sortDir.onchange = applyFilter;
+        if (el.btnLogMax) el.btnLogMax.onclick = toggleLogMax;
+        if (el.cfgToggle) {
+            el.cfgToggle.onclick = function () {
+                var collapsed = el.cfgBody && el.cfgBody.style.display === 'none';
+                setCfgCollapsed(!collapsed);
+            };
+        }
 
-        var map = [
-            ['pjBrowseNas', el.nasDir], ['pjBrowseLocal', el.localRoot],
-            ['pjBrowseTemplate', el.templateDir], ['pjBrowsePr', el.prTemplate]
-        ];
-        map.forEach(function (m) {
-            var b = document.getElementById(m[0]);
-            if (b) b.onclick = function () { pickFolder(m[1], function () { saveCfg(true); }); };
-        });
+        // 文件夹选择
+        [['pjBrowseNas', el.nasDir], ['pjBrowseLocal', el.localRoot], ['pjBrowseTemplate', el.templateDir]]
+            .forEach(function (m) {
+                var b = document.getElementById(m[0]);
+                if (b) b.onclick = function () { pickFolder(m[1], function () { saveCfg(true); }); };
+            });
+        // PR 模板：选文件（.prproj）
+        var bp = document.getElementById('pjBrowsePr');
+        if (bp) {
+            bp.onclick = function () {
+                pickFile(el.prTemplate, '选择 PR 模板工程（.prproj）',
+                    [{ name: 'PR 工程', extensions: ['prproj'] }, { name: '所有文件', extensions: ['*'] }],
+                    function () { saveCfg(true); log('已选择 PR 模板工程', 'ok'); });
+            };
+        }
 
         fillCfg();
         renderSelInfo();
         renderLocalList();
+
+        // 配置区折叠状态（默认折叠，省空间）
+        var saved = null;
+        try { saved = localStorage.getItem('vh_pj_cfg_collapsed'); } catch (e) {}
+        setCfgCollapsed(saved !== '0');
     }
 
     window.__projectOnShow = function () {
         if (!el.nasDir) pick();
+        fillPrVersions(P.readCfg().prVersion);
         renderLocalList();
     };
 
     document.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Escape' && epModal) closeEpModal();
+        if (ev.key !== 'Escape') return;
+        if (epModal) { closeEpModal(); return; }
+        var cm = document.getElementById('pjConfirmMask');
+        if (cm && cm.parentNode) cm.parentNode.removeChild(cm);
     });
 
     if (document.readyState === 'loading') {

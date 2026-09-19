@@ -52,7 +52,8 @@
         excludeDirs: ['00已完成', '0000新人'],   // 扫描时排除的目录名
         autoOpenPR: true,       // 创建后自动用 PR 打开工程
         copyTemplate: true,     // 复制模板结构
-        copyRoughcut: true      // 同时把粗剪拉到 02粗剪
+        copyRoughcut: true,     // 同时把粗剪拉到 02粗剪
+        prVersion: 0            // 默认用哪个 PR 版本打开（0 = 用最新）
     };
 
     function readCfg() {
@@ -683,19 +684,14 @@
                 prOpened: false
             };
 
-            // 7) 打开 PR（可选）
+            // 7) 打开 PR（可选，按配置的版本）
             if (prPath && cfg.autoOpenPR) {
-                var exe = findPREXE();
-                if (exe) {
-                    try {
-                        cp.spawn(exe, [prPath], { detached: true, stdio: 'ignore' }).unref();
-                        result.prOpened = true;
-                        steps.push('已用 Premiere Pro 打开工程');
-                    } catch (e) {
-                        steps.push('打开 PR 失败：' + e.message);
-                    }
+                var r = openProjectFile(prPath, cfg.prVersion);
+                if (r.ok) {
+                    result.prOpened = true;
+                    steps.push(r.msg);
                 } else {
-                    steps.push('未找到 Premiere Pro，未自动打开');
+                    steps.push('未自动打开：' + r.msg);
                 }
             }
             cb(null, result);
@@ -714,31 +710,117 @@
         return max + 1;
     }
 
-    function findPREXE() {
-        var cands = [
-            'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2026\\Adobe Premiere Pro.exe',
-            'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2025\\Adobe Premiere Pro.exe',
-            'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2024\\Adobe Premiere Pro.exe',
-            'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2023\\Adobe Premiere Pro.exe',
-            'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2022\\Adobe Premiere Pro.exe',
-            'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2021\\Adobe Premiere Pro.exe'
-        ];
-        for (var i = 0; i < cands.length; i++) {
-            if (fs.existsSync(cands[i])) return cands[i];
+    // ---------- Premiere Pro 探测 ----------
+    // 返回本机装的全部版本（降序），用于配置项里让用户选默认版本
+    function listPREXE() {
+        var out = [];
+        var seen = {};
+        function push(folder, exe) {
+            if (!exe || seen[exe]) return;
+            seen[exe] = 1;
+            var m = String(folder).match(/Premiere Pro (\d{4})/i);
+            out.push({ version: m ? parseInt(m[1], 10) : 0, folder: folder, exe: exe });
         }
         try {
-            var base = 'C:\\Program Files\\Adobe';
-            if (fs.existsSync(base)) {
-                var dirs = fs.readdirSync(base);
-                for (var k = 0; k < dirs.length; k++) {
-                    if (dirs[k].indexOf('Premiere Pro') >= 0) {
-                        var p = path.join(base, dirs[k], 'Adobe Premiere Pro.exe');
-                        if (fs.existsSync(p)) return p;
-                    }
+            var bases = ['C:\\Program Files\\Adobe', 'C:\\Program Files (x86)\\Adobe'];
+            for (var b = 0; b < bases.length; b++) {
+                if (!fs.existsSync(bases[b])) continue;
+                var dirs = fs.readdirSync(bases[b]);
+                for (var i = 0; i < dirs.length; i++) {
+                    if (dirs[i].indexOf('Premiere Pro') < 0) continue;
+                    var folder = path.join(bases[b], dirs[i]);
+                    var exe = path.join(folder, 'Adobe Premiere Pro.exe');
+                    if (fs.existsSync(exe)) push(dirs[i], exe);
                 }
             }
         } catch (e) {}
-        return '';
+        out.sort(function (a, b) { return b.version - a.version; });
+        return out;
+    }
+
+    // 取默认要用的 PR：优先用户配置的版本，其次最新装的那版
+    function findPREXE(prefer) {
+        var all = listPREXE();
+        if (!all.length) return '';
+        if (prefer) {
+            var p = parseInt(prefer, 10);
+            for (var i = 0; i < all.length; i++) {
+                if (all[i].version === p) return all[i].exe;
+            }
+        }
+        return all[0].exe;
+    }
+
+    // ---------- 工程文件检测 / 打开 ----------
+    // 在项目目录里递归找 .prproj（限深度，避免大项目扫太久）
+    async function findProjectFile(rootDir, maxDepth) {
+        if (!rootDir || !(await isDir(rootDir))) return '';
+        var limit = (typeof maxDepth === 'number') ? maxDepth : 3;
+        var hit = '';
+        async function walk(p, depth) {
+            if (hit || depth > limit) return;
+            var files = [];
+            try {
+                var ents = await fsp.readdir(p, { withFileTypes: true });
+                for (var i = 0; i < ents.length; i++) {
+                    var e = ents[i];
+                    if (e.name.charAt(0) === '.' || e.name.charAt(0) === '~') continue;
+                    var full = path.join(p, e.name);
+                    if (e.isDirectory()) {
+                        if (e.name.toLowerCase() === 'auto-save' ||
+                            e.name.toLowerCase() === 'adobe premiere pro auto-save') continue;
+                        await walk(full, depth + 1);
+                        if (hit) return;
+                    } else if (/\.prproj$/i.test(e.name)) {
+                        hit = full;
+                        return;
+                    }
+                }
+            } catch (err) {}
+        }
+        await walk(rootDir, 0);
+        return hit;
+    }
+
+    // 同步版（UI 里做轻量判断用）
+    function findProjectFileSync(rootDir, maxDepth) {
+        if (!rootDir || !fs.existsSync(rootDir)) return '';
+        var limit = (typeof maxDepth === 'number') ? maxDepth : 3;
+        var hit = '';
+        (function walk(p, depth) {
+            if (hit || depth > limit) return;
+            var ents;
+            try { ents = fs.readdirSync(p, { withFileTypes: true }); } catch (e) { return; }
+            for (var i = 0; i < ents.length; i++) {
+                var e = ents[i];
+                if (e.name.charAt(0) === '.' || e.name.charAt(0) === '~') continue;
+                var full = path.join(p, e.name);
+                if (e.isDirectory()) {
+                    var ln = e.name.toLowerCase();
+                    if (ln === 'auto-save' || ln.indexOf('auto-save') >= 0) continue;
+                    walk(full, depth + 1);
+                    if (hit) return;
+                } else if (/\.prproj$/i.test(e.name)) {
+                    hit = full;
+                    return;
+                }
+            }
+        })(rootDir, 0);
+        return hit;
+    }
+
+    // 用指定（或默认）版本的 PR 打开工程
+    function openProjectFile(prproj, preferVersion) {
+        if (!prproj || !fs.existsSync(prproj)) return { ok: false, msg: '工程文件不存在' };
+        var exe = findPREXE(preferVersion);
+        if (!exe) return { ok: false, msg: '未找到 Premiere Pro' };
+        try {
+            cp.spawn(exe, [prproj], { detached: true, stdio: 'ignore' }).unref();
+            var m = exe.match(/Premiere Pro (\d{4})/i);
+            return { ok: true, msg: '已用 PR ' + (m ? m[1] : '') + ' 打开', exe: exe };
+        } catch (e) {
+            return { ok: false, msg: '打开失败：' + e.message };
+        }
     }
 
     // ---------- 已建本地项目列表 ----------
@@ -758,6 +840,8 @@
                 var m = name.match(/^(\d{1,4})[-_\s]*(.*)$/);
                 if (!m) continue;
                 var st = await dirStat(full);
+                // 检测项目里的工程文件（用于「打开工程」按钮）
+                var prproj = findProjectFileSync(full, 3);
                 out.push({
                     seq: parseInt(m[1], 10),
                     title: m[2] || name,
@@ -765,7 +849,9 @@
                     dir: full,
                     mtime: st ? st.mtimeMs : 0,
                     hasScript: fs.existsSync(path.join(full, '剧本')),
-                    hasMaterial: fs.existsSync(path.join(full, '01原素材'))
+                    hasMaterial: fs.existsSync(path.join(full, '01原素材')),
+                    hasRoughcut: fs.existsSync(path.join(full, '02粗剪')),
+                    prproj: prproj
                 });
             }
             out.sort(function (a, b) { return b.seq - a.seq; });
@@ -809,7 +895,11 @@
         createProject: createProject,
         listLocalProjects: listLocalProjects,
         sortProjects: sortProjects,
+        listPREXE: listPREXE,
         findPREXE: findPREXE,
+        findProjectFile: findProjectFile,
+        findProjectFileSync: findProjectFileSync,
+        openProjectFile: openProjectFile,
         configFile: function () { return CFG_FILE; }
     };
 })();

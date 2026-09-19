@@ -554,74 +554,53 @@
         <div class="log" id="log"></div>
     </div>
 
+    <!-- ==================== 项目（NAS 拉素材 + 建本地项目） ==================== -->
     <div class="tab-panel" id="panel-project" style="display:none;">
         <div class="pj-wrap">
 
-            <!-- 路径配置 -->
-            <div class="pj-group">
+            <!-- 路径配置（可折叠） -->
+            <div class="pj-group" id="pjCfgGroup">
                 <div class="pj-ghead">
+                    <span id="pjCfgToggle" class="pj-toggle">▾</span>
                     <span>路径配置</span>
+                    <span id="pjCfgSummary" class="pj-cfg-sum" style="display:none;"></span>
                     <button id="pjSaveCfg" class="secondary mini" style="margin-left:auto;">保存配置</button>
                 </div>
-                <div class="pj-row">
-                    <label class="pj-lb">组内 NAS 目录</label>
-                    <input type="text" id="pjNasDir" placeholder="例如：\\NAS\短剧\进行中">
-                    <button id="pjBrowseNas" class="secondary mini">浏览…</button>
+                <div id="pjCfgBody">
+                    <div class="pj-row">
+                        <label class="pj-lb">组内 NAS 目录</label>
+                        <input type="text" id="pjNasDir" placeholder="例如：\\NAS\短剧\进行中">
+                        <button id="pjBrowseNas" class="secondary mini">浏览…</button>
+                    </div>
+                    <div class="pj-row">
+                        <label class="pj-lb">本地项目根目录</label>
+                        <input type="text" id="pjLocalRoot" placeholder="例如：D:\剪辑项目">
+                        <button id="pjBrowseLocal" class="secondary mini">浏览…</button>
+                    </div>
+                    <div class="pj-row">
+                        <label class="pj-lb">项目模板结构</label>
+                        <input type="text" id="pjTemplateDir" placeholder="可选：新人模板目录">
+                        <button id="pjBrowseTemplate" class="secondary mini">浏览…</button>
+                    </div>
+                    <div class="pj-row">
+                        <label class="pj-lb">PR 模板工程</label>
+                        <input type="text" id="pjPrTemplate" placeholder="可选：xxx.prproj">
+                        <button id="pjBrowsePr" class="secondary mini">选择文件…</button>
+                    </div>
+                    <div class="pj-row">
+                        <label class="pj-lb">默认 PR 版本</label>
+                        <select id="pjPrVersion" style="flex:1;min-width:0;"></select>
+                    </div>
+                    <div class="pj-row">
+                        <label class="pj-lb">排除目录（、分隔）</label>
+                        <input type="text" id="pjExcludeDirs" placeholder="00已完成、0000新人">
+                    </div>
+                    <div class="pj-checks">
+                        <label class="pj-ck"><input type="checkbox" id="pjCopyTpl" checked> 复制模板结构</label>
+                        <label class="pj-ck"><input type="checkbox" id="pjCopyRough" checked> 拉取粗剪</label>
+                        <label class="pj-ck"><input type="checkbox" id="pjAutoOpen" checked> 创建后用 PR 打开</label>
+                    </div>
                 </div>
-                <div class="pj-row">
-                    <label class="pj-lb">本地项目根目录</label>
-                    <input type="text" id="pjLocalRoot" placeholder="例如：D:\剪辑项目">
-                    <button id="pjBrowseLocal" class="secondary mini">浏览…</button>
-                </div>
-                <div class="pj-row">
-                    <label class="pj-lb">项目模板结构</label>
-                    <input type="text" id="pjTemplateDir" placeholder="可选：新人模板目录">
-                    <button id="pjBrowseTemplate" class="secondary mini">浏览…</button>
-                </div>
-                <div class="pj-row">
-                    <label class="pj-lb">PR 模板工程</label>
-                    <input type="text" id="pjPrTemplate" placeholder="可选：xxx.prproj">
-                    <button id="pjBrowsePr" class="secondary mini">浏览…</button>
-                </div>
-                <div class="pj-row">
-                    <label class="pj-lb">排除目录（、分隔）</label>
-                    <input type="text" id="pjExcludeDirs" placeholder="00已完成、0000新人">
-                </div>
-                <div class="pj-checks">
-                    <label class="pj-ck"><input type="checkbox" id="pjCopyTpl" checked> 复制模板结构</label>
-                    <label class="pj-ck"><input type="checkbox" id="pjCopyRough" checked> 同时拉取粗剪（02粗剪）</label>
-                    <label class="pj-ck"><input type="checkbox" id="pjAutoOpen" checked> 创建后用 PR 打开工程</label>
-                </div>
-            </div>
-
-            <!-- 项目列表 -->
-            <div class="pj-group">
-                <div class="pj-ghead">
-                    <span>选择项目</span>
-                    <span id="pjProjCount" class="pj-cnt"></span>
-                    <button id="pjScan" class="secondary mini" style="margin-left:auto;">开始扫描</button>
-                </div>
-                <div class="pj-toolbar">
-                    <input type="text" id="pjSearch" class="pj-search" placeholder="搜索项目名…">
-                    <select id="pjSort" class="pj-sortsel" title="排序方式">
-                        <option value="name">按名称</option>
-                        <option value="time">按时间</option>
-                        <option value="eps">按集数</option>
-                    </select>
-                    <select id="pjSortDir" class="pj-sortsel" title="排序方向">
-                        <option value="asc">升序</option>
-                        <option value="desc">降序</option>
-                    </select>
-                </div>
-                <div id="pjProjList" class="pj-list">
-                    <div class="hint">先设置 NAS 目录，再点「开始扫描」。</div>
-                </div>
-            </div>
-
-            <!-- 已选 + 创建 -->
-            <div class="pj-group pj-selbar">
-                <div class="pj-selinfo" id="pjSelInfo">未选择项目</div>
-                <button id="pjCreate" class="pj-main" disabled>创建本地项目</button>
             </div>
 
             <!-- 进度 -->
@@ -631,20 +610,56 @@
                 <div class="pj-prog-track"><div class="pj-prog-bar" id="pjProgBar"></div></div>
             </div>
 
-            <!-- 日志 -->
-            <div class="pj-group">
-                <div class="pj-ghead"><span>运行日志</span></div>
-                <div id="pjLog" class="pj-log"></div>
+            <!-- 左右并排：进行中项目 | 本地项目 -->
+            <div class="pj-cols">
+
+                <!-- 左：NAS 进行中项目 -->
+                <div class="pj-group pj-col">
+                    <div class="pj-ghead">
+                        <span>进行中项目</span>
+                        <span id="pjProjCount" class="pj-cnt"></span>
+                        <button id="pjScan" class="secondary mini" style="margin-left:auto;">开始扫描</button>
+                    </div>
+                    <div class="pj-toolbar">
+                        <input type="text" id="pjSearch" class="pj-search" placeholder="搜索项目名…">
+                        <select id="pjSort" class="pj-sortsel" title="排序方式">
+                            <option value="name">按名称</option>
+                            <option value="time">按时间</option>
+                            <option value="eps">按集数</option>
+                        </select>
+                        <select id="pjSortDir" class="pj-sortsel" title="排序方向">
+                            <option value="asc">升序</option>
+                            <option value="desc">降序</option>
+                        </select>
+                    </div>
+                    <div id="pjProjList" class="pj-list">
+                        <div class="hint">先设置 NAS 目录，再点「开始扫描」。</div>
+                    </div>
+                    <div class="pj-selbar">
+                        <div class="pj-selinfo" id="pjSelInfo">未选择项目 · 点项目的「选集 ▸」开始</div>
+                        <button id="pjCreate" class="pj-main" disabled>创建本地项目</button>
+                    </div>
+                </div>
+
+                <!-- 右：本地项目 -->
+                <div class="pj-group pj-col">
+                    <div class="pj-ghead">
+                        <span>本地项目</span>
+                        <span id="pjLocalInfo" class="pj-cnt"></span>
+                        <button id="pjRefreshLocal" class="secondary mini" style="margin-left:auto;">刷新</button>
+                    </div>
+                    <div id="pjLocalList" class="pj-list pj-list-local"></div>
+                    <div id="pjLocalMore" style="display:none;"></div>
+                </div>
             </div>
 
-            <!-- 本地项目 -->
-            <div class="pj-group">
+            <!-- 日志（可最大化） -->
+            <div class="pj-group" id="pjLogWrap">
                 <div class="pj-ghead">
-                    <span>本地项目</span>
-                    <span id="pjLocalInfo" style="font-size:10px;color:#9a9a9a;margin-left:8px;"></span>
-                    <button id="pjRefreshLocal" class="secondary mini" style="margin-left:auto;">刷新</button>
+                    <span>运行日志</span>
+                    <button id="pjLogMax" class="secondary mini" style="margin-left:auto;">⤢ 最大化</button>
                 </div>
-                <div id="pjLocalList"></div>
+                <div id="pjLog" class="pj-log"></div>
             </div>
         </div>
     </div>
