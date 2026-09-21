@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "新增 🔧 工具面板（PR 版本转换）",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "新增「🔧 工具」面板：PR 样式/工程版本转换"
+        },
+        {
+          "kind": "feat",
+          "text": "支持 .prtextstyle 与 .prproj"
+        },
+        {
+          "kind": "feat",
+          "text": "目标版本默认 PR 2021"
+        }
+      ],
+      "version": "1.10.0",
+      "date": "2026-09-21"
+    },
+    {
       "version": "1.9.1",
       "date": "2026-09-19",
       "title": "修：切换筛选后进度退回「待扫描」+ 我参与空态提示",

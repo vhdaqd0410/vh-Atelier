@@ -2906,3 +2906,23 @@
         .top-head #btnLogView .log-badge { min-width: 14px; height: 14px;
             line-height: 14px; font-size: 9px; padding: 0 3px; border-radius: 7px;
             text-align: center; }
+
+/* ==================== PR 工具（版本转换） ==================== */
+.pc-wrap{display:flex;flex-direction:column;height:calc(100vh - 130px);gap:8px;}
+.pc-card{background:var(--panel2,#242424);border:1px solid var(--border,#3a3a3a);
+    border-radius:6px;padding:10px 12px;}
+.pc-card-grow{flex:1;display:flex;flex-direction:column;min-height:0;}
+.pc-head{display:flex;align-items:center;font-size:12.5px;font-weight:600;color:#ddd;margin-bottom:8px;}
+.pc-ver{font-size:10.5px;color:#8a8a8a;font-weight:400;margin-left:10px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
+.pc-tip{font-size:10.5px;color:#9a9a9a;line-height:1.7;margin-bottom:9px;
+    background:#1c1c1c;border:1px solid #2e2e2e;border-radius:4px;padding:6px 9px;}
+.pc-tip b{color:#8ec4e0;}
+.pc-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.pc-lb{flex:0 0 62px;font-size:11px;color:#9a9a9a;}
+.pc-in{flex:1;min-width:0;background:#1a1a1a;color:#e8e8e8;border:1px solid #3a3a3a;
+    border-radius:4px;font-size:11px;padding:5px 7px;}
+.pc-in:focus{outline:none;border-color:var(--accent,#537d96);}
+.pc-log{flex:1;background:#141414;border:1px solid #333;border-radius:4px;padding:7px 9px;
+    font-family:Consolas,monospace;font-size:10.5px;line-height:1.7;color:#9fe0a8;
+    overflow-y:auto;white-space:pre-wrap;word-break:break-all;}

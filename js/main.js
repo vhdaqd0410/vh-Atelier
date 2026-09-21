@@ -16,6 +16,7 @@
         script: document.getElementById('panel-script'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
+        prconv: document.getElementById('panel-prconv'),
         todo: document.getElementById('panel-todo'),
         feedback: document.getElementById('panel-feedback'),
         admin: document.getElementById('panel-admin')
@@ -32,6 +33,7 @@
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' },
+        prconv: { members: ['prconv'], default: 'prconv' },
         feedback: { members: ['feedback'], default: 'feedback' },
         admin: { members: ['admin'], default: 'admin' }
     };
@@ -122,6 +124,9 @@
         // 管理台：切到时把 iframe 拉起来并刷新待处理数
         if (name === 'admin' && window.__adminPanelOnShow) {
             try { window.__adminPanelOnShow(); } catch (e) {}
+        }
+        if (name === 'prconv' && window.__prconvOnShow) {
+            try { window.__prconvOnShow(); } catch (e) {}
         }
     }
 

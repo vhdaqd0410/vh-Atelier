@@ -49,6 +49,7 @@
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
+        <button class="ws-group" data-group="prconv">🔧 工具</button>
         <button class="ws-group" data-group="admin">⚙ 管理<span id="adminBadge" class="ws-badge" style="display:none;">0</span></button>
     </div>
 
@@ -930,6 +931,42 @@
         </div>
     </div>
 
+
+    <!-- ==================== PR 工具（版本转换） ==================== -->
+    <div class="tab-panel" id="panel-prconv" style="display:none;">
+        <div class="pc-wrap">
+            <div class="pc-card">
+                <div class="pc-head">
+                    <span>🔧 PR 版本转换</span>
+                    <span id="pcSrcVer" class="pc-ver">未选择文件</span>
+                </div>
+                <div class="pc-tip">
+                    高版本 PR 做的样式/工程，低版本打不开 → 转成低版本可用。
+                    高版本一定能打开低版本，所以默认转 <b>PR 2021</b> 就够用。
+                </div>
+                <div class="pc-row">
+                    <label class="pc-lb">文件</label>
+                    <input type="text" id="pcSrc" class="pc-in" placeholder=".prtextstyle 文字样式 / .prproj 工程文件">
+                    <button id="pcBrowse" class="secondary mini">选择文件…</button>
+                </div>
+                <div class="pc-row">
+                    <label class="pc-lb">目标版本</label>
+                    <select id="pcTarget" class="pc-in"></select>
+                    <button id="pcApply" class="primary mini" style="flex:0 0 auto;">开始转换</button>
+                    <button id="pcDetect" class="secondary mini">识别版本</button>
+                    <button id="pcOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
+                </div>
+            </div>
+            <div class="pc-card pc-card-grow">
+                <div class="pc-head">
+                    <span>转换日志</span>
+                    <button id="pcClearLog" class="secondary mini" style="margin-left:auto;">清空</button>
+                </div>
+                <div id="pcLog" class="pc-log"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== 审片（内嵌分秒帧，看批注不切出 PR） ==================== -->
     <div class="tab-panel" id="panel-shenpian" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
@@ -971,6 +1008,10 @@
             </div>
             <iframe id="adFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#0f1115;" src="about:blank"></iframe>
         </div>
+    </div>
+
+    <div class="tabs ws-subtabs" data-group="prconv" style="display:none;">
+        <button class="tab active" data-tab="prconv">PR 版本转换</button>
     </div>
 
     <!-- ==================== 超分（一键导出并超分 + 外站工具） ==================== -->
@@ -1140,6 +1181,8 @@
     <script src="js/feedback-ui.js"></script>
     <script src="js/feedback-panel.js"></script>
     <script src="js/admin-panel.js"></script>
+    <script src="js/pr-convert.js"></script>
+    <script src="js/pr-convert-ui.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================
