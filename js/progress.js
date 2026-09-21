@@ -667,6 +667,18 @@
                 importMaterialsForProject(p.name || '');
             });
             opsMore.appendChild(impBtn);
+            // 📦 建本地：调工作台创建本地项目并拉素材
+            var lpBtn = document.createElement('button');
+            lpBtn.type = 'button';
+            lpBtn.className = 'prg-open-btn prg-ops-icon';
+            lpBtn.textContent = '📦 建本地';
+            lpBtn.title = '在工作台的本地项目盘创建「序号-项目名」文件夹，并拉取我负责集数的素材';
+            lpBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                createLocalProjectFor(p.name || '');
+            });
+            opsMore.appendChild(lpBtn);
+
             var prjBtn = document.createElement('button');
             prjBtn.type = 'button';
             prjBtn.className = 'prg-open-btn prg-ops-icon';
@@ -1136,6 +1148,26 @@
     function found0(dir, fs2) {
         if (!dir) return '';
         return findPrprojIn(dir, 3);
+    }
+
+    // ===== 创建本地项目（复用工作台能力）=====
+    function createLocalProjectFor(projectName) {
+        if (!projectName) return;
+        if (!window.__vhLocalProj) {
+            el.statusText.textContent = '创建模块未就绪（local-project-create.js 未加载）';
+            return;
+        }
+        window.__vhLocalProj.create(projectName, {
+            apiPost: apiPost,
+            apiGet: apiGet,
+            setStatus: function (s) { try { el.statusText.textContent = s; } catch (e) {} },
+            onDone: function (ok) {
+                // 建完自动刷新进度（本地文件会变）
+                if (ok) {
+                    setTimeout(function () { try { refresh(true); } catch (e) {} }, 800);
+                }
+            }
+        });
     }
 
     // 导入素材到当前 PR 工程素材箱（保留目录结构：按相对根目录分组 → meImportTreePlanStr）
