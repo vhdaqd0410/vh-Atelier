@@ -696,62 +696,74 @@
 
     <!-- ==================== PR 工具（版本转换） ==================== -->
     <div class="tab-panel" id="panel-prconv" style="display:none;">
-        <div class="pc-wrap">
-            <div class="pc-card">
-                <div class="pc-head">
-                    <span>🔧 PR 版本转换</span>
-                    <span id="pcSrcVer" class="pc-ver">未选择文件</span>
-                </div>
-                <div class="pc-tip">
-                    高版本 PR 做的样式/工程，低版本打不开 → 转成低版本可用。
-                    高版本一定能打开低版本，所以默认转 <b>PR 2021</b> 就够用。
-                </div>
-                <div class="pj-row">
-                    <label class="pj-lb">文件</label>
-                    <input type="text" id="pcSrc" placeholder=".prtextstyle 文字样式 / .prproj 工程文件">
-                    <button id="pcBrowse" class="secondary mini">选择文件…</button>
-                </div>
-                <div class="pj-row">
-                    <label class="pj-lb">目标版本</label>
-                    <select id="pcTarget" style="flex:1;min-width:0;"></select>
-                    <button id="pcApply" class="pj-main" style="flex:0 0 auto;">开始转换</button>
-                    <button id="pcDetect" class="secondary mini">识别版本</button>
-                    <button id="pcOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
-                </div>
-            </div>
+        <div class="pt-wrap">
 
+            <!-- ===== 工具：PR 版本转换 ===== -->
+            <section class="pt-tool" id="ptToolConv" data-tool="conv">
+                <header class="pt-head" id="ptHeadConv">
+                    <span class="pt-caret">▸</span>
+                    <span class="pt-ico">🔧</span>
+                    <span class="pt-title">PR 版本转换</span>
+                    <span class="pt-sum" id="pcSrcVer">未选择文件</span>
+                </header>
+                <div class="pt-body" id="ptBodyConv" style="display:none;">
+                    <div class="pt-tip">
+                        高版本 PR 做的样式/工程，低版本打开会报「保存于更新版本」。
+                        选文件 → 选目标版本 → 转换。高版本一定能开低版本，默认转 <b>PR 2021</b> 即可。
+                    </div>
+                    <div class="pt-row">
+                        <label class="pt-lb">文件</label>
+                        <input type="text" id="pcSrc" class="pt-in" placeholder=".prtextstyle 文字样式 / .prproj 工程文件">
+                        <button id="pcBrowse" class="secondary mini">选择文件…</button>
+                    </div>
+                    <div class="pt-row">
+                        <label class="pt-lb">目标版本</label>
+                        <select id="pcTarget" class="pt-in"></select>
+                        <button id="pcApply" class="primary mini" style="flex:0 0 auto;">开始转换</button>
+                        <button id="pcDetect" class="secondary mini">识别版本</button>
+                        <button id="pcOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
+                    </div>
+                </div>
+            </section>
 
-            <!-- 字体修复（PR 版本转换配套） -->
-            <div class="pc-card" id="pcFontBox">
-                <div class="pc-head">
-                    <span>🔤 缺失字体修复</span>
-                    <span id="pcFontStatus" class="pc-ver">检测中…</span>
+            <!-- ===== 工具：缺失字体修复 ===== -->
+            <section class="pt-tool" id="ptToolFont" data-tool="font">
+                <header class="pt-head" id="ptHeadFont">
+                    <span class="pt-caret">▸</span>
+                    <span class="pt-ico">🔤</span>
+                    <span class="pt-title">缺失字体修复</span>
+                    <span class="pt-sum" id="pcFontStatus">检测中…</span>
+                </header>
+                <div class="pt-body" id="ptBodyFont" style="display:none;">
+                    <div class="pt-tip">
+                        PR 2021 及更早版本<b>不支持可变字体</b>。Windows 自带的 Bahnschrift 是可变字体，
+                        高版本样式里存的 <code>Bahnschrift-Bold</code> 会被低版本判为「字体不可用」。
+                        这里装一个从该字体固化出来的静态 Bold（<b>字重与原设计一致</b>）。
+                        字体随插件附带，<b>免管理员、可随时卸载</b>；装完重启 PR 生效。
+                    </div>
+                    <div class="pt-row">
+                        <button id="pcFontInstall" class="primary mini">安装字体</button>
+                        <button id="pcFontUninstall" class="secondary mini" style="display:none;">卸载</button>
+                        <button id="pcFontScan" class="secondary mini">扫描样式字体</button>
+                    </div>
                 </div>
-                <div class="pc-tip">
-                    PR 2021 及更早版本<b>不支持可变字体</b>。Windows 自带的 Bahnschrift 是可变字体，
-                    所以高版本样式里存的 <code>Bahnschrift-Bold</code> 在低版本会报「字体不可用」。
-                    这里装一个从该字体固化出来的静态 Bold（<b>字重与原设计一致</b>），
-                    装完重启 PR 即可正常显示。<br>
-                    字体随插件附带，<b>免管理员、可随时卸载</b>。
-                </div>
-                <div class="pc-row">
-                    <label class="pc-lb">状态</label>
-                    <button id="pcFontInstall" class="primary mini" style="flex:0 0 auto;">安装字体</button>
-                    <button id="pcFontUninstall" class="secondary mini" style="display:none;">卸载</button>
-                    <button id="pcFontScan" class="secondary mini">扫描样式字体</button>
-                </div>
-            </div>
+            </section>
 
-            <div class="pc-card" style="flex:1;display:flex;flex-direction:column;min-height:0;">
-                <div class="pc-head">
-                    <span>转换日志</span>
+            <!-- ===== 工具：日志 ===== -->
+            <section class="pt-tool" id="ptToolLog" data-tool="log">
+                <header class="pt-head" id="ptHeadLog">
+                    <span class="pt-caret">▸</span>
+                    <span class="pt-ico">📄</span>
+                    <span class="pt-title">运行日志</span>
                     <button id="pcClearLog" class="secondary mini" style="margin-left:auto;">清空</button>
+                </header>
+                <div class="pt-body pt-body-grow" id="ptBodyLog" style="display:none;">
+                    <div id="pcLog" class="pt-log"></div>
                 </div>
-                <div id="pcLog" class="pj-log" style="flex:1;max-height:none;"></div>
-            </div>
+            </section>
+
         </div>
     </div>
-
     <!-- ==================== 板块六：视频下载 ==================== -->
     <div class="tab-panel" id="panel-video" style="display:none;">
         <div class="v-cookiebar">
@@ -990,6 +1002,7 @@
     <script src="js/font-install.js"></script>
     <script src="js/font-fix.js"></script>
     <script src="js/font-fix-ui.js"></script>
+    <script src="js/tool-panel.js"></script>
     <script src="js/video.js"></script>
     <script src="js/script.js"></script>
     <script src="js/iframe-nav.js"></script>

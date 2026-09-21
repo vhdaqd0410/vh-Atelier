@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "工具面板改为可折叠工具列表（便于后续扩展新工具）",
+      "items": [
+        {
+          "kind": "impr",
+          "text": "工具面板改为通用可折叠列表，不再是单一功能的专用版式"
+        },
+        {
+          "kind": "feat",
+          "text": "每个工具独立折叠/展开，状态记忆；标题栏显示状态摘要"
+        },
+        {
+          "kind": "feat",
+          "text": "默认展开 PR 版本转换与日志，收起缺失字体修复"
+        },
+        {
+          "kind": "impr",
+          "text": "统一工具面板样式类名（pt-*），清理旧样式"
+        }
+      ],
+      "version": "1.19.0",
+      "date": "2026-09-21"
+    },
+    {
       "title": "新增缺失字体修复（解决 Bahnschrift 可变字体在低版本 PR 不可用）",
       "items": [
         {

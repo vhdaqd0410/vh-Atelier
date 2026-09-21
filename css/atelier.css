@@ -3068,13 +3068,33 @@
 
 .hint{font-size:10.5px;color:#7a7a7a;padding:6px 2px;}
 
-/* ==================== PR 工具（版本转换） ==================== */
-.pc-wrap{display:flex;flex-direction:column;height:calc(100vh - 130px);gap:8px;}
-.pc-card{background:var(--panel2,#242424);border:1px solid var(--border,#3a3a3a);
-    border-radius:6px;padding:10px 12px;}
-.pc-head{display:flex;align-items:center;font-size:12.5px;font-weight:600;color:#ddd;margin-bottom:8px;}
-.pc-ver{font-size:10.5px;color:#8a8a8a;font-weight:400;margin-left:10px;
+/* ==================== 工具面板（可折叠工具列表） ==================== */
+.pt-wrap{display:flex;flex-direction:column;height:calc(100vh - 130px);gap:8px;overflow-y:auto;}
+.pt-tool{background:var(--panel2,#242424);border:1px solid var(--border,#3a3a3a);
+    border-radius:6px;overflow:hidden;flex:0 0 auto;}
+.pt-tool.pt-open{flex:0 0 auto;}
+.pt-head{display:flex;align-items:center;gap:7px;padding:9px 12px;cursor:pointer;
+    user-select:none;-webkit-user-select:none;transition:background .12s;}
+.pt-head:hover{background:#2a2a2a;}
+.pt-caret{color:#8a8a8a;font-size:11px;width:12px;flex:0 0 auto;}
+.pt-ico{font-size:13px;flex:0 0 auto;}
+.pt-title{font-size:12.5px;font-weight:600;color:#ddd;flex:0 0 auto;}
+.pt-sum{font-size:10.5px;color:#8a8a8a;font-weight:400;margin-left:6px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;}
-.pc-tip{font-size:10.5px;color:#9a9a9a;line-height:1.7;margin-bottom:9px;
-    background:#1c1c1c;border:1px solid #2e2e2e;border-radius:4px;padding:6px 9px;}
-.pc-tip b{color:#8ec4e0;}
+.pt-body{padding:0 12px 11px;display:flex;flex-direction:column;gap:6px;}
+.pt-body-grow{flex:1;min-height:0;}
+.pt-tip{font-size:10.5px;color:#9a9a9a;line-height:1.7;background:#1c1c1c;
+    border:1px solid #2e2e2e;border-radius:4px;padding:6px 9px;}
+.pt-tip b{color:#8ec4e0;}
+.pt-tip code{background:#2a2a2a;padding:0 4px;border-radius:3px;color:#c8c8c8;}
+.pt-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.pt-lb{flex:0 0 62px;font-size:11px;color:#9a9a9a;}
+.pt-in{flex:1;min-width:0;background:#1a1a1a;color:#e8e8e8;border:1px solid #3a3a3a;
+    border-radius:4px;font-size:11px;padding:5px 7px;}
+.pt-in:focus{outline:none;border-color:var(--accent,#537d96);}
+.pt-log{flex:1;min-height:110px;background:#141414;border:1px solid #333;border-radius:4px;
+    padding:7px 9px;font-family:Consolas,monospace;font-size:10.5px;line-height:1.7;
+    color:#9fe0a8;overflow-y:auto;white-space:pre-wrap;word-break:break-all;}
+.pt-tool[data-tool="log"].pt-open{flex:1 1 auto;min-height:180px;
+    display:flex;flex-direction:column;}
+.pt-tool[data-tool="log"].pt-open .pt-body{flex:1;min-height:0;}
