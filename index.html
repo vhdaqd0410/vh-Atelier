@@ -957,6 +957,28 @@
                     <button id="pcOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
                 </div>
             </div>
+
+            <!-- 字体修复（PR 版本转换配套） -->
+            <div class="pc-card" id="pcFontBox">
+                <div class="pc-head">
+                    <span>🔤 缺失字体修复</span>
+                    <span id="pcFontStatus" class="pc-ver">检测中…</span>
+                </div>
+                <div class="pc-tip">
+                    PR 2021 及更早版本<b>不支持可变字体</b>。Windows 自带的 Bahnschrift 是可变字体，
+                    所以高版本样式里存的 <code>Bahnschrift-Bold</code> 在低版本会报「字体不可用」。
+                    这里装一个从该字体固化出来的静态 Bold（<b>字重与原设计一致</b>），
+                    装完重启 PR 即可正常显示。<br>
+                    字体随插件附带，<b>免管理员、可随时卸载</b>。
+                </div>
+                <div class="pc-row">
+                    <label class="pc-lb">状态</label>
+                    <button id="pcFontInstall" class="primary mini" style="flex:0 0 auto;">安装字体</button>
+                    <button id="pcFontUninstall" class="secondary mini" style="display:none;">卸载</button>
+                    <button id="pcFontScan" class="secondary mini">扫描样式字体</button>
+                </div>
+            </div>
+
             <div class="pc-card pc-card-grow">
                 <div class="pc-head">
                     <span>转换日志</span>
@@ -1183,6 +1205,9 @@
     <script src="js/admin-panel.js"></script>
     <script src="js/pr-convert.js"></script>
     <script src="js/pr-convert-ui.js"></script>
+    <script src="js/font-install.js"></script>
+    <script src="js/font-fix.js"></script>
+    <script src="js/font-fix-ui.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================

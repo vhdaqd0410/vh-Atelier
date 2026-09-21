@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "新增缺失字体修复（解决 Bahnschrift 可变字体在低版本 PR 不可用）",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "PR 工具面板新增「缺失字体修复」：一键安装静态 Bahnschrift Bold"
+        },
+        {
+          "kind": "feat",
+          "text": "字体随插件附带，免管理员、可卸载，字重与原设计一致"
+        },
+        {
+          "kind": "feat",
+          "text": "新增「扫描样式字体」按钮，列出样式引用的字体"
+        },
+        {
+          "kind": "fix",
+          "text": "解决 PR2021 打开高版本样式时提示「字体不可用」"
+        }
+      ],
+      "version": "1.11.0",
+      "date": "2026-09-21"
+    },
+    {
       "title": "新增 🔧 工具面板（PR 版本转换）",
       "items": [
         {
