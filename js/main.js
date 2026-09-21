@@ -5,6 +5,7 @@
         home: document.getElementById('panel-home'),
         media: document.getElementById('panel-media'),
         project: document.getElementById('panel-project'),
+        prconv: document.getElementById('panel-prconv'),
         separate: document.getElementById('panel-sep'),
         sfx: document.getElementById('panel-sfx'),
         musiclib: document.getElementById('panel-musiclib'),
@@ -26,6 +27,7 @@
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' },
+        prconv: { members: ['prconv'], default: 'prconv' },
         feedback: { members: ['feedback'], default: 'feedback' }
     };
     // tab 归属映射
@@ -109,6 +111,9 @@
         // 反馈中心：切到时把 iframe 拉起来
         if (name === 'feedback' && window.__feedbackPanelOnShow) {
             try { window.__feedbackPanelOnShow(); } catch (e) {}
+        }
+        if (name === 'prconv' && window.__prconvOnShow) {
+            try { window.__prconvOnShow(); } catch (e) {}
         }
     }
 

@@ -47,6 +47,7 @@
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
+        <button class="ws-group" data-group="prconv">🔧 工具</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
     </div>
 
@@ -133,6 +134,9 @@
     </div>
     <div class="tabs ws-subtabs" data-group="feedback" style="display:none;">
         <button class="tab active" data-tab="feedback">反馈中心</button>
+    </div>
+<div class="tabs ws-subtabs" data-group="prconv" style="display:none;">
+        <button class="tab active" data-tab="prconv">PR 版本转换</button>
     </div>
 
     <!-- 人声分离（从字幕工作台迁至声音工作台） -->
@@ -618,7 +622,7 @@
             </div>
 
             <!-- 左右并排：进行中项目 | 本地项目 -->
-            <div class="pj-cols">
+            <div class="pj-cols" id="pjCols">
 
                 <!-- 左：NAS 进行中项目 -->
                 <div class="pj-group pj-col">
@@ -673,6 +677,11 @@
                 </div>
             </div>
 
+            <!-- 可拖动分割条：调整上半区（项目/本地）与日志的高度 -->
+            <div class="en-splitter" id="pjSplitter" title="上下拖动调整列表区与日志的高度；双击还原默认">
+                <span class="en-splitter-grip"></span>
+            </div>
+
             <!-- 日志（可最大化） -->
             <div class="pj-group" id="pjLogWrap">
                 <div class="pj-ghead">
@@ -681,26 +690,42 @@
                 </div>
                 <div id="pjLog" class="pj-log"></div>
             </div>
+        </div>
+    </div>
 
-            <!-- PR 样式版本转换 -->
-            <div class="pj-group" id="scGroup">
-                <div class="pj-ghead">
-                    <span>🔤 PR 文字样式版本转换</span>
-                    <span id="scSrcVer" class="pj-cnt">未选择文件</span>
+
+    <!-- ==================== PR 工具（版本转换） ==================== -->
+    <div class="tab-panel" id="panel-prconv" style="display:none;">
+        <div class="pc-wrap">
+            <div class="pc-card">
+                <div class="pc-head">
+                    <span>🔧 PR 版本转换</span>
+                    <span id="pcSrcVer" class="pc-ver">未选择文件</span>
+                </div>
+                <div class="pc-tip">
+                    高版本 PR 做的样式/工程，低版本打不开 → 转成低版本可用。
+                    高版本一定能打开低版本，所以默认转 <b>PR 2021</b> 就够用。
                 </div>
                 <div class="pj-row">
-                    <label class="pj-lb">样式文件</label>
-                    <input type="text" id="scSrc" placeholder="高版本 PR 的 .prtextstyle">
-                    <button id="scBrowse" class="secondary mini">选择文件…</button>
+                    <label class="pj-lb">文件</label>
+                    <input type="text" id="pcSrc" placeholder=".prtextstyle 文字样式 / .prproj 工程文件">
+                    <button id="pcBrowse" class="secondary mini">选择文件…</button>
                 </div>
                 <div class="pj-row">
                     <label class="pj-lb">目标版本</label>
-                    <select id="scTarget" style="flex:1;min-width:0;"></select>
-                    <button id="scApply" class="pj-main" style="flex:0 0 auto;">转换</button>
-                    <button id="scDetect" class="secondary mini">识别版本</button>
-                    <button id="scOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
+                    <select id="pcTarget" style="flex:1;min-width:0;"></select>
+                    <button id="pcApply" class="pj-main" style="flex:0 0 auto;">开始转换</button>
+                    <button id="pcDetect" class="secondary mini">识别版本</button>
+                    <button id="pcOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
                 </div>
-                <div id="scLog" class="pj-log" style="max-height:96px;"></div>
+            </div>
+
+            <div class="pc-card" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+                <div class="pc-head">
+                    <span>转换日志</span>
+                    <button id="pcClearLog" class="secondary mini" style="margin-left:auto;">清空</button>
+                </div>
+                <div id="pcLog" class="pj-log" style="flex:1;max-height:none;"></div>
             </div>
         </div>
     </div>
@@ -937,9 +962,9 @@
     <script src="js/enhance.js"></script>
     <script src="js/media.js"></script>
     <script src="js/project.js"></script>
-    <script src="js/style-convert.js"></script>
     <script src="js/project-ui.js"></script>
-    <script src="js/style-convert-ui.js"></script>
+    <script src="js/pr-convert.js"></script>
+    <script src="js/pr-convert-ui.js"></script>
     <script src="js/video.js"></script>
     <script src="js/script.js"></script>
     <script src="js/iframe-nav.js"></script>

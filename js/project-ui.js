@@ -972,4 +972,62 @@
     } else {
         bind();
     }
+
+    // ---------- 列表区 / 日志 高度分割条 ----------
+    (function () {
+        var panel = document.getElementById('panel-project');
+        var cols = document.getElementById('pjCols');
+        var splitter = document.getElementById('pjSplitter');
+        var logWrap = document.getElementById('pjLogWrap');
+        if (!panel || !cols || !splitter || !logWrap) return;
+
+        var KEY = 'vh_pj_log_h';
+        var DEF = 120;      // 日志默认高
+        var MIN_LOG = 60;   // 日志最小
+        var MIN_TOP = 120;  // 上半区最小
+
+        function clamp(px) {
+            var total = panel.clientHeight || 600;
+            var max = Math.max(MIN_LOG, total - MIN_TOP);
+            if (px < MIN_LOG) px = MIN_LOG;
+            if (px > max) px = max;
+            return Math.round(px);
+        }
+        function apply(px, save) {
+            px = clamp(px);
+            logWrap.style.flex = '0 0 auto';
+            logWrap.style.height = px + 'px';
+            var lg = document.getElementById('pjLog');
+            if (lg) lg.style.maxHeight = 'none';
+            if (save) { try { localStorage.setItem(KEY, String(px)); } catch (e) {} }
+            return px;
+        }
+
+        apply(parseInt(localStorage.getItem(KEY) || DEF, 10), false);
+
+        var dragging = false, startY = 0, startH = 0;
+        splitter.addEventListener('mousedown', function (e) {
+            dragging = true;
+            startY = e.clientY;
+            startH = logWrap.getBoundingClientRect().height;
+            splitter.classList.add('active');
+            document.body.style.cursor = 'row-resize';
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', function (e) {
+            if (!dragging) return;
+            apply(startH - (e.clientY - startY), false);
+        });
+        document.addEventListener('mouseup', function () {
+            if (!dragging) return;
+            dragging = false;
+            splitter.classList.remove('active');
+            document.body.style.cursor = '';
+            apply(logWrap.getBoundingClientRect().height, true);
+        });
+        splitter.addEventListener('dblclick', function () {
+            apply(DEF, true);
+        });
+    })();
+
 })();
