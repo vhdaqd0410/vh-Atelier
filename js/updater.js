@@ -302,6 +302,7 @@
     // 自己的服务器在国内可直连 GitHub，由它代取并缓存，插件只连自己的服务器。
     var MIRROR_BASE = 'http://47.122.108.231:17894';
     var _mirrorProbe = null;     // 探测结果缓存：{ ok, at, base, plugin }
+    var _forceNextCheck = false; // 下一次检查是否强制回源（手动点「检查更新」时置真）
 
     function mirrorBase() {
         // 允许用插件根目录的 license-admin.json / update.json 覆盖地址
@@ -331,31 +332,35 @@
     }
 
     // 探测镜像是否可用（结果缓存 10 分钟，避免每次都问）
-    function probeMirror(cb) {
+    // force=true：跳过本地探测缓存，并要求服务端强制回源（用于用户手动点「检查更新」）
+    function probeMirror(cb, force) {
         var now = Date.now();
-        if (_mirrorProbe && (now - _mirrorProbe.at) < 600000) return cb(_mirrorProbe);
+        if (!force && _mirrorProbe && (now - _mirrorProbe.at) < 600000) return cb(_mirrorProbe);
         var pid = pluginId();
-        var url = mirrorBase() + '/api/update/version?plugin=' + encodeURIComponent(pid);
-        fetchJsonOnce(url, 6000, function (err, j) {
+        var url = mirrorBase() + '/api/update/version?plugin=' + encodeURIComponent(pid) +
+                  (force ? '&force=1&_=' + now : '');
+        fetchJsonOnce(url, 8000, function (err, j) {
             var r = { ok: !err && j && j.ok && j.versionJson, at: now, base: mirrorBase(), plugin: pid, data: j };
-            _mirrorProbe = r;
+            // 探测失败时不要缓存失败结果，避免 10 分钟内一直拿不到
+            if (r.ok || !force) _mirrorProbe = r;
             cb(r);
         });
     }
 
     // 从镜像取版本（成功则直接给结果）
-    function fetchFromMirror(cfg, cb) {
+    function fetchFromMirror(cfg, force, cb) {
         probeMirror(function (p) {
             if (!p.ok) return cb(new Error('镜像不可用'), null);
             cb(null, p.data.versionJson, 'mirror');
-        });
+        }, force);
     }
 
     // 读远端 version.json。三条线路依次尝试，出错信息全部收集起来，
     // 便于把「到底卡在哪」展示给用户，而不是笼统一句"检查失败"。
-    function fetchRemoteVersion(cfg, cb) {
+    // force=true 时会要求镜像服务跳过缓存直接回源
+    function fetchRemoteVersion(cfg, force, cb) {
         // 首选自建镜像：直连自己的服务器，不存在 403 / 被墙 / 长时间等待
-        return fetchFromMirror(cfg, function (mErr, mVer, mSrc) {
+        return fetchFromMirror(cfg, force, function (mErr, mVer, mSrc) {
             if (!mErr && mVer) return cb(null, mVer, mSrc);
             // 镜像不可用时，才退回下面直连 GitHub 的线路
             fetchRemoteVersionDirect(cfg, cb);
@@ -423,10 +428,13 @@
         tryNext();
     }
 
-    function checkUpdate(cb) {
+    function checkUpdate(cb, force) {
         var cfg = readCfg();
         if (!cfg || !cfg.repo || !cfg.branch) { cb(new Error('未配置更新源（缺 version.json）')); return; }
-        fetchRemoteVersion(cfg, function (err, remote, src) {
+        // force 未显式传入时，消费一次「本次检查是否强制」的意图标记
+        if (force === undefined) { force = !!_forceNextCheck; }
+        _forceNextCheck = false;
+        fetchRemoteVersion(cfg, force, function (err, remote, src) {
             if (err) { cb(err); return; }
             try { localStorage.setItem(LAST_CHECK_KEY, String(Date.now())); } catch (e) {}
             cb(null, {
@@ -584,6 +592,9 @@
             locked: false,
             onReady: function (api) {
                 api.el.innerHTML = '<div class="vhu-files">正在检查更新…</div>';
+                // 手动检查（silent 为假）时要求服务端强制回源，刚发布的版本能立刻看到；
+                // 自动检查走缓存，不消耗 GitHub API 配额。
+                _forceNextCheck = !silent;
                 checkUpdate(function (err, r) {
                     if (err) {
                         api.el.innerHTML = '<div class="vhu-note">检查更新失败：' + esc(err.message) +
@@ -591,8 +602,7 @@
                         api.addBtn('关闭', true, api.close);
                         return;
                     }
-                    var cur = r.local.version || '?';
-                    if (!r.hasUpdate) {
+                    var cur = r.local.version || '?';                    if (!r.hasUpdate) {
                         // 远端比本地旧：说明发布端还没跟上（或推送失败），不能降级
                         if (r.remoteOlder) {
                             api.el.innerHTML =
@@ -698,6 +708,7 @@
         if (autoChecked) return;
         autoChecked = true;
         setTimeout(function () {
+            // 自动检查：走缓存，不消耗 GitHub API 配额
             checkUpdate(function (err, r) {
                 if (err) {
                     // 以前这里直接 return，用户完全不知道检查失败了，
