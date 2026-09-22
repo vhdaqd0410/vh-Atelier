@@ -17,6 +17,7 @@
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
         prconv: document.getElementById('panel-prconv'),
+        colorxml: document.getElementById('panel-colorxml'),
         todo: document.getElementById('panel-todo'),
         feedback: document.getElementById('panel-feedback'),
         admin: document.getElementById('panel-admin')
@@ -33,7 +34,7 @@
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' },
-        prconv: { members: ['prconv'], default: 'prconv' },
+        prconv: { members: ['prconv', 'colorxml'], default: 'prconv' },
         feedback: { members: ['feedback'], default: 'feedback' },
         admin: { members: ['admin'], default: 'admin' }
     };
@@ -127,6 +128,9 @@
         }
         if (name === 'prconv' && window.__prconvOnShow) {
             try { window.__prconvOnShow(); } catch (e) {}
+        }
+        if (name === 'colorxml' && window.__vhColorXmlOnShow) {
+            try { window.__vhColorXmlOnShow(); } catch (e) {}
         }
     }
 

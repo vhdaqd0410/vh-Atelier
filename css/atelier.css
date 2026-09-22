@@ -2937,3 +2937,22 @@
 .pt-tool[data-tool="log"].pt-open{flex:1 1 auto;min-height:180px;
     display:flex;flex-direction:column;}
 .pt-tool[data-tool="log"].pt-open .pt-body{flex:1;min-height:0;}
+
+/* ===== 调色 XML：轨道选择列表 ===== */
+.cx-tracks{display:flex;flex-direction:column;gap:2px;max-height:230px;overflow-y:auto;
+    background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:4px;}
+.cx-tr{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:3px;
+    font-size:10.5px;line-height:1.4;}
+.cx-tr:hover{background:#232323;}
+.cx-tr.cx-decor{opacity:.72;}
+.cx-tr.cx-empty{opacity:.38;}
+.cx-chk{flex:0 0 auto;display:flex;align-items:center;}
+.cx-chk input{width:auto;margin:0;}
+.cx-name{flex:0 0 30px;font-weight:600;color:#ddd;}
+.cx-cnt{flex:0 0 58px;color:#9a9a9a;}
+.cx-badge{flex:0 0 auto;font-size:9.5px;padding:1px 5px;border-radius:3px;white-space:nowrap;}
+.cx-badge-dis{background:#3a2a2a;color:#e0a0a0;}
+.cx-badge-tr{background:#2a3340;color:#8ec4e0;}
+.cx-badge-decor{background:#3a3524;color:#e0c268;}
+.cx-sample{flex:1;min-width:0;color:#7a8494;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;text-align:right;}

@@ -1002,7 +1002,78 @@
 
         </div>
     </div>
-    <!-- ==================== 审片（内嵌分秒帧，看批注不切出 PR） ==================== -->
+    <!-- ==================== PR 工具：调色 XML 清理 ==================== -->
+    <div class="tab-panel" id="panel-colorxml" style="display:none;">
+        <div class="pt-wrap">
+
+            <section class="pt-tool pt-open" id="cxToolMain" data-tool="cxmain">
+                <header class="pt-head" id="cxHeadMain">
+                    <span class="pt-caret">▾</span>
+                    <span class="pt-ico">🎨</span>
+                    <span class="pt-title">调色 XML 清理</span>
+                    <span class="pt-sum" id="cxStatus">未读取序列</span>
+                </header>
+                <div class="pt-body" id="cxBodyMain">
+                    <div class="pt-tip">
+                        剪辑完成后，把序列导出成<b>只给达芬奇调色</b>的单轨 XML。
+                        自动删除被禁用的镜头、水印 / 调整图层 / 转场等装饰轨、全部音频；
+                        多条视频轨合并成一条 V1。<b>原工程不会被改动。</b>
+                    </div>
+                    <div class="pt-row">
+                        <label class="pt-lb">序列</label>
+                        <select id="cxSeq" class="pt-in"></select>
+                        <button id="cxReadSeq" class="primary mini" style="flex:0 0 auto;">读取当前序列</button>
+                    </div>
+                    <div class="pt-row" id="cxTracksWrap" style="display:none;align-items:flex-start;">
+                        <label class="pt-lb" style="padding-top:3px;">保留轨道</label>
+                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+                            <div style="display:flex;gap:6px;align-items:center;">
+                                <span style="font-size:10px;color:#8a8a8a;">
+                                    勾选 = 参与合轨；不勾 = 整轨丢弃（水印 / 调整图层等请取消勾选）
+                                </span>
+                                <button id="cxAll" class="secondary mini" style="margin-left:auto;">全选</button>
+                                <button id="cxNone" class="secondary mini">仅留 V1</button>
+                            </div>
+                            <div id="cxTracks" class="cx-tracks"></div>
+                        </div>
+                    </div>
+                    <div class="pt-row" id="cxSummaryRow" style="display:none;">
+                        <label class="pt-lb"></label>
+                        <span id="cxSummary" style="font-size:10.5px;color:#8ec4e0;line-height:1.6;"></span>
+                    </div>
+                    <div class="pt-row">
+                        <label class="pt-lb">输出目录</label>
+                        <input type="text" id="cxOutDir" class="pt-in" placeholder="选择 XML 输出目录">
+                        <button id="cxOutBrowse" class="secondary mini">浏览…</button>
+                    </div>
+                    <div class="pt-row">
+                        <label class="pt-lb">文件名</label>
+                        <input type="text" id="cxOutName" class="pt-in" placeholder="留空则用序列名">
+                        <label class="pt-chk" style="font-size:10.5px;color:#9a9a9a;display:flex;align-items:center;gap:4px;">
+                            <input type="checkbox" id="cxDropTrans" style="width:auto;"> 丢弃转场
+                        </label>
+                    </div>
+                    <div class="pt-row">
+                        <button id="cxGo" class="primary mini">生成调色 XML</button>
+                        <button id="cxOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="pt-tool" id="cxToolLog" data-tool="cxlog">
+                <header class="pt-head" id="cxHeadLog">
+                    <span class="pt-caret">▸</span>
+                    <span class="pt-ico">📄</span>
+                    <span class="pt-title">运行日志</span>
+                    <button id="cxClearLog" class="secondary mini" style="margin-left:auto;">清空</button>
+                </header>
+                <div class="pt-body pt-body-grow" id="cxBodyLog" style="display:none;">
+                    <div id="cxLog" class="pt-log"></div>
+                </div>
+            </section>
+
+        </div>
+    </div>
     <div class="tab-panel" id="panel-shenpian" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
             <div class="wb-nav">
@@ -1047,6 +1118,7 @@
 
     <div class="tabs ws-subtabs" data-group="prconv" style="display:none;">
         <button class="tab active" data-tab="prconv">PR 版本转换</button>
+        <button class="tab" data-tab="colorxml">调色 XML</button>
     </div>
 
     <!-- ==================== 超分（一键导出并超分 + 外站工具） ==================== -->
@@ -1219,6 +1291,8 @@
     <script src="js/admin-panel.js"></script>
     <script src="js/pr-convert.js"></script>
     <script src="js/pr-convert-ui.js"></script>
+    <script src="js/flatten-xml.js"></script>
+    <script src="js/flatten-ui.js"></script>
     <script src="js/font-install.js"></script>
     <script src="js/font-fix.js"></script>
     <script src="js/font-fix-ui.js"></script>

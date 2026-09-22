@@ -1,8 +1,15 @@
 // vh-Atelier · 工具面板的可折叠行为
 // 面板结构：<section class="pt-tool"><header class="pt-head"><div class="pt-body">
 // 点标题栏展开/收起；展开状态记在 localStorage。
+// 适用于所有带 .pt-wrap 的工具面板（PR 版本转换 / 调色 XML 等）。
 (function () {
-    if (!document.getElementById('panel-prconv')) return;
+    var PANELS = ['panel-prconv', 'panel-colorxml'];
+    var roots = [];
+    for (var p = 0; p < PANELS.length; p++) {
+        var n = document.getElementById(PANELS[p]);
+        if (n) roots.push(n);
+    }
+    if (!roots.length) return;
 
     var KEY = 'vh_pt_open';   // 存哪些工具是展开的
 
@@ -26,9 +33,14 @@
     }
 
     function init() {
-        var wrap = document.querySelector('#panel-prconv .pt-wrap');
-        if (!wrap) return;
-        var tools = wrap.querySelectorAll('.pt-tool');
+        var wrap = null, tools = [];
+        for (var r = 0; r < roots.length; r++) {
+            var w = roots[r].querySelector('.pt-wrap');
+            if (!w) continue;
+            var ts = w.querySelectorAll('.pt-tool');
+            for (var q = 0; q < ts.length; q++) tools.push(ts[q]);
+        }
+        if (!tools.length) return;
         var saved = loadOpen();
 
         tools.forEach(function (tool) {
@@ -38,7 +50,7 @@
             var key = tool.getAttribute('data-tool') || tool.id;
 
             // 默认：日志和转换展开，字体收起（首次使用时引导）
-            var def = (key === 'conv' || key === 'log');
+            var def = (key === 'conv' || key === 'log' || key === 'cxmain' || key === 'cxlog');
             var on = (saved[key] === undefined) ? def : !!saved[key];
             setOpen(tool, head, body, on, false);
 

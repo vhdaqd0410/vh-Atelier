@@ -1504,3 +1504,65 @@ function meImportFilesToBinStr() {
         return JSON.stringify({ ok: true, bin: pl.binName, imported: imported, failed: failed });
     } catch (e) { return JSON.stringify({ error: '导入异常: ' + e }); }
 }
+
+// ==================== 调色 XML：导出当前序列为 FCP XML ====================
+// 供「调色 XML 清理」工具调用：导出后由面板在 Node 端清理轨道。
+// 实测签名：Sequence.exportAsFinalCutProXML(outputPath) → boolean
+
+// 列出序列（带轨道概况），供面板选择要处理哪条序列
+function fcListSequences() {
+    try {
+        var out = [];
+        for (var i = 0; i < app.project.sequences.numSequences; i++) {
+            var sq = app.project.sequences[i];
+            var v = 0, a = 0;
+            try { v = sq.videoTracks.numTracks; } catch (e) {}
+            try { a = sq.audioTracks.numTracks; } catch (e) {}
+            var isActive = false;
+            try { isActive = (app.project.activeSequence && app.project.activeSequence.name === sq.name); } catch (e) {}
+            out.push({ name: sq.name, videoTracks: v, audioTracks: a, active: isActive });
+        }
+        return "OK:" + JSON.stringify({ sequences: out });
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 导出指定序列为 FCP XML
+// 参数：seqName（空=当前序列）、outPath（.xml 输出路径）
+function fcExportXML(seqName, outPath) {
+    try {
+        var seq = app.project.activeSequence;
+        if (seqName) {
+            var act = meActivateSequence(seqName);
+            if (act.indexOf('OK:') !== 0) return "ERR:激活序列失败：" + act;
+            seq = app.project.activeSequence;
+        }
+        if (!seq) return "ERR:没有活动序列";
+        if (!outPath) return "ERR:缺少输出路径";
+
+        // 确保输出目录存在
+        var outf = new File(outPath);
+        var parent = outf.parent;
+        if (parent && !parent.exists) {
+            try { parent.create(); } catch (e) { return "ERR:无法创建输出目录 " + parent.fsName; }
+        }
+        // 已存在先删（PR 覆盖行为不一致，先删最稳）
+        if (outf.exists) { try { outf.remove(); } catch (e) {} }
+
+        var ok = false;
+        try { ok = seq.exportAsFinalCutProXML(outf.fsName); } catch (e) {
+            return "ERR:导出异常 " + e.toString();
+        }
+        if (!ok) return "ERR:exportAsFinalCutProXML 返回失败";
+        if (!outf.exists) return "ERR:导出返回成功但文件未生成";
+        return "OK:" + JSON.stringify({ path: outf.fsName, seqName: seq.name });
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 取当前工程目录（导出 XML 的默认落点）
+function fcProjectDir() {
+    try {
+        var d = meProjectDir();
+        if (d && d.indexOf('OK:') === 0) return d;
+        return "OK:";
+    } catch (e) { return "ERR:" + e; }
+}
