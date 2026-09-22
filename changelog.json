@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "修复「检查更新」拿到旧版本号（更新源缓存未击穿）",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "手动「检查更新」现在会强制刷新更新源缓存"
+        },
+        {
+          "kind": "impr",
+          "text": "自动检查仍走缓存，不额外消耗 API 配额"
+        }
+      ],
+      "version": "1.19.2",
+      "date": "2026-09-18"
+    },
+    {
       "title": "修复更新提示误报「往回降级」",
       "items": [
         {
