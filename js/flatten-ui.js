@@ -5,6 +5,8 @@
 //   自动删：禁用片段、装饰轨（水印/调整图层/转场）、全部音频
 //   自动合：多条视频轨 → 一条 V1（上层优先，片段原子）
 //   原序列零改动（只读导出，不碰工程）
+//
+// 布局：左栏配置（序列 / 步骤 / 轨道 / 输出），右栏运行日志（分级着色、自动粘底）
 (function () {
     if (!document.getElementById('panel-colorxml')) return;
 
@@ -20,6 +22,7 @@
     var lastOut = '';
     var scanData = null;
     var seqList = [];
+    var nameTouched = false;   // 用户是否手动改过文件名（改了就不再自动覆盖）
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -29,6 +32,7 @@
 
     function pick() {
         el.seq = document.getElementById('cxSeq');
+        el.refreshSeq = document.getElementById('cxRefreshSeq');
         el.readSeq = document.getElementById('cxReadSeq');
         el.status = document.getElementById('cxStatus');
         el.tracks = document.getElementById('cxTracks');
@@ -42,22 +46,44 @@
         el.openOut = document.getElementById('cxOpenOut');
         el.clearLog = document.getElementById('cxClearLog');
         el.log = document.getElementById('cxLog');
-        el.preview = document.getElementById('cxPreview');
+        el.logStat = document.getElementById('cxLogStat');
         el.dropTrans = document.getElementById('cxDropTrans');
         el.cbxAll = document.getElementById('cxAll');
         el.cbxNone = document.getElementById('cxNone');
     }
 
+    // ---------- 日志（分级着色 + 自动粘底 + 条数统计） ----------
+    var logCount = 0;
+    var STICK_PX = 28;   // 距底部多少像素内算「贴底」
+
+    function nowStr() {
+        var d = new Date();
+        function p2(n) { return (n < 10 ? '0' : '') + n; }
+        return p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+    }
+
     function log(msg, kind) {
         if (!el.log) return;
-        var d = document.createElement('div');
-        d.textContent = msg;
-        if (kind === 'err') d.style.color = '#fca5a5';
-        else if (kind === 'ok') d.style.color = '#7fd68b';
-        else if (kind === 'warn') d.style.color = '#e0c268';
-        else if (kind === 'dim') d.style.color = '#8b95a5';
-        el.log.appendChild(d);
-        el.log.scrollTop = el.log.scrollHeight;
+        var atBottom = (el.log.scrollHeight - el.log.scrollTop - el.log.clientHeight) <= STICK_PX;
+
+        var line = document.createElement('span');
+        line.className = 'cx-ln cx-ln-' + (kind || 'info');
+
+        var t = document.createElement('span');
+        t.className = 'cx-ln-time';
+        t.textContent = nowStr();
+        line.appendChild(t);
+        line.appendChild(document.createTextNode(msg));
+
+        el.log.appendChild(line);
+        logCount++;
+        if (el.logStat) el.logStat.textContent = logCount + ' 条';
+
+        if (atBottom) el.log.scrollTop = el.log.scrollHeight;
+    }
+
+    function logSep() {
+        log('────────────────────────────', 'sep');
     }
 
     function cs() { return new CSInterface(); }
@@ -91,9 +117,24 @@
         }
     }
 
+    // ---------- 文件名自动填充：序列名-调色 ----------
+    function autoFillName(seqName) {
+        if (!el.outName) return;
+        if (nameTouched) return;                 // 用户改过就不动
+        if (!seqName) return;
+        el.outName.value = String(seqName).replace(/[\\\/:*?"<>|]/g, '_') + '-调色';
+    }
+
+    // 当前选中的序列名
+    function currentSeqName() {
+        return (el.seq && el.seq.value) ? el.seq.value : '';
+    }
+
     // ---------- 序列列表 ----------
-    function loadSequences() {
+    function loadSequences(silent) {
+        if (el.refreshSeq) el.refreshSeq.disabled = true;
         return evalHost('fcListSequences()').then(function (res) {
+            if (el.refreshSeq) el.refreshSeq.disabled = false;
             if (!res || res.indexOf('OK:') !== 0) {
                 log('读取序列失败：' + res, 'err');
                 return;
@@ -101,6 +142,9 @@
             try {
                 seqList = JSON.parse(res.slice(3)).sequences || [];
             } catch (e) { log('解析序列列表失败', 'err'); return; }
+
+            // 记住当前选择，刷新后尽量保留
+            var keepName = el.seq.value;
 
             var html = '';
             for (var i = 0; i < seqList.length; i++) {
@@ -110,11 +154,22 @@
                     (s.active ? ' · 当前' : '') + '）</option>';
             }
             el.seq.innerHTML = html;
-            // 默认选当前序列
-            for (var j = 0; j < seqList.length; j++) {
-                if (seqList[j].active) { el.seq.value = seqList[j].name; break; }
+
+            // 优先保留原选择，否则选 PR 当前序列，再否则选第一个
+            var picked = '';
+            for (var k = 0; k < seqList.length; k++) {
+                if (seqList[k].name === keepName) { picked = keepName; break; }
             }
-            log('读取到 ' + seqList.length + ' 条序列', 'dim');
+            if (!picked) {
+                for (var j = 0; j < seqList.length; j++) {
+                    if (seqList[j].active) { picked = seqList[j].name; break; }
+                }
+            }
+            if (!picked && seqList.length) picked = seqList[0].name;
+            if (picked) el.seq.value = picked;
+
+            if (!silent) log('已刷新序列列表，共 ' + seqList.length + ' 条', 'ok');
+            else log('读取到 ' + seqList.length + ' 条序列', 'dim');
         });
     }
 
@@ -126,13 +181,14 @@
     }
 
     function doReadSeq() {
-        var name = el.seq.value || '';
+        var name = currentSeqName();
         if (!name) { log('请先选择序列', 'err'); return Promise.resolve(); }
+
         var out = tmpXml(name);
         el.readSeq.disabled = true;
         el.status.textContent = '正在导出…';
         el.status.style.color = '#8ec4e0';
-        log('正在把「' + name + '」导出为 XML…', 'dim');
+        log('【第 1 步】把「' + name + '」导出为 XML…', 'step');
 
         return evalHost('fcExportXML(' + q(name) + ',' + q(out) + ')').then(function (res) {
             el.readSeq.disabled = false;
@@ -145,7 +201,7 @@
             }
             el.status.textContent = 'XML 已就绪';
             el.status.style.color = '#7fd68b';
-            log('导出成功：' + out, 'ok');
+            log('已导出：' + out, 'ok');
 
             // 读文件并扫描
             var txt;
@@ -154,11 +210,15 @@
 
             var s = F.scan(txt);
             if (s.error) { log('解析失败：' + s.error, 'err'); return; }
-            scanData = { text: txt, scan: s, file: out };
+            scanData = { text: txt, scan: s, file: out, seqName: name };
 
             renderTracks(s);
+            // 文件名自动填充（序列名-调色）
+            autoFillName(name);
+
             log('扫描完成：' + s.tracks.length + ' 条视频轨 / ' +
                 s.audioTracks + ' 条音频轨（' + s.audioClips + ' 个音频片段，将全部清空）', 'ok');
+            log('可在左侧勾选要保留的轨道，改完会自动重算结果。', 'dim');
         });
     }
 
@@ -174,22 +234,22 @@
             var checked = !t.decor && !disabled;
 
             html += '<div class="cx-tr' + (t.decor ? ' cx-decor' : '') +
-                (disabled ? ' cx-empty' : '') + '" data-idx="' + t.index + '">';
+                (disabled ? ' cx-empty' : '') + '" data-idx="' + t.index + '" title="' +
+                esc(t.label + ' · ' + (t.sample || '(空轨)')) + '">';
             html += '<label class="cx-chk"><input type="checkbox" class="cx-cb"' +
                 (checked ? ' checked' : '') + (disabled ? ' disabled' : '') + '></label>';
             html += '<span class="cx-name">' + esc(t.label) + '</span>';
             html += '<span class="cx-cnt">' + t.clipCount + ' 片段</span>';
             if (t.disabled > 0) {
-                html += '<span class="cx-badge cx-badge-dis">禁用 ' + t.disabled + '</span>';
+                html += '<span class="cx-badge cx-badge-dis" title="该轨上有被禁用的片段，会自动删除">禁用 ' + t.disabled + '</span>';
             }
             if (t.transitionCount > 0) {
-                html += '<span class="cx-badge cx-badge-tr">转场 ' + t.transitionCount + '</span>';
+                html += '<span class="cx-badge cx-badge-tr" title="该轨含转场（输出里表现为片段重叠）">转场 ' + t.transitionCount + '</span>';
             }
             if (t.decor) {
-                html += '<span class="cx-badge cx-badge-decor">装饰 · ' + esc(t.decorWhy) + '</span>';
+                html += '<span class="cx-badge cx-badge-decor" title="疑似装饰轨：' + esc(t.decorWhy) + '">装饰 · ' + esc(t.decorWhy) + '</span>';
             }
-            html += '<span class="cx-sample" title="' + esc(t.sample) + '">' +
-                esc((t.sample || '(空轨)').slice(0, 30)) + '</span>';
+            html += '<span class="cx-sample">' + esc((t.sample || '(空轨)').slice(0, 30)) + '</span>';
             html += '</div>';
         }
         el.tracks.innerHTML = html;
@@ -220,7 +280,7 @@
         var s = scanData.scan;
 
         if (!keep.length) {
-            el.summary.textContent = '⚠ 至少要保留一条视频轨';
+            el.summary.textContent = '至少要保留一条视频轨';
             el.summary.style.color = '#fca5a5';
             return;
         }
@@ -237,15 +297,15 @@
             dropTransitions: !!(el.dropTrans && el.dropTrans.checked)
         });
         if (!r.ok) {
-            el.summary.textContent = '⚠ ' + r.msg;
+            el.summary.textContent = r.msg;
             el.summary.style.color = '#fca5a5';
             return;
         }
         var st = r.stats;
-        var msg = '合轨后 ' + st.mergedSegments + ' 个片段（成片时长 ' +
-            (st.duration / r.fps).toFixed(2) + ' 秒）';
-        msg += ' · 删禁用片段 ' + st.droppedDisabled + ' 个';
-        msg += ' · 清空音频 ' + st.droppedAudio + ' 个';
+        var msg = '合轨后 ' + st.mergedSegments + ' 个片段（成片 ' +
+            (st.duration / r.fps).toFixed(2) + ' 秒 @ ' + r.fps + 'fps）';
+        msg += ' · 删禁用 ' + st.droppedDisabled;
+        msg += ' · 清音频 ' + st.droppedAudio;
         if (st.skippedTracks.length) msg += ' · 跳过 ' + st.skippedTracks.join('/');
         el.summary.textContent = msg;
         el.summary.style.color = '#8ec4e0';
@@ -253,7 +313,7 @@
 
     // ---------- 执行导出 ----------
     function doExport() {
-        if (!scanData) { log('请先点「读取当前序列」', 'err'); return; }
+        if (!scanData) { log('请先点「① 读取当前序列」', 'err'); return; }
         var keep = pickedTracks();
         if (!keep.length) { log('至少要保留一条视频轨', 'err'); return; }
 
@@ -269,10 +329,12 @@
             if (keep.indexOf(t.index) < 0) skip.push(t.index);
         }
 
-        var name = (el.outName.value || '').trim() || (s.seqName || 'sequence');
-        var outFile = path.join(dir, name + '_调色.xml');
+        var name = (el.outName.value || '').trim() || ((s.seqName || 'sequence') + '-调色');
+        var outFile = path.join(dir, name + '.xml');
+
+        log('【第 2 步】生成调色 XML…', 'step');
         if (fs.existsSync(outFile)) {
-            log('输出文件已存在，将被覆盖：' + outFile, 'warn');
+            log('同名文件已存在，将被覆盖：' + outFile, 'warn');
         }
 
         var r = F.flatten(scanData.text, {
@@ -286,7 +348,7 @@
 
         lastOut = outFile;
         var st = r.stats;
-        log('──────────', 'dim');
+        logSep();
         log('已输出：' + outFile, 'ok');
         log('  · 保留轨道：' + st.keptTracks.join(' / '), 'dim');
         if (st.skippedTracks.length) log('  · 跳过轨道：' + st.skippedTracks.join(' / '), 'dim');
@@ -299,7 +361,7 @@
             log('  · 修复素材引用：' + st.fixedFileRefs + ' 个（原本因删轨而悬空）', 'dim');
         }
         if (st.danglingLeft) {
-            log('  ⚠ 仍有 ' + st.danglingLeft + ' 个素材引用无法补全，建议在达芬奇里核对', 'warn');
+            log('  仍有 ' + st.danglingLeft + ' 个素材引用无法补全，建议在达芬奇里核对', 'warn');
         }
         log('原工程完全未改动，可直接把该 XML 导入达芬奇调色。', 'ok');
         el.openOut.style.display = '';
@@ -310,6 +372,23 @@
     function bind() {
         pick();
         if (!el.seq) return;
+
+        // 刷新序列列表（切换序列后不用切页面）
+        el.refreshSeq.onclick = function () {
+            loadSequences(false).catch(function (e) {
+                log('刷新序列失败：' + (e && e.message || e), 'err');
+            });
+        };
+
+        // 换序列时，如果文件名还是自动填的，跟着更新
+        el.seq.addEventListener('change', function () {
+            if (!scanData) autoFillName(currentSeqName());
+        });
+
+        // 用户手动改文件名后，不再自动覆盖
+        el.outName.addEventListener('input', function () {
+            nameTouched = !!el.outName.value.trim();
+        });
 
         el.readSeq.onclick = function () {
             doReadSeq().catch(function (e) { log('异常：' + (e && e.message || e), 'err'); });
@@ -327,7 +406,13 @@
                 } catch (e) { log('打开失败：' + e.message, 'err'); }
             };
         }
-        if (el.clearLog) el.clearLog.onclick = function () { el.log.innerHTML = ''; };
+        if (el.clearLog) {
+            el.clearLog.onclick = function () {
+                el.log.innerHTML = '';
+                logCount = 0;
+                if (el.logStat) el.logStat.textContent = '';
+            };
+        }
 
         if (el.dropTrans) el.dropTrans.addEventListener('change', updatePreview);
 
@@ -340,7 +425,6 @@
         }
         if (el.cbxNone) {
             el.cbxNone.onclick = function () {
-                // 至少留 V1
                 var cbs = el.tracks.querySelectorAll('.cx-cb');
                 for (var i = 0; i < cbs.length; i++) cbs[i].checked = (i === 0);
                 if (cbs[0]) cbs[0].checked = true;
@@ -352,18 +436,18 @@
         var ld = getLastDir();
         if (ld) { el.outDir.value = ld; }
 
-        log('把剪辑好的序列导出成「只给调色用」的单轨 XML。', '');
-        log('自动删除：被禁用的镜头、水印/调整图层/转场等装饰轨、全部音频。', '');
-        log('自动合并：多条视频轨 → 一条 V1（上层优先，片段不被切碎）。', '');
+        log('把剪辑好的序列导出成「只给调色用」的单轨 XML。', 'info');
+        log('自动删除：被禁用的镜头、水印/调整图层/转场等装饰轨、全部音频。', 'dim');
+        log('自动合并：多条视频轨 → 一条 V1（上层优先，片段不被切碎）。', 'dim');
         log('原工程不会被改动。', 'ok');
 
-        loadSequences().catch(function () {});
+        loadSequences(true).catch(function () {});
     }
 
     // 切到本面板时刷新序列
     window.__vhColorXmlOnShow = function () {
         if (!el.seq) pick();
-        loadSequences().catch(function () {});
+        loadSequences(true).catch(function () {});
     };
 
     if (document.readyState === 'loading') {

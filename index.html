@@ -39,6 +39,7 @@
     </div>
 
     <div class="ws-groups">
+        <button class="ws-group" data-group="prconv">🔧 工具</button>
         <button class="ws-group" data-group="media">🗂 素材</button>
         <button class="ws-group" data-group="script">📖 剧本</button>
         <button class="ws-group active" data-group="progress">进度</button>
@@ -49,7 +50,6 @@
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
-        <button class="ws-group" data-group="prconv">🔧 工具</button>
         <button class="ws-group" data-group="admin">⚙ 管理<span id="adminBadge" class="ws-badge" style="display:none;">0</span></button>
     </div>
 
@@ -1004,73 +1004,95 @@
     </div>
     <!-- ==================== PR 工具：调色 XML 清理 ==================== -->
     <div class="tab-panel" id="panel-colorxml" style="display:none;">
-        <div class="pt-wrap">
+        <div class="cx-layout">
 
-            <section class="pt-tool pt-open" id="cxToolMain" data-tool="cxmain">
-                <header class="pt-head" id="cxHeadMain">
-                    <span class="pt-caret">▾</span>
-                    <span class="pt-ico">🎨</span>
-                    <span class="pt-title">调色 XML 清理</span>
-                    <span class="pt-sum" id="cxStatus">未读取序列</span>
-                </header>
-                <div class="pt-body" id="cxBodyMain">
-                    <div class="pt-tip">
-                        剪辑完成后，把序列导出成<b>只给达芬奇调色</b>的单轨 XML。
-                        自动删除被禁用的镜头、水印 / 调整图层 / 转场等装饰轨、全部音频；
-                        多条视频轨合并成一条 V1。<b>原工程不会被改动。</b>
+            <!-- 左：配置 -->
+            <div class="cx-left">
+
+                <div class="cx-card">
+                    <div class="cx-card-head">
+                        <span class="cx-card-ico">🎨</span>
+                        <span class="cx-card-title">调色 XML 清理</span>
+                        <span class="pt-sum" id="cxStatus">未读取序列</span>
                     </div>
-                    <div class="pt-row">
-                        <label class="pt-lb">序列</label>
-                        <select id="cxSeq" class="pt-in"></select>
-                        <button id="cxReadSeq" class="primary mini" style="flex:0 0 auto;">读取当前序列</button>
-                    </div>
-                    <div class="pt-row" id="cxTracksWrap" style="display:none;align-items:flex-start;">
-                        <label class="pt-lb" style="padding-top:3px;">保留轨道</label>
-                        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
-                            <div style="display:flex;gap:6px;align-items:center;">
-                                <span style="font-size:10px;color:#8a8a8a;">
-                                    勾选 = 参与合轨；不勾 = 整轨丢弃（水印 / 调整图层等请取消勾选）
-                                </span>
-                                <button id="cxAll" class="secondary mini" style="margin-left:auto;">全选</button>
-                                <button id="cxNone" class="secondary mini">仅留 V1</button>
+                    <div class="cx-card-body">
+                        <div class="cx-tip">
+                            剪辑完成后，把序列导出成<b>只给达芬奇调色</b>的单轨 XML。
+                            自动删除被禁用的镜头、水印 / 调整图层 / 转场等装饰轨、全部音频，
+                            多条视频轨合并成一条 V1。<b>原工程不会被改动。</b>
+                        </div>
+
+                        <!-- 序列 -->
+                        <div class="cx-row">
+                            <label class="cx-lb">序列</label>
+                            <select id="cxSeq" class="cx-in" title="选择要处理的序列（列出当前工程里的全部序列）"></select>
+                            <button id="cxRefreshSeq" class="secondary mini"
+                                    title="重新读取工程里的序列列表（在 PR 里新建/改名序列后点这里）">↻</button>
+                        </div>
+
+                        <!-- 步骤按钮 -->
+                        <div class="cx-steps">
+                            <button id="cxReadSeq" class="primary cx-step-btn"
+                                    title="第一步：把所选序列导出为 XML 并读取轨道结构（只读，不会修改工程）">
+                                <span class="cx-step-no">1</span>读取当前序列
+                            </button>
+                            <button id="cxGo" class="primary cx-step-btn"
+                                    title="第二步：按当前轨道选择生成调色 XML，输出到下方指定目录">
+                                <span class="cx-step-no">2</span>生成调色 XML
+                            </button>
+                            <button id="cxOpenOut" class="secondary mini" style="display:none;"
+                                    title="在资源管理器中定位刚生成的文件">打开输出位置</button>
+                        </div>
+
+                        <!-- 保留轨道 -->
+                        <div class="cx-group" id="cxTracksWrap" style="display:none;">
+                            <div class="cx-group-head">
+                                <span class="cx-group-title">保留轨道</span>
+                                <span class="cx-group-hint">勾选 = 参与合轨；不勾 = 整轨丢弃（水印/调整图层等请取消勾选）</span>
+                                <button id="cxAll" class="secondary mini" title="勾选全部有内容的轨道">全选</button>
+                                <button id="cxNone" class="secondary mini" title="只保留 V1，其余全部丢弃">仅留 V1</button>
                             </div>
                             <div id="cxTracks" class="cx-tracks"></div>
                         </div>
-                    </div>
-                    <div class="pt-row" id="cxSummaryRow" style="display:none;">
-                        <label class="pt-lb"></label>
-                        <span id="cxSummary" style="font-size:10.5px;color:#8ec4e0;line-height:1.6;"></span>
-                    </div>
-                    <div class="pt-row">
-                        <label class="pt-lb">输出目录</label>
-                        <input type="text" id="cxOutDir" class="pt-in" placeholder="选择 XML 输出目录">
-                        <button id="cxOutBrowse" class="secondary mini">浏览…</button>
-                    </div>
-                    <div class="pt-row">
-                        <label class="pt-lb">文件名</label>
-                        <input type="text" id="cxOutName" class="pt-in" placeholder="留空则用序列名">
-                        <label class="pt-chk" style="font-size:10.5px;color:#9a9a9a;display:flex;align-items:center;gap:4px;">
-                            <input type="checkbox" id="cxDropTrans" style="width:auto;"> 丢弃转场
-                        </label>
-                    </div>
-                    <div class="pt-row">
-                        <button id="cxGo" class="primary mini">生成调色 XML</button>
-                        <button id="cxOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
-                    </div>
-                </div>
-            </section>
 
-            <section class="pt-tool" id="cxToolLog" data-tool="cxlog">
-                <header class="pt-head" id="cxHeadLog">
-                    <span class="pt-caret">▸</span>
-                    <span class="pt-ico">📄</span>
-                    <span class="pt-title">运行日志</span>
-                    <button id="cxClearLog" class="secondary mini" style="margin-left:auto;">清空</button>
-                </header>
-                <div class="pt-body pt-body-grow" id="cxBodyLog" style="display:none;">
-                    <div id="cxLog" class="pt-log"></div>
+                        <!-- 预览 -->
+                        <div class="cx-summary" id="cxSummaryRow" style="display:none;">
+                            <span class="cx-summary-ico">📊</span>
+                            <span id="cxSummary"></span>
+                        </div>
+
+                        <!-- 输出 -->
+                        <div class="cx-row">
+                            <label class="cx-lb">输出目录</label>
+                            <input type="text" id="cxOutDir" class="cx-in" placeholder="选择 XML 输出目录">
+                            <button id="cxOutBrowse" class="secondary mini" title="选择输出目录（会记住上次位置）">浏览…</button>
+                        </div>
+                        <div class="cx-row">
+                            <label class="cx-lb">文件名</label>
+                            <input type="text" id="cxOutName" class="cx-in" placeholder="读取序列后自动填充">
+                            <label class="cx-chk" title="勾选后不在 XML 里保留转场（转场会在输出里表现为两段重叠）">
+                                <input type="checkbox" id="cxDropTrans" style="width:auto;"> 丢弃转场
+                            </label>
+                        </div>
+                    </div>
                 </div>
-            </section>
+
+            </div>
+
+            <!-- 右：日志 -->
+            <div class="cx-right">
+                <div class="cx-card cx-logcard">
+                    <div class="cx-card-head">
+                        <span class="cx-card-ico">📄</span>
+                        <span class="cx-card-title">运行日志</span>
+                        <span class="cx-logstat" id="cxLogStat"></span>
+                        <button id="cxClearLog" class="secondary mini" title="清空日志">清空</button>
+                    </div>
+                    <div class="cx-card-body cx-logbody">
+                        <div id="cxLog" class="cx-log"></div>
+                    </div>
+                </div>
+            </div>
 
         </div>
     </div>

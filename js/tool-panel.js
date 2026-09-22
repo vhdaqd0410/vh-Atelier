@@ -1,9 +1,10 @@
 // vh-Atelier · 工具面板的可折叠行为
 // 面板结构：<section class="pt-tool"><header class="pt-head"><div class="pt-body">
 // 点标题栏展开/收起；展开状态记在 localStorage。
-// 适用于所有带 .pt-wrap 的工具面板（PR 版本转换 / 调色 XML 等）。
+// 只作用于「pt-wrap + pt-tool」结构的面板（PR 版本转换等）；
+// 调色 XML 是左右分栏布局，不用这套折叠。
 (function () {
-    var PANELS = ['panel-prconv', 'panel-colorxml'];
+    var PANELS = ['panel-prconv'];
     var roots = [];
     for (var p = 0; p < PANELS.length; p++) {
         var n = document.getElementById(PANELS[p]);

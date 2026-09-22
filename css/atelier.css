@@ -2956,3 +2956,64 @@
 .cx-badge-decor{background:#3a3524;color:#e0c268;}
 .cx-sample{flex:1;min-width:0;color:#7a8494;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;text-align:right;}
+
+/* ===== 调色 XML：左右分栏布局 ===== */
+.cx-layout{display:flex;gap:10px;height:calc(100vh - 128px);align-items:stretch;}
+.cx-left{flex:0 0 46%;min-width:330px;display:flex;flex-direction:column;
+    overflow-y:auto;overflow-x:hidden;padding-right:2px;}
+.cx-right{flex:1;min-width:0;display:flex;flex-direction:column;}
+
+.cx-card{background:var(--panel2,#242424);border:1px solid var(--border,#3a3a3a);
+    border-radius:6px;display:flex;flex-direction:column;overflow:hidden;}
+.cx-logcard{flex:1;min-height:0;}
+.cx-card-head{display:flex;align-items:center;gap:7px;padding:9px 12px;
+    border-bottom:1px solid #2e2e2e;flex:0 0 auto;}
+.cx-card-ico{font-size:13px;flex:0 0 auto;}
+.cx-card-title{font-size:12.5px;font-weight:600;color:#ddd;flex:0 0 auto;}
+.cx-card-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:7px;}
+.cx-logbody{flex:1;min-height:0;padding:8px;}
+
+.cx-tip{font-size:10.5px;color:#9a9a9a;line-height:1.75;background:#1c1c1c;
+    border:1px solid #2e2e2e;border-radius:4px;padding:7px 9px;}
+.cx-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.cx-lb{flex:0 0 58px;font-size:11px;color:#9a9a9a;}
+.cx-in{flex:1;min-width:0;background:#1a1a1a;color:#e8e8e8;border:1px solid #3a3a3a;
+    border-radius:4px;font-size:11px;padding:5px 7px;}
+.cx-in:focus{outline:none;border-color:#4a6fa5;}
+.cx-chk{font-size:10.5px;color:#9a9a9a;display:flex;align-items:center;gap:4px;white-space:nowrap;}
+
+/* 步骤按钮（第一步/第二步） */
+.cx-steps{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    background:#1c1c1c;border:1px solid #2e2e2e;border-radius:4px;padding:7px 9px;}
+.cx-step-btn{display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;}
+.cx-step-no{display:inline-flex;align-items:center;justify-content:center;
+    width:15px;height:15px;border-radius:50%;background:rgba(255,255,255,.22);
+    font-size:9.5px;font-weight:700;flex:0 0 auto;}
+
+/* 分组块（保留轨道） */
+.cx-group{display:flex;flex-direction:column;gap:5px;}
+.cx-group-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.cx-group-title{font-size:11px;color:#bbb;font-weight:600;flex:0 0 auto;}
+.cx-group-hint{font-size:10px;color:#8a8a8a;flex:1;min-width:0;}
+
+/* 预览条 */
+.cx-summary{display:flex;align-items:flex-start;gap:6px;font-size:10.5px;
+    color:#8ec4e0;line-height:1.65;background:#1a222c;border:1px solid #26374a;
+    border-radius:4px;padding:6px 9px;}
+.cx-summary-ico{flex:0 0 auto;}
+
+/* ===== 调色 XML：日志（分级着色 + 粘底） ===== */
+.cx-log{height:100%;min-height:150px;background:#131417;border:1px solid #2b2f36;
+    border-radius:4px;padding:8px 10px;overflow-y:auto;
+    font-family:Consolas,"Cascadia Mono",monospace;font-size:10.5px;line-height:1.8;
+    color:#c8cdd6;white-space:pre-wrap;word-break:break-all;}
+.cx-log .cx-ln{display:block;}
+.cx-log .cx-ln-info{color:#c8cdd6;}
+.cx-log .cx-ln-dim{color:#7c8698;}
+.cx-log .cx-ln-ok{color:#78d98a;}
+.cx-log .cx-ln-warn{color:#e6c469;}
+.cx-log .cx-ln-err{color:#f2879a;}
+.cx-log .cx-ln-step{color:#8ec4e0;font-weight:600;}
+.cx-log .cx-ln-sep{color:#4a525f;}
+.cx-log .cx-ln-time{color:#5d6675;margin-right:6px;}
+.cx-logstat{font-size:10px;color:#8a8a8a;margin-left:auto;flex:0 0 auto;}
