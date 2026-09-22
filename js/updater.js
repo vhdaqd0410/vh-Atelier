@@ -41,6 +41,23 @@
         return null;
     }
 
+    // 版本号比较：返回 a 是否比 b 新（语义化逐段比较）
+    function verNum(v) {
+        return String(v || '0').replace(/^v/i, '').split('.').map(function (x) {
+            var n = parseInt(x, 10); return isNaN(n) ? 0 : n;
+        });
+    }
+    function verGt(a, b) {
+        var A = verNum(a), B = verNum(b);
+        var len = Math.max(A.length, B.length);
+        for (var i = 0; i < len; i++) {
+            var x = A[i] || 0, y = B[i] || 0;
+            if (x > y) return true;
+            if (x < y) return false;
+        }
+        return false;
+    }
+
     // ============ 样式（统一注入一次）============
     var STYLE_ID = 'vh-update-style';
     function injectStyle() {
@@ -300,7 +317,12 @@
                 local: cfg,
                 remote: remote,
                 src: src || 'mirror',
-                hasUpdate: String(remote.version || '') !== String(cfg.version || ''),
+                // 只有「远端严格比本地新」才算有更新。
+                // 之前写成 !== （版本号不同就算有更新），远端更旧时也会弹窗，
+                // 会让用户把已修复的版本退回去。
+                hasUpdate: verGt(remote.version, cfg.version),
+                // 远端比本地旧（一般是发布端未推送或推送失败）
+                remoteOlder: verGt(cfg.version, remote.version),
                 remoteTime: remote.buildTime || '',
                 notes: remote.notes || ''
             });
@@ -433,6 +455,19 @@
                     }
                     var cur = r.local.version || '?';
                     if (!r.hasUpdate) {
+                        // 远端比本地旧：不能降级，单独提示
+                        if (r.remoteOlder) {
+                            api.el.innerHTML =
+                                '<div class="vhu-ver">' +
+                                  '<span class="vhu-badge vhu-old">当前 v' + esc(cur) + '</span>' +
+                                  '<span class="vhu-arrow">→</span>' +
+                                  '<span class="vhu-badge">远端 v' + esc(r.remote.version || '?') + '</span>' +
+                                '</div>' +
+                                '<div class="vhu-note">远端版本比当前低，无需更新（也不会降级）。<br>' +
+                                '这种情况通常是发布端还未推送新版本，稍后再试即可。</div>';
+                            api.addBtn('关闭', true, api.close);
+                            return;
+                        }
                         api.el.innerHTML =
                             '<div class="vhu-ver"><span class="vhu-badge vhu-new">已是最新</span>' +
                             '<span class="vhu-files">v' + esc(cur) + '</span></div>' +
@@ -520,10 +555,20 @@
                     return;
                 }
                 lastAutoResult = { ok: true, at: Date.now(), hasUpdate: !!r.hasUpdate,
+                                   remoteOlder: !!r.remoteOlder,
                                    local: (r.local || {}).version, remote: (r.remote || {}).version };
                 if (r.hasUpdate) {
                     markUpdateState('has-update', '新版本 v' + ((r.remote || {}).version || ''));
                     showUpdateUI(true);
+                } else if (r.remoteOlder) {
+                    // 远端比本地旧：不弹窗打扰，只在日志里说明，避免误导用户降级
+                    markUpdateState('latest', '已是最新 v' + ((r.local || {}).version || ''));
+                    try {
+                        if (window.__vhLog && window.__vhLog.warn) {
+                            window.__vhLog.warn('更新源版本（v' + ((r.remote || {}).version || '?') +
+                                '）低于当前（v' + ((r.local || {}).version || '?') + '），已忽略，不会降级。');
+                        }
+                    } catch (e) {}
                 } else {
                     markUpdateState('latest', '已是最新 v' + ((r.local || {}).version || ''));
                 }
