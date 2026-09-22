@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "修复更新提示误报「往回降级」",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修复更新提示误报降级（与主插件同步）"
+        },
+        {
+          "kind": "fix",
+          "text": "远端版本更低时明确提示、不提供更新按钮"
+        }
+      ],
+      "version": "1.19.1",
+      "date": "2026-09-18"
+    },
+    {
       "title": "工具面板改为可折叠工具列表（便于后续扩展新工具）",
       "items": [
         {
