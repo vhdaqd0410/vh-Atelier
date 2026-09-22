@@ -51,6 +51,7 @@
         el.cbxNone = document.getElementById('cxNone');
         el.layout = document.querySelector('#panel-colorxml .cx-layout');
         el.split = document.getElementById('cxSplit');
+        el.purgeTmp = document.getElementById('cxPurgeTmp');
     }
 
     // ---------- 左右宽度拖动 ----------
@@ -250,17 +251,106 @@
     }
 
     // ---------- 导出 + 扫描 ----------
-    function tmpXml(name) {
-        var d = path.join(os.tmpdir(), 'vh_cx_' + Date.now());
-        try { fs.mkdirSync(d); } catch (e) {}
-        return path.join(d, (name || 'seq').replace(/[\\\/:*?"<>|]/g, '_') + '.xml');
+    // 临时目录：用来放 PR 导出的 XML。
+    // 读完就删（scanData 只需要内存里的文本），不残留。
+    var TMP_PREFIX = 'vh_cx_';
+
+    function tmpDir() {
+        return path.join(os.tmpdir(), TMP_PREFIX + Date.now());
+    }
+
+    // 递归删除一个目录（尽力而为，失败不报错）
+    function rmTree(dir) {
+        var n = 0;
+        try {
+            if (!fs.existsSync(dir)) return 0;
+            var entries = fs.readdirSync(dir);
+            for (var i = 0; i < entries.length; i++) {
+                var p = path.join(dir, entries[i]);
+                try {
+                    var st = fs.statSync(p);
+                    if (st.isDirectory()) n += rmTree(p);
+                    else { fs.unlinkSync(p); n++; }
+                } catch (e) {}
+            }
+            try { fs.rmdirSync(dir); } catch (e) {}
+        } catch (e) {}
+        return n;
+    }
+
+    // 清理本插件历史遗留的临时目录，返回 {dirs, files, bytes}
+    function purgeTmp() {
+        var base = os.tmpdir();
+        var dirs = 0, files = 0, bytes = 0;
+        var names = [];
+        try {
+            var all = fs.readdirSync(base);
+            for (var i = 0; i < all.length; i++) {
+                var nm = all[i];
+                if (nm.indexOf(TMP_PREFIX) !== 0) continue;   // 只碰本功能自己的目录
+                var p = path.join(base, nm);
+                try {
+                    if (!fs.statSync(p).isDirectory()) continue;
+                    // 统计
+                    var st2 = statTree(p);
+                    files += st2.files; bytes += st2.bytes;
+                    rmTree(p);
+                    if (!fs.existsSync(p)) { dirs++; names.push(nm); }
+                } catch (e) {}
+            }
+        } catch (e) {}
+        return { dirs: dirs, files: files, bytes: bytes, names: names };
+    }
+
+    function statTree(dir) {
+        var files = 0, bytes = 0;
+        try {
+            var entries = fs.readdirSync(dir);
+            for (var i = 0; i < entries.length; i++) {
+                var p = path.join(dir, entries[i]);
+                try {
+                    var st = fs.statSync(p);
+                    if (st.isDirectory()) {
+                        var sub = statTree(p);
+                        files += sub.files; bytes += sub.bytes;
+                    } else { files++; bytes += st.size; }
+                } catch (e) {}
+            }
+        } catch (e) {}
+        return { files: files, bytes: bytes };
+    }
+
+    // 统计当前遗留的临时目录（用于「清理前/后」对比）
+    function statTmp() {
+        var base = os.tmpdir();
+        var dirs = 0, files = 0, bytes = 0;
+        try {
+            var all = fs.readdirSync(base);
+            for (var i = 0; i < all.length; i++) {
+                if (all[i].indexOf(TMP_PREFIX) !== 0) continue;
+                var p = path.join(base, all[i]);
+                try {
+                    if (!fs.statSync(p).isDirectory()) continue;
+                    var st = statTree(p);
+                    dirs++; files += st.files; bytes += st.bytes;
+                } catch (e) {}
+            }
+        } catch (e) {}
+        return { dirs: dirs, files: files, bytes: bytes };
+    }
+
+    function fmtSize(b) {
+        if (b < 1024) return b + ' B';
+        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+        return (b / 1024 / 1024).toFixed(2) + ' MB';
     }
 
     function doReadSeq() {
         var name = currentSeqName();
         if (!name) { log('请先选择序列', 'err'); return Promise.resolve(); }
 
-        var out = tmpXml(name);
+        var dir = tmpDir();
+        var out = path.join(dir, (name || 'seq').replace(/[\\\/:*?"<>|]/g, '_') + '.xml');
         el.readSeq.disabled = true;
         el.status.textContent = '正在导出…';
         el.status.style.color = '#8ec4e0';
@@ -273,20 +363,23 @@
                 el.status.style.color = '#fca5a5';
                 log('导出 XML 失败：' + res, 'err');
                 log('提示：请确认 PR 里这条序列已保存，且不是空序列。', 'warn');
+                rmTree(dir);
                 return;
             }
             el.status.textContent = 'XML 已就绪';
             el.status.style.color = '#7fd68b';
-            log('已导出：' + out, 'ok');
 
             // 读文件并扫描
             var txt;
             try { txt = fs.readFileSync(out, 'utf8'); }
-            catch (e) { log('读取 XML 失败：' + e.message, 'err'); return; }
+            catch (e) { log('读取 XML 失败：' + e.message, 'err'); rmTree(dir); return; }
 
             var s = F.scan(txt);
-            if (s.error) { log('解析失败：' + s.error, 'err'); return; }
-            scanData = { text: txt, scan: s, file: out, seqName: name };
+            if (s.error) { log('解析失败：' + s.error, 'err'); rmTree(dir); return; }
+            // 文本已在内存，临时文件不再需要 → 立即清掉，不留在磁盘上
+            scanData = { text: txt, scan: s, seqName: name };
+            var cleared = rmTree(dir);
+            if (cleared) log('临时文件已清理（' + cleared + ' 个文件）', 'dim');
 
             renderTracks(s);
             // 文件名自动填充（序列名-调色）
@@ -492,6 +585,28 @@
             };
         }
 
+        // 清理运行中产生的中间文件（临时目录）
+        if (el.purgeTmp) {
+            el.purgeTmp.onclick = function () {
+                var before = statTmp();
+                if (!before.dirs) {
+                    log('没有需要清理的临时文件（临时目录已是干净的）', 'ok');
+                    return;
+                }
+                var r = purgeTmp();
+                if (r.dirs) {
+                    log('已清理临时文件：' + r.dirs + ' 个目录 / ' + r.files +
+                        ' 个文件，释放 ' + fmtSize(r.bytes), 'ok');
+                } else {
+                    log('清理失败（文件可能被其他程序占用）', 'warn');
+                }
+                var after = statTmp();
+                if (after.dirs) {
+                    log('仍有 ' + after.dirs + ' 个目录未删除，可稍后重试', 'warn');
+                }
+            };
+        }
+
         if (el.dropTrans) el.dropTrans.addEventListener('change', updatePreview);
 
         if (el.cbxAll) {
@@ -526,6 +641,14 @@
     window.__vhColorXmlOnShow = function () {
         if (!el.seq) pick();
         loadSequences(true).catch(function () {});
+        // 提一句遗留缓存（不打扰，仅在有东西时才说）
+        try {
+            var t = statTmp();
+            if (t.dirs) {
+                log('检测到 ' + t.dirs + ' 个历史临时目录（' + fmtSize(t.bytes) +
+                    '），可点「🧹 清理缓存」删除', 'dim');
+            }
+        } catch (e) {}
     };
 
     if (document.readyState === 'loading') {

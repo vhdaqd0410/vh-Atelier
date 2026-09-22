@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "调色 XML：新增清理缓存，临时文件改为读完即删",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "日志区新增「🧹 清理缓存」按钮，一键清掉遗留临时文件"
+        },
+        {
+          "kind": "impr",
+          "text": "读取序列后立即删除临时 XML，不再在磁盘堆积"
+        },
+        {
+          "kind": "feat",
+          "text": "打开面板时若有历史残留会提示占用体积"
+        },
+        {
+          "kind": "note",
+          "text": "只删本功能自己的临时目录，不碰其他文件"
+        }
+      ],
+      "version": "1.15.2",
+      "date": "2026-09-18"
+    },
+    {
       "title": "调色 XML：左右宽度可拖动调整 + 工具子 tab 位置修正",
       "items": [
         {
