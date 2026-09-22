@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "调色 XML：左右宽度可拖动调整 + 工具子 tab 位置修正",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "左右栏中间加拖动分隔条，宽度自由调整"
+        },
+        {
+          "kind": "feat",
+          "text": "拖动位置自动记忆，双击恢复默认"
+        },
+        {
+          "kind": "fix",
+          "text": "工具面板子 tab 位置归正（之前被写在页面末尾，显示在最底部）"
+        }
+      ],
+      "version": "1.15.1",
+      "date": "2026-09-18"
+    },
+    {
       "title": "工具板块移到导航最前，调色 XML 界面重排（左右分栏 + 步骤化）",
       "items": [
         {

@@ -32,8 +32,7 @@
 
     function pick() {
         el.seq = document.getElementById('cxSeq');
-        el.refreshSeq = document.getElementById('cxRefreshSeq');
-        el.readSeq = document.getElementById('cxReadSeq');
+        el.refreshSeq = document.getElementById('cxRefreshSeq');        el.readSeq = document.getElementById('cxReadSeq');
         el.status = document.getElementById('cxStatus');
         el.tracks = document.getElementById('cxTracks');
         el.tracksWrap = document.getElementById('cxTracksWrap');
@@ -50,6 +49,83 @@
         el.dropTrans = document.getElementById('cxDropTrans');
         el.cbxAll = document.getElementById('cxAll');
         el.cbxNone = document.getElementById('cxNone');
+        el.layout = document.querySelector('#panel-colorxml .cx-layout');
+        el.split = document.getElementById('cxSplit');
+    }
+
+    // ---------- 左右宽度拖动 ----------
+    var LEFT_KEY = 'vh_cx_leftw';      // 记忆左栏宽度（百分比）
+    var LEFT_DEFAULT = 46;             // 默认 46%
+    var LEFT_MIN = 22;                 // 左栏最小百分比
+    var RIGHT_MIN = 22;                // 右栏最小百分比
+
+    function getLeftPct() {
+        try {
+            var v = parseFloat(localStorage.getItem(LEFT_KEY));
+            if (!isNaN(v) && v >= LEFT_MIN && v <= (100 - RIGHT_MIN)) return v;
+        } catch (e) {}
+        return LEFT_DEFAULT;
+    }
+    function applyLeftPct(pct) {
+        if (!el.layout) return;
+        var p = Math.max(LEFT_MIN, Math.min(100 - RIGHT_MIN, pct));
+        el.layout.style.setProperty('--cx-left-w', p + '%');
+        return p;
+    }
+    function saveLeftPct(pct) {
+        try { localStorage.setItem(LEFT_KEY, String(Math.round(pct * 10) / 10)); } catch (e) {}
+    }
+
+    function bindSplit() {
+        if (!el.layout || !el.split) return;
+
+        // 恢复上次宽度
+        applyLeftPct(getLeftPct());
+
+        var dragging = false;
+
+        function onMove(ev) {
+            if (!dragging) return;
+            var rect = el.layout.getBoundingClientRect();
+            if (rect.width <= 0) return;
+            var x = (ev.touches && ev.touches[0] ? ev.touches[0].clientX : ev.clientX);
+            var pct = ((x - rect.left) / rect.width) * 100;
+            applyLeftPct(pct);
+            ev.preventDefault();
+        }
+
+        function onUp() {
+            if (!dragging) return;
+            dragging = false;
+            el.split.classList.remove('cx-dragging');
+            document.body.classList.remove('cx-resizing');
+            // 记住最终值
+            try {
+                var cur = el.layout.style.getPropertyValue('--cx-left-w');
+                if (cur) saveLeftPct(parseFloat(cur));
+            } catch (e) {}
+        }
+
+        function onDown(ev) {
+            dragging = true;
+            el.split.classList.add('cx-dragging');
+            document.body.classList.add('cx-resizing');
+            ev.preventDefault();
+        }
+
+        el.split.addEventListener('mousedown', onDown);
+        el.split.addEventListener('touchstart', onDown, { passive: false });
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchend', onUp);
+
+        // 双击分隔条：恢复默认宽度
+        el.split.addEventListener('dblclick', function () {
+            applyLeftPct(LEFT_DEFAULT);
+            saveLeftPct(LEFT_DEFAULT);
+            log('左右宽度已恢复默认', 'dim');
+        });
     }
 
     // ---------- 日志（分级着色 + 自动粘底 + 条数统计） ----------
@@ -372,6 +448,8 @@
     function bind() {
         pick();
         if (!el.seq) return;
+
+        bindSplit();
 
         // 刷新序列列表（切换序列后不用切页面）
         el.refreshSeq.onclick = function () {

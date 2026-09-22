@@ -2957,11 +2957,28 @@
 .cx-sample{flex:1;min-width:0;color:#7a8494;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;text-align:right;}
 
-/* ===== 调色 XML：左右分栏布局 ===== */
-.cx-layout{display:flex;gap:10px;height:calc(100vh - 128px);align-items:stretch;}
-.cx-left{flex:0 0 46%;min-width:330px;display:flex;flex-direction:column;
-    overflow-y:auto;overflow-x:hidden;padding-right:2px;}
-.cx-right{flex:1;min-width:0;display:flex;flex-direction:column;}
+/* ===== 调色 XML：左右分栏布局（可拖动调整宽度） ===== */
+.cx-layout{display:flex;gap:0;height:calc(100vh - 128px);align-items:stretch;
+    --cx-left-w:46%;}
+.cx-left{flex:0 0 var(--cx-left-w);width:var(--cx-left-w);min-width:260px;
+    display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;
+    padding-right:8px;box-sizing:border-box;}
+.cx-right{flex:1 1 auto;min-width:200px;display:flex;flex-direction:column;
+    padding-left:8px;box-sizing:border-box;}
+
+/* 拖动分隔条 */
+.cx-split{flex:0 0 8px;width:8px;cursor:col-resize;position:relative;
+    background:transparent;transition:background .12s;border-radius:4px;}
+.cx-split::before{content:'';position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-50%);width:2px;height:38px;border-radius:2px;
+    background:#3a3f47;transition:background .12s,height .12s;}
+.cx-split:hover{background:rgba(142,196,224,.08);}
+.cx-split:hover::before{background:#6d8fb0;height:56px;}
+.cx-split.cx-dragging{background:rgba(142,196,224,.14);}
+.cx-split.cx-dragging::before{background:#8ec4e0;height:56px;}
+/* 拖动中禁止选中文字、保持光标 */
+body.cx-resizing{cursor:col-resize;user-select:none;-webkit-user-select:none;}
+body.cx-resizing *{cursor:col-resize !important;}
 
 .cx-card{background:var(--panel2,#242424);border:1px solid var(--border,#3a3a3a);
     border-radius:6px;display:flex;flex-direction:column;overflow:hidden;}
