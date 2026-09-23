@@ -734,17 +734,18 @@ function sfxInsertToTimelineStr() {
         if (!payload || !payload.path) return JSON.stringify({ error: '无插入数据' });
         var filePath = payload.path;
         var positionSec = payload.positionSec || 0;
+        var inSec = (typeof payload.inSec === 'number') ? payload.inSec : null;
+        var outSec = (typeof payload.outSec === 'number') ? payload.outSec : null;
+        var hasRange = (inSec !== null && outSec !== null && outSec > inSec);
 
         var seq = app.project.activeSequence;
         if (!seq) return JSON.stringify({ error: '没有激活的序列' });
 
-        // 1. 导入到项目（返回 boolean）
         var f = new File(filePath);
         if (!f.exists) return JSON.stringify({ error: '文件不存在: ' + filePath });
         var ok = app.project.importFiles([f.fsName], true, app.project.rootItem, false);
         if (!ok) return JSON.stringify({ error: '导入失败（importFiles 返回 false）' });
 
-        // 2. 按路径找回刚导入的 ProjectItem
         var projectItem = null;
         try {
             var found = app.project.rootItem.findItemsMatchingMediaPath(f.fsName, 1);
@@ -753,13 +754,35 @@ function sfxInsertToTimelineStr() {
         } catch (e) {}
         if (!projectItem) return JSON.stringify({ error: '导入成功但未找到 ProjectItem' });
 
-        // 3. 计算 ticks（254016000000 ticks/秒），插入到最末一条音轨
-        var ticks = String(Math.round(positionSec * 254016000000));
+        var TICKS = 254016000000;
+
+        if (hasRange) {
+            try {
+                var inT = String(Math.round(inSec * TICKS));
+                var outT = String(Math.round(outSec * TICKS));
+                var r1 = projectItem.setInPoint(inT, 2);
+                var r2 = projectItem.setOutPoint(outT, 2);
+                if (r1 !== 0 || r2 !== 0) {
+                    try { projectItem.setInPoint(inT, 4); } catch (e) {}
+                    try { projectItem.setOutPoint(outT, 4); } catch (e) {}
+                }
+            } catch (e) {
+                return JSON.stringify({ error: '设置选区失败: ' + e.toString() });
+            }
+        }
+
+        var ticks = String(Math.round(positionSec * TICKS));
         var aTrackIndex = seq.audioTracks.numTracks - 1;
         if (aTrackIndex < 0) aTrackIndex = 0;
         seq.audioTracks[aTrackIndex].insertClip(projectItem, ticks, -1, aTrackIndex);
 
-        return JSON.stringify({ ok: true, trackIndex: aTrackIndex, positionSec: positionSec, name: f.name });
+        return JSON.stringify({
+            ok: true, trackIndex: aTrackIndex, positionSec: positionSec, name: f.name,
+            ranged: hasRange,
+            inSec: hasRange ? inSec : null,
+            outSec: hasRange ? outSec : null,
+            durationSec: hasRange ? (outSec - inSec) : null
+        });
     } catch (e) {
         return JSON.stringify({ error: '插入时间线失败: ' + e.toString() });
     }

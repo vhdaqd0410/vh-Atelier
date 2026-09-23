@@ -597,6 +597,23 @@
             return;
         }
         item.__ws = ws;
+        // 安装片段选区：波形上拖选 → 「↧ 送入时间轴」只插这一段
+        try {
+            if (window.__vhClipSel) {
+                window.__vhClipSel.attach({
+                    waveEl: waveEl,
+                    getDuration: function () {
+                        try { return item.__wsReady ? (item.__ws.getDuration() || 0) : 0; } catch (e) { return 0; }
+                    },
+                    onSend: function (a, b) { insertToTimeline(f, a, b); },
+                    onChange: function (a, b) {
+                        setStatus('已选区 ' + formatDur(a) + ' → ' + formatDur(b) +
+                            '（' + (b - a).toFixed(2) + 's），点「↧ 送入时间轴」插入播放头', '');
+                    },
+                    onClear: function () { setStatus('已清除选区', ''); }
+                });
+            }
+        } catch (e) {}
         // ready：唯一监听，负责 UI + 缓存 peaks
         ws.on('ready', function () {
             item.__wsReady = true;
@@ -925,20 +942,27 @@
     }
 
     // ================= 插入时间线 =================
-    function insertToTimeline(f) {
+    function insertToTimeline(f, inSec, outSec) {
         if (busy) return;
+        var hasRange = (typeof inSec === 'number' && typeof outSec === 'number' && outSec > inSec);
         setStatus('正在获取播放头位置...', '');
         csInterface.evalScript('sfxGetPlayerPosition()', function (posResult) {
             var posSec = 0;
             try { var pr = JSON.parse(posResult); posSec = pr.positionSec || 0; } catch (e) {}
             busy = true;
-            setStatus('正在插入时间线: ' + f.name + ' @ ' + formatDur(posSec) + ' ...', '');
-            csInterface.evalScript('sfxInsertPayload = ' + JSON.stringify({ path: f.fullPath, positionSec: posSec }) + ';', function () {
+            var rangeTxt = hasRange ? ('，选区 ' + formatDur(inSec) + '→' + formatDur(outSec)) : '';
+            setStatus('正在插入时间线: ' + f.name + rangeTxt + ' @ ' + formatDur(posSec) + ' ...', '');
+            var payload = { path: f.fullPath, positionSec: posSec };
+            if (hasRange) { payload.inSec = inSec; payload.outSec = outSec; }
+            csInterface.evalScript('sfxInsertPayload = ' + JSON.stringify(payload) + ';', function () {
                 csInterface.evalScript('sfxInsertToTimelineStr()', function (result) {
                     busy = false;
                     try {
                         var data = JSON.parse(result);
-                        if (data.ok) setStatus('已插入时间线 @ ' + formatDur(data.positionSec) + '（音轨 ' + (data.trackIndex + 1) + '）：' + data.name, 'ok');
+                        if (data.ok) setStatus('已插入时间线 @ ' + formatDur(data.positionSec) +
+                            '（音轨 ' + (data.trackIndex + 1) + '）' +
+                            (data.ranged ? '，已裁剪到选区 ' + formatDur(data.inSec) + '→' + formatDur(data.outSec) : '') +
+                            '：' + data.name, 'ok');
                         else setStatus(data.error || '插入失败', 'err');
                     } catch (e) { setStatus('插入解析失败: ' + result, 'err'); }
                 });

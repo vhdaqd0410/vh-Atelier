@@ -3098,3 +3098,18 @@
 .pt-tool[data-tool="log"].pt-open{flex:1 1 auto;min-height:180px;
     display:flex;flex-direction:column;}
 .pt-tool[data-tool="log"].pt-open .pt-body{flex:1;min-height:0;}
+
+/* ===== 音频片段选区（音效库 / 音乐库共用） ===== */
+.vcs-layer{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:3;}
+.vcs-bar{position:absolute;top:0;bottom:0;background:rgba(94,168,255,.20);
+    border-left:1px solid rgba(120,190,255,.85);border-right:1px solid rgba(120,190,255,.85);
+    border-radius:2px;pointer-events:none;}
+.vcs-actions{position:absolute;top:calc(100% + 3px);display:flex;align-items:center;gap:5px;
+    background:#20252c;border:1px solid #3d4656;border-radius:5px;padding:2px 4px 2px 7px;
+    white-space:nowrap;pointer-events:auto;z-index:6;box-shadow:0 3px 10px rgba(0,0,0,.45);}
+.vcs-lab{font-size:10px;color:#9fd0ff;font-variant-numeric:tabular-nums;}
+.vcs-btn{flex:0 0 auto;font-size:10px;line-height:1;padding:3px 6px;border-radius:3px;
+    background:#2f6fb8;color:#fff;border:1px solid #4a8fd0;cursor:pointer;}
+.vcs-btn:hover{background:#3a82d2;}
+.vcs-btn-x{background:transparent;color:#9aa4b2;border-color:#4a5260;padding:3px 5px;}
+.vcs-btn-x:hover{color:#ffd7d7;border-color:#8a5a5a;background:rgba(255,120,120,.12);}
