@@ -499,15 +499,19 @@ function vcInsertToTimelineStr() {
         var trackIndex = payload.trackIndex;
         var positionSec = payload.positionSec || 0;
         var colorLabel = payload.colorLabel || 9;
+        // 选区（秒）：给了且 out>in 才裁剪；省略则整段插入
+        var inSec = (typeof payload.inSec === 'number') ? payload.inSec : null;
+        var outSec = (typeof payload.outSec === 'number') ? payload.outSec : null;
+        var hasRange = (inSec !== null && outSec !== null && outSec > inSec);
 
         var seq = app.project.activeSequence;
         if (!seq) return JSON.stringify({ error: '没有激活的序列' });
 
-        // 1. 导入 wav 到项目（返回 boolean）
+        // 1. 导入到项目（返回 boolean）
         var f = new File(wavPath);
-        if (!f.exists) return JSON.stringify({ error: 'wav 不存在: ' + wavPath });
+        if (!f.exists) return JSON.stringify({ error: '音频不存在: ' + wavPath });
         var ok = app.project.importFiles([f.fsName], true, app.project.rootItem, false);
-        if (!ok) return JSON.stringify({ error: '导入 wav 失败（importFiles 返回 false）' });
+        if (!ok) return JSON.stringify({ error: '导入音频失败（importFiles 返回 false）' });
 
         // 2. 按路径找回刚导入的 ProjectItem
         var projectItem = null;
@@ -521,26 +525,53 @@ function vcInsertToTimelineStr() {
         } catch (e) {}
         if (!projectItem) return JSON.stringify({ error: '导入成功但未找到 ProjectItem' });
 
-        // 3. 换色（必须在插入之前设，否则已插入的 trackItem 不更新）
+        var TICKS = 254016000000;
+
+        // 3. 有选区：先在素材上设 in/out，插入时就只进这一段
+        if (hasRange) {
+            try {
+                var inT = String(Math.round(inSec * TICKS));
+                var outT = String(Math.round(outSec * TICKS));
+                // mediaType: 1=视频, 2=音频, 4=全部
+                var r1 = projectItem.setInPoint(inT, 2);
+                var r2 = projectItem.setOutPoint(outT, 2);
+                // 部分版本要求 4（全部）：任一边非 0 就补设一次
+                if (r1 !== 0 || r2 !== 0) {
+                    try { projectItem.setInPoint(inT, 4); } catch (e) {}
+                    try { projectItem.setOutPoint(outT, 4); } catch (e) {}
+                }
+            } catch (e) {
+                return JSON.stringify({ error: '设置选区失败: ' + e.toString() });
+            }
+        }
+
+        // 4. 换色（必须在插入之前设，否则已插入的 trackItem 不更新）
         try { projectItem.setColorLabel(colorLabel); } catch (e) {}
 
-        // 4. 计算 ticks（254016000000 ticks/秒）
-        var ticks = String(Math.round(positionSec * 254016000000));
+        // 5. 插入点 ticks
+        var ticks = String(Math.round(positionSec * TICKS));
 
-        // 5. insertClip：插入语义，把后续片段往后推、不覆盖
+        // 6. insertClip：插入语义，后续片段往后推、不覆盖已有音频
         var aTrackIndex = trackIndex;
         if (typeof aTrackIndex !== 'number' || aTrackIndex < 0 || aTrackIndex >= seq.audioTracks.numTracks) {
             aTrackIndex = 0;
         }
         seq.audioTracks[aTrackIndex].insertClip(projectItem, ticks, -1, aTrackIndex);
 
-        return JSON.stringify({ ok: true, trackIndex: aTrackIndex, positionSec: positionSec, colorLabel: colorLabel });
+        return JSON.stringify({
+            ok: true, trackIndex: aTrackIndex, positionSec: positionSec,
+            colorLabel: colorLabel,
+            ranged: hasRange,
+            inSec: hasRange ? inSec : null,
+            outSec: hasRange ? outSec : null,
+            durationSec: hasRange ? (outSec - inSec) : null
+        });
     } catch (e) {
         return JSON.stringify({ error: '导入时间线失败: ' + e.toString() });
     }
 }
 
-// ---------- 获取播放头位置（秒），插入点默认用它 ----------
+
 function vcGetPlayerPosition() {
     try {
         var seq = app.project.activeSequence;
@@ -734,6 +765,10 @@ function sfxInsertToTimelineStr() {
         if (!payload || !payload.path) return JSON.stringify({ error: '无插入数据' });
         var filePath = payload.path;
         var positionSec = payload.positionSec || 0;
+        // 选区（秒）：给了且 out>in 才裁剪；省略则整段插入
+        var inSec = (typeof payload.inSec === 'number') ? payload.inSec : null;
+        var outSec = (typeof payload.outSec === 'number') ? payload.outSec : null;
+        var hasRange = (inSec !== null && outSec !== null && outSec > inSec);
 
         var seq = app.project.activeSequence;
         if (!seq) return JSON.stringify({ error: '没有激活的序列' });
@@ -753,19 +788,45 @@ function sfxInsertToTimelineStr() {
         } catch (e) {}
         if (!projectItem) return JSON.stringify({ error: '导入成功但未找到 ProjectItem' });
 
-        // 3. 计算 ticks（254016000000 ticks/秒），插入到最末一条音轨
-        var ticks = String(Math.round(positionSec * 254016000000));
+        var TICKS = 254016000000;
+
+        // 3. 有选区：先在素材上设 in/out，插入时只进这一段
+        //    （这样插到时间轴的片段自带裁剪，且不产生额外子片段文件）
+        if (hasRange) {
+            try {
+                var inT = String(Math.round(inSec * TICKS));
+                var outT = String(Math.round(outSec * TICKS));
+                // mediaType: 1=视频, 2=音频, 4=全部
+                var r1 = projectItem.setInPoint(inT, 2);
+                var r2 = projectItem.setOutPoint(outT, 2);
+                if (r1 !== 0 || r2 !== 0) {
+                    try { projectItem.setInPoint(inT, 4); } catch (e) {}
+                    try { projectItem.setOutPoint(outT, 4); } catch (e) {}
+                }
+            } catch (e) {
+                return JSON.stringify({ error: '设置选区失败: ' + e.toString() });
+            }
+        }
+
+        // 4. 计算 ticks，插入到最末一条音轨（新音频不会覆盖已有内容）
+        var ticks = String(Math.round(positionSec * TICKS));
         var aTrackIndex = seq.audioTracks.numTracks - 1;
         if (aTrackIndex < 0) aTrackIndex = 0;
         seq.audioTracks[aTrackIndex].insertClip(projectItem, ticks, -1, aTrackIndex);
 
-        return JSON.stringify({ ok: true, trackIndex: aTrackIndex, positionSec: positionSec, name: f.name });
+        return JSON.stringify({
+            ok: true, trackIndex: aTrackIndex, positionSec: positionSec, name: f.name,
+            ranged: hasRange,
+            inSec: hasRange ? inSec : null,
+            outSec: hasRange ? outSec : null,
+            durationSec: hasRange ? (outSec - inSec) : null
+        });
     } catch (e) {
         return JSON.stringify({ error: '插入时间线失败: ' + e.toString() });
     }
 }
 
-// 导入一个音效文件到「音效库」素材箱（从全局变量 sfxImportPayload 读文件列表）
+
 function sfxImportToBinStr() {
     try {
         var files = sfxImportPayload;
