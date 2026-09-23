@@ -1695,11 +1695,21 @@
         }
 
         // 边听边识别：循环录 6 秒 → 识别 → 命中则显示结果，否则继续下一轮
+        // 录音文件用完即删：在每轮开始前清上一轮，finishIdentify 里清最后一轮，
+        // 否则反复点「听歌识曲」会在系统临时目录堆一大堆 wav。
+        var _identifyWav = null;
+        function dropIdentifyWav() {
+            try { if (_identifyWav && fs.existsSync(_identifyWav)) fs.unlinkSync(_identifyWav); } catch (e) {}
+            _identifyWav = null;
+        }
+
         function round() {
             if (identifyStop || !identifyActive) { finishIdentify(); return; }
+            dropIdentifyWav();                 // 清上一轮的录音（不再需要）
             identifyRound++;
             setProg('<div style="color:#9db9ff;">🎙 第 ' + identifyRound + ' 轮录音中（6 秒）… 正在捕捉电脑播放的声音</div>');
             var wavPath = path.join(tmpdir, 'vh_identify_' + Date.now() + '.wav');
+            _identifyWav = wavPath;
             childProcess.execFile(py, [scriptPath, wavPath, '6'], { encoding: 'utf8', timeout: 20000 }, function (err, stdout) {
                 if (identifyStop || !identifyActive) { finishIdentify(); return; }
                 var rec = null;
@@ -1765,6 +1775,7 @@
         function finishIdentify() {
             identifyActive = false;
             identifyStop = false;
+            dropIdentifyWav();                 // 清最后一轮的录音
             var b2 = $('btnMusicIdentify');
             var s2 = $('btnMusicIdentifyStop');
             var p2 = $('musicIdentifyProgress');

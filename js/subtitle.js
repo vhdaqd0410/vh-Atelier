@@ -138,7 +138,39 @@
             el.progressWrap.classList.remove('show');
             el.stop.style.display = 'none';
             stopProgressTimer();
+            // 任务结束（成功/失败/停止都会走到这里）：清掉本次产生的中间文件，
+            // 否则每个用过的序列都会在临时目录永久留一份 mix_<id>.wav。
+            cleanTmpArtifacts();
         }
+    }
+
+    // 清理本次识别产生的中间文件（音频/列表/结果），保留目录本身
+    // 注意：只在任务收尾时调用；识别过程中不能删（whisper/funasr 还在读）
+    function cleanTmpArtifacts() {
+        try {
+            var d = path.join(os.tmpdir(), 'ws_subtitle');
+            if (!fs.existsSync(d)) return;
+            var es = fs.readdirSync(d);
+            var n = 0, bytes = 0;
+            for (var i = 0; i < es.length; i++) {
+                var f = es[i];
+                // 只删本功能的中间产物，保留意外文件
+                if (!/^(mix|funasr_)/.test(f)) continue;
+                var fp = path.join(d, f);
+                try {
+                    var st = fs.statSync(fp);
+                    if (st.isDirectory()) continue;
+                    bytes += st.size;
+                    fs.unlinkSync(fp);
+                    n++;
+                } catch (e) {}
+            }
+            if (n > 0 && window.__vhTmp) {
+                try {
+                    setStatus('已清理临时音频 ' + n + ' 个（' + window.__vhTmp.fmt(bytes) + '）', '');
+                } catch (e) {}
+            }
+        } catch (e) {}
     }
 
     // ---------- 1. 序列列表 ----------

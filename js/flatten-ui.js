@@ -253,96 +253,17 @@
     // ---------- 导出 + 扫描 ----------
     // 临时目录：用来放 PR 导出的 XML。
     // 读完就删（scanData 只需要内存里的文本），不残留。
+    // 删除/统计的通用实现收在 js/tmp-clean.js（window.__vhTmp），此处只做转发。
     var TMP_PREFIX = 'vh_cx_';
 
     function tmpDir() {
         return path.join(os.tmpdir(), TMP_PREFIX + Date.now());
     }
 
-    // 递归删除一个目录（尽力而为，失败不报错）
     function rmTree(dir) {
-        var n = 0;
-        try {
-            if (!fs.existsSync(dir)) return 0;
-            var entries = fs.readdirSync(dir);
-            for (var i = 0; i < entries.length; i++) {
-                var p = path.join(dir, entries[i]);
-                try {
-                    var st = fs.statSync(p);
-                    if (st.isDirectory()) n += rmTree(p);
-                    else { fs.unlinkSync(p); n++; }
-                } catch (e) {}
-            }
-            try { fs.rmdirSync(dir); } catch (e) {}
-        } catch (e) {}
-        return n;
-    }
-
-    // 清理本插件历史遗留的临时目录，返回 {dirs, files, bytes}
-    function purgeTmp() {
-        var base = os.tmpdir();
-        var dirs = 0, files = 0, bytes = 0;
-        var names = [];
-        try {
-            var all = fs.readdirSync(base);
-            for (var i = 0; i < all.length; i++) {
-                var nm = all[i];
-                if (nm.indexOf(TMP_PREFIX) !== 0) continue;   // 只碰本功能自己的目录
-                var p = path.join(base, nm);
-                try {
-                    if (!fs.statSync(p).isDirectory()) continue;
-                    // 统计
-                    var st2 = statTree(p);
-                    files += st2.files; bytes += st2.bytes;
-                    rmTree(p);
-                    if (!fs.existsSync(p)) { dirs++; names.push(nm); }
-                } catch (e) {}
-            }
-        } catch (e) {}
-        return { dirs: dirs, files: files, bytes: bytes, names: names };
-    }
-
-    function statTree(dir) {
-        var files = 0, bytes = 0;
-        try {
-            var entries = fs.readdirSync(dir);
-            for (var i = 0; i < entries.length; i++) {
-                var p = path.join(dir, entries[i]);
-                try {
-                    var st = fs.statSync(p);
-                    if (st.isDirectory()) {
-                        var sub = statTree(p);
-                        files += sub.files; bytes += sub.bytes;
-                    } else { files++; bytes += st.size; }
-                } catch (e) {}
-            }
-        } catch (e) {}
-        return { files: files, bytes: bytes };
-    }
-
-    // 统计当前遗留的临时目录（用于「清理前/后」对比）
-    function statTmp() {
-        var base = os.tmpdir();
-        var dirs = 0, files = 0, bytes = 0;
-        try {
-            var all = fs.readdirSync(base);
-            for (var i = 0; i < all.length; i++) {
-                if (all[i].indexOf(TMP_PREFIX) !== 0) continue;
-                var p = path.join(base, all[i]);
-                try {
-                    if (!fs.statSync(p).isDirectory()) continue;
-                    var st = statTree(p);
-                    dirs++; files += st.files; bytes += st.bytes;
-                } catch (e) {}
-            }
-        } catch (e) {}
-        return { dirs: dirs, files: files, bytes: bytes };
-    }
-
-    function fmtSize(b) {
-        if (b < 1024) return b + ' B';
-        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
-        return (b / 1024 / 1024).toFixed(2) + ' MB';
+        var T = window.__vhTmp;
+        if (T && T.rmTree) return T.rmTree(dir);
+        return 0;
     }
 
     function doReadSeq() {
@@ -585,24 +506,39 @@
             };
         }
 
-        // 清理运行中产生的中间文件（临时目录）
+        // 清理各板块在临时目录遗留的中间文件
         if (el.purgeTmp) {
             el.purgeTmp.onclick = function () {
-                var before = statTmp();
-                if (!before.dirs) {
-                    log('没有需要清理的临时文件（临时目录已是干净的）', 'ok');
+                var T = window.__vhTmp;
+                if (!T) { log('清理模块未加载', 'err'); return; }
+
+                var before = T.scan();
+                if (!before.groups.length) {
+                    log('没有需要清理的临时文件（已是干净的）', 'ok');
                     return;
                 }
-                var r = purgeTmp();
-                if (r.dirs) {
-                    log('已清理临时文件：' + r.dirs + ' 个目录 / ' + r.files +
-                        ' 个文件，释放 ' + fmtSize(r.bytes), 'ok');
+
+                log('清理前：' + before.total.n + ' 项，共 ' + T.fmt(before.total.bytes), 'dim');
+                before.groups.forEach(function (g) {
+                    log('  · ' + g.label + '：' + g.count + ' 项 / ' + T.fmt(g.bytes), 'dim');
+                });
+
+                var r = T.purge();
+                logSep();
+                if (r.files || r.dirs) {
+                    log('已清理 ' + r.files + ' 个文件，释放 ' + T.fmt(r.bytes), 'ok');
+                    r.groups.forEach(function (g) {
+                        log('  · ' + g.label + '：' + g.files + ' 个文件 / ' + T.fmt(g.bytes), 'dim');
+                    });
                 } else {
-                    log('清理失败（文件可能被其他程序占用）', 'warn');
+                    log('没有可清理的内容', 'dim');
                 }
-                var after = statTmp();
-                if (after.dirs) {
-                    log('仍有 ' + after.dirs + ' 个目录未删除，可稍后重试', 'warn');
+
+                var after = T.scan();
+                if (after.groups.length) {
+                    log('仍有 ' + after.total.n + ' 项未删除（可能正被占用，可稍后重试）', 'warn');
+                } else {
+                    log('临时目录已清空', 'ok');
                 }
             };
         }
@@ -641,11 +577,16 @@
     window.__vhColorXmlOnShow = function () {
         if (!el.seq) pick();
         loadSequences(true).catch(function () {});
-        // 提一句遗留缓存（不打扰，仅在有东西时才说）
+        // 提一句各板块的临时文件占用（仅在有东西时才说，不打扰）
         try {
-            var t = statTmp();
-            if (t.dirs) {
-                log('检测到 ' + t.dirs + ' 个历史临时目录（' + fmtSize(t.bytes) +
+            var T = window.__vhTmp;
+            if (!T) return;
+            var t = T.scan();
+            if (t.total.n) {
+                var parts = t.groups.map(function (g) {
+                    return g.label + ' ' + T.fmt(g.bytes);
+                });
+                log('临时文件占用 ' + T.fmt(t.total.bytes) + '（' + parts.join('，') +
                     '），可点「🧹 清理缓存」删除', 'dim');
             }
         } catch (e) {}
