@@ -1097,6 +1097,137 @@
     });
   }
 
+  // 打开面板时自动做一次登录态体检。
+  // 不健康就弹窗（可一键登录/去填账号），健康则只在提示栏显示余额。
+  // 注：不每次都弹窗——只在未登录/未配置时打扰。
+  var _accountCheckedAt = 0;
+  function checkAccountHealth(force) {
+    if (!enAccHint) return;
+    // 60 秒内不重复检测（面板频繁切换时避免反复跑 python）
+    if (!force && Date.now() - _accountCheckedAt < 60000) return;
+    _accountCheckedAt = Date.now();
+
+    var py = findPy();
+    var script = pyPath();
+    if (!script || !fs.existsSync(script)) { enAccHint.textContent = ''; return; }
+
+    enAccHint.textContent = '正在检查账号…';
+    enAccHint.className = 'en-acc-hint';
+
+    var cp = require('child_process');
+    // 验证登录态要跑一次真实请求（含必要时重新登录 + 验证码识别），给足时间
+    cp.exec('"' + py + '" "' + script + '" check', { windowsHide: true, timeout: 180000 },
+      function (err, stdout) {
+        var txt = String(stdout || '').trim().split('\n').pop() || '';
+        var j = null;
+        try { j = JSON.parse(txt); } catch (e) {}
+
+        if (!j) {
+          enAccHint.textContent = '';
+          enAccHint.className = 'en-acc-hint';
+          return;
+        }
+
+        if (j.logged) {
+          var extra = '';
+          if (j.balance !== undefined) extra = ' · 余额 ' + j.balance;
+          else if (j.score !== undefined) extra = ' · 积分 ' + j.score;
+          enAccHint.textContent = '账号 ' + j.user + ' · 登录正常' + extra;
+          enAccHint.className = 'en-acc-hint ok';
+          return;
+        }
+
+        // 未配置 或 登录失效 → 提示栏标红 + 弹窗
+        if (!j.configured) {
+          enAccHint.textContent = '⚠ 未配置超分站账号，请点「⚙ 账号」设置';
+        } else {
+          enAccHint.textContent = '⚠ 账号 ' + j.user + ' 登录已失效，请重新登录';
+        }
+        enAccHint.className = 'en-acc-hint warn';
+        showAccountAlert(j);
+      });
+  }
+
+  // 登录异常的弹窗：说明原因 + 一键登录/去填账号
+  function showAccountAlert(info) {
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#1e1e1e;border:1px solid #4a4a4a;border-radius:8px;padding:18px;width:400px;max-width:92vw;';
+
+    var title = document.createElement('div');
+    title.style.cssText = 'font-size:13px;font-weight:600;color:#fcd34d;margin-bottom:10px;';
+    title.textContent = info.configured ? '⚠ 超分站账号登录已失效' : '⚠ 尚未配置超分站账号';
+    box.appendChild(title);
+
+    var body = document.createElement('div');
+    body.style.cssText = 'font-size:11.5px;color:#bbb;line-height:1.75;margin-bottom:14px;';
+    body.innerHTML = info.configured
+      ? ('账号 <b style="color:#e8e8e8;">' + (info.user || '') + '</b> 的登录态已失效（PR 重启后 token 可能过期）。<br>' +
+         (info.msg ? ('原因：' + String(info.msg).slice(0, 120) + '<br>') : '') +
+         '点下方按钮用已保存的账号重新登录即可。')
+      : ('还没有填写超分站（subtitle.zztianqiao.com）账号，无法提交超分 / 去字幕任务。<br>' +
+         '账号只存在本机，不会外传。');
+    box.appendChild(body);
+
+    var tip = document.createElement('div');
+    tip.style.cssText = 'font-size:11px;color:#c9a86a;min-height:16px;margin-bottom:10px;';
+    box.appendChild(tip);
+
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+
+    function mkBtn(text, primary, fn) {
+      var b = document.createElement('button');
+      b.className = primary ? 'primary' : 'secondary';
+      b.textContent = text;
+      b.onclick = fn;
+      row.appendChild(b);
+      return b;
+    }
+
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+
+    // 一键登录：用已保存的账号密码重新登录
+    if (info.configured) {
+      var bLogin = mkBtn('🔑 一键登录', true, function () {
+        bLogin.disabled = true;
+        bLogin.textContent = '登录中…';
+        tip.style.color = '#c9a86a';
+        tip.textContent = '正在自动识别验证码并登录，最长约 1 分钟…';
+        var py = findPy(); var script = pyPath();
+        var cp = require('child_process');
+        cp.exec('"' + py + '" "' + script + '" login', { windowsHide: true, timeout: 180000 },
+          function (e2, so) {
+            var t = String(so || '');
+            if (t.indexOf('登录成功') >= 0) {
+              tip.style.color = '#7fd68b';
+              tip.textContent = '✅ 登录成功';
+              _accountCheckedAt = 0;
+              refreshAccount();
+              checkAccountHealth(true);
+              setTimeout(close, 1000);
+            } else {
+              bLogin.disabled = false;
+              bLogin.textContent = '🔑 重试登录';
+              tip.style.color = '#ff9a9a';
+              tip.textContent = '登录失败：' +
+                (t.split('\n').pop() || '验证码识别不稳定，可点多几次重试').slice(0, 90);
+              _accountCheckedAt = 0;
+            }
+          });
+      });
+      mkBtn('改用其他账号', false, function () { close(); openAccountDialog(); });
+    } else {
+      mkBtn('⚙ 去填写账号', true, function () { close(); openAccountDialog(); });
+    }
+    mkBtn('稍后再说', false, close);
+
+    box.appendChild(row);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  }
+
   function saveAccount(user, pwd, cb) {
     var py = findPy();
     var script = pyPath();
@@ -1152,6 +1283,37 @@
     box.appendChild(tip); box.appendChild(row);
     ov.appendChild(box);
     document.body.appendChild(ov);
+
+    // 回填已保存的账号密码（记住账号）
+    try {
+      var _py = findPy(); var _sc = pyPath();
+      if (_sc && fs.existsSync(_sc)) {
+        require('child_process').exec('"' + _py + '" "' + _sc + '" account --json',
+          { windowsHide: true, timeout: 20000 }, function (e3, so3) {
+            var t3 = String(so3 || '').trim().split('\n').pop() || '';
+            var j3 = null;
+            try { j3 = JSON.parse(t3); } catch (e) {}
+            if (j3 && j3.user) {
+              in1.value = j3.user;
+              if (j3.pwd) in2.value = j3.pwd;
+              tip.style.color = '#8ec4e0';
+              tip.textContent = '已自动填入上次保存的账号';
+            }
+          });
+      }
+    } catch (e) {}
+
+    // 显示/隐藏密码（便于核对已保存的密码）
+    try {
+      var showPwd = document.createElement('label');
+      showPwd.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:11px;color:#9a9a9a;margin-bottom:10px;cursor:pointer;';
+      var chk = document.createElement('input');
+      chk.type = 'checkbox'; chk.style.cssText = 'width:auto;margin:0;';
+      chk.addEventListener('change', function () { in2.type = chk.checked ? 'text' : in2.type; });
+      showPwd.appendChild(chk);
+      showPwd.appendChild(document.createTextNode('显示密码'));
+      box.insertBefore(showPwd, tip);
+    } catch (e) {}
 
     function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
     bWeb.addEventListener('click', function () {
@@ -1533,7 +1695,11 @@
   }
 
   // 面板显示钩子（main.js 切换时调用）
-  window.__enhanceOnShow = function () { refreshSeqs(); refreshTaskList(); };
+  window.__enhanceOnShow = function () {
+    refreshSeqs(); refreshTaskList();
+    // 打开面板就体检账号（登录失效/未配置时会弹窗，可一键登录）
+    try { checkAccountHealth(false); } catch (e) {}
+  };
 
   // ===== 内嵌站（去字幕站）高度：拖拽分隔条 + 展开/还原 =====
   (function () {
