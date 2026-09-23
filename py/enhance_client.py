@@ -707,7 +707,7 @@ def main():
     except Exception:
         pass
     ap = argparse.ArgumentParser(description='超分站客户端')
-    ap.add_argument('cmd', choices=['login', 'account', 'upload', 'tasks', 'folders', 'download',
+    ap.add_argument('cmd', choices=['login', 'account', 'check', 'upload', 'tasks', 'folders', 'download',
                                     'erase', 'erase-tasks', 'erase-download', 'netcheck'])
     ap.add_argument('--user', default='', help='超分站账号（不传则读本地配置）')
     ap.add_argument('--pwd', default='', help='超分站密码')
@@ -731,11 +731,43 @@ def main():
                 out('❌ 保存失败')
         else:
             u, p = load_account()
-            out(json.dumps({
-                'configured': bool(u and p),
-                'user': u,
-                'pwdLen': len(p),
-            }, ensure_ascii=False))
+            # --json 时带上明文密码，供面板回填（仅本机本地读取，不外传）
+            if args.json:
+                out(json.dumps({
+                    'configured': bool(u and p),
+                    'user': u,
+                    'pwd': p,
+                    'pwdLen': len(p),
+                }, ensure_ascii=False))
+            else:
+                out(json.dumps({
+                    'configured': bool(u and p),
+                    'user': u,
+                    'pwdLen': len(p),
+                }, ensure_ascii=False))
+    elif args.cmd == 'check':
+        # 面板打开时调用：验证「账号是否配置 + 登录态是否可用」。
+        # 不抛异常（异常会让前端拿不到结构化结果），统一输出一行 JSON。
+        u, p = load_account()
+        res = {'configured': bool(u and p), 'user': u, 'logged': False, 'msg': ''}
+        if not res['configured']:
+            res['msg'] = '未配置超分站账号'
+        else:
+            try:
+                tok = get_token(u, p)
+                st, d = _req('GET', '/api/user/getUserInfo', headers_extra={'x-token': tok})
+                if d.get('code') == 0:
+                    info = d.get('data') or {}
+                    res['logged'] = True
+                    res['msg'] = '登录正常'
+                    for k in ('nickName', 'nickname', 'userName', 'balance', 'balanceCents', 'score'):
+                        if k in info:
+                            res[k] = info[k]
+                else:
+                    res['msg'] = '登录态已失效：' + str(d.get('msg') or d.get('code'))
+            except Exception as e:
+                res['msg'] = str(e)
+        out(json.dumps(res, ensure_ascii=False))
     elif args.cmd == 'login':
         try:
             u, p = resolve_account(args.user, args.pwd)
