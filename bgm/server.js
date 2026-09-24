@@ -120,8 +120,42 @@ function wavTo8kFloat32(filePath) {
   return r
 }
 
-// ── ffmpeg 抽音轨（可指定区间）──
-function extractWav(input, outWav, start, end) {
+// ── 可杀死的异步进程执行（替代 spawnSync，不阻塞事件循环）──
+// 说明：spawnSync 会冻住 Node 事件循环，导致下载/分离期间 /status 与 /cancel 都无法响应。
+const runningChildren = new Set()
+
+function runProc(cmd, args, opts) {
+  return new Promise((resolve, reject) => {
+    const cp = spawn(cmd, args, Object.assign({ windowsHide: true }, opts || {}))
+    runningChildren.add(cp)
+    let out = ''
+    if (cp.stdout) cp.stdout.on('data', d => { out += d })
+    if (cp.stderr) cp.stderr.on('data', d => { out += d })
+    let timer = null
+    if (opts && opts.timeout) {
+      timer = setTimeout(() => { try { cp.kill() } catch (e) {} }, opts.timeout)
+    }
+    cp.on('error', e => {
+      clearTimeout(timer); runningChildren.delete(cp); reject(e)
+    })
+    cp.on('close', code => {
+      clearTimeout(timer); runningChildren.delete(cp)
+      if (code === 0) resolve(out)
+      else reject(new Error('exit ' + code + ': ' + out.slice(-250)))
+    })
+  })
+}
+
+// 取消时杀掉所有在跑的子进程
+function killAllChildren() {
+  for (const cp of runningChildren) {
+    try { cp.kill() } catch (e) {}
+  }
+  runningChildren.clear()
+}
+
+// ── ffmpeg 抽音轨（可指定区间，异步）──
+async function extractWav(input, outWav, start, end) {
   const args = ['-y', '-v', 'error']
   if (start != null && start !== '') args.push('-ss', String(start))
   args.push('-i', input)
@@ -130,10 +164,8 @@ function extractWav(input, outWav, start, end) {
     args.push('-t', String(dur > 0 ? dur : 0))
   }
   args.push('-vn', '-ac', '2', '-ar', '48000', outWav)
-  const r = spawnSync(findFfmpeg(), args, { encoding: 'utf8', timeout: 600000 })
-  if (r.status !== 0 || !fs.existsSync(outWav)) {
-    throw new Error('ffmpeg 抽音轨失败: ' + String(r.stderr || r.error || '').slice(0, 200))
-  }
+  await runProc(findFfmpeg(), args, { timeout: 600000 })
+  if (!fs.existsSync(outWav)) throw new Error('ffmpeg 抽音轨失败')
   return outWav
 }
 
@@ -160,19 +192,17 @@ function ensureSherpaDir(workDir) {
   return d
 }
 
-function separate(sherpaDir, inputWav, outVocals, outAccomp) {
+async function separate(sherpaDir, inputWav, outVocals, outAccomp) {
   const exe = path.join(sherpaDir, 'sherpa-onnx-offline-source-separation.exe')
-  const r = spawnSync(exe, [
+  await runProc(exe, [
     '--spleeter-vocals=' + path.join(sherpaDir, 'vocals.fp16.onnx'),
     '--spleeter-accompaniment=' + path.join(sherpaDir, 'accompaniment.fp16.onnx'),
     '--num-threads=4',
     '--input-wav=' + inputWav,
     '--output-vocals-wav=' + outVocals,
     '--output-accompaniment-wav=' + outAccomp,
-  ], { cwd: sherpaDir, encoding: 'utf8', timeout: 1800000 })
-  if (!fs.existsSync(outAccomp)) {
-    throw new Error('人声分离失败: ' + String(r.stderr || r.error || '').slice(0, 200))
-  }
+  ], { cwd: sherpaDir, timeout: 1800000 })
+  if (!fs.existsSync(outAccomp)) throw new Error('人声分离失败')
   return outAccomp
 }
 
@@ -326,7 +356,7 @@ async function resolveWebVideo(seriesId, vid) {
   }
   let main = pick('main_url')
   main = main.replace(/\\u002F/g, '/')
-  if (!main) throw new Error('播放页未取到视频地址（可能是付费/下架集）')
+  if (!main) throw new Error('该集未开放试看（官网只开放前 3 集，后续集需 App 登录）')
   const nm = /"series_name"\s*:\s*"([^"]*)"/.exec(html)
   const v = /"vid"\s*:\s*"(\d+)"/.exec(html)
   let dur = pick('duration') || ''
@@ -344,13 +374,13 @@ async function resolveWebVideo(seriesId, vid) {
 }
 
 // ── 下载单集（ffmpeg 直接拉取，可限时长）──
-function downloadVideo(url, outPath, limitSeconds) {
+async function downloadVideo(url, outPath, limitSeconds) {
   const args = ['-y', '-v', 'error']
   if (limitSeconds) args.push('-t', String(limitSeconds))
   args.push('-i', url, '-c', 'copy', '-movflags', '+faststart', outPath)
-  const r = spawnSync(findFfmpeg(), args, { encoding: 'utf8', timeout: 1800000 })
+  await runProc(findFfmpeg(), args, { timeout: 1800000 })
   if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 10000) {
-    throw new Error('下载失败: ' + String(r.stderr || r.error || '').slice(0, 250))
+    throw new Error('下载失败或文件过小')
   }
   return fs.statSync(outPath).size
 }
@@ -384,6 +414,14 @@ function readBody(req) {
 }
 
 // 任务表（内存）：/bgm/start 异步跑，前端轮询 /bgm/status
+// 任务是否已被要求停止
+function cancelled(job) { return !!(job && job.cancelRequested) }
+// 收尾统一处理：已取消则不再覆写状态
+function finalize(job, state, msg) {
+  if (job.cancelRequested) { job.state = 'cancelled'; job.msg = job.msg || '已停止'; return }
+  job.state = state; job.msg = msg
+}
+
 const jobs = {}
 let seq = 0
 
@@ -402,7 +440,7 @@ async function runDownload(job, seriesId, vid, seriesName, epNo) {
     const dir = videoDir()
     const fn = safeName((seriesName || info.name || seriesId)) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
     const out = path.join(dir, fn)
-    const size = downloadVideo(info.url, out)
+    const size = await downloadVideo(info.url, out)
     job.result = { file: out, size, frame: info.frame, duration: info.duration, vid: info.vid }
     job.state = 'done'; job.percent = 100; job.msg = `已下载 ${(size / 1048576).toFixed(1)}MB → ${fn}`
   } catch (e) {
@@ -416,13 +454,13 @@ async function runEpisode(job, seriesId, vid, seriesName, epNo, start, end, keep
   try {
     job.msg = '获取视频地址'; job.percent = 3
     const info = await resolveWebVideo(seriesId, vid)
-    if (!info.url) throw new Error('没取到视频地址（可能是付费/下架集）')
+    if (!info.url) throw new Error('该集未开放试看（官网只开放前 3 集）')
     job.msg = `下载第 ${epNo} 集（${info.frame || '?'}）`; job.percent = 8
 
     const dir = videoDir()
     const fn = safeName((seriesName || info.name || seriesId)) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
     const localPath = path.join(dir, fn)
-    const size = downloadVideo(info.url, localPath, keepFile ? null : null)
+    const size = await downloadVideo(info.url, localPath, keepFile ? null : null)
     job.msg = `已下载 ${(size / 1048576).toFixed(1)}MB，开始分离`; job.percent = 35
 
     await ripWav(job, localPath, start, end)
@@ -438,10 +476,10 @@ async function ripWav(job, input, start, end) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vhbgm_r_'))
   try {
     job.msg = '抽取音轨'; job.percent = 40
-    const mix = extractWav(input, path.join(work, 'mix.wav'), start, end)
+    const mix = await extractWav(input, path.join(work, 'mix.wav'), start, end)
     job.msg = '人声分离（取伴奏轨）'; job.percent = 55
     const sherpaDir = ensureSherpaDir(work)
-    const accomp = separate(sherpaDir, mix, path.join(work, 'vocals.wav'), path.join(work, 'accomp.wav'))
+    const accomp = await separate(sherpaDir, mix, path.join(work, 'vocals.wav'), path.join(work, 'accomp.wav'))
     job.msg = '扫描伴奏轨'; job.percent = 65
     const afp = loadAfp()
     const cookie = getCookie()
@@ -472,11 +510,11 @@ async function runSingle(job, input, start, end, mode) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vhbgm_'))
   try {
     job.msg = '抽取音轨'; job.percent = 5
-    const mix = extractWav(input, path.join(work, 'mix.wav'), start, end)
+    const mix = await extractWav(input, path.join(work, 'mix.wav'), start, end)
 
     job.msg = '人声分离（取伴奏轨）'; job.percent = 25
     const sherpaDir = ensureSherpaDir(work)
-    const accomp = separate(sherpaDir, mix, path.join(work, 'vocals.wav'), path.join(work, 'accomp.wav'))
+    const accomp = await separate(sherpaDir, mix, path.join(work, 'vocals.wav'), path.join(work, 'accomp.wav'))
 
     job.msg = '扫描伴奏轨'; job.percent = 40
     const afp = loadAfp()
@@ -537,25 +575,27 @@ async function runBatchOnline(job, seriesId, seriesName, fromEp, count) {
     const dir = videoDir()
 
     for (let i = 0; i < vids.length; i++) {
+      if (cancelled(job)) break
       const epNo = fromEp + i
       const vid = vids[i]
       const base = i / vids.length
       job.percent = Math.round(5 + base * 90)
       try {
-        job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：取地址`
-        const info = await resolveWebVideo(seriesId, vid)
         const fn = safeName(name) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
         const localPath = path.join(dir, fn)
-        let src = localPath
-        if (fs.existsSync(localPath) && fs.statSync(localPath).size > 10000) {
+        const src = localPath
+        const hasLocal = fs.existsSync(localPath) && fs.statSync(localPath).size > 10000
+        if (hasLocal) {
           job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：用本地已有文件`
         } else {
+          job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：取地址`
+          const info = await resolveWebVideo(seriesId, vid)
           job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：下载（${info.frame || '?'}）`
-          downloadVideo(info.url, localPath)
+          await downloadVideo(info.url, localPath)
         }
         job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：分离+扫描`
-        const mix = extractWav(src, path.join(work, `m_${i}.wav`), null, null)
-        const accomp = separate(sherpaDir, mix, path.join(work, `v_${i}.wav`), path.join(work, `a_${i}.wav`))
+        const mix = await extractWav(src, path.join(work, `m_${i}.wav`), null, null)
+        const accomp = await separate(sherpaDir, mix, path.join(work, `v_${i}.wav`), path.join(work, `a_${i}.wav`))
         const r = await scanWav(afp, accomp, cookie, { win: 3, step: 1.5 })
         for (const h of r.hits) {
           const k = h.song.id
@@ -585,9 +625,23 @@ async function runBatchOnline(job, seriesId, seriesName, fromEp, count) {
     } catch (e) {}
 
     job.result = { total: songs.length, songs, episodes: perEp.length, perEp, seriesName: name }
-    job.state = 'done'; job.percent = 100; job.msg = `完成，共识别 ${songs.length} 首`
+    if (!cancelled(job)) job.percent = 100
+    // 汇总失败原因（典型：官网仅开放前 3 集，后续集播放页 404）
+    const failed = perEp.filter(e => e.error)
+    let doneMsg = `完成，共识别 ${songs.length} 首`
+    if (failed.length) {
+      const locked = failed.filter(e => /播放页|未取到|404/.test(e.error)).length
+      if (locked === failed.length && locked === perEp.length) {
+        doneMsg = `未能下载任何一集：官网只开放前 3 集试看，后面的集需要 App 登录`
+      } else if (locked) {
+        doneMsg = `完成，识别 ${songs.length} 首（${locked} 集因未开放试看跳过）`
+      } else {
+        doneMsg = `完成，识别 ${songs.length} 首（${failed.length} 集失败）`
+      }
+    }
+    finalize(job, 'done', doneMsg)
   } catch (e) {
-    job.state = 'error'; job.msg = e.message
+    finalize(job, 'error', e.message)
   } finally {
     try { fs.rmSync(work, { recursive: true, force: true }) } catch (e) {}
   }
@@ -606,12 +660,13 @@ async function runBatch(job, dir, limit) {
     const agg = {}, perEp = []
 
     for (let i = 0; i < files.length; i++) {
+      if (cancelled(job)) break
       const f = files[i]
       job.msg = `[${i + 1}/${files.length}] ${f}`
       job.percent = Math.round(i / files.length * 100)
       try {
-        const mix = extractWav(path.join(dir, f), path.join(work, `m_${i}.wav`), null, null)
-        const accomp = separate(sherpaDir, mix, path.join(work, `v_${i}.wav`), path.join(work, `a_${i}.wav`))
+        const mix = await extractWav(path.join(dir, f), path.join(work, `m_${i}.wav`), null, null)
+        const accomp = await separate(sherpaDir, mix, path.join(work, `v_${i}.wav`), path.join(work, `a_${i}.wav`))
         const r = await scanWav(afp, accomp, cookie, { win: 3, step: 1.5 })
         for (const h of r.hits) {
           const k = h.song.id
@@ -642,9 +697,10 @@ async function runBatch(job, dir, limit) {
     } catch (e) {}
 
     job.result = { total: songs.length, songs, episodes: perEp.length, perEp }
-    job.state = 'done'; job.percent = 100; job.msg = `完成，共识别 ${songs.length} 首`
+    if (!cancelled(job)) job.percent = 100
+    finalize(job, 'done', `完成，共识别 ${songs.length} 首`)
   } catch (e) {
-    job.state = 'error'; job.msg = e.message
+    finalize(job, 'error', e.message)
   } finally {
     try { fs.rmSync(work, { recursive: true, force: true }) } catch (e) {}
   }
@@ -783,7 +839,12 @@ const server = http.createServer(async (req, res) => {
     if (p === '/cancel' && req.method === 'POST') {
       const b = await readBody(req)
       const j = jobs[b.jobId]
-      if (j && j.state === 'running') { j.state = 'cancelled'; j.msg = '已取消' }
+      if (j && j.state === 'running') {
+        j.cancelRequested = true
+        j.state = 'cancelled'
+        j.msg = '已停止'
+        killAllChildren()   // 关键：杀掉正在跑的 ffmpeg / 分离器
+      }
       return send(res, 200, { code: 0 })
     }
 

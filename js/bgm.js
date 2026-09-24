@@ -286,7 +286,9 @@
             box.appendChild(more);
         }
         var hint = $('bgmSeriesHint');
-        if (hint) hint.textContent = '「下载」= 存到本地（collect/video）；「扒这集」= 自动下载后直接扒；批量可直接「自动下载并扒」。';
+        if (hint) {
+            hint.innerHTML = '「下载」= 存到本地；「扒这集」= 自动下载后直接扒。<span style="color:var(--fg-warn-soft);">注：官网只开放前 3 集免费试看，后面的集需 App 登录，自动下载会跳过。</span>';
+        }
     }
 
     // 单集：自动下载后扒（不再要求先有本地文件）
@@ -370,6 +372,20 @@
         if (t) t.textContent = timeTxt || '';
     }
 
+    // 结果为空时，给出可能原因提示
+    function emptyHint(res) {
+        var per = (res && res.perEp) || [];
+        var fail = per.filter(function (e) { return e.error; });
+        if (fail.length && fail.length === per.length) {
+            var locked = fail.filter(function (e) { return /未开放试看|播放页|404/.test(e.error); }).length;
+            if (locked === fail.length) {
+                return '这些集未开放试看（官网只开放前 3 集）。要扒后面的集，得先用别的方式把视频下到本地，再用「选择本地文件…」。';
+            }
+            return '全部失败：' + fail[0].error;
+        }
+        return '本集没有识别出 BGM（可能是纯对白段）';
+    }
+
     function poll() {
         if (!curJobId) return;
         if (pollTimer) clearTimeout(pollTimer);
@@ -418,7 +434,8 @@
 
         box.innerHTML = '';
         if (!songs.length) {
-            box.innerHTML = '<div class="bgm-item"><div class="bgm-item-main"><div class="bgm-item-name" style="color:var(--muted);">本集没有识别出 BGM（可能是纯对白段）</div></div></div>';
+            box.innerHTML = '<div class="bgm-item"><div class="bgm-item-main"><div class="bgm-item-name" style="color:var(--muted);">' +
+                esc(emptyHint(res)) + '</div></div></div>';
         } else {
             songs.forEach(function (s, i) {
                 var el = document.createElement('div');
