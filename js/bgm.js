@@ -266,9 +266,13 @@
                 '<div class="bgm-item-main"><div class="bgm-item-name">第 ' + (i + 1) + ' 集</div>' +
                 '<div class="bgm-item-sub">' + esc(v) + '</div></div>' +
                 '<span class="bgm-item-act bgm-look">看看</span>' +
+                '<span class="bgm-item-act bgm-dl">下载</span>' +
                 '<span class="bgm-item-act bgm-pick">扒这集</span>';
             el.querySelector('.bgm-look').addEventListener('click', function () {
                 previewEpisode(v, '第 ' + (i + 1) + ' 集');
+            });
+            el.querySelector('.bgm-dl').addEventListener('click', function () {
+                downloadEpisode(v, i + 1);
             });
             el.querySelector('.bgm-pick').addEventListener('click', function () {
                 pickEpisode(v, i + 1);
@@ -282,48 +286,24 @@
             box.appendChild(more);
         }
         var hint = $('bgmSeriesHint');
-        if (hint) hint.textContent = '「看看」= 内嵌预览这集；「扒这集」= 需先下载到本地（或直接选本地文件）。';
+        if (hint) hint.textContent = '「下载」= 存到本地（collect/video）；「扒这集」= 自动下载后直接扒；批量可直接「自动下载并扒」。';
     }
 
-    // 单集：优先用已下载的本地文件；否则提示
+    // 单集：自动下载后扒（不再要求先有本地文件）
     function pickEpisode(vid, epNo) {
         if (!curSeries) return;
-        var guess = guessLocalFile(curSeries.name, epNo);
-        if (guess) {
-            startBgm('/single', { input: guess, start: null, end: null, mode: 'accomp' },
-                '第 ' + epNo + ' 集扒歌');
-        } else {
-            flash('没找到第 ' + epNo + ' 集的本地文件，请点「选择本地文件…」指定');
-        }
+        startBgm('/episode', {
+            series_id: curSeries.series_id, vid: vid, name: curSeries.name, ep: epNo,
+            start: null, end: null,
+        }, '第 ' + epNo + ' 集（自动下载后扒）');
     }
 
-    // 在本地常见下载目录里找第 N 集的文件（模糊匹配 4 位序号）
-    function guessLocalFile(seriesName, epNo) {
-        try {
-            var root = path.join(extRoot, 'collect', 'video');
-            if (!fs.existsSync(root)) return null;
-            var want4 = ('0000' + epNo).slice(-4);
-            var safeName = String(seriesName || '').replace(/[\\/:*?"<>|]/g, '_');
-            var cands = [path.join(root, safeName)];
-            try {
-                fs.readdirSync(root).forEach(function (f) {
-                    if (safeName && f.indexOf(safeName) >= 0) cands.push(path.join(root, f));
-                });
-            } catch (e) {}
-            var out = [];
-            for (var c = 0; c < cands.length; c++) {
-                var dir = cands[c];
-                try {
-                    if (!fs.statSync(dir).isDirectory()) continue;
-                    fs.readdirSync(dir).forEach(function (f) {
-                        if (!/\.(mp4|mkv|mov|ts|wav|mp3|m4a)$/i.test(f)) return;
-                        if (f.indexOf(want4) >= 0) out.push(path.join(dir, f));
-                    });
-                } catch (e) {}
-                if (out.length) return out[0];
-            }
-            return null;
-        } catch (e) { return null; }
+    // 仅下载这一集到本地
+    function downloadEpisode(vid, epNo) {
+        if (!curSeries) return;
+        startBgm('/download', {
+            series_id: curSeries.series_id, vid: vid, name: curSeries.name, ep: epNo,
+        }, '下载第 ' + epNo + ' 集');
     }
 
     // ---------- 扒歌 ----------
@@ -343,8 +323,21 @@
             var p = (r.data || {}).path;
             if (!p) return;
             var lim = parseInt(($('bgmLimit') || {}).value, 10);
-            startBgm('/batch', { dir: p, limit: isNaN(lim) ? 0 : lim }, '整剧扒歌');
+            startBgm('/batch', { dir: p, limit: isNaN(lim) ? 0 : lim }, '本地目录批量扒歌');
         }).catch(function (e) { flash(e.message); });
+    }
+
+    // 在线批量：自动逐集下载再扒
+    function startOnlineBatch() {
+        if (!curSeries) { flash('先选一部剧'); return; }
+        var from = parseInt(($('bgmFromEp') || {}).value, 10);
+        var cnt = parseInt(($('bgmCount') || {}).value, 10);
+        if (isNaN(from) || from < 1) from = 1;
+        if (isNaN(cnt) || cnt < 1) cnt = 10;
+        if (cnt > 200) { flash('一次最多 200 集'); return; }
+        startBgm('/batch', {
+            series_id: curSeries.series_id, name: curSeries.name, from: from, count: cnt,
+        }, '在线批量 ' + from + '~' + (from + cnt - 1) + ' 集');
     }
 
     function startBgm(endpoint, body, label) {
@@ -518,6 +511,8 @@
         $('btnBgmPickFile').addEventListener('click', startSingleByFile);
         $('btnBgmPickDir').addEventListener('click', startBatchByDir);
         $('btnBgmBatch').addEventListener('click', startBatchByDir);
+        var ob = $('btnBgmOnlineBatch');
+        if (ob) ob.addEventListener('click', startOnlineBatch);
         $('btnBgmCancel').addEventListener('click', stopJob);
         $('btnBgmToLib').addEventListener('click', toPlaylist);
         var pc = $('btnBgmPreviewClose');

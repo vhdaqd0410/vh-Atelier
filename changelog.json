@@ -4,6 +4,31 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "短剧扒歌：自动下载",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "「扒这集」改为自动下载该集再扒 BGM，不用先手动下载"
+        },
+        {
+          "kind": "feat",
+          "text": "新增「下载」按钮：单独把该集存到本地（collect/video）"
+        },
+        {
+          "kind": "feat",
+          "text": "在线批量：「从第 N 集起扒 M 集」自动逐集下载+扒歌，无需本地文件"
+        },
+        {
+          "kind": "impr",
+          "text": "下载源改用官网播放页的明文 mp4（免签名、免设备号），720p，约 2 秒/集"
+        },
+        {
+          "kind": "note",
+          "text": "已下载过的集会直接复用本地文件，不重复下载"
+        }
+      ]
+    },
+    {
       "title": "短剧扒歌：可看可挑",
       "items": [
         {

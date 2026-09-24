@@ -315,6 +315,55 @@ async function getSeries(seriesId) {
   return { series_id: seriesId, name: nm ? nm[1] : seriesId, cover, intro, tags, vid_list: vids, count: vids.length }
 }
 
+// ── 从官网播放页 SSR 数据取 mp4 直链（免签名 / 免 cookie / 免设备号）──
+// 官网播放页 HTML 里直接内置 video_player_info.main_url，是明文 mp4（无 DRM）
+async function resolveWebVideo(seriesId, vid) {
+  const url = `https://hongguoduanju.com/player/${seriesId}/` + (vid ? `${vid}/` : '')
+  const html = await fetchText(url)
+  const pick = (key) => {
+    const m = new RegExp('"' + key + '"\\s*:\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|([\\d.]+))').exec(html)
+    return m ? (m[1] !== undefined ? m[1] : m[2]) : ''
+  }
+  let main = pick('main_url')
+  main = main.replace(/\\u002F/g, '/')
+  if (!main) throw new Error('播放页未取到视频地址（可能是付费/下架集）')
+  const nm = /"series_name"\s*:\s*"([^"]*)"/.exec(html)
+  const v = /"vid"\s*:\s*"(\d+)"/.exec(html)
+  let dur = pick('duration') || ''
+  // ISO8601 时长（PT2M14S）转秒
+  let durSec = 0
+  const dm = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/.exec(dur)
+  if (dm) durSec = (+dm[1] || 0) * 3600 + (+dm[2] || 0) * 60 + (parseFloat(dm[3]) || 0)
+  return {
+    url: main.replace(/&amp;/g, '&'),
+    name: nm ? nm[1] : '',
+    vid: v ? v[1] : (vid || ''),
+    frame: (pick('width') || '') + 'x' + (pick('height') || ''),
+    duration: Math.round(durSec),
+  }
+}
+
+// ── 下载单集（ffmpeg 直接拉取，可限时长）──
+function downloadVideo(url, outPath, limitSeconds) {
+  const args = ['-y', '-v', 'error']
+  if (limitSeconds) args.push('-t', String(limitSeconds))
+  args.push('-i', url, '-c', 'copy', '-movflags', '+faststart', outPath)
+  const r = spawnSync(findFfmpeg(), args, { encoding: 'utf8', timeout: 1800000 })
+  if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 10000) {
+    throw new Error('下载失败: ' + String(r.stderr || r.error || '').slice(0, 250))
+  }
+  return fs.statSync(outPath).size
+}
+
+function safeName(s) { return String(s || 'video').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) }
+
+// 下载目录：优先用视频板块的 collect/video，回退 collect/bgm/downloads
+function videoDir() {
+  const d = path.join(EXT_ROOT, 'collect', 'video')
+  fs.mkdirSync(d, { recursive: true })
+  return d
+}
+
 // ── HTTP 服务 ──
 function send(res, code, obj) {
   const body = Buffer.from(JSON.stringify(obj), 'utf8')
@@ -344,6 +393,81 @@ function newJob(kind) {
   return jobs[id]
 }
 
+// 仅下载（不扒歌）
+async function runDownload(job, seriesId, vid, seriesName, epNo) {
+  try {
+    job.msg = '获取视频地址'; job.percent = 5
+    const info = await resolveWebVideo(seriesId, vid)
+    job.msg = `下载第 ${epNo} 集（${info.frame || '?'}）`; job.percent = 20
+    const dir = videoDir()
+    const fn = safeName((seriesName || info.name || seriesId)) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
+    const out = path.join(dir, fn)
+    const size = downloadVideo(info.url, out)
+    job.result = { file: out, size, frame: info.frame, duration: info.duration, vid: info.vid }
+    job.state = 'done'; job.percent = 100; job.msg = `已下载 ${(size / 1048576).toFixed(1)}MB → ${fn}`
+  } catch (e) {
+    job.state = 'error'; job.msg = e.message
+  }
+}
+
+// 单集：自动下载再扒（默认行为）
+async function runEpisode(job, seriesId, vid, seriesName, epNo, start, end, keepFile) {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vhbgm_'))
+  try {
+    job.msg = '获取视频地址'; job.percent = 3
+    const info = await resolveWebVideo(seriesId, vid)
+    if (!info.url) throw new Error('没取到视频地址（可能是付费/下架集）')
+    job.msg = `下载第 ${epNo} 集（${info.frame || '?'}）`; job.percent = 8
+
+    const dir = videoDir()
+    const fn = safeName((seriesName || info.name || seriesId)) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
+    const localPath = path.join(dir, fn)
+    const size = downloadVideo(info.url, localPath, keepFile ? null : null)
+    job.msg = `已下载 ${(size / 1048576).toFixed(1)}MB，开始分离`; job.percent = 35
+
+    await ripWav(job, localPath, start, end)
+  } catch (e) {
+    job.state = 'error'; job.msg = e.message
+  } finally {
+    try { fs.rmSync(work, { recursive: true, force: true }) } catch (e) {}
+  }
+}
+
+// 共用：对本地文件（可区间）做分离 + 扫描
+async function ripWav(job, input, start, end) {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vhbgm_r_'))
+  try {
+    job.msg = '抽取音轨'; job.percent = 40
+    const mix = extractWav(input, path.join(work, 'mix.wav'), start, end)
+    job.msg = '人声分离（取伴奏轨）'; job.percent = 55
+    const sherpaDir = ensureSherpaDir(work)
+    const accomp = separate(sherpaDir, mix, path.join(work, 'vocals.wav'), path.join(work, 'accomp.wav'))
+    job.msg = '扫描伴奏轨'; job.percent = 65
+    const afp = loadAfp()
+    const cookie = getCookie()
+    const r = await scanWav(afp, accomp, cookie, {
+      win: 3, step: 1.5,
+      onProgress: (w, tot) => { job.percent = 65 + Math.round(w / Math.max(1, tot) * 33); job.msg = `扫描中 ${w}/${tot}` },
+    })
+    job.result = {
+      total: r.hits.length,
+      songs: r.hits.map(h => ({
+        id: h.song.id, name: h.song.name,
+        artist: (h.song.artists || []).map(a => a.name).join(', '),
+        album: (h.song.album || {}).name || '',
+        count: h.count, at: +h.firstAt.toFixed(1), to: +(h.lastAt + 3).toFixed(1),
+      })),
+      duration: +r.duration.toFixed(1), windows: r.windows, skipped: r.skipped,
+    }
+    job.state = 'done'; job.percent = 100; job.msg = `完成，识别 ${r.hits.length} 首`
+  } catch (e) {
+    job.state = 'error'; job.msg = e.message
+  } finally {
+    try { fs.rmSync(work, { recursive: true, force: true }) } catch (e) {}
+  }
+}
+
+// 单集：本地已有文件直接扒
 async function runSingle(job, input, start, end, mode) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vhbgm_'))
   try {
@@ -393,6 +517,79 @@ function fmtSong(s) {
     artist: (s.artists || []).map(a => a.name).join(', '),
     album: (s.album || {}).name || '',
     count: s.count, at: +(s.firstAt).toFixed(1), to: +(s.lastAt + 3).toFixed(1),
+  }
+}
+
+// 在线批量：自动逐集下载+分离+扒歌（不依赖本地已下载文件）
+async function runBatchOnline(job, seriesId, seriesName, fromEp, count) {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vhbgm_on_'))
+  try {
+    job.msg = '获取剧集列表'; job.percent = 2
+    const ser = await getSeries(seriesId)
+    const vids = (ser.vid_list || []).slice(Math.max(0, fromEp - 1), Math.max(0, fromEp - 1) + count)
+    if (!vids.length) throw new Error('没有取到剧集')
+    const name = seriesName || ser.name || seriesId
+
+    const sherpaDir = ensureSherpaDir(work)
+    const afp = loadAfp()
+    const cookie = getCookie()
+    const agg = {}, perEp = []
+    const dir = videoDir()
+
+    for (let i = 0; i < vids.length; i++) {
+      const epNo = fromEp + i
+      const vid = vids[i]
+      const base = i / vids.length
+      job.percent = Math.round(5 + base * 90)
+      try {
+        job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：取地址`
+        const info = await resolveWebVideo(seriesId, vid)
+        const fn = safeName(name) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
+        const localPath = path.join(dir, fn)
+        let src = localPath
+        if (fs.existsSync(localPath) && fs.statSync(localPath).size > 10000) {
+          job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：用本地已有文件`
+        } else {
+          job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：下载（${info.frame || '?'}）`
+          downloadVideo(info.url, localPath)
+        }
+        job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：分离+扫描`
+        const mix = extractWav(src, path.join(work, `m_${i}.wav`), null, null)
+        const accomp = separate(sherpaDir, mix, path.join(work, `v_${i}.wav`), path.join(work, `a_${i}.wav`))
+        const r = await scanWav(afp, accomp, cookie, { win: 3, step: 1.5 })
+        for (const h of r.hits) {
+          const k = h.song.id
+          if (!agg[k]) agg[k] = { song: h.song, count: 0, eps: [] }
+          agg[k].count += h.count
+          if (agg[k].eps.indexOf(epNo) < 0) agg[k].eps.push(epNo)
+        }
+        perEp.push({ ep: epNo, vid, songs: r.hits.map(fmtSong) })
+      } catch (e) {
+        perEp.push({ ep: epNo, vid, error: e.message })
+      }
+    }
+
+    const songs = Object.values(agg)
+      .sort((a, b) => (b.count - a.count) || (b.eps.length - a.eps.length))
+      .map(h => ({
+        id: h.song.id, name: h.song.name,
+        artist: (h.song.artists || []).map(a => a.name).join(', '),
+        album: (h.song.album || {}).name || '',
+        count: h.count, eps: h.eps.length, epList: h.eps.slice(0, 30),
+      }))
+
+    try {
+      fs.mkdirSync(OUT_ROOT, { recursive: true })
+      fs.writeFileSync(path.join(OUT_ROOT, 'last_batch.json'),
+        JSON.stringify({ series_id: seriesId, name, at: new Date().toISOString(), songs, perEp }, null, 2), 'utf8')
+    } catch (e) {}
+
+    job.result = { total: songs.length, songs, episodes: perEp.length, perEp, seriesName: name }
+    job.state = 'done'; job.percent = 100; job.msg = `完成，共识别 ${songs.length} 首`
+  } catch (e) {
+    job.state = 'error'; job.msg = e.message
+  } finally {
+    try { fs.rmSync(work, { recursive: true, force: true }) } catch (e) {}
   }
 }
 
@@ -529,11 +726,46 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/batch' && req.method === 'POST') {
       const b = await readBody(req)
-      if (!b.dir) return send(res, 200, { code: -1, msg: '缺少 dir（剧集目录）' })
+      // 新用法：给 series_id 自动逐集下载再扒
+      if (b.series_id) {
+        const job = newJob('batch')
+        runBatchOnline(job, b.series_id, b.name || '', b.from || 1, b.count || 10)
+        return send(res, 200, { code: 0, data: { jobId: job.id } })
+      }
+      if (!b.dir) return send(res, 200, { code: -1, msg: '缺少 dir（本地剧集目录）或 series_id（在线批量）' })
       if (!fs.existsSync(b.dir)) return send(res, 200, { code: -1, msg: '目录不存在: ' + b.dir })
       const job = newJob('batch')
       runBatch(job, b.dir, b.limit)
       return send(res, 200, { code: 0, data: { jobId: job.id } })
+    }
+
+    if (p === '/episodes') {
+      const sid = u.searchParams.get('series_id') || ''
+      const info = await getSeries(sid)
+      return send(res, 200, { code: 0, data: info })
+    }
+
+    if (p === '/episode' && req.method === 'POST') {
+      const b = await readBody(req)
+      if (!b.series_id) return send(res, 200, { code: -1, msg: '缺少 series_id' })
+      const job = newJob('episode')
+      runEpisode(job, b.series_id, b.vid || null, b.name || '', b.ep || 1, b.start, b.end)
+      return send(res, 200, { code: 0, data: { jobId: job.id } })
+    }
+
+    if (p === '/download' && req.method === 'POST') {
+      const b = await readBody(req)
+      if (!b.series_id) return send(res, 200, { code: -1, msg: '缺少 series_id' })
+      const job = newJob('download')
+      runDownload(job, b.series_id, b.vid || null, b.name || '', b.ep || 1)
+      return send(res, 200, { code: 0, data: { jobId: job.id } })
+    }
+
+    if (p === '/probe') {
+      const sid = u.searchParams.get('series_id') || ''
+      const vid = u.searchParams.get('vid') || ''
+      const info = await resolveWebVideo(sid, vid || null)
+      return send(res, 200, { code: 0, data: info })
     }
 
     if (p === '/status') {
