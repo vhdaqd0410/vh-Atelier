@@ -133,16 +133,29 @@
         } else {
             list.forEach(function (it, i) {
                 var el = document.createElement('div');
-                el.className = 'bgm-item';
+                el.className = 'bgm-card';
+                var tags = (it.tags || []).map(function (t) {
+                    return '<span class="bgm-chip">' + esc(t) + '</span>';
+                }).join('');
+                var epTxt = it.count ? (it.count + ' 集') : '';
+                var actorTxt = (it.actors && it.actors !== '暂无演员信息') ? ('演员：' + esc(it.actors)) : '';
                 el.innerHTML =
-                    '<span class="bgm-item-idx">' + (i + 1) + '</span>' +
-                    '<div class="bgm-item-main">' +
-                        '<div class="bgm-item-name bgm-play">' + esc(it.name || ('剧集 ' + it.series_id)) + '</div>' +
-                        '<div class="bgm-item-sub">ID ' + esc(it.series_id) + '</div>' +
-                    '</div>' +
-                    '<span class="bgm-item-act">选此剧</span>';
+                    '<img class="bgm-cover" src="' + esc(it.cover || '') + '" alt="" ' +
+                        'onerror="this.style.visibility=&quot;hidden&quot;">' +
+                    '<div class="bgm-card-main">' +
+                        '<div class="bgm-card-title bgm-play">' + esc(it.name || ('剧集 ' + it.series_id)) + '</div>' +
+                        '<div class="bgm-card-meta">' + tags +
+                            (epTxt ? '<span class="bgm-chip">' + epTxt + '</span>' : '') + '</div>' +
+                        (actorTxt ? '<div class="bgm-card-actor">' + actorTxt + '</div>' : '') +
+                        '<div class="bgm-card-intro">' + esc(it.intro || '') + '</div>' +
+                        '<div class="bgm-card-actions">' +
+                            '<span class="bgm-item-act bgm-pick">选此剧扒歌</span>' +
+                            '<span class="bgm-item-act bgm-look">先看看</span>' +
+                        '</div>' +
+                    '</div>';
                 el.querySelector('.bgm-play').addEventListener('click', function () { openSeries(it); });
-                el.querySelector('.bgm-item-act').addEventListener('click', function () { openSeries(it); });
+                el.querySelector('.bgm-pick').addEventListener('click', function () { openSeries(it); });
+                el.querySelector('.bgm-look').addEventListener('click', function () { previewSeries(it); });
                 box.appendChild(el);
             });
         }
@@ -155,6 +168,46 @@
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    // ---------- 预览（内嵌官网播放页，无需逆向解析） ----------
+    function previewSeries(it) {
+        openPreview('https://hongguoduanju.com/player/' + it.series_id + '/', it.name || it.series_id, 1);
+    }
+
+    function previewEpisode(vid, label) {
+        if (!curSeries) return;
+        openPreview('https://hongguoduanju.com/player/' + curSeries.series_id + '/' + vid + '/',
+            (curSeries.name || '') + ' ' + label, 0);
+    }
+
+    function openPreview(url, title, isFirst) {
+        var wrap = $('bgmPreviewWrap');
+        if (!wrap) return;
+        wrap.style.display = '';
+        $('bgmPreviewTitle').textContent = title || '';
+        var f = $('bgmPreviewFrame');
+        // 防止重复加载同一地址
+        if (f.getAttribute('data-cur') !== url) {
+            f.setAttribute('data-cur', url);
+            f.src = isFirst ? url.replace(/\/$/, '/') : url;
+        }
+        // 滚到预览区
+        try { wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+    }
+
+    function closePreview() {
+        var wrap = $('bgmPreviewWrap');
+        if (wrap) wrap.style.display = 'none';
+        var f = $('bgmPreviewFrame');
+        if (f) { f.removeAttribute('data-cur'); f.src = 'about:blank'; }
+    }
+
+    function openExternalPreview() {
+        var f = $('bgmPreviewFrame');
+        var u = f && f.getAttribute('data-cur');
+        if (!u) { flash('先选一部剧预览'); return; }
+        try { childProcess.exec('start "" "' + u + '"'); } catch (e) { flash('打开外部浏览器失败'); }
     }
 
     // ---------- 剧集 ----------
@@ -176,6 +229,32 @@
         $('bgmSeriesName').textContent = d.name || d.series_id;
         $('bgmSeriesCount').textContent = '共 ' + d.count + ' 集';
 
+        // 剧集头：封面 + 标签 + 简介
+        var head = $('bgmSeriesHead');
+        if (head) {
+            var tags = (d.tags || []).map(function (t) { return '<span class="bgm-chip">' + esc(t) + '</span>'; }).join('');
+            head.innerHTML =
+                '<img class="bgm-cover" src="' + esc(d.cover || '') + '" alt="" ' +
+                    'onerror="this.style.visibility=&quot;hidden&quot;">' +
+                '<div class="bgm-card-main">' +
+                    '<div class="bgm-card-meta">' + tags + '</div>' +
+                    '<div class="bgm-card-intro">' + esc(d.intro || '') + '</div>' +
+                    '<div class="bgm-card-actions">' +
+                        '<span class="bgm-item-act" id="bgmHeadPreview">▶ 预览第 1 集</span>' +
+                        '<span class="bgm-item-act" id="bgmHeadExternal">用浏览器打开</span>' +
+                    '</div>' +
+                '</div>';
+            var pv = $('bgmHeadPreview');
+            if (pv) pv.addEventListener('click', function () {
+                openPreview('https://hongguoduanju.com/player/' + d.series_id + '/', d.name + ' 第1集', 1);
+            });
+            var ex = $('bgmHeadExternal');
+            if (ex) ex.addEventListener('click', function () {
+                openPreview('https://hongguoduanju.com/player/' + d.series_id + '/', d.name + ' 第1集', 1);
+                openExternalPreview();
+            });
+        }
+
         var box = $('bgmEpList');
         box.innerHTML = '';
         // 只渲染前 60 集，避免一次塞太多 DOM
@@ -186,7 +265,14 @@
                 '<span class="bgm-item-idx">' + (i + 1) + '</span>' +
                 '<div class="bgm-item-main"><div class="bgm-item-name">第 ' + (i + 1) + ' 集</div>' +
                 '<div class="bgm-item-sub">' + esc(v) + '</div></div>' +
-                '<span class="bgm-item-act">扒这集</span>';
+                '<span class="bgm-item-act bgm-look">看看</span>' +
+                '<span class="bgm-item-act bgm-pick">扒这集</span>';
+            el.querySelector('.bgm-look').addEventListener('click', function () {
+                previewEpisode(v, '第 ' + (i + 1) + ' 集');
+            });
+            el.querySelector('.bgm-pick').addEventListener('click', function () {
+                pickEpisode(v, i + 1);
+            });
             box.appendChild(el);
         });
         if ((d.vid_list || []).length > 60) {
@@ -196,7 +282,48 @@
             box.appendChild(more);
         }
         var hint = $('bgmSeriesHint');
-        if (hint) hint.textContent = '单集需先下载到本地（「视频下载」板块），或用「选择本地文件」指定。';
+        if (hint) hint.textContent = '「看看」= 内嵌预览这集；「扒这集」= 需先下载到本地（或直接选本地文件）。';
+    }
+
+    // 单集：优先用已下载的本地文件；否则提示
+    function pickEpisode(vid, epNo) {
+        if (!curSeries) return;
+        var guess = guessLocalFile(curSeries.name, epNo);
+        if (guess) {
+            startBgm('/single', { input: guess, start: null, end: null, mode: 'accomp' },
+                '第 ' + epNo + ' 集扒歌');
+        } else {
+            flash('没找到第 ' + epNo + ' 集的本地文件，请点「选择本地文件…」指定');
+        }
+    }
+
+    // 在本地常见下载目录里找第 N 集的文件（模糊匹配 4 位序号）
+    function guessLocalFile(seriesName, epNo) {
+        try {
+            var root = path.join(extRoot, 'collect', 'video');
+            if (!fs.existsSync(root)) return null;
+            var want4 = ('0000' + epNo).slice(-4);
+            var safeName = String(seriesName || '').replace(/[\\/:*?"<>|]/g, '_');
+            var cands = [path.join(root, safeName)];
+            try {
+                fs.readdirSync(root).forEach(function (f) {
+                    if (safeName && f.indexOf(safeName) >= 0) cands.push(path.join(root, f));
+                });
+            } catch (e) {}
+            var out = [];
+            for (var c = 0; c < cands.length; c++) {
+                var dir = cands[c];
+                try {
+                    if (!fs.statSync(dir).isDirectory()) continue;
+                    fs.readdirSync(dir).forEach(function (f) {
+                        if (!/\.(mp4|mkv|mov|ts|wav|mp3|m4a)$/i.test(f)) return;
+                        if (f.indexOf(want4) >= 0) out.push(path.join(dir, f));
+                    });
+                } catch (e) {}
+                if (out.length) return out[0];
+            }
+            return null;
+        } catch (e) { return null; }
     }
 
     // ---------- 扒歌 ----------
@@ -393,6 +520,10 @@
         $('btnBgmBatch').addEventListener('click', startBatchByDir);
         $('btnBgmCancel').addEventListener('click', stopJob);
         $('btnBgmToLib').addEventListener('click', toPlaylist);
+        var pc = $('btnBgmPreviewClose');
+        if (pc) pc.addEventListener('click', closePreview);
+        var pe = $('btnBgmPreviewExternal');
+        if (pe) pe.addEventListener('click', openExternalPreview);
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);

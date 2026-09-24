@@ -236,8 +236,7 @@ async function searchDramas(keyword) {
   const html = await fetchText(url)
   const out = [], seen = {}
 
-  // 搜索页卡片结构：<a href="/detail?series_id=ID">…</a>，剧名在其后文本/标签里
-  // 先按 article 卡片切分，再逐个提取 series_id 与剧名
+  // 搜索页卡片：<article>…，含封面图 / 标题 / 标签 / 演员 / 简介 / 集数
   const cards = html.split(/<article[^>]*>/i).slice(1)
   for (const c of cards) {
     if (out.length >= 40) break
@@ -245,27 +244,56 @@ async function searchDramas(keyword) {
     if (!idm) continue
     const id = idm[1]
     if (seen[id]) continue
-    // 剧名：优先带 title 的标签，其次 alt，最后从可见文本里挑最长的中文串
+
+    // 剧名：alt 最可靠（title 属性不存在）
     let name = ''
-    const t = /title="([^"]{2,60})"/.exec(c)
-    const a = /alt="([^"]{2,60})"/.exec(c)
-    if (t) name = t[1]
-    else if (a) name = a[1]
+    const am = /alt="([^"]{2,80})"/.exec(c)
+    if (am) name = am[1]
     else {
-      const txt = c.replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ')
-      const cands = (txt.match(/[\u4e00-\u9fa5\u3001\uff1a\uff0c0-9A-Za-z]{3,40}/g) || [])
-        .filter(x => !/搜索|首页|百度|官网|投放/.test(x))
-      if (cands.length) name = cands[0].trim()
+      const tm = /class="pc-title-[^"]*"[^>]*>([\s\S]{0,300}?)<\/a>/.exec(c)
+      if (tm) name = tm[1].replace(/<[^>]+>/g, '').trim()
     }
+
+    // 封面：只取 image 版本（webp 在部分旧内核不支持）
+    let cover = ''
+    const imgAll = c.match(/https:\/\/[^"\s]+(?:byteimg|fqnovelpic)\.com\/[^"\s]+/g) || []
+    for (const u of imgAll) {
+      if (/\.jpeg|\.image|\.jpg|\.png/i.test(u) || /\.webp/i.test(u)) {
+        cover = u.replace(/&amp;/g, '&')
+        if (!/\.webp/i.test(u)) break
+      }
+    }
+
+    // 标签
+    const tags = []
+    const tRe = /class="pc-tag-[^"]*"[^>]*>([^<]{1,12})</g
+    let tm2
+    while ((tm2 = tRe.exec(c))) tags.push(tm2[1].trim())
+
+    // 演员
+    let actors = ''
+    const acm = /class="pc-actors-[^"]*"[^>]*>([\s\S]{0,200}?)<\/p>/.exec(c)
+    if (acm) actors = acm[1].replace(/<!--[^>]*-->/g, '').replace(/<[^>]+>/g, '').replace(/^演员：/, '').trim()
+
+    // 简介（取第一个，不带 tooltip 的那个）
+    let intro = ''
+    const inm = /class="pc-intro-[^"]*"[^>]*>([\s\S]{0,1200}?)<\/p>/.exec(c)
+    if (inm) intro = inm[1].replace(/<!--[^>]*-->/g, '').replace(/<[^>]+>/g, '').replace(/^简介：/, '').trim()
+
+    // 集数：从分集按钮/链接数量或文本推
+    const epCells = (c.match(/pc-episode-cell/g) || []).length
+    const epText = /全(\d+)集/.exec(c)
+    const count = epText ? parseInt(epText[1], 10) : (epCells || 0)
+
     seen[id] = 1
-    out.push({ series_id: id, name })
+    out.push({ series_id: id, name, cover, tags, actors, intro, count })
   }
 
   // 兜底：至少能列出 series_id
   if (!out.length) {
     const ids = [...new Set((html.match(/\/detail\?series_id=(\d+)/g) || [])
       .map(x => x.match(/(\d+)/)[1]))]
-    ids.slice(0, 40).forEach(id => out.push({ series_id: id, name: '' }))
+    ids.slice(0, 40).forEach(id => out.push({ series_id: id, name: '', cover: '', tags: [], actors: '', intro: '', count: 0 }))
   }
   return out
 }
@@ -275,7 +303,16 @@ async function getSeries(seriesId) {
   const nm = /"series_name":"([^"]*)"/.exec(html)
   const mv = /"vid_list":\[([^\]]+)\]/.exec(html)
   const vids = mv ? (mv[1].match(/"(\d+)"/g) || []).map(x => x.replace(/"/g, '')) : []
-  return { series_id: seriesId, name: nm ? nm[1] : seriesId, vid_list: vids, count: vids.length }
+  let cover = ''
+  const cm = /"series_cover":"([^"]*)"/.exec(html)
+  if (cm) cover = cm[1].replace(/\\u002F/g, '/')
+  let intro = ''
+  const im = /"series_intro":"([^"]*)"/.exec(html)
+  if (im) intro = im[1]
+  const tags = []
+  const tm = /"tags":\[([^\]]*)\]/.exec(html)
+  if (tm) (tm[1].match(/"([^"]*)"/g) || []).forEach(x => tags.push(x.replace(/"/g, '')))
+  return { series_id: seriesId, name: nm ? nm[1] : seriesId, cover, intro, tags, vid_list: vids, count: vids.length }
 }
 
 // ── HTTP 服务 ──

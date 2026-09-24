@@ -3150,3 +3150,63 @@ body.cx-resizing *{cursor:col-resize !important;}
 }
 .bgm-play { cursor: pointer; }
 .bgm-play:hover { color: var(--accent-hover); }
+
+/* ===== 短剧扒歌：卡片 ===== */
+
+.bgm-card {
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: var(--panel2);
+}
+.bgm-card:last-child { border-bottom: none; }
+.bgm-cover {
+    width: 72px;
+    height: 96px;
+    flex: 0 0 72px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #222;
+}
+.bgm-card-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.bgm-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-card-meta { display: flex; flex-wrap: wrap; gap: 4px; }
+.bgm-chip {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--sel-blue2-bg);
+    color: var(--fg-link);
+    white-space: nowrap;
+}
+.bgm-card-actor {
+    font-size: 10.5px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-card-intro {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.bgm-card-actions { display: flex; gap: 6px; margin-top: 2px; }

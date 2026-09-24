@@ -629,7 +629,8 @@
                         <span id="bgmSeriesName" style="font-size:13px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                         <span id="bgmSeriesCount" style="font-size:11px;color:var(--muted);"></span>
                     </div>
-                    <div class="tr" style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+                    <div id="bgmSeriesHead" class="bgm-card" style="border-bottom:none;padding:8px 0;"></div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
                         <span style="font-size:11px;color:var(--muted);">单集区间：</span>
                         <input type="number" id="bgmStart" placeholder="起(秒)" style="width:64px;" min="0">
                         <span style="color:var(--muted);">~</span>
@@ -648,6 +649,20 @@
                     <div id="bgmSeriesHint" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
                 </div>
                 <div id="bgmEpList" class="bgm-list" style="margin-top:6px;"></div>
+            </div>
+
+            <!-- 内嵌预览（直接嵌官网播放页，不依赖逆向解析） -->
+            <div id="bgmPreviewWrap" style="display:none;margin-top:8px;">
+                <div class="bgm-sec-title">
+                    <span>预览：<span id="bgmPreviewTitle"></span></span>
+                    <span style="flex:1;"></span>
+                    <button id="btnBgmPreviewExternal" class="tbtn" style="padding:3px 8px;font-size:11px;">浏览器打开</button>
+                    <button id="btnBgmPreviewClose" class="tbtn" style="padding:3px 8px;font-size:11px;">✕ 关闭</button>
+                </div>
+                <iframe id="bgmPreviewFrame" src="about:blank"
+                    allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                    style="width:100%;height:340px;border:1px solid #333;border-radius:6px;background:#000;"></iframe>
+                <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">内嵌预览来自红果官网播放页。若此处一直空白，点「浏览器打开」看。</div>
             </div>
 
             <!-- 进度 -->
