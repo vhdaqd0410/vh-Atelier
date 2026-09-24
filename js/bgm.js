@@ -366,7 +366,22 @@
     }
 
     // ---------- 剧集 ----------
+    // 换剧清理：清掉结果列表、色块、叠加条、当前播放集（缓存本身保留，按剧号隔离）
+    function resetForSeries() {
+        try { closePlayer(); } catch (e) {}
+        try { clearMarks(); } catch (e) {}
+        try {
+            var rw = $('bgmResultWrap'); if (rw) rw.style.display = 'none';
+            var rl = $('bgmResultList'); if (rl) rl.innerHTML = '';
+            var rt = $('bgmResultTitle'); if (rt) rt.textContent = '\u8bc6\u522b\u7ed3\u679c';
+            var ns = $('bgmNowSong'); if (ns) ns.style.display = 'none';
+            var meta = $('bgmEpMeta'); if (meta) meta.textContent = '';
+        } catch (e) {}
+        lastResult = null; selected = {}; lastPickEp = 0; lastHlId = null; lastOverlayId = null;
+    }
+
     function openSeries(it) {
+        resetForSeries();
         ensureServer().then(function () {
             return api('/series?series_id=' + encodeURIComponent(it.series_id), { timeout: 40000 });
         }).then(function (r) {
@@ -486,7 +501,8 @@
             });
             // 双击 = 下载（未下）/ 播放（已下）
             el.addEventListener('dblclick', function () {
-                if (local) playEpisode(ep, v); else downloadEpisode(v, ep);
+                // 已下载 → 直接播；未下载 → 下载完自动播（autoPlay=ep）
+                if (local) playEpisode(ep, v); else downloadEpisode(v, ep, true);
             });
             // 已下载的集：整行可拖进 PR（拖时排除按钮区）
             if (local) {
@@ -560,14 +576,24 @@
 
     // 扒歌结果缓存：ep -> { songs, duration, windows, at }
     var resultCache = {};
-    try { resultCache = JSON.parse(localStorage.getItem('vh_bgm_results') || '{}'); } catch (e) { resultCache = {}; }
+    try {
+        resultCache = JSON.parse(localStorage.getItem('vh_bgm_results') || '{}');
+        // 迁移：旧格式 key 是纯数字集号（会跨剧串），上线隔离后清掉一次
+        if (localStorage.getItem('vh_bgm_keyver') !== '2') {
+            resultCache = {};
+            bgmMarks = {};
+            localStorage.setItem('vh_bgm_keyver', '2');
+        }
+    } catch (e) { resultCache = {}; }
     function saveResults() { try { localStorage.setItem('vh_bgm_results', JSON.stringify(resultCache)); } catch (e) {} }
+    // 缓存键 = 剧号 + 集号（换剧后互不干扰，杜绝"上一部剧信息残留"）
+    function ckey(ep) { return (curSeries && curSeries.series_id ? curSeries.series_id : '_') + ':' + ep; }
     function cacheResult(ep, res) {
         if (!ep || !res) return;
-        resultCache[ep] = { songs: res.songs || [], duration: res.duration, windows: res.windows, at: Date.now() };
+        resultCache[ckey(ep)] = { songs: res.songs || [], duration: res.duration, windows: res.windows, at: Date.now() };
         saveResults();
     }
-    function getCached(ep) { return resultCache[ep] || null; }
+    function getCached(ep) { return resultCache[ckey(ep)] || null; }
 
     // 每首歌一个稳定颜色（按 id 哈希，色相区分明显）
     function songColor(id) {
@@ -579,7 +605,7 @@
 
     function rememberMarks(ep, songs) {
         if (!ep || !songs || !songs.length) return;
-        bgmMarks[ep] = songs.map(function (s) {
+        bgmMarks[ckey(ep)] = songs.map(function (s) {
             return { id: s.id, name: s.name, artist: s.artist, at: s.at, to: s.to, count: s.count };
         });
         saveMarks();
@@ -715,6 +741,7 @@
         drawMarkers(ep);
         renderEpisodeSongList(ep);      // 该集已有识别结果 → 直接显示列表
         syncBar();
+        focusPlayer();                  // 自动聚焦到画面中心
         var info = $('bgmPlayerInfo');
         if (info) info.textContent = loc.name + '  ' + loc.sizeMB + 'MB';
         try { localStorage.setItem('vh_bgm_last_ep', String(ep)); } catch (e) {}
@@ -780,12 +807,30 @@
     }
     function toggleMini() { applyMini(!miniMode); }
 
+    // ⑦ 播放时把播放窗口滚到视野中心（小窗模式则滚到右下角区域）
+    function focusPlayer() {
+        var wrap = $('bgmPlayerWrap');
+        if (!wrap) return;
+        try {
+            if (miniMode) return;   // 小窗本就固定定位，不需要滚
+            // 优先滚到视频元素，留出上下舒适边距
+            var v = $('bgmV');
+            var target = v || wrap;
+            var rect = target.getBoundingClientRect();
+            var vh = window.innerHeight || document.documentElement.clientHeight;
+            var top = rect.top + window.pageYOffset - Math.max(0, (vh - rect.height) / 2);
+            window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        } catch (e) {
+            try { if (wrap.scrollIntoView) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) {}
+        }
+    }
+
     // ---------- 实时叠加：当前进度落在哪首 BGM 上 ----------
     var lastOverlayId = null;
     function tickOverlay() {
         var v = $('bgmV');
         if (!v || !playEp) return;
-        var marks = bgmMarks[playEp] || [];
+        var marks = bgmMarks[ckey(playEp)] || [];
         if (!marks.length) return;              // 没标记直接跳过，不做任何 DOM 操作
         var t = v.currentTime || 0;
         var cur = null;
@@ -866,12 +911,25 @@
         var cur = $('bgmBarCur'), dur = $('bgmBarDur');
         if (cur) cur.textContent = fmtTime(v.currentTime || 0);
         if (dur) dur.textContent = fmtTime(v.duration || 0);
+        updateBarFill();
     }
     function fmtTime(s) {
         s = Math.max(0, Math.floor(s || 0));
         var m = Math.floor(s / 60), ss = s % 60;
         return m + ':' + (ss < 10 ? '0' : '') + ss;
     }
+    // 当前活跃媒体元素（视频优先；歌曲模式用 audio）
+    function curMedia() {
+        if (songMode && inlineAudio) return inlineAudio;
+        return $('bgmV');
+    }
+    function updateBarFill() {
+        var m = curMedia();
+        var f = $('bgmBarFill');
+        if (!f || !m || !m.duration) { if (f) f.style.width = '0%'; return; }
+        f.style.width = Math.min(100, (m.currentTime / m.duration) * 100) + '%';
+    }
+
     // 歌曲模式的底部条
     function syncSongBar() {
         var bar = $('bgmBar');
@@ -884,6 +942,7 @@
         var cur = $('bgmBarCur'), dur = $('bgmBarDur');
         if (cur && inlineAudio) cur.textContent = fmtTime(inlineAudio.currentTime || 0);
         if (dur && inlineAudio) dur.textContent = fmtTime(inlineAudio.duration || 0);
+        updateBarFill();
     }
 
     function bindSongBar() {
@@ -894,6 +953,7 @@
             if (!songMode) return;
             var cur = $('bgmBarCur');
             if (cur) cur.textContent = fmtTime(inlineAudio.currentTime || 0);
+            updateBarFill();
         });
         inlineAudio.addEventListener('loadedmetadata', function () {
             if (!songMode) return;
@@ -908,7 +968,7 @@
     // ⑦ 双向定位：从音乐列表定位到视频对应位置
     function locateInVideo(s) {
         if (!playEp) { flash('\u5148\u64ad\u653e\u4e00\u96c6\uff0c\u624d\u80fd\u5b9a\u4f4d'); return; }
-        var marks = bgmMarks[playEp] || [];
+        var marks = bgmMarks[ckey(playEp)] || [];
         var m = null;
         for (var i = 0; i < marks.length; i++) if (String(marks[i].id) === String(s.id)) { m = marks[i]; break; }
         if (!m) { flash('\u5f53\u524d\u96c6\u6ca1\u6709\u8fd9\u9996\u7684\u547d\u4e2d\u8bb0\u5f55'); return; }
@@ -924,18 +984,36 @@
     function searchOnNetease(s) {
         var kw = ((s.name || '') + ' ' + (s.artist || '')).trim();
         if (!kw) { flash('\u6ca1\u6709\u53ef\u641c\u7684\u5173\u952e\u8bcd'); return; }
-        // 打开网易云搜索页（系统浏览器）
-        var url = 'https://music.163.com/#/search/m/?s=' + encodeURIComponent(kw) + '&type=1';
-        try { childProcess.exec('start "" "' + url + '"'); flash('\u5df2\u5728\u7f51\u6613\u4e91\u6253\u5f00\u641c\u7d22\uff1a' + kw); }
-        catch (e) { flash('\u6253\u5f00\u5931\u8d25'); }
+        // 在插件内的「网易云」板块搜索（不跳浏览器）
+        try {
+            if (window.__atSwitchTab) window.__atSwitchTab('music');
+        } catch (e) {}
+        // 等面板切过去后，往它的搜索框填词并触发搜索
+        var tries = 0;
+        var timer = setInterval(function () {
+            tries++;
+            var q = document.getElementById('musicQuery');
+            var btn = document.getElementById('btnMusicSearch');
+            if (q && btn) {
+                clearInterval(timer);
+                q.value = kw;
+                try { btn.click(); } catch (e) {}
+                flash('\u5df2\u5728\u7f51\u6613\u4e91\u677f\u5757\u641c\u7d22\uff1a' + kw);
+            } else if (tries > 20) {
+                clearInterval(timer);
+                flash('\u672a\u627e\u5230\u7f51\u6613\u4e91\u641c\u7d22\u6846');
+            }
+        }, 150);
     }
+
 
     function bindBar() {
         var v = $('bgmV');
         if (!v) return;
         v.addEventListener('timeupdate', function () {
             var cur = $('bgmBarCur');
-            if (cur) cur.textContent = fmtTime(v.currentTime || 0);
+            if (cur && !songMode) cur.textContent = fmtTime(v.currentTime || 0);
+            if (!songMode) updateBarFill();
             tickOverlay();
         });
         v.addEventListener('loadedmetadata', function () {
@@ -1281,7 +1359,7 @@
                     '<span class="bgm-item-act bgm-m-loc" title="\u5b9a\u4f4d\u5230\u89c6\u9891\u5bf9\u5e94\u4f4d\u7f6e">\u5b9a\u4f4d</span>' +
                     '<span class="bgm-item-act bgm-m-163" title="\u5728\u7f51\u6613\u4e91\u641c\u7d22\u8fd9\u9996\u6b4c">\u7f51\u6613\u4e91</span>' +
                     '<span class="bgm-item-act bgm-m-dl" title="\u4e0b\u8f7d\u5230\u672c\u5730">\u4e0b\u8f7d</span>' +
-                    '<span class="bgm-item-act" data-id="' + s.id + '">\u9009\u7528</span>';
+                    '<span class="bgm-item-act bgm-m-sel" data-id="' + s.id + '">\u9009\u7528</span>';
                 el.querySelector('.bgm-m-play').addEventListener('click', function (ev) {
                     ev.stopPropagation(); playSongInline(s, el);
                 });
@@ -1294,11 +1372,12 @@
                 el.querySelector('.bgm-m-163').addEventListener('click', function (ev) {
                     ev.stopPropagation(); searchOnNetease(s);
                 });
-                el.querySelector('.bgm-item-act[data-id]').addEventListener('click', function (ev) {
+                el.querySelector('.bgm-m-sel').addEventListener('click', function (ev) {
                     ev.stopPropagation();
                     var btn = this, id = btn.getAttribute('data-id');
                     if (selected[id]) { delete selected[id]; btn.classList.remove('on'); btn.textContent = '\u9009\u7528'; }
                     else { selected[id] = s; btn.classList.add('on'); btn.textContent = '\u5df2\u9009'; }
+                    updateSongSelUI();
                 });
                 el.addEventListener('dblclick', function () { playSongInline(s, el); });
                 box.appendChild(el);
@@ -1354,16 +1433,80 @@
     function attachSongDrag(row, filePath) {
         if (!row || !filePath) return;
         row.dataset.songPath = filePath;
-        // 官方拖拽（拖到 PR 时间线 / 项目面板）
-        enableCepDrag(row, filePath);
-        if (row.querySelector('.bgm-m-dragtip')) return;
-        var tip = document.createElement('span');
-        tip.className = 'bgm-item-act bgm-m-dragtip';
-        tip.textContent = '\u53ef\u62d6\u5165PR';
-        tip.style.opacity = '.75';
-        tip.title = '\u76f4\u63a5\u62d6\u8fd9\u4e00\u884c\u5230 PR \u65f6\u95f4\u7ebf\u6216\u9879\u76ee\u9762\u677f';
-        row.appendChild(tip);
+        enableCepDrag(row, filePath);   // 整行可拖进 PR
+        // 下载按钮 → 「✔ 已下载」，点它弹菜单（导入PR / 改目录 / 资源管理器）
+        var dlBtn = row.querySelector('.bgm-m-dl');
+        if (dlBtn) {
+            dlBtn.textContent = '\u2714 \u5df2\u4e0b\u8f7d';
+            dlBtn.classList.add('done');
+            dlBtn.title = filePath;
+            var clone = dlBtn.cloneNode(true);
+            dlBtn.parentNode.replaceChild(clone, dlBtn);
+            clone.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                showSongMenu(filePath, clone, ev);
+            });
+        }
     }
+
+    // 歌曲下载后的操作菜单（对齐网易云板块）
+    function showSongMenu(dest, anchor, ev) {
+        ev.stopPropagation();
+        var old = document.getElementById('bgmSongMenu');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var menu = document.createElement('div');
+        menu.id = 'bgmSongMenu';
+        menu.style.cssText = 'position:fixed;z-index:9999;min-width:180px;background:#2b2b2b;border:1px solid #444;border-radius:6px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.45);font-size:12px;';
+        function mi(text, fn) {
+            var el = document.createElement('div');
+            el.style.cssText = 'padding:7px 12px;cursor:pointer;border-radius:4px;color:var(--text);white-space:nowrap;';
+            el.textContent = text;
+            el.addEventListener('mouseenter', function () { el.style.background = 'rgba(255,255,255,.08)'; });
+            el.addEventListener('mouseleave', function () { el.style.background = ''; });
+            el.addEventListener('click', function () { menu.remove(); fn(); });
+            menu.appendChild(el);
+        }
+        mi('\u2934 \u5bfc\u5165 PR \u7d20\u6750\u7bb1', function () { importFilesToPR([dest], 'BGM'); });
+        mi('\u25b6 \u63d2\u5165\u65f6\u95f4\u7ebf', function () { insertToTimeline(dest); });
+        mi('\ud83d\udcc1 \u6539\u5b58\u5230\u5176\u4ed6\u76ee\u5f55\u2026', function () { moveSongFile(dest); });
+        mi('\ud83d\udcc2 \u5728\u8d44\u6e90\u7ba1\u7406\u5668\u663e\u793a', function () {
+            try { childProcess.spawn('explorer.exe', ['/select,' + dest]); } catch (e) {}
+        });
+        document.body.appendChild(menu);
+        var r = anchor.getBoundingClientRect();
+        var x = r.left, y = r.bottom + 4;
+        if (x + 190 > window.innerWidth) x = window.innerWidth - 195;
+        menu.style.left = x + 'px'; menu.style.top = y + 'px';
+        setTimeout(function () {
+            var kill = function (e2) { if (!menu.contains(e2.target)) { menu.remove(); document.removeEventListener('click', kill); } };
+            document.addEventListener('click', kill);
+        }, 10);
+    }
+
+    // 改存到其他目录（选目录后移动文件）
+    function moveSongFile(dest) {
+        post('/pick-dir', {}, 120000).then(function (r) {
+            var newDir = (r.data || {}).path;
+            if (!newDir) return;
+            post('/song/move', { file: dest, dir: newDir }, 60000).then(function (r2) {
+                if (r2 && r2.code === 0) {
+                    flash('\u5df2\u79fb\u5230\uff1a' + r2.data.file);
+                    // 更新行上的路径
+                    var rows = document.querySelectorAll('#bgmResultList .bgm-item');
+                    for (var i = 0; i < rows.length; i++) {
+                        if (rows[i].dataset.songPath === dest) {
+                            rows[i].dataset.songPath = r2.data.file;
+                            var b = rows[i].querySelector('.bgm-m-dl');
+                            if (b) b.title = r2.data.file;
+                            enableCepDrag(rows[i], r2.data.file);
+                            break;
+                        }
+                    }
+                } else flash((r2 && r2.msg) || '\u79fb\u52a8\u5931\u8d25');
+            });
+        }).catch(function (e) { flash(e.message); });
+    }
+
 
     // 批量记下已下载歌曲（按名字匹配行）
     function markSongsDownloaded(files) {
@@ -1378,6 +1521,31 @@
     }
 
     // ---------- 入库 ----------
+    // 音乐列表全选 / 取消全选
+    function toggleSongSelectAll() {
+        var songs = (lastResult && lastResult.songs) || [];
+        if (!songs.length) { flash('\u5f53\u524d\u6ca1\u6709\u8bc6\u522b\u7ed3\u679c'); return; }
+        var allSel = songs.length && Object.keys(selected).length === songs.length;
+        selected = {};
+        document.querySelectorAll('#bgmResultList .bgm-m-sel').forEach(function (b) {
+            if (allSel) { b.classList.remove('on'); b.textContent = '\u9009\u7528'; }
+            else { b.classList.add('on'); b.textContent = '\u5df2\u9009'; }
+        });
+        if (!allSel) songs.forEach(function (s) { selected[s.id] = s; });
+        updateSongSelUI();
+    }
+
+    function updateSongSelUI() {
+        var n = Object.keys(selected).length;
+        var el = $('bgmSongSelInfo');
+        if (el) el.textContent = n ? ('\u5df2\u9009 ' + n + ' \u9996') : '';
+        var btn = $('btnBgmSelAllSongs');
+        if (btn) {
+            var total = (lastResult && lastResult.songs) ? lastResult.songs.length : 0;
+            btn.textContent = (total && n === total) ? '\u53d6\u6d88\u5168\u9009' : '\u5168\u9009';
+        }
+    }
+
     // 批量下载选中的歌
     function downloadSelectedSongs() {
         var ids = Object.keys(selected);
@@ -1487,6 +1655,7 @@
         if (ob) ob.addEventListener('click', startOnlineBatch);
         on('btnBgmCancel', stopJob, 'click');
         on('btnBgmToLib', toPlaylist, 'click');
+        on('btnBgmSelAllSongs', toggleSongSelectAll);
         var ds = $('btnBgmDownloadSongs');
         if (ds) ds.addEventListener('click', downloadSelectedSongs);
         var md = $('btnBgmMusicDir');
@@ -1552,6 +1721,31 @@
         });
         var bprev = $('btnBgmBarPrev');
         if (bprev) bprev.addEventListener('click', function () { playNav(-1); });
+        // 进度条：点击/拖动跳转
+        (function () {
+            var sk = $('bgmBarSeek');
+            if (!sk) return;
+            var seekTo = function (ev) {
+                var m = curMedia();
+                if (!m || !m.duration) return;
+                var r = sk.getBoundingClientRect();
+                var pct = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+                try { m.currentTime = pct * m.duration; } catch (e) {}
+                updateBarFill();
+            };
+            var dragging = false;
+            sk.addEventListener('mousedown', function (ev) { dragging = true; seekTo(ev); ev.preventDefault(); });
+            document.addEventListener('mousemove', function (ev) { if (dragging) seekTo(ev); });
+            document.addEventListener('mouseup', function () { dragging = false; });
+        })();
+        // 音量
+        on('bgmBarVol', function (ev) {
+            var v = +ev.target.value;
+            var m = curMedia();
+            if (m) m.volume = v;
+            var vv2 = $('bgmV'); if (vv2) vv2.volume = v;
+            if (inlineAudio) inlineAudio.volume = v;
+        }, 'input');
         var bnext = $('btnBgmBarNext');
         if (bnext) bnext.addEventListener('click', function () { playNav(1); });
       } catch (e) { try { flash('\u754c\u9762\u521d\u59cb\u5316\u5f02\u5e38: ' + (e && e.message || e)); } catch (e2) {} }

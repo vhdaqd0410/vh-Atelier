@@ -638,11 +638,26 @@
                     <span style="flex:1;"></span>
                     <span id="bgmHotRefresh" style="cursor:pointer;color:var(--fg-link);">刷新</span>
                 </div>
-                <div class="tr" style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+                <!-- 榜单 -->
+                <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap;">
                     <button class="tbtn bgm-hot-tab active" data-kind="all" style="padding:3px 9px;font-size:11px;">热播总榜</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="real" style="padding:3px 9px;font-size:11px;">真人剧</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="ai" style="padding:3px 9px;font-size:11px;">AI 剧</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="comic" style="padding:3px 9px;font-size:11px;">漫剧</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="real" style="padding:3px 9px;font-size:11px;">真人剧榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="ai" style="padding:3px 9px;font-size:11px;">AI 剧榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="comic" style="padding:3px 9px;font-size:11px;">漫剧榜</button>
+                </div>
+                <!-- 题材分类 -->
+                <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+                    <span style="font-size:11px;color:var(--muted);align-self:center;">题材</span>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:urban" style="padding:3px 9px;font-size:11px;">都市</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:romance" style="padding:3px 9px;font-size:11px;">甜宠</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:comeback" style="padding:3px 9px;font-size:11px;">逆袭</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:suspense" style="padding:3px 9px;font-size:11px;">悬疑</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:costume" style="padding:3px 9px;font-size:11px;">古装</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:cute-kids" style="padding:3px 9px;font-size:11px;">萌宝</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:fantasy" style="padding:3px 9px;font-size:11px;">奇幻</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:family" style="padding:3px 9px;font-size:11px;">家庭</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:comedy" style="padding:3px 9px;font-size:11px;">喜剧</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:action-adventure" style="padding:3px 9px;font-size:11px;">动作</button>
                 </div>
                 <div id="bgmHotGrid" class="bgm-grid"></div>
             </div>
@@ -699,24 +714,31 @@
 
             <!-- 剧集播放（本地已下载 / 边下边看） -->
             <div id="bgmPlayerWrap" style="display:none;margin-top:8px;">
-                <div class="bgm-sec-title">
-                    <span>播放：<span id="bgmPlayerTitle"></span></span>
-                    <span style="flex:1;"></span>
-                    <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;">
-                        <input type="checkbox" id="bgmAutoNext" checked> 连播
-                    </label>
-                    <button id="btnBgmPlayerPrev" class="tbtn" style="padding:3px 8px;font-size:11px;">◀ 上一集</button>
-                    <button id="btnBgmPlayerNext" class="tbtn" style="padding:3px 8px;font-size:11px;">下一集 ▶</button>
-                    <button id="btnBgmMini" class="tbtn" style="padding:3px 8px;font-size:11px;">小窗</button>
-                    <button id="btnBgmPlayerClose" class="tbtn" style="padding:3px 8px;font-size:11px;">✕ 关闭</button>
+                <div class="bgm-player">
+                    <!-- 头部：标题 + 工具 -->
+                    <div class="bgm-player-head">
+                        <span class="bgm-player-title" id="bgmPlayerTitle">未在播放</span>
+                        <span class="bgm-player-spacer"></span>
+                        <label class="bgm-player-chk">
+                            <input type="checkbox" id="bgmAutoNext" checked> 连播
+                        </label>
+                        <button id="btnBgmMini" class="bgm-pbtn" title="小窗/展开">小窗</button>
+                        <button id="btnBgmPlayerPrev" class="bgm-pbtn" title="上一集">◀</button>
+                        <button id="btnBgmPlayerNext" class="bgm-pbtn" title="下一集">▶</button>
+                        <button id="btnBgmPlayerClose" class="bgm-pbtn" title="关闭播放器">✕</button>
+                    </div>
+                    <!-- 画面 -->
+                    <div class="bgm-player-stage">
+                        <video id="bgmV" controls playsinline preload="metadata"></video>
+                        <div id="bgmNowSong" style="display:none;" title="点这里跳到识别列表"></div>
+                    </div>
+                    <!-- 进度 + BGM 标记（合在一条更清晰） -->
+                    <div class="bgm-player-foot">
+                        <div id="bgmMarkerBar" style="display:none;"></div>
+                        <div id="bgmMarkerTip" class="bgm-player-tip"></div>
+                    </div>
+                    <div id="bgmPlayerInfo" class="bgm-player-info"></div>
                 </div>
-                <video id="bgmV" controls playsinline preload="metadata"
-                    style="width:100%;max-height:420px;background:#000;border:1px solid #333;border-radius:6px;"></video>
-                <!-- BGM 命中点在进度条上的标记 -->
-                <div id="bgmMarkerBar" style="display:none;position:relative;height:10px;background:#1a1a1a;border-radius:3px;margin-top:6px;overflow:hidden;"></div>
-                <div id="bgmMarkerTip" style="font-size:10.5px;color:var(--muted);margin-top:3px;"></div>
-                <div id="bgmNowSong" style="display:none;" title="点这里跳到识别列表"></div>
-                <div id="bgmPlayerInfo" style="font-size:10.5px;color:var(--muted);margin-top:4px;"></div>
             </div>
 
             <!-- 内嵌预览（直接嵌官网播放页，不依赖逆向解析） -->
@@ -751,6 +773,8 @@
                 <div class="bgm-sec-title">
                     <span id="bgmResultTitle">识别结果</span>
                     <span style="flex:1;"></span>
+                    <span id="bgmSongSelInfo" style="font-size:10.5px;color:var(--muted);"></span>
+                    <button id="btnBgmSelAllSongs" class="tbtn" style="padding:3px 8px;font-size:11px;">全选</button>
                     <button id="btnBgmDownloadSongs" class="tbtn" style="padding:3px 8px;font-size:11px;">下载选中歌曲</button>
                     <button id="btnBgmToLib" class="tbtn" style="padding:3px 8px;font-size:11px;">加进歌单…</button>
                     <button id="btnBgmMusicDir" class="tbtn" style="padding:3px 8px;font-size:11px;">音乐目录…</button>
@@ -767,10 +791,15 @@
             <button id="btnBgmBarPlay" class="tbtn" style="padding:3px 10px;font-size:13px;">▶</button>
             <button id="btnBgmBarStop" class="tbtn" style="padding:3px 8px;font-size:11px;">⏹</button>
             <span class="bgm-bar-time" id="bgmBarCur">0:00</span>
-            <span class="bgm-bar-title" id="bgmBarTitle">未在播放</span>
+            <div class="bgm-bar-seek" id="bgmBarSeek" title="点击/拖动跳转">
+                <div class="bgm-bar-fill" id="bgmBarFill"></div>
+            </div>
             <span class="bgm-bar-time" id="bgmBarDur">0:00</span>
+            <span class="bgm-bar-title" id="bgmBarTitle">未在播放</span>
             <button id="btnBgmBarPrev" class="tbtn" style="padding:3px 8px;font-size:11px;">◀</button>
             <button id="btnBgmBarNext" class="tbtn" style="padding:3px 8px;font-size:11px;">▶</button>
+            <input type="range" id="bgmBarVol" min="0" max="1" step="0.01" value="0.8"
+                style="width:64px;flex:0 0 auto;" title="音量">
         </div>
     </div>
 

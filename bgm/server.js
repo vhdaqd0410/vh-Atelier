@@ -565,49 +565,80 @@ const RANK_MAP = {
   ai: '/rank/hot-ai-drama',
   comic: '/rank/hot-comic-drama',
 }
+// kind 支持三种：
+//   all / real / ai / comic  → 热榜
+//   cat:<genre>              → 题材分类（如 cat:urban）
+//   cat:<base>/<genre>       → 指定基类的题材（如 cat:ai-drama/sci-fi）
+const RANK_LABEL = { all: '\u70ed\u64ad\u603b\u699c', real: '\u771f\u4eba\u5267\u699c', ai: 'AI \u5267\u699c', comic: '\u6f2b\u5267\u699c' }
+
 async function fetchRank(kind) {
-  const path = RANK_MAP[kind] || RANK_MAP.all
+  let path
+  if (String(kind).indexOf('cat:') === 0) {
+    const g = String(kind).slice(4)
+    path = g.indexOf('/') >= 0 ? ('/category/' + g) : ('/category/real-drama/' + g)
+  } else {
+    path = RANK_MAP[kind] || RANK_MAP.all
+  }
   const html = await fetchText('https://hongguoduanju.com' + path)
   const out = [], seen = {}
-  // 榜单卡片：/detail?series_id=ID + 封面 + 剧名
-  const cards = html.split(/<article[^>]*>/i).slice(1)
-  for (const c of cards) {
+
+  // 统一解析：按 /detail?series_id=ID 出现的位置切块（榜单与分类页 class 不同，
+  // 但都以 detail 链接 + 相邻封面/剧名/标签 呈现）
+  const marks = []
+  const re = /\/detail\?series_id=(\d+)/g
+  let m
+  while ((m = re.exec(html))) marks.push({ id: m[1], at: m.index })
+  for (let mi = 0; mi < marks.length; mi++) {
     if (out.length >= 40) break
-    const idm = /series_id=(\d+)/.exec(c)
-    if (!idm) continue
-    const id = idm[1]
+    const { id, at } = marks[mi]
     if (seen[id]) continue
+    // 取本块：从当前链接到下一个链接（截断防止跨卡片误匹配）
+    // 注意：热度/评分在剧名之后、下一个 detail 链接之前，所以区块要向后多取一段
+    const nextAt = (mi + 1 < marks.length) ? marks[mi + 1].at : Math.min(html.length, at + 6000)
+    const seg = html.slice(Math.max(0, at - 1200), Math.min(html.length, nextAt + 1200))
+
+    // 剧名：alt 最稳（去“封面”后缀）；其次 title 属性
     let name = ''
-    const am = /alt="([^"]{2,80})"/.exec(c)
-    if (am) name = am[1].replace(/\u5c01\u9762$/, '')
+    const am = /alt="([^"]{2,80})"/.exec(seg)
+    if (am) name = am[1]
+    if (!name) {
+      const tm = /title="([^"]{2,80})"/.exec(seg)
+      if (tm) name = tm[1]
+    }
     if (!name) continue
+    name = name.replace(/\u5c01\u9762$/, '').trim()
+    if (!name || name === '\u7ea2\u679c\u77ed\u5267logo') continue
+
+    // 封面
     let cover = ''
-    const imgs = c.match(/https:\/\/[^"\s]+(?:byteimg|fqnovelpic)\.com\/[^"\s]+/g) || []
+    const imgs = seg.match(/https:\/\/[^"\s]+(?:byteimg|fqnovelpic)\.com\/[^"\s]+/g) || []
     for (const u of imgs) {
       if (/\.jpeg|\.image|\.jpg|\.png|\.webp/i.test(u)) { cover = u.replace(/&amp;/g, '&'); break }
     }
+
+    // 标签
     const tags = []
-    const tRe = /class="pc-tag-[^"]*"[^>]*>([^<]{1,12})</g
-    let tm
-    while ((tm = tRe.exec(c))) tags.push(tm[1].trim())
-    // 榜单卡片有：热度 / 评分 / 收藏 / 点赞（没有总集数）
-    const txt = c.replace(/<[^>]+>/g, '|')
-    const hotM = /([\d.]+[万亿]?)热度/.exec(txt)
-    const scoreM = /评分([\d.]+)/.exec(txt)
-    const favM = /([\d.]+[万亿]?)收藏/.exec(txt)
-    const likeM = /([\d.]+[万亿]?)点赞/.exec(txt)
-    const rankM = /aria-labelledby="rank-title-\d+"[^>]*>\s*(\d+)/.exec(c)
-    // 分集按钮数（榜单页只展示前几集，仅作参考）
-    const epCells = (c.match(/pc-episode-cell/g) || []).length
+    const tRe = /class="(?:pc-tag|m-tag)-[^"]*"[^>]*>([^<]{1,12})</g
+    let tm2
+    while ((tm2 = tRe.exec(seg)) && tags.length < 4) {
+      const t = tm2[1].trim()
+      if (t && t !== '\u5168\u90e8' && tags.indexOf(t) < 0) tags.push(t)
+    }
+
+    // 榜单页的热度/评分
+    const txt = seg.replace(/<[^>]+>/g, '|')
+    const hotM = /([\d.]+[\u4e07\u4ebf]?)\u70ed\u5ea6/.exec(txt)
+    const scoreM = /\u8bc4\u5206([\d.]+)/.exec(txt)
+    const favM = /([\d.]+[\u4e07\u4ebf]?)\u6536\u85cf/.exec(txt)
+    const likeM = /([\d.]+[\u4e07\u4ebf]?)\u70b9\u8d5e/.exec(txt)
+
     seen[id] = 1
     out.push({
       series_id: id, name, cover, tags,
-      rank: rankM ? parseInt(rankM[1], 10) : 0,
       hot: hotM ? hotM[1] + '\u70ed\u5ea6' : '',
       score: scoreM ? scoreM[1] : '',
       fav: favM ? favM[1] + '\u6536\u85cf' : '',
       like: likeM ? likeM[1] + '\u70b9\u8d5e' : '',
-      count: epCells,
     })
   }
   return out
@@ -1167,6 +1198,25 @@ const server = http.createServer(async (req, res) => {
         job.msg = `完成：成功 ${ok.length} 首` + (fail.length ? `，失败 ${fail.length} 首` : '')
       })()
       return send(res, 200, { code: 0, data: { jobId: job.id, dir: musicDir() } })
+    }
+
+    if (p === '/song/move' && req.method === 'POST') {
+      // 把已下载的歌曲移到另一个目录
+      const b = await readBody(req)
+      if (!b.file || !b.dir) return send(res, 200, { code: -1, msg: '缺少 file 或 dir' })
+      try {
+        if (!fs.existsSync(b.file)) return send(res, 200, { code: -1, msg: '源文件不存在' })
+        fs.mkdirSync(b.dir, { recursive: true })
+        const dest = path.join(b.dir, path.basename(b.file))
+        if (path.resolve(dest) === path.resolve(b.file)) {
+          return send(res, 200, { code: 0, data: { file: dest } })
+        }
+        fs.renameSync(b.file, dest)
+        setMusicDir(b.dir)
+        return send(res, 200, { code: 0, data: { file: dest } })
+      } catch (e) {
+        return send(res, 200, { code: -1, msg: '移动失败: ' + e.message })
+      }
     }
 
     if (p === '/music-dir') {

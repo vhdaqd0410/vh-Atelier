@@ -3224,9 +3224,12 @@ body.cx-resizing *{cursor:col-resize !important;}
     padding: 8px;
     box-shadow: 0 8px 28px rgba(0,0,0,.55);
 }
-#bgmPlayerWrap.bgm-mini video { max-height: 190px; }
-#bgmPlayerWrap.bgm-mini .bgm-sec-title { font-size: 10px; }
-#bgmPlayerWrap.bgm-mini #bgmMarkerTip { display: none; }
+#bgmPlayerWrap.bgm-mini .bgm-player { border-radius: 8px; }
+#bgmPlayerWrap.bgm-mini #bgmV { max-height: 175px; }
+#bgmPlayerWrap.bgm-mini .bgm-player-head { padding: 5px 7px; }
+#bgmPlayerWrap.bgm-mini .bgm-player-foot,
+#bgmPlayerWrap.bgm-mini .bgm-player-info { display: none; }
+#bgmPlayerWrap.bgm-mini #bgmNowSong { left: 6px; right: 6px; bottom: 6px; font-size: 10.5px; padding: 3px 7px; }
 .bgm-dot {
     display: inline-block;
     width: 8px; height: 8px;
@@ -3324,3 +3327,118 @@ body.cx-resizing *{cursor:col-resize !important;}
 #bgmPlayerWrap.bgm-mini video { contain: paint; }
 #bgmNowSong { will-change: contents; }
 #bgmMarkerBar { contain: strict; }
+
+/* ===== 短剧扒歌 · 播放器（优化版）===== */
+.bgm-player {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #232323, #1c1c1c);
+    box-shadow: 0 4px 18px rgba(0,0,0,.35);
+}
+.bgm-player-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: rgba(255,255,255,.02);
+}
+.bgm-player-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-player-spacer { flex: 1; }
+.bgm-player-chk {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    user-select: none;
+}
+.bgm-pbtn {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--panel2);
+    color: var(--muted);
+    cursor: pointer;
+    font-family: inherit;
+}
+.bgm-pbtn:hover { background: var(--panel); color: var(--text); border-color: var(--accent); }
+.bgm-player-stage {
+    position: relative;
+    background: #000;
+    display: flex;
+    justify-content: center;
+}
+#bgmV {
+    width: 100%;
+    max-height: 400px;
+    display: block;
+    background: #000;
+    outline: none;
+}
+#bgmNowSong {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    right: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: rgba(12,12,12,.82);
+    backdrop-filter: blur(4px);
+    font-size: 12px;
+    color: #eee;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#bgmNowSong:hover { background: rgba(30,30,30,.92); }
+.bgm-player-foot { padding: 8px 10px 0; }
+.bgm-player-tip { font-size: 10.5px; color: var(--muted); padding: 4px 0 6px; }
+.bgm-player-info {
+    font-size: 10.5px;
+    color: var(--muted);
+    padding: 0 10px 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* 进度条上的 BGM 色块（换成更精致的高度） */
+#bgmMarkerBar {
+    position: relative;
+    height: 8px;
+    background: #151515;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+/* ===== 底部播放条（对齐网易云板块）===== */
+.bgm-bar-seek {
+    flex: 1 1 auto;
+    min-width: 60px;
+    height: 6px;
+    background: #141414;
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+}
+.bgm-bar-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent), #a78bfa);
+    border-radius: 3px;
+    transition: width .12s linear;
+}
+.bgm-bar-seek:hover { height: 8px; }
