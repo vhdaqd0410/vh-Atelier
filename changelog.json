@@ -4,6 +4,31 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "短剧扒歌",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "新增「短剧扒歌」板块：搜短剧名 → 选剧 → 单集指定区间 / 整部剧批量扒 BGM"
+        },
+        {
+          "kind": "feat",
+          "text": "人声分离取伴奏轨后做音频指纹识别，实测命中率是原始混音轨的 3 倍以上（有命中集数 6/8 vs 3/8）"
+        },
+        {
+          "kind": "feat",
+          "text": "整剧批量按累计命中次数聚合出本剧歌单，可选曲目一键加进网易云歌单"
+        },
+        {
+          "kind": "impr",
+          "text": "扒歌服务（bgm/server.js）零 npm 依赖，端口 17891，复用网易云 afp 指纹引擎与登录态"
+        },
+        {
+          "kind": "note",
+          "text": "需先在「网易云」板块登录；本机需有 ffmpeg 与 sherpa spleeter 分离模型"
+        }
+      ]
+    },
+    {
       "title": "音效库 / 音乐库：波形选片段，一键送入时间轴",
       "items": [
         {

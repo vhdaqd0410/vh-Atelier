@@ -69,6 +69,7 @@
         <button class="tab" data-tab="musiclib">音乐库</button>
         <button class="tab" data-tab="sfx">音效库</button>
         <button class="tab" data-tab="music">网易云</button>
+        <button class="tab" data-tab="bgm">短剧扒歌</button>
     </div>
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
         <button class="tab" data-tab="export">多版本导出</button>
@@ -595,6 +596,84 @@
 
         <!-- 试听（网易云） -->
         <audio id="musicAudio" style="display:none;"></audio>
+    </div>
+
+    <!-- ==================== 板块：短剧扒歌 ==================== -->
+    <div class="tab-panel" id="panel-bgm" style="display:none;">
+        <div class="bgm-wrap">
+
+            <!-- 顶部：服务状态 + 搜索 -->
+            <div class="card" style="padding:10px 12px;">
+                <div class="tr" style="display:flex;gap:6px;align-items:center;">
+                    <span id="bgmSrvState" class="music-server" style="font-size:11px;">服务未连接</span>
+                    <span style="flex:1;"></span>
+                    <span id="bgmLoginHint" style="font-size:11px;color:#ffb84d;"></span>
+                </div>
+                <div class="tr" style="display:flex;gap:6px;margin-top:8px;">
+                    <input type="text" id="bgmQuery" placeholder="输入短剧名搜索（如：剑宗）" style="flex:1;">
+                    <button id="btnBgmSearch" class="tbtn">搜索</button>
+                </div>
+            </div>
+
+            <!-- 搜索结果 -->
+            <div id="bgmSearchWrap" style="display:none;margin-top:8px;">
+                <div class="bgm-sec-title">搜索结果</div>
+                <div id="bgmSearchList" class="bgm-list"></div>
+            </div>
+
+            <!-- 剧集面板 -->
+            <div id="bgmSeriesWrap" style="display:none;margin-top:8px;">
+                <div class="card" style="padding:10px 12px;">
+                    <div class="tr" style="display:flex;gap:8px;align-items:center;">
+                        <button id="btnBgmBack" class="tbtn" style="padding:4px 8px;">←</button>
+                        <span id="bgmSeriesName" style="font-size:13px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                        <span id="bgmSeriesCount" style="font-size:11px;color:var(--muted);"></span>
+                    </div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+                        <span style="font-size:11px;color:var(--muted);">单集区间：</span>
+                        <input type="number" id="bgmStart" placeholder="起(秒)" style="width:64px;" min="0">
+                        <span style="color:var(--muted);">~</span>
+                        <input type="number" id="bgmEnd" placeholder="止(秒)" style="width:64px;" min="0">
+                        <span style="font-size:11px;color:var(--muted);">（留空=全片）</span>
+                    </div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+                        <button id="btnBgmPickFile" class="tbtn">选择本地文件…</button>
+                        <button id="btnBgmPickDir" class="tbtn">选择剧集目录…</button>
+                    </div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                        <input type="number" id="bgmLimit" placeholder="集数上限" style="width:80px;" min="1" title="批量时最多处理多少集，留空=全部">
+                        <button id="btnBgmBatch" class="tbtn" style="background:var(--accent,#537d96);color:#fff;">扒整剧 BGM</button>
+                        <button id="btnBgmCancel" class="tbtn danger" style="display:none;">⏹ 停止</button>
+                    </div>
+                    <div id="bgmSeriesHint" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
+                </div>
+                <div id="bgmEpList" class="bgm-list" style="margin-top:6px;"></div>
+            </div>
+
+            <!-- 进度 -->
+            <div id="bgmProgress" style="display:none;margin-top:8px;padding:10px;border:1px solid #3a5d8a;border-radius:6px;background:#1a2a3d;">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#9db9ff;">
+                    <span id="bgmProgMsg">准备中…</span>
+                    <span style="flex:1;"></span>
+                    <span id="bgmProgPct">0%</span>
+                </div>
+                <div style="height:6px;background:#0f1a26;border-radius:3px;margin-top:8px;overflow:hidden;">
+                    <div id="bgmProgBar" style="height:100%;width:0;background:linear-gradient(90deg,#537d96,#7fb3d5);transition:width .3s;"></div>
+                </div>
+                <div id="bgmProgTime" style="font-size:11px;color:#889;margin-top:6px;"></div>
+            </div>
+
+            <!-- 结果 -->
+            <div id="bgmResultWrap" style="display:none;margin-top:8px;">
+                <div class="bgm-sec-title">
+                    <span id="bgmResultTitle">识别结果</span>
+                    <span style="flex:1;"></span>
+                    <button id="btnBgmToLib" class="tbtn" style="padding:3px 8px;font-size:11px;">加进歌单…</button>
+                </div>
+                <div id="bgmResultList" class="bgm-list"></div>
+            </div>
+
+        </div>
     </div>
 
     <!-- ==================== 板块四：多版本导出 ==================== -->
@@ -1303,6 +1382,7 @@
     <script src="js/sfx-capture.js"></script>
     <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
+    <script src="js/bgm.js"></script>
     <script src="js/export.js"></script>
     <script src="js/enhance.js"></script>
     <script src="js/media.js"></script>

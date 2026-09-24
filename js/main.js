@@ -10,6 +10,7 @@
         sfx: document.getElementById('panel-sfx'),
         musiclib: document.getElementById('panel-musiclib'),
         music: document.getElementById('panel-music'),
+        bgm: document.getElementById('panel-bgm'),
         export: document.getElementById('panel-export'),
         video: document.getElementById('panel-video'),
         progress: document.getElementById('panel-progress'),
@@ -29,7 +30,7 @@
         progress: { members: ['progress'], default: 'progress' },
         todo: { members: ['todo'], default: 'todo' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
-        audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music'], default: 'separate' },
+        audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
@@ -84,6 +85,9 @@
     function lazyInit(name) {
         if (name === 'music' && window.__musicOnShow) {
             try { window.__musicOnShow(); } catch (e) {}
+        }
+        if (name === 'bgm' && window.__bgmOnShow) {
+            try { window.__bgmOnShow(); } catch (e) {}
         }
         if (name === 'video' && window.__videoOnShow) {
             try { window.__videoOnShow(); } catch (e) {}

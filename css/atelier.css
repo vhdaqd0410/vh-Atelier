@@ -3049,3 +3049,104 @@ body.cx-resizing *{cursor:col-resize !important;}
 .vcs-btn:hover{background:#3a82d2;}
 .vcs-btn-x{background:transparent;color:#9aa4b2;border-color:#4a5260;padding:3px 5px;}
 .vcs-btn-x:hover{color:#ffd7d7;border-color:#8a5a5a;background:rgba(255,120,120,.12);}
+
+/* ===== 短剧扒歌 ===== */
+.bgm-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-bottom: 8px;
+}
+.bgm-sec-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    margin: 0 0 4px;
+    letter-spacing: .3px;
+}
+.bgm-list {
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--panel2);
+    border-radius: 6px;
+}
+.bgm-list:empty::after {
+    content: "（空）";
+    display: block;
+    padding: 10px;
+    font-size: 11px;
+    color: var(--muted);
+}
+.bgm-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+    font-size: 12px;
+    cursor: default;
+}
+.bgm-item:last-child { border-bottom: none; }
+.bgm-item:hover { background: rgba(255,255,255,.04); }
+.bgm-item-idx {
+    flex: 0 0 20px;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: right;
+}
+.bgm-item-main {
+    flex: 1;
+    min-width: 0;
+}
+.bgm-item-name {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-item-sub {
+    font-size: 10.5px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+.bgm-item-tag {
+    flex: 0 0 auto;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--sel-blue2-bg);
+    color: var(--fg-link);
+    white-space: nowrap;
+}
+.bgm-item-ep {
+    flex: 0 0 auto;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--sel-green-bg);
+    color: var(--sel-green-fg);
+    white-space: nowrap;
+}
+.bgm-item-act {
+    flex: 0 0 auto;
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+    cursor: pointer;
+}
+.bgm-item-act:hover { color: var(--white); border-color: var(--accent); }
+.bgm-item-act.on { background: var(--sel-blue-bg); color: var(--white); border-color: var(--accent); }
+.bgm-series-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+.bgm-play { cursor: pointer; }
+.bgm-play:hover { color: var(--accent-hover); }
