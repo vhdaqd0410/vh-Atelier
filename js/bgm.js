@@ -315,10 +315,14 @@
         if (!t) { flash('\u8bf7\u7c98\u8d34\u5206\u4eab\u94fe\u63a5\u6216\u5267 ID'); return; }
         flash('\u89e3\u6790\u4e2d\u2026');
         api('/share-parse?text=' + encodeURIComponent(t), { timeout: 40000 }).then(function (r) {
-            if (r.code !== 0) { flash(r.msg || '\u89e3\u6790\u5931\u8d25'); return; }
+            if (r.code !== 0) {
+                flash(r.msg || '\u89e3\u6790\u5931\u8d25\uff08\u652f\u6301\u5206\u4eab\u94fe\u63a5/App \u77ed\u94fe/\u7eaf\u6570\u5b57\u5267 ID\uff09');
+                return;
+            }
             var info = r.data || {};
             if (!info.count) { flash('\u89e3\u6790\u5230\u5267 ID ' + info.series_id + '\uff0c\u4f46\u672a\u53d6\u5230\u5267\u96c6\u4fe1\u606f'); }
             curSeries = info;
+            if (info.name) flash('\u5df2\u89e3\u6790\uff1a' + info.name + '\uff08' + (info.count || 0) + ' \u96c6\uff09');
             openSeries(info);   // 直接进剧集页
         }).catch(function (e) { flash(e.message); });
     }

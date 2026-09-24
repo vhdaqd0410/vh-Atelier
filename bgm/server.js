@@ -644,12 +644,112 @@ async function fetchRank(kind) {
   return out
 }
 
+// 从跳转 URL 的 zlink/schemeParams 里解出 video_series_id（两层 URL 编码）
+function extractFromSchemeParams(text) {
+  if (!text) return ''
+  let cur = String(text)
+  // 最多解两层 URL 编码
+  for (let round = 0; round < 3; round++) {
+    const m = /video_series_id[^\d]{0,12}(\d{15,20})/.exec(cur)
+    if (m) return m[1]
+    let next
+    try { next = decodeURIComponent(cur) } catch (e) { break }
+    if (next === cur) break
+    cur = next
+  }
+  return ''
+}
+
+// 短链白名单域名（红果 App 分享用的是 novelquickapp.com）
+const SHORT_LINK_HOSTS = ['novelquickapp.com', 'applink.novelquickapp.com', 'hongguoduanju.com']
+
+// 跟随短链跳转（不消费 body，只看 Location / 最终 URL）
+function followShortLink(url) {
+  return new Promise((resolve) => {
+    const u = new URL(url)
+    const mod = u.protocol === 'https:' ? https : require('http')
+    const req = mod.get({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 9; SM-N9860) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.152 Mobile Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,*/*',
+      },
+      timeout: 20000,
+    }, res => {
+      // 302/301 → 从 Location 里找；200 → 从 body 里找
+      const loc = res.headers.location || ''
+      if (res.statusCode >= 300 && res.statusCode < 400 && loc) {
+        res.resume()
+        const abs = loc.indexOf('http') === 0 ? loc : new URL(loc, url).href
+        let sid = extractFromSchemeParams(abs)
+        if (!sid) sid = parseShareSeriesId(abs)
+        if (sid) return resolve({ series_id: sid, via: 'redirect', finalUrl: abs })
+        // 再跟一层
+        return resolve(followOneMore(abs))
+      }
+      let body = ''
+      res.setEncoding('utf8')
+      res.on('data', c => { if (body.length < 200000) body += c })
+      res.on('end', () => {
+        // 优先从 zlink 解
+        const zl = /zlink=([^&]+)/.exec(res.headers.location || '') 
+        let sid = extractFromSchemeParams(body)
+        if (!sid) {
+          const zm = /"zlink":"([^"]+)"/.exec(body)
+          if (zm) sid = extractFromSchemeParams(zm[1])
+        }
+        if (!sid) {
+          // 退而求其次：页面内嵌 title 对应的 series_id 拿不到，取 video_series_id 邻近的
+          const vm = /"video_series_id"[^\d]{0,12}(\d{15,20})/.exec(body)
+          if (vm) sid = vm[1]
+        }
+        resolve(sid ? { series_id: sid, via: 'body' } : null)
+      })
+    })
+    req.on('error', () => resolve(null))
+    req.on('timeout', () => { req.destroy(); resolve(null) })
+  })
+}
+
+function followOneMore(url) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(url)
+      const mod = u.protocol === 'https:' ? https : require('http')
+      const req = mod.get({
+        hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+        path: u.pathname + u.search,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 9) AppleWebKit/537.36 Chrome/88 Mobile Safari/537.36' },
+        timeout: 20000,
+      }, res => {
+        let body = ''
+        res.setEncoding('utf8')
+        res.on('data', c => { if (body.length < 200000) body += c })
+        res.on('end', () => {
+          let sid = extractFromSchemeParams(body)
+          if (!sid) {
+            const zm = /"zlink":"([^"]+)"/.exec(body)
+            if (zm) sid = extractFromSchemeParams(zm[1])
+          }
+          resolve(sid ? { series_id: sid, via: 'body2' } : null)
+        })
+      })
+      req.on('error', () => resolve(null))
+      req.on('timeout', () => { req.destroy(); resolve(null) })
+    } catch (e) { resolve(null) }
+  })
+}
+
 // ── 解析分享链接 / 剧 ID ──
 // 支持：纯数字、detail?series_id=、share?series_id=、video_series_id=、含引导文案的长文本
 function parseShareSeriesId(text) {
   const s = String(text || '').trim()
   if (!s) return ''
   if (/^\d{15,20}$/.test(s)) return s
+  // 短链形态（/s/xxx），调用方应先 followShortLink
+  if (/novelquickapp\.com\/s\//i.test(s)) return ''
   const pats = [
     /series_id=(\d+)/i,
     /video_series_id=(\d+)/i,
@@ -1028,14 +1128,35 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/share-parse') {
-      const t = u.searchParams.get('text') || ''
-      const sid = parseShareSeriesId(t)
-      if (!sid) return send(res, 200, { code: -1, msg: '\u6ca1\u8bc6\u522b\u51fa\u5267\u53f7\uff08\u8bf7\u7c98\u8d34\u7ea2\u679c\u5206\u4eab\u94fe\u63a5\u6216\u7eaf\u6570\u5b57\u5267 ID\uff09' })
+      const raw = u.searchParams.get('text') || ''
+      // 用户往往粘贴「《剧名》免费看全集 https://xxx」这种带文案的文本，先抽出 URL
+      const um = /https?:\/\/[^\s\u4e00-\u9fa5"']+/.exec(raw)
+      const t = um ? um[0] : raw.trim()
+      let sid = parseShareSeriesId(t)
+      let via = 'text'
+      // 短链（/s/xxx）：先跟随跳转，从 schemeParams 里解出 video_series_id
+      if (!sid && /https?:\/\//.test(t) && /\/s\//i.test(t)) {
+        try {
+          const r = await followShortLink(t.trim())
+          if (r && r.series_id) { sid = r.series_id; via = r.via || 'shortlink' }
+        } catch (e) {}
+      }
+      // 其它 http 链接：也可能是跳转链，跟随一层再试
+      if (!sid && /https?:\/\//.test(t)) {
+        try {
+          const r = await followShortLink(t.trim())
+          if (r && r.series_id) { sid = r.series_id; via = r.via || 'follow' }
+        } catch (e) {}
+      }
+      if (!sid) {
+        return send(res, 200, { code: -1, msg: '\u6ca1\u8bc6\u522b\u51fa\u5267\u53f7\uff08\u652f\u6301\u7ea2\u679c\u5206\u4eab\u94fe\u63a5\u3001App \u77ed\u94fe\u3001\u7eaf\u6570\u5b57\u5267 ID\uff09' })
+      }
       try {
         const info = await getSeries(sid)
+        info.via = via
         return send(res, 200, { code: 0, data: info })
       } catch (e) {
-        return send(res, 200, { code: 0, data: { series_id: sid, name: '', vid_list: [], count: 0 } })
+        return send(res, 200, { code: 0, data: { series_id: sid, name: '', vid_list: [], count: 0, via } })
       }
     }
 

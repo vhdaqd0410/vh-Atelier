@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.27.1",
-  "buildTime": "2026-09-25 03:00:00",
+  "version": "1.27.2",
+  "buildTime": "2026-09-25 04:00:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修首次打开时榜单加载失败（要手动点刷新）：榜单改为先等服务就绪再请求，等待期间显示骨架屏动画与「正在等待本地服务启动…」，服务通常 3 秒内就绪会自动加载，最多自动重试 2 次，之后可点「重试」。"
+  "notes": "分享链接解析支持 App 短链：红果 App 分享的 novelquickapp.com/s/xxx 短链会跟随跳转并从 schemeParams 解出剧号（实测《情感试炼》82 集可正常解析下载）。也支持粘贴带文案的整段文本（自动抽出其中的 URL）。"
 }

@@ -4,6 +4,27 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "短剧扒歌：支持App短链",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "分享解析支持红果 App 短链（novelquickapp.com/s/xxx）：跟随跳转解出剧号"
+        },
+        {
+          "kind": "feat",
+          "text": "支持粘贴带文案的整段文本，自动抽出其中的链接"
+        },
+        {
+          "kind": "impr",
+          "text": "解析失败提示更明确；成功时提示剧名与集数"
+        },
+        {
+          "kind": "note",
+          "text": "之前只认 series_id= 这类带参链接，所以 App 短链解析不出来"
+        }
+      ]
+    },
+    {
       "title": "短剧扒歌：首开体验",
       "items": [
         {
