@@ -3696,3 +3696,134 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .bgm-hot-status { padding: 30px 14px; }
 /* 8) 进度条更醒目 */
 #bgmProgress { border-radius: 8px; }
+
+/* ===== 短剧扒歌 · 播放器悬浮识曲按钮 ===== */
+.bgm-player-stage { position: relative; }
+.bgm-fab {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+    background: rgba(20,20,20,.72);
+    border: 1px solid rgba(255,255,255,.22);
+    color: #fff;
+    cursor: pointer;
+    padding: 0;
+    flex: 0 0 auto;
+    backdrop-filter: blur(6px);
+    transition: transform .15s, background .15s, border-color .15s;
+    z-index: 5;
+}
+.bgm-fab:hover {
+    background: rgba(61,110,245,.85);
+    border-color: transparent;
+    transform: scale(1.08);
+}
+.bgm-fab:disabled { opacity: .6; cursor: default; }
+.bgm-fab-panel {
+    position: absolute;
+    right: 12px; top: 58px;
+    width: 300px; max-width: calc(100% - 24px);
+    background: rgba(24,24,24,.96);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 8px 26px rgba(0,0,0,.6);
+    z-index: 6;
+    backdrop-filter: blur(8px);
+}
+.bgm-fab-prog { font-size: 11.5px; line-height: 1.7; margin-top: 6px; color: var(--fg-info); }
+.bgm-fab-res { font-size: 11.5px; margin-top: 6px; }
+
+/* ===== ④ 字体颜色分层（按功能语义区分，不花）===== */
+:root {
+    --fg-title:   #f1f3f7;   /* 标题/主要信息：最亮 */
+    --fg-body:    #d3d8e0;   /* 正文 */
+    --fg-info:    #7fa8f5;   /* 信息/提示（蓝） */
+    --fg-link:    #6db3ff;   /* 可点击链接（亮蓝） */
+    --fg-ok:      #7fd68b;   /* 成功/已完成（绿） */
+    --fg-warn:    #ffb84d;   /* 警示/待处理（琥珀） */
+    --fg-err:     #ff8f8f;   /* 错误/失败（红） */
+    --fg-key:     #c9a6ff;   /* 关键词/高亮（紫） */
+    --fg-dim:     #8b93a1;   /* 次要/说明（灰） */
+    --fg-num:     #8fd0d0;   /* 数字/时间（青） */
+}
+
+/* 扒歌面板内按语义上色 */
+.bgm-sec-title { color: var(--fg-dim); }
+.bgm-item-name { color: var(--fg-title); }
+.bgm-item-sub  { color: var(--fg-dim); }
+.bgm-item-tag  { color: var(--fg-info); }          /* ×N 计数 */
+.bgm-item-ep   { color: var(--fg-ok); }            /* 集数标签 */
+.bgm-grid-name { color: var(--fg-title); }
+.bgm-grid-sub  { color: var(--fg-warn); }          /* 热度/评分：暖色更醒目 */
+.bgm-card-title { color: var(--fg-title); }
+.bgm-card-intro { color: var(--fg-dim); }
+.bgm-card-actor { color: var(--fg-link); }
+.bgm-player-title { color: var(--fg-title); }
+.bgm-player-info { color: var(--fg-dim); }
+.bgm-player-tip  { color: var(--fg-dim); }
+.bgm-hot-tab.active { color: #fff; }
+.bgm-bar-time { color: var(--fg-num); }            /* 时间数字：青色等宽更清晰 */
+.bgm-bar-title { color: var(--fg-title); }
+#bgmSongSelInfo, #bgmEpMeta, #bgmSongInfo, #bgmMusicDirLabel { color: var(--fg-dim); }
+#bgmProgMsg { color: var(--fg-info); }
+#bgmProgPct { color: var(--fg-num); font-weight: 600; }
+/* 已完成按钮的绿字 */
+.bgm-item-act.done { color: var(--fg-ok); border-color: rgba(127,214,139,.4); }
+/* 已选中的“选用” */
+.bgm-item-act.on { background: rgba(61,110,245,.2); color: var(--fg-link); border-color: var(--btn-primary-bg); }
+
+/* ===== ① 首页分类按钮：放大、舒展 ===== */
+.bgm-home { margin-top: 10px; }
+.bgm-tab-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.bgm-tab-label {
+    font-size: 11px;
+    color: var(--fg-dim);
+    padding-right: 2px;
+    flex: 0 0 auto;
+}
+/* 榜单与题材按钮统一放大 */
+.bgm-hot-tab {
+    font-size: 12.5px !important;
+    padding: 7px 15px !important;
+    border-radius: 8px !important;
+    background: rgba(255,255,255,.055) !important;
+    color: var(--fg-body) !important;
+    border: 1px solid rgba(255,255,255,.11) !important;
+    flex: 0 0 auto !important;
+    min-width: 0;
+    white-space: nowrap;
+    transition: background .14s, border-color .14s, color .14s, transform .1s;
+}
+.bgm-hot-tab:hover {
+    background: rgba(255,255,255,.12) !important;
+    color: var(--fg-title) !important;
+    border-color: rgba(255,255,255,.22) !important;
+    transform: translateY(-1px);
+}
+.bgm-hot-tab.active {
+    background: var(--btn-primary-bg, #3d6ef5) !important;
+    color: #fff !important;
+    border-color: transparent !important;
+    font-weight: 600;
+    box-shadow: 0 3px 12px -4px rgba(61,110,245,.8);
+}
+/* 小链接（刷新等）*/
+.bgm-mini-link {
+    cursor: pointer;
+    font-size: 11.5px;
+    color: var(--fg-link);
+}
+.bgm-mini-link:hover { color: #9ecbff; text-decoration: underline; }
+/* 热榜网格同步放大 */
+.bgm-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 11px; }

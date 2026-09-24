@@ -632,32 +632,32 @@
             </div>
 
             <!-- 首页：热门短剧瀑布流 -->
-            <div id="bgmHome" style="margin-top:8px;">
+            <div id="bgmHome" class="bgm-home">
                 <div class="bgm-sec-title">
                     <span>热门短剧</span>
                     <span style="flex:1;"></span>
-                    <span id="bgmHotRefresh" style="cursor:pointer;color:var(--fg-link);">刷新</span>
+                    <span id="bgmHotRefresh" class="bgm-mini-link">刷新</span>
                 </div>
                 <!-- 榜单 -->
-                <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap;">
-                    <button class="tbtn bgm-hot-tab active" data-kind="all" style="padding:3px 9px;font-size:11px;">热播总榜</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="real" style="padding:3px 9px;font-size:11px;">真人剧榜</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="ai" style="padding:3px 9px;font-size:11px;">AI 剧榜</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="comic" style="padding:3px 9px;font-size:11px;">漫剧榜</button>
+                <div class="bgm-tab-row">
+                    <button class="tbtn bgm-hot-tab active" data-kind="all">热播总榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="real">真人剧榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="ai">AI 剧榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="comic">漫剧榜</button>
                 </div>
                 <!-- 题材分类 -->
-                <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
-                    <span style="font-size:11px;color:var(--muted);align-self:center;">题材</span>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:urban" style="padding:3px 9px;font-size:11px;">都市</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:romance" style="padding:3px 9px;font-size:11px;">甜宠</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:comeback" style="padding:3px 9px;font-size:11px;">逆袭</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:suspense" style="padding:3px 9px;font-size:11px;">悬疑</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:costume" style="padding:3px 9px;font-size:11px;">古装</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:cute-kids" style="padding:3px 9px;font-size:11px;">萌宝</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:fantasy" style="padding:3px 9px;font-size:11px;">奇幻</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:family" style="padding:3px 9px;font-size:11px;">家庭</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:comedy" style="padding:3px 9px;font-size:11px;">喜剧</button>
-                    <button class="tbtn bgm-hot-tab" data-kind="cat:action-adventure" style="padding:3px 9px;font-size:11px;">动作</button>
+                <div class="bgm-tab-row">
+                    <span class="bgm-tab-label">题材</span>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:urban">都市</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:romance">甜宠</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:comeback">逆袭</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:suspense">悬疑</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:costume">古装</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:cute-kids">萌宝</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:fantasy">奇幻</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:family">家庭</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:comedy">喜剧</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:action-adventure">动作</button>
                 </div>
                 <div id="bgmHotGrid" class="bgm-grid"></div>
             </div>
@@ -677,13 +677,6 @@
                         <span id="bgmSeriesCount" style="font-size:11px;color:var(--muted);"></span>
                     </div>
                     <div id="bgmSeriesHead" class="bgm-card" style="border-bottom:none;padding:8px 0;"></div>
-                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
-                        <span style="font-size:11px;color:var(--muted);">单集区间：</span>
-                        <input type="number" id="bgmStart" placeholder="起(秒)" style="width:64px;" min="0">
-                        <span style="color:var(--muted);">~</span>
-                        <input type="number" id="bgmEnd" placeholder="止(秒)" style="width:64px;" min="0">
-                        <span style="font-size:11px;color:var(--muted);">（留空=全片）</span>
-                    </div>
                     <div class="tr" style="display:flex;gap:6px;margin-top:8px;align-items:center;">
                         <span style="font-size:11px;color:var(--muted);">在线批量：从第</span>
                         <input type="number" id="bgmFromEp" placeholder="起始" style="width:60px;" min="1" value="1">
@@ -730,6 +723,17 @@
                     <!-- 画面 -->
                     <div class="bgm-player-stage">
                         <video id="bgmV" controls playsinline preload="metadata"></video>
+                        <!-- 悬浮听歌识曲（复用网易云板块的识曲链路）-->
+                        <button id="bgmIdentifyFab" class="bgm-fab" title="听歌识曲：录 6 秒正在播放的声音并识别">🎧</button>
+                        <div id="bgmIdentifyPanel" class="bgm-fab-panel" style="display:none;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span style="flex:1;font-size:11.5px;color:var(--fg-info);">🎧 听歌识曲</span>
+                                <button id="btnBgmIdentifyStop" class="tbtn danger" style="display:none;padding:2px 7px;font-size:11px;">停</button>
+                                <button id="btnBgmIdentifyClose" class="tbtn" style="padding:2px 7px;font-size:11px;">✕</button>
+                            </div>
+                            <div id="bgmIdentifyProgress" class="bgm-fab-prog"></div>
+                            <div id="bgmIdentifyResult" class="bgm-fab-res" style="display:none;"></div>
+                        </div>
                         <div id="bgmNowSong" style="display:none;" title="点这里跳到识别列表"></div>
                     </div>
                     <!-- 进度 + BGM 标记（合在一条更清晰） -->

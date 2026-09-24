@@ -612,7 +612,6 @@
         lastPickEp = epNo;
         startBgm('/episode', {
             series_id: curSeries.series_id, vid: vid, name: curSeries.name, ep: epNo,
-            start: null, end: null,
         }, '\u7b2c ' + epNo + ' \u96c6\uff08\u81ea\u52a8\u4e0b\u8f7d\u540e\u626c\uff09');
     }
 
@@ -1253,15 +1252,170 @@
         } catch (e) { flash('导入失败：' + e.message); }
     }
 
+    // ---------- 听歌识曲（复用网易云板块的录音脚本 + ncm 识别）----------
+    var idActive = false, idStop = false, idRound = 0;
+    var idWav = null;
+
+    function identifyServer() { return 'http://127.0.0.1:17890'; }
+
+    function findIdentifyPython() {
+        var os2 = require('os');
+        var cands = [
+            path.join(extRoot, 'runtime', 'python.exe'),
+            path.join(os2.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
+            path.join(os2.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe')
+        ];
+        for (var i = 0; i < cands.length; i++) {
+            if (fs.existsSync(cands[i])) return cands[i];
+        }
+        return 'python';
+    }
+
+    function setIdProg(html) {
+        var el = $('bgmIdentifyProgress');
+        if (el) el.innerHTML = html;
+    }
+
+    function dropIdWav() {
+        try { if (idWav && fs.existsSync(idWav)) fs.unlinkSync(idWav); } catch (e) {}
+        idWav = null;
+    }
+
+    function openIdentifyPanel() {
+        var p = $('bgmIdentifyPanel');
+        if (p) p.style.display = '';
+    }
+    function closeIdentifyPanel() {
+        var p = $('bgmIdentifyPanel');
+        if (p) p.style.display = 'none';
+    }
+
+    function doBgmIdentify() {
+        if (idActive) return;
+        var btn = $('bgmIdentifyFab');
+        if (btn) { btn.disabled = true; btn.textContent = '🎧…'; }
+        openIdentifyPanel();
+        var stopBtn = $('btnBgmIdentifyStop');
+        if (stopBtn) stopBtn.style.display = '';
+        var box = $('bgmIdentifyResult');
+        if (box) box.style.display = 'none';
+
+        idActive = true; idStop = false; idRound = 0;
+
+        var py = findIdentifyPython();
+        var scriptPath = path.join(extRoot, 'py', 'identify_record.py');
+        var tmpdir = require('os').tmpdir();
+
+        function finish() {
+            idActive = false; idStop = false;
+            dropIdWav();
+            var b2 = $('bgmIdentifyFab');
+            if (b2) { b2.disabled = false; b2.textContent = '🎧'; }
+            var s2 = $('btnBgmIdentifyStop');
+            if (s2) s2.style.display = 'none';
+        }
+
+        function round() {
+            if (idStop || !idActive) { finish(); return; }
+            dropIdWav();
+            idRound++;
+            setIdProg('<span style="color:var(--fg-info);">🎙 第 ' + idRound + ' 轮录音中（6 秒）…</span>');
+            var wavPath = path.join(tmpdir, 'vh_bgm_id_' + Date.now() + '.wav');
+            idWav = wavPath;
+            childProcess.execFile(py, [scriptPath, wavPath, '6'], { encoding: 'utf8', timeout: 20000 }, function (err, stdout) {
+                if (idStop || !idActive) { finish(); return; }
+                var rec = null;
+                try { rec = JSON.parse((stdout || '').trim().split('\n').pop()); } catch (e) {}
+                if (err || !rec || !rec.ok) {
+                    idActive = false; finish();
+                    var diag = (rec && rec.allOutputDevices) ? ('<div style="font-size:10.5px;color:var(--muted);margin-top:4px;">输出设备：' + esc(rec.allOutputDevices.join(' / ')) + '</div>') : '';
+                    setIdProg('<span style="color:var(--fg-err-soft);">录音失败：' + esc((rec && rec.error) || (err && err.message) || '未知') + '</span>' + diag);
+                    return;
+                }
+                if (rec.silent) {
+                    setIdProg('<span style="color:var(--fg-warn-soft);">第 ' + idRound + ' 轮没听到声音，继续…</span>');
+                    round();
+                    return;
+                }
+                setIdProg('<span style="color:var(--fg-info);">🔍 第 ' + idRound + ' 轮识别中…</span>');
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', identifyServer() + '/identify', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.timeout = 20000;
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState !== 4) return;
+                    if (idStop || !idActive) { finish(); return; }
+                    try {
+                        var j = JSON.parse(xhr.responseText);
+                        var data = j.data || {};
+                        var results = data.result || [];
+                        if (results.length > 0 && results[0].song) {
+                            idActive = false;
+                            renderIdentifyHits(results);
+                            finish();
+                        } else {
+                            setIdProg('<span style="color:var(--fg-warn-soft);">第 ' + idRound + ' 轮没识别出，继续下一轮…</span>');
+                            round();
+                        }
+                    } catch (e) {
+                        idActive = false; finish();
+                        setIdProg('<span style="color:var(--fg-err-soft);">识别出错：' + esc(e.message) + '</span>');
+                    }
+                };
+                xhr.onerror = function () {
+                    if (!idStop && idActive) {
+                        setIdProg('<span style="color:var(--fg-err-soft);">无法连接识曲服务（请先打开「网易云」板块，它会自动启动本地服务）</span>');
+                        finish();
+                    }
+                };
+                xhr.ontimeout = function () { if (!idStop && idActive) round(); };
+                xhr.send(JSON.stringify({ wavPath: wavPath }));
+            });
+        }
+        round();
+    }
+
+    function stopBgmIdentify() {
+        idStop = true; idActive = false;
+        var b = $('bgmIdentifyFab');
+        if (b) { b.disabled = false; b.textContent = '🎧'; }
+        var s = $('btnBgmIdentifyStop');
+        if (s) s.style.display = 'none';
+        setIdProg('<span style="color:var(--muted);">已停止</span>');
+        dropIdWav();
+    }
+
+    // 识曲结果：直接复用扒歌结果区（可试听/下载/选用/加歌单）
+    function renderIdentifyHits(results) {
+        var box = $('bgmIdentifyResult');
+        if (box) box.style.display = '';
+        setIdProg('<span style="color:var(--fg-ok-soft);">✅ 识别到 ' + results.length + ' 首</span>');
+        var songs = results.map(function (m) {
+            var s = m.song || {};
+            return {
+                id: s.id, name: s.name,
+                artist: (s.artists || []).map(function (a) { return a.name; }).join(', '),
+                album: (s.album || {}).name || '',
+                count: 1, fromIdentify: true,
+            };
+        }).filter(function (s) { return s.id && s.name; });
+        if (!songs.length) return;
+        // 写进结果区，复用同一套下载/选用/加歌单逻辑
+        lastResult = { songs: songs, identify: true };
+        renderResult(lastResult);
+        setTimeout(function () {
+            var rw = $('bgmResultWrap');
+            if (rw && rw.style.display !== 'none') focusEl(rw, { bias: 0.08 });
+        }, 80);
+    }
+
     // ---------- 扒歌 ----------
     function startSingleByFile() {
         post('/pick-file', {}, 120000).then(function (r) {
             var p = (r.data || {}).path;
             if (!p) return;
-            var start = ($('bgmStart') || {}).value;
-            var end = ($('bgmEnd') || {}).value;
-            startBgm('/single', { input: p, start: start || null, end: end || null, mode: 'accomp' },
-                '单集扒歌');
+startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
+                '\u5355\u96c6\u626c\u6b4c\uff08\u5168\u7247\uff09');
         }).catch(function (e) { flash(e.message); });
     }
 
@@ -1781,6 +1935,13 @@
         if (ob) ob.addEventListener('click', startOnlineBatch);
         on('btnBgmCancel', stopJob, 'click');
         on('btnBgmToLib', toPlaylist, 'click');
+        on('bgmIdentifyFab', function () {
+            var p = $('bgmIdentifyPanel');
+            if (p && p.style.display === 'none') { openIdentifyPanel(); return; }
+            doBgmIdentify();
+        });
+        on('btnBgmIdentifyStop', stopBgmIdentify);
+        on('btnBgmIdentifyClose', closeIdentifyPanel);
         on('btnBgmSelAllSongs', toggleSongSelectAll);
         var ds = $('btnBgmDownloadSongs');
         if (ds) ds.addEventListener('click', downloadSelectedSongs);
