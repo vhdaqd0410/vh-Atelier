@@ -34,6 +34,10 @@
                         <Parameter>--allow-running-insecure-content</Parameter>
                         <Parameter>--disable-site-isolation-trials</Parameter>
                         <Parameter>--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure</Parameter>
+                        <!-- HEVC(H.265) 本地播放：短剧 1080p 为 HEVC 编码，CEP 默认可能不解码导致黑屏有声 -->
+                        <Parameter>--enable-features=PlatformHEVCDecoderSupport</Parameter>
+                        <Parameter>--ignore-gpu-blocklist</Parameter>
+                        <Parameter>--enable-gpu-rasterization</Parameter>
                     </CEFCommandLine>
                 </Resources>
                 <Lifecycle>

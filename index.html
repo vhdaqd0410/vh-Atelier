@@ -654,6 +654,7 @@
                     <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
                         <span id="bgmSeriesHint" style="font-size:11px;color:var(--muted);flex:1;"></span>
                         <button id="btnBgmOpenDir" class="tbtn" style="padding:3px 8px;font-size:11px;">打开下载目录</button>
+                        <button id="btnBgmDownloadAll" class="tbtn" style="padding:3px 8px;font-size:11px;">下载全集</button>
                     </div>
                     <div id="bgmEpMeta" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
                     <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
@@ -678,6 +679,9 @@
                 </div>
                 <video id="bgmV" controls playsinline preload="metadata"
                     style="width:100%;max-height:420px;background:#000;border:1px solid #333;border-radius:6px;"></video>
+                <!-- BGM 命中点在进度条上的标记 -->
+                <div id="bgmMarkerBar" style="display:none;position:relative;height:10px;background:#1a1a1a;border-radius:3px;margin-top:6px;overflow:hidden;"></div>
+                <div id="bgmMarkerTip" style="font-size:10.5px;color:var(--muted);margin-top:3px;"></div>
                 <div id="bgmPlayerInfo" style="font-size:10.5px;color:var(--muted);margin-top:4px;"></div>
             </div>
 
@@ -713,8 +717,12 @@
                 <div class="bgm-sec-title">
                     <span id="bgmResultTitle">识别结果</span>
                     <span style="flex:1;"></span>
+                    <button id="btnBgmDownloadSongs" class="tbtn" style="padding:3px 8px;font-size:11px;">下载选中歌曲</button>
                     <button id="btnBgmToLib" class="tbtn" style="padding:3px 8px;font-size:11px;">加进歌单…</button>
+                    <button id="btnBgmMusicDir" class="tbtn" style="padding:3px 8px;font-size:11px;">音乐目录…</button>
                 </div>
+                <div id="bgmMusicDirLabel" style="font-size:10.5px;color:var(--muted);"></div>
+                <div id="bgmSongInfo" style="font-size:10.5px;color:var(--muted);"></div>
                 <div id="bgmResultList" class="bgm-list"></div>
             </div>
 

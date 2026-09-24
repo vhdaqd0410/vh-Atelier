@@ -433,7 +433,97 @@ function videoDir() {
   return d
 }
 
+// ── 音乐下载：从网易云拿直链存到本地（可配目录）──
+// 网易云接口：GET http://127.0.0.1:17890/song/url?id=&br=
+function musicDir() {
+  const f = path.join(EXT_ROOT, 'collect', 'bgm', 'music_dir.txt')
+  try {
+    const d = fs.readFileSync(f, 'utf8').trim()
+    if (d) { fs.mkdirSync(d, { recursive: true }); return d }
+  } catch (e) {}
+  const d = path.join(EXT_ROOT, 'collect', 'bgm', 'music')
+  fs.mkdirSync(d, { recursive: true })
+  return d
+}
+
+function setMusicDir(d) {
+  const f = path.join(EXT_ROOT, 'collect', 'bgm', 'music_dir.txt')
+  fs.mkdirSync(path.dirname(f), { recursive: true })
+  fs.writeFileSync(f, d, 'utf8')
+}
+
+function httpGetJson(url, cookie) {
+  return new Promise(resolve => {
+    const http = require('http')
+    const mod = url.indexOf('https:') === 0 ? https : http
+    const u = new URL(url)
+    const headers = { 'User-Agent': 'Mozilla/5.0', 'Accept-Encoding': 'identity' }
+    if (cookie) headers.Cookie = cookie
+    const rq = mod.get({ hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search, headers, timeout: 20000 }, rs => {
+      const chunks = []
+      rs.on('data', d => chunks.push(d))
+      rs.on('end', () => {
+        let buf = Buffer.concat(chunks)
+        // 某些服务会 gzip（即使请求 identity）
+        if (buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b) {
+          try { buf = require('zlib').gunzipSync(buf) } catch (e) {}
+        }
+        const s = buf.toString('utf8')
+        try { resolve(JSON.parse(s)) } catch (e) { resolve({ _parseError: true, _raw: s.slice(0, 200) }) }
+      })
+    })
+    rq.on('error', () => resolve({}))
+    rq.on('timeout', () => { rq.destroy(); resolve({}) })
+  })
+}
+
+async function downloadSongFile(songId, name, artist, cookie) {
+  // 1) 拿直链（走本地 ncm 服务）
+  const j = await httpGetJson('http://127.0.0.1:17890/song/url?id=' + encodeURIComponent(songId) + '&br=320000')
+  const d = (j.data || [])[0]
+  if (!d || !d.url) throw new Error('拿不到歌曲直链（可能需会员或版权限制）')
+  const dir = musicDir()
+  const fn = safeName((name || 'song') + (artist ? ' - ' + artist : '')) + '.mp3'
+  const out = path.join(dir, fn)
+  if (fs.existsSync(out) && fs.statSync(out).size > 10000) return { file: out, size: fs.statSync(out).size, reused: true }
+  await runProc(findFfmpeg(), ['-y', '-v', 'error', '-i', d.url, '-c', 'copy', out], { timeout: 600000 })
+  if (!fs.existsSync(out)) throw new Error('下载失败')
+  return { file: out, size: fs.statSync(out).size }
+}
+
+// ── 转码兜底：HEVC → H.264（部分机器 Chromium 硬解不支持会黑屏）──
+// 产物缓存到 collect/video/_h264/，同名 .mp4，避免重复转码。
+async function ensureH264(srcPath) {
+  const dir = path.join(videoDir(), '_h264')
+  fs.mkdirSync(dir, { recursive: true })
+  const dst = path.join(dir, path.basename(srcPath))
+  if (fs.existsSync(dst) && fs.statSync(dst).size > 10000) return dst
+
+  // 编码器探测：按硬件优先，逐个实际试编一帧
+  const cands = ['h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_mf', 'libx264']
+  for (const enc of cands) {
+    try {
+      await runProc(findFfmpeg(), [
+        '-y', '-v', 'error', '-i', srcPath, '-t', '0.1',
+        '-c:v', enc, '-an', '-f', 'null', '-',
+      ], { timeout: 30000 })
+    } catch (e) { continue }
+    try {
+      await runProc(findFfmpeg(), [
+        '-y', '-v', 'error', '-i', srcPath,
+        '-c:v', enc, '-preset', 'veryfast', '-crf', '20',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart', dst,
+      ], { timeout: 3600000 })
+      if (fs.existsSync(dst) && fs.statSync(dst).size > 10000) return dst
+    } catch (e) { /* 换下一个编码器 */ }
+  }
+  throw new Error('转码失败：没有可用的 H.264 编码器')
+}
+
 // ── 本地视频供给（支持 Range，供 <video> 拖动进度）──
+// 若带 h264=1 则自动转码后再供给（部分机器 HEVC 黑屏的兜底）
 function serveVideo(req, res, filePath) {
   let st
   try { st = fs.statSync(filePath) } catch (e) {
@@ -911,6 +1001,86 @@ const server = http.createServer(async (req, res) => {
       const vid = u.searchParams.get('vid') || ''
       const info = await resolveWebVideo(sid, vid || null)
       return send(res, 200, { code: 0, data: info })
+    }
+
+    if (p === '/transcode' && req.method === 'POST') {
+      // 把某集转成 H.264（供黑屏时兑底），返回新文件路径
+      const b = await readBody(req)
+      const base = path.resolve(videoDir())
+      const full = path.resolve(b.file || '')
+      if (!b.file || full.indexOf(base) !== 0) return send(res, 200, { code: -1, msg: '非法路径' })
+      const job = newJob('transcode')
+      job.msg = '准备转码'
+      ;(async () => {
+        try {
+          job.msg = '转码中（HEVC → H.264）'; job.percent = 10
+          const out = await ensureH264(full)
+          job.result = { file: out, size: fs.statSync(out).size, src: full }
+          job.state = 'done'; job.percent = 100; job.msg = '转码完成'
+        } catch (e) {
+          job.state = 'error'; job.msg = e.message
+        }
+      })()
+      return send(res, 200, { code: 0, data: { jobId: job.id } })
+    }
+
+    if (p === '/song/download' && req.method === 'POST') {
+      const b = await readBody(req)
+      if (!b.id) return send(res, 200, { code: -1, msg: '缺少歌曲 id' })
+      const job = newJob('songdl')
+      job.msg = '获取歌曲直链'
+      ;(async () => {
+        try {
+          const r = await downloadSongFile(b.id, b.name || '', b.artist || '', getCookie())
+          job.result = { file: r.file, size: r.size, reused: !!r.reused }
+          job.state = 'done'; job.percent = 100; job.msg = '已下载 ' + (r.size / 1048576).toFixed(1) + 'MB'
+        } catch (e) { job.state = 'error'; job.msg = e.message }
+      })()
+      return send(res, 200, { code: 0, data: { jobId: job.id, dir: musicDir() } })
+    }
+
+    if (p === '/song/download-multi' && req.method === 'POST') {
+      const b = await readBody(req)
+      const list = b.songs || []
+      if (!list.length) return send(res, 200, { code: -1, msg: '没有要下载的歌' })
+      const job = newJob('songdl')
+      ;(async () => {
+        const ok = [], fail = []
+        for (let i = 0; i < list.length; i++) {
+          const s = list[i]
+          job.msg = `[${i + 1}/${list.length}] ${s.name || s.id}`
+          job.percent = Math.round(i / list.length * 100)
+          try {
+            const r = await downloadSongFile(s.id, s.name, s.artist, getCookie())
+            ok.push({ file: r.file, name: s.name })
+          } catch (e) { fail.push({ name: s.name, msg: e.message }) }
+        }
+        job.result = { count: ok.length, files: ok, failed: fail, dir: musicDir() }
+        job.state = 'done'; job.percent = 100
+        job.msg = `完成：成功 ${ok.length} 首` + (fail.length ? `，失败 ${fail.length} 首` : '')
+      })()
+      return send(res, 200, { code: 0, data: { jobId: job.id, dir: musicDir() } })
+    }
+
+    if (p === '/music-dir') {
+      if (req.method === 'POST') {
+        const b = await readBody(req)
+        if (!b.dir) return send(res, 200, { code: -1, msg: '缺少 dir' })
+        try { fs.mkdirSync(b.dir, { recursive: true }); setMusicDir(b.dir) }
+        catch (e) { return send(res, 200, { code: -1, msg: '目录不可用: ' + e.message }) }
+        return send(res, 200, { code: 0, data: { dir: musicDir() } })
+      }
+      return send(res, 200, { code: 0, data: { dir: musicDir() } })
+    }
+
+    if (p === '/song-url') {
+      // 代理本地 ncm 服务拿歌曲直链（供内嵌试听）
+      const id = u.searchParams.get('id') || ''
+      if (!id) return send(res, 200, { code: -1, msg: '缺少 id' })
+      const j = await httpGetJson('http://127.0.0.1:17890/song/url?id=' + encodeURIComponent(id) + '&br=320000')
+      const d = (j.data || [])[0]
+      if (!d || !d.url) return send(res, 200, { code: -1, msg: '拿不到直链（可能需会员或版权限制）' })
+      return send(res, 200, { code: 0, data: { url: d.url, br: d.br } })
     }
 
     if (p === '/video') {

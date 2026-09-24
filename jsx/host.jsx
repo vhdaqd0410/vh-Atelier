@@ -1542,6 +1542,35 @@ function meImportTreePlanStr() {
     } catch (e) { return JSON.stringify({ error: '导入异常: ' + e }); }
 }
 
+// ==================== 短剧扒歌：把已下载的剧集导入 PR 素材库 ====================
+// 前端先赋值 bgmImportPayload = ["路径1","路径2"]，再调 bgmImportToBinStr("剧名")
+function bgmImportToBinStr(binName) {
+    try {
+        var files = bgmImportPayload || [];
+        if (!files || !files.length) return JSON.stringify({ error: '没有要导入的文件' });
+        var name = binName || '短剧';
+        var root = app.project.rootItem;
+        var bin = null;
+        for (var i = 0; i < root.children.numItems; i++) {
+            var c = root.children[i];
+            try { if (c.name === name) { bin = c; break; } } catch (e) {}
+        }
+        if (!bin) {
+            try { bin = root.createBin(name); } catch (e) { return JSON.stringify({ error: '创建素材箱失败: ' + e }); }
+        }
+        var count = 0, failed = [];
+        for (var j = 0; j < files.length; j++) {
+            var f = new File(files[j]);
+            if (!f.exists) { failed.push(f.name + '(不存在)'); continue; }
+            try {
+                var ok = app.project.importFiles([f.fsName], true, bin, false);
+                if (ok) count++; else failed.push(f.name);
+            } catch (e) { failed.push(f.name + '(' + e + ')'); }
+        }
+        return JSON.stringify({ ok: true, count: count, failed: failed });
+    } catch (e) { return JSON.stringify({ error: '导入异常: ' + e }); }
+}
+
 function meImportFilesToBinStr() {
     try {
         var pl = meImportPayload;
