@@ -558,6 +558,89 @@ function serveVideo(req, res, filePath) {
   }
 }
 
+// ── 首页热榜：抓官网榜单页（瀑布流数据源）──
+const RANK_MAP = {
+  all: '/rank/hot-drama',
+  real: '/rank/hot-real-drama',
+  ai: '/rank/hot-ai-drama',
+  comic: '/rank/hot-comic-drama',
+}
+async function fetchRank(kind) {
+  const path = RANK_MAP[kind] || RANK_MAP.all
+  const html = await fetchText('https://hongguoduanju.com' + path)
+  const out = [], seen = {}
+  // 榜单卡片：/detail?series_id=ID + 封面 + 剧名
+  const cards = html.split(/<article[^>]*>/i).slice(1)
+  for (const c of cards) {
+    if (out.length >= 40) break
+    const idm = /series_id=(\d+)/.exec(c)
+    if (!idm) continue
+    const id = idm[1]
+    if (seen[id]) continue
+    let name = ''
+    const am = /alt="([^"]{2,80})"/.exec(c)
+    if (am) name = am[1].replace(/\u5c01\u9762$/, '')
+    if (!name) continue
+    let cover = ''
+    const imgs = c.match(/https:\/\/[^"\s]+(?:byteimg|fqnovelpic)\.com\/[^"\s]+/g) || []
+    for (const u of imgs) {
+      if (/\.jpeg|\.image|\.jpg|\.png|\.webp/i.test(u)) { cover = u.replace(/&amp;/g, '&'); break }
+    }
+    const tags = []
+    const tRe = /class="pc-tag-[^"]*"[^>]*>([^<]{1,12})</g
+    let tm
+    while ((tm = tRe.exec(c))) tags.push(tm[1].trim())
+    // 榜单卡片有：热度 / 评分 / 收藏 / 点赞（没有总集数）
+    const txt = c.replace(/<[^>]+>/g, '|')
+    const hotM = /([\d.]+[万亿]?)热度/.exec(txt)
+    const scoreM = /评分([\d.]+)/.exec(txt)
+    const favM = /([\d.]+[万亿]?)收藏/.exec(txt)
+    const likeM = /([\d.]+[万亿]?)点赞/.exec(txt)
+    const rankM = /aria-labelledby="rank-title-\d+"[^>]*>\s*(\d+)/.exec(c)
+    // 分集按钮数（榜单页只展示前几集，仅作参考）
+    const epCells = (c.match(/pc-episode-cell/g) || []).length
+    seen[id] = 1
+    out.push({
+      series_id: id, name, cover, tags,
+      rank: rankM ? parseInt(rankM[1], 10) : 0,
+      hot: hotM ? hotM[1] + '\u70ed\u5ea6' : '',
+      score: scoreM ? scoreM[1] : '',
+      fav: favM ? favM[1] + '\u6536\u85cf' : '',
+      like: likeM ? likeM[1] + '\u70b9\u8d5e' : '',
+      count: epCells,
+    })
+  }
+  return out
+}
+
+// ── 解析分享链接 / 剧 ID ──
+// 支持：纯数字、detail?series_id=、share?series_id=、video_series_id=、含引导文案的长文本
+function parseShareSeriesId(text) {
+  const s = String(text || '').trim()
+  if (!s) return ''
+  if (/^\d{15,20}$/.test(s)) return s
+  const pats = [
+    /series_id=(\d+)/i,
+    /video_series_id=(\d+)/i,
+    /book_id=(\d+)/i,
+    /\/detail\/(\d+)/i,
+    /\/player\/(\d+)/i,
+    /\b(\d{15,20})\b/,
+  ]
+  for (const p of pats) {
+    const m = p.exec(s)
+    if (m) return m[1]
+  }
+  return ''
+}
+
+// ── 搜索建议（自动补全）：用官网搜索页返回的剧名 ──
+async function suggest(keyword) {
+  if (!keyword || keyword.length < 1) return []
+  const list = await searchDramas(keyword)
+  return list.slice(0, 10).map(x => ({ series_id: x.series_id, name: x.name }))
+}
+
 // ── HTTP 服务 ──
 function send(res, code, obj) {
   const body = Buffer.from(JSON.stringify(obj), 'utf8')
@@ -905,6 +988,30 @@ const server = http.createServer(async (req, res) => {
         ffmpeg: !!ff, sherpa: !!sh, model: !!md,
         paths: { ffmpeg: ff, sherpa: sh, model: md },
       })
+    }
+
+    if (p === '/hot') {
+      const kind = u.searchParams.get('kind') || 'all'
+      const list = await fetchRank(kind)
+      return send(res, 200, { code: 0, data: list })
+    }
+
+    if (p === '/share-parse') {
+      const t = u.searchParams.get('text') || ''
+      const sid = parseShareSeriesId(t)
+      if (!sid) return send(res, 200, { code: -1, msg: '\u6ca1\u8bc6\u522b\u51fa\u5267\u53f7\uff08\u8bf7\u7c98\u8d34\u7ea2\u679c\u5206\u4eab\u94fe\u63a5\u6216\u7eaf\u6570\u5b57\u5267 ID\uff09' })
+      try {
+        const info = await getSeries(sid)
+        return send(res, 200, { code: 0, data: info })
+      } catch (e) {
+        return send(res, 200, { code: 0, data: { series_id: sid, name: '', vid_list: [], count: 0 } })
+      }
+    }
+
+    if (p === '/suggest') {
+      const kw = u.searchParams.get('keyword') || ''
+      const list = await suggest(kw)
+      return send(res, 200, { code: 0, data: list })
     }
 
     if (p === '/search') {

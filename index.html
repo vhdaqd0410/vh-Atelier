@@ -610,9 +610,41 @@
                     <span id="bgmLoginHint" style="font-size:11px;color:#ffb84d;"></span>
                 </div>
                 <div class="tr" style="display:flex;gap:6px;margin-top:8px;">
-                    <input type="text" id="bgmQuery" placeholder="输入短剧名搜索（如：剑宗）" style="flex:1;">
+                    <input type="text" id="bgmQuery" placeholder="输入短剧名搜索（如：剑宗）" style="flex:1;" autocomplete="off">
                     <button id="btnBgmSearch" class="tbtn">搜索</button>
                 </div>
+                <!-- 自动补全建议 -->
+                <div id="bgmSuggest" style="display:none;margin-top:4px;border:1px solid var(--border);border-radius:6px;background:var(--panel2);overflow:hidden;"></div>
+                <!-- 分享链接解析 -->
+                <div class="tr" style="display:flex;gap:6px;margin-top:8px;">
+                    <input type="text" id="bgmShare" placeholder="粘贴红果分享链接或剧 ID，自动解析" style="flex:1;">
+                    <button id="btnBgmShareParse" class="tbtn">解析</button>
+                </div>
+                <!-- 搜索历史 -->
+                <div id="bgmHistoryWrap" style="display:none;margin-top:8px;">
+                    <div style="display:flex;align-items:center;font-size:11px;color:var(--muted);margin-bottom:4px;">
+                        <span>搜索历史</span>
+                        <span style="flex:1;"></span>
+                        <span id="bgmHistClear" style="cursor:pointer;color:var(--fg-link);">清空</span>
+                    </div>
+                    <div id="bgmHistory" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                </div>
+            </div>
+
+            <!-- 首页：热门短剧瀑布流 -->
+            <div id="bgmHome" style="margin-top:8px;">
+                <div class="bgm-sec-title">
+                    <span>热门短剧</span>
+                    <span style="flex:1;"></span>
+                    <span id="bgmHotRefresh" style="cursor:pointer;color:var(--fg-link);">刷新</span>
+                </div>
+                <div class="tr" style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+                    <button class="tbtn bgm-hot-tab active" data-kind="all" style="padding:3px 9px;font-size:11px;">热播总榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="real" style="padding:3px 9px;font-size:11px;">真人剧</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="ai" style="padding:3px 9px;font-size:11px;">AI 剧</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="comic" style="padding:3px 9px;font-size:11px;">漫剧</button>
+                </div>
+                <div id="bgmHotGrid" class="bgm-grid"></div>
             </div>
 
             <!-- 搜索结果 -->

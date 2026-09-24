@@ -3270,3 +3270,57 @@ body.cx-resizing *{cursor:col-resize !important;}
     cursor: pointer;
 }
 #bgmNowSong:hover { background: rgba(255,255,255,.09); }
+
+/* ===== 短剧扒歌 · 首页瀑布流 ===== */
+.bgm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+}
+.bgm-grid-card {
+    cursor: pointer;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--panel2);
+    transition: transform .12s ease;
+}
+.bgm-grid-card:hover { transform: translateY(-2px); }
+.bgm-grid-cover {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    display: block;
+    background: #222;
+}
+.bgm-grid-name {
+    font-size: 11px;
+    line-height: 1.35;
+    padding: 4px 5px 0;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.bgm-grid-sub {
+    font-size: 9.5px;
+    color: var(--muted);
+    padding: 1px 5px 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-hot-tab.active {
+    background: var(--accent) !important;
+    color: #fff !important;
+    border-color: var(--accent) !important;
+}
+/* 播放时不闪烁：给视频容器独立合成层，避免与列表重排相互触发重绘 */
+#bgmV {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: paint;
+}
+#bgmPlayerWrap.bgm-mini video { contain: paint; }
+#bgmNowSong { will-change: contents; }
+#bgmMarkerBar { contain: strict; }
