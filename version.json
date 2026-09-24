@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.27.2",
-  "buildTime": "2026-09-25 04:00:00",
+  "version": "1.27.3",
+  "buildTime": "2026-09-25 05:00:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "分享链接解析支持 App 短链：红果 App 分享的 novelquickapp.com/s/xxx 短链会跟随跳转并从 schemeParams 解出剧号（实测《情感试炼》82 集可正常解析下载）。也支持粘贴带文案的整段文本（自动抽出其中的 URL）。"
+  "notes": "搜索结果、分享解析、进剧集页、识别结果出来后都会自动把内容滚到视野中心，不用手动滑动。若你 2 秒内刚手动滚过则不打扰（避免抢滚动）。"
 }

@@ -383,6 +383,7 @@
         wrap.style.display = '';
         $('bgmSeriesWrap').style.display = 'none';
         $('bgmResultWrap').style.display = 'none';
+        focusSearchResult();   // 结果出来自动滚到视野
     }
 
     function esc(s) {
@@ -479,6 +480,7 @@
     function renderSeriesNow() {
         var d = curSeries;
         if (!d) return;
+        focusSeries();   // 进剧集页自动聚焦
         $('bgmSearchWrap').style.display = 'none';
         $('bgmSeriesWrap').style.display = '';
         $('bgmSeriesName').textContent = d.name || d.series_id;
@@ -874,22 +876,57 @@
     function toggleMini() { applyMini(!miniMode); }
 
     // ⑦ 播放时把播放窗口滚到视野中心（小窗模式则滚到右下角区域）
-    function focusPlayer() {
-        var wrap = $('bgmPlayerWrap');
-        if (!wrap) return;
+    // 记录用户最近是否手动滚动过（避免自动聚焦打断用户浏览）
+    var lastUserScrollAt = 0;
+    (function () {
+        var mark = function () { lastUserScrollAt = Date.now(); };
+        ['wheel', 'touchmove', 'mousedown'].forEach(function (ev) {
+            window.addEventListener(ev, mark, { passive: true });
+        });
+        window.addEventListener('keydown', function (e) {
+            if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].indexOf(e.key) >= 0) mark();
+        });
+    })();
+
+    // 通用：把某个元素平滑滚到视野中心（留出舒适边距）
+    function focusEl(el, opt) {
+        if (!el) return;
+        if (miniMode) return;                 // 小窗固定定位，不滚
+        opt = opt || {};
+        // 用户 2 秒内刚手动滚过 → 不打扰
+        if (Date.now() - lastUserScrollAt < 2000) return;
         try {
-            if (miniMode) return;   // 小窗本就固定定位，不需要滚
-            // 优先滚到视频元素，留出上下舒适边距
-            var v = $('bgmV');
-            var target = v || wrap;
-            var rect = target.getBoundingClientRect();
+            var rect = el.getBoundingClientRect();
             var vh = window.innerHeight || document.documentElement.clientHeight;
-            var top = rect.top + window.pageYOffset - Math.max(0, (vh - rect.height) / 2);
+            var bias = opt.bias == null ? 0.5 : opt.bias;   // 0=顶部,0.5=居中
+            var top = rect.top + window.pageYOffset - Math.max(0, (vh - rect.height) * bias);
+            if (opt.maxTop != null) top = Math.min(top, opt.maxTop);
             window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
         } catch (e) {
-            try { if (wrap.scrollIntoView) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) {}
+            try { el.scrollIntoView({ behavior: 'smooth', block: opt.block || 'center' }); } catch (e2) {}
         }
     }
+
+    function focusPlayer() {
+        var v = $('bgmV') || $('bgmPlayerWrap');
+        if (!v) return;
+        // 播放区较高，稍微偏上一点更舒服
+        focusEl(v, { bias: 0.35 });
+    }
+
+    // 搜索结果／剧集页出现后聚焦
+    function focusSearchResult() {
+        var w = $('bgmSearchWrap');
+        if (!w || w.style.display === 'none') return;
+        focusEl(w, { bias: 0.12 });
+    }
+
+    function focusSeries() {
+        var w = $('bgmSeriesWrap');
+        if (!w || w.style.display === 'none') return;
+        focusEl(w, { bias: 0.1 });
+    }
+
 
     // ---------- 实时叠加：当前进度落在哪首 BGM 上 ----------
     var lastOverlayId = null;
@@ -1450,6 +1487,11 @@
             });
         }
         wrap.style.display = '';
+        // 结果列表出现后聚焦（留一点延迟等布局稳定）
+        setTimeout(function () {
+            var rw = $('bgmResultWrap');
+            if (rw && rw.style.display !== 'none') focusEl(rw, { bias: 0.08 });
+        }, 60);
     }
 
     // 内嵌试听一首（不离开面板）

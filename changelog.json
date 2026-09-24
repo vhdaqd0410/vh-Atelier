@@ -4,6 +4,31 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "短剧扒歌：自动聚焦",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "搜索结果出来后自动滚到视野（不用手动滑）"
+        },
+        {
+          "kind": "feat",
+          "text": "分享链接解析后自动聚焦到剧集页"
+        },
+        {
+          "kind": "feat",
+          "text": "识别结果（BGM 列表）出来后自动聚焦"
+        },
+        {
+          "kind": "impr",
+          "text": "聚焦统一成通用逻辑：留边距、平滑滚动；若你 2 秒内刚手动滚动过则不打扰"
+        },
+        {
+          "kind": "note",
+          "text": "小窗播放模式下不触发滚动（窗口本就固定）"
+        }
+      ]
+    },
+    {
       "title": "短剧扒歌：支持App短链",
       "items": [
         {
