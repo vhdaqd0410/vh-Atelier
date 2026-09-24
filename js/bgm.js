@@ -284,21 +284,32 @@
                 '<div class="bgm-item-main"><div class="bgm-item-name">第 ' + ep + ' 集</div>' +
                 '<div class="bgm-item-sub">' + (local ? '✔ 已下载 ' + local.sizeMB + 'MB' : '未下载') + '</div></div>' +
                 (local ? '<span class="bgm-item-act on bgm-playnow">播放</span>' : '') +
-                (local ? '<span class="bgm-item-act bgm-drag" draggable="true" title="拖到 PR 项目面板导进素材库">拖进PR</span>' : '') +
+                (local ? '<span class="bgm-item-act bgm-imp" title="导入 PR 项目面板素材库">导入PR</span>' : '') +
+                (local ? '<span class="bgm-item-act bgm-ins" title="插入到当前时间线播放头位置">插入时间线</span>' : '') +
                 '<span class="bgm-item-act bgm-watch">' + (local ? '重下' : '下载') + '</span>' +
-                '<span class="bgm-item-act bgm-pick">扒这集</span>';
+                '<span class="bgm-item-act bgm-pick">' + (getCached(ep) ? '看结果' : '扒这集') + '</span>' +
+                (getCached(ep) ? '<span class="bgm-item-act bgm-repick">重扒</span>' : '');
             var pn = el.querySelector('.bgm-playnow');
             if (pn) pn.addEventListener('click', function (ev) { ev.stopPropagation(); playEpisode(ep, v); });
-            var dg = el.querySelector('.bgm-drag');
-            if (dg) dg.addEventListener('dragstart', function (ev) {
-                try { ev.dataTransfer.setData('text/plain', local.path); } catch (e) {}
-                flash('拖到 PR 项目面板即可导入');
+            var imp = el.querySelector('.bgm-imp');
+            if (imp) imp.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                importFilesToPR([local.path], curSeries ? curSeries.name : '短剧');
+            });
+            var ins = el.querySelector('.bgm-ins');
+            if (ins) ins.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                insertToTimeline(local.path);
             });
             el.querySelector('.bgm-watch').addEventListener('click', function (ev) {
                 ev.stopPropagation(); downloadEpisode(v, ep);
             });
             el.querySelector('.bgm-pick').addEventListener('click', function (ev) {
                 ev.stopPropagation(); pickEpisode(v, ep);
+            });
+            var rp = el.querySelector('.bgm-repick');
+            if (rp) rp.addEventListener('click', function (ev) {
+                ev.stopPropagation(); rePickEpisode(v, ep);
             });
             // 双击 = 下载（未下）/ 播放（已下）
             el.addEventListener('dblclick', function () {
@@ -321,10 +332,29 @@
     // 单集：自动下载后扒（不再要求先有本地文件）
     function pickEpisode(vid, epNo) {
         if (!curSeries) return;
+        // 已扒过 → 直接展示缓存结果，不重跑
+        if (getCached(epNo)) {
+            flash('\u5df2\u6709\u7f13\u5b58\u7ed3\u679c\uff0c\u76f4\u63a5\u5c55\u793a\uff08\u60f3\u91cd\u626c\u70b9\u300c\u91cd\u626c\u300d\uff09');
+            renderEpisodeSongList(epNo);
+            highlightSong(null, false);
+            return;
+        }
+        lastPickEp = epNo;
         startBgm('/episode', {
             series_id: curSeries.series_id, vid: vid, name: curSeries.name, ep: epNo,
             start: null, end: null,
-        }, '第 ' + epNo + ' 集（自动下载后扒）');
+        }, '\u7b2c ' + epNo + ' \u96c6\uff08\u81ea\u52a8\u4e0b\u8f7d\u540e\u626c\uff09');
+    }
+
+    // 强制重扒
+    function rePickEpisode(vid, epNo) {
+        if (!curSeries) return;
+        delete resultCache[epNo]; saveResults();
+        lastPickEp = epNo;
+        startBgm('/episode', {
+            series_id: curSeries.series_id, vid: vid, name: curSeries.name, ep: epNo,
+            start: null, end: null,
+        }, '\u91cd\u626c\u7b2c ' + epNo + ' \u96c6');
     }
 
     // 仅下载这一集到本地
@@ -342,13 +372,33 @@
     try { bgmMarks = JSON.parse(localStorage.getItem('vh_bgm_marks') || '{}'); } catch (e) { bgmMarks = {}; }
     function saveMarks() { try { localStorage.setItem('vh_bgm_marks', JSON.stringify(bgmMarks)); } catch (e) {} }
 
+    // 扒歌结果缓存：ep -> { songs, duration, windows, at }
+    var resultCache = {};
+    try { resultCache = JSON.parse(localStorage.getItem('vh_bgm_results') || '{}'); } catch (e) { resultCache = {}; }
+    function saveResults() { try { localStorage.setItem('vh_bgm_results', JSON.stringify(resultCache)); } catch (e) {} }
+    function cacheResult(ep, res) {
+        if (!ep || !res) return;
+        resultCache[ep] = { songs: res.songs || [], duration: res.duration, windows: res.windows, at: Date.now() };
+        saveResults();
+    }
+    function getCached(ep) { return resultCache[ep] || null; }
+
+    // 每首歌一个稳定颜色（按 id 哈希，色相区分明显）
+    function songColor(id) {
+        var n = 0, s = String(id);
+        for (var i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) % 360000;
+        var hue = n % 360;
+        return 'hsl(' + hue + ', 78%, 58%)';
+    }
+
     function rememberMarks(ep, songs) {
         if (!ep || !songs || !songs.length) return;
         bgmMarks[ep] = songs.map(function (s) {
-            return { name: s.name, artist: s.artist, at: s.at, to: s.to, count: s.count };
+            return { id: s.id, name: s.name, artist: s.artist, at: s.at, to: s.to, count: s.count };
         });
         saveMarks();
     }
+
 
     function clearMarks() {
         var box = $('bgmMarkerBar');
@@ -365,32 +415,33 @@
         var marks = bgmMarks[ep] || [];
         if (!marks.length) {
             clearMarks();
-            if (tip) tip.textContent = '（这集还没扒过，点「扒这集」后就能在进度条上看到 BGM 位置）';
+            if (tip) tip.textContent = '\u8fd9\u96c6\u8fd8\u6ca1\u626c\u8fc7\uff0c\u70b9\u300c\u626c\u8fd9\u96c6\u300d\u540e\u5c31\u80fd\u5728\u8fdb\u5ea6\u6761\u4e0a\u770b\u5230 BGM \u4f4d\u7f6e';
             return;
         }
         var dur = v.duration || 0;
         if (!dur) { setTimeout(function () { drawMarkers(ep); }, 600); return; }
         box.innerHTML = '';
         box.style.display = '';
-        var colors = ['#7fd68b', '#6db3ff', '#ffb84d', '#d98cff', '#ff9a9a', '#5fd3d3'];
-        marks.forEach(function (m, i) {
+        marks.forEach(function (m) {
+            var c = songColor(m.id);
             var left = Math.min(100, Math.max(0, (m.at / dur) * 100));
-            var width = Math.max(0.6, ((m.to - m.at) / dur) * 100);
+            var width = Math.max(0.7, ((m.to - m.at) / dur) * 100);
             var el = document.createElement('div');
-            el.title = m.name + ' — ' + m.artist + '  (' + m.at + '~' + m.to + 's, ' + m.count + '次命中)';
+            el.className = 'bgm-mark';
+            el.setAttribute('data-id', String(m.id));
+            el.title = m.name + ' \u2014 ' + m.artist + '  (' + m.at + '~' + m.to + 's)';
             el.style.cssText = 'position:absolute;left:' + left + '%;width:' + width + '%;' +
-                'height:100%;background:' + colors[i % colors.length] + ';opacity:.75;border-radius:2px;cursor:pointer;';
+                'height:100%;background:' + c + ';opacity:.85;border-radius:2px;cursor:pointer;';
             el.addEventListener('click', function () {
                 try { v.currentTime = m.at; v.play().catch(function () {}); } catch (e) {}
+                // 点击色块 → 列表里对应歌曲高亮并滚到可见
+                highlightSong(m.id, true);
             });
             box.appendChild(el);
         });
-        if (tip) {
-            tip.textContent = '这集命中 ' + marks.length + ' 首 BGM（点色块跳转）：' +
-                marks.map(function (m) { return m.name; }).slice(0, 3).join('、') +
-                (marks.length > 3 ? ' 等' : '');
-        }
+        if (tip) tip.textContent = '\u8fd9\u96c6\u547d\u4e2d ' + marks.length + ' \u9996 BGM\uff08\u8272\u5757\u70b9\u51fb\u8df3\u8f6c + \u9ad8\u4eae\u5217\u8868\uff09';
     }
+
 
     // ---------- 本地已下载列表 ----------
     var localMap = {};    // ep -> { path, name, sizeMB }
@@ -444,6 +495,7 @@
 
     // ---------- 播放（本地文件，边下边看）----------
     var playEp = 0;
+    var lastPickEp = 0;   // \u6700\u8fd1\u626c\u8fc7\u7684\u96c6
     var pendingAutoPlay = 0;   // 下载完成后自动播哪一集
 
     function playEpisode(ep, vid) {
@@ -457,21 +509,25 @@
 
     function playLocal(ep) {
         var loc = localMap[ep];
-        if (!loc) { flash('第 ' + ep + ' 集本地文件不存在'); return; }
+        if (!loc) { flash('\u7b2c ' + ep + ' \u96c6\u672c\u5730\u6587\u4ef6\u4e0d\u5b58\u5728'); return; }
         var wrap = $('bgmPlayerWrap');
         if (wrap) wrap.style.display = '';
+        if (miniMode) applyMini(true);
         playEp = ep;
-        $('bgmPlayerTitle').textContent = (curSeries && curSeries.name ? curSeries.name + ' ' : '') + '第 ' + ep + ' 集';
+        $('bgmPlayerTitle').textContent = (curSeries && curSeries.name ? curSeries.name + ' ' : '') + '\u7b2c ' + ep + ' \u96c6';
         var v = $('bgmV');
         if (!v) return;
         v.src = API + '/video?file=' + encodeURIComponent(loc.path);
         v.dataset.ep = String(ep);
         try { v.load(); v.play().catch(function () {}); } catch (e) {}
         drawMarkers(ep);
+        renderEpisodeSongList(ep);      // 该集已有识别结果 → 直接显示列表
+        syncBar();
         var info = $('bgmPlayerInfo');
-        if (info) info.textContent = loc.name + '  ' + loc.sizeMB + 'MB  ·  ' + loc.path;
+        if (info) info.textContent = loc.name + '  ' + loc.sizeMB + 'MB';
         try { localStorage.setItem('vh_bgm_last_ep', String(ep)); } catch (e) {}
     }
+
 
     // HEVC 黑屏兜底：检测到"有进度但无画面"则提示转码
     function wireHevcFallback() {
@@ -511,6 +567,124 @@
         var v = $('bgmV');
         if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
         playEp = 0;
+    }
+    function closePlayer() {
+        var wrap = $('bgmPlayerWrap');
+        if (wrap) wrap.style.display = 'none';
+        var v = $('bgmV');
+        if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
+        playEp = 0;
+    }
+
+    // ---------- 小窗（画中画式）模式 ----------
+    var miniMode = false;
+    function applyMini(on) {
+        miniMode = !!on;
+        var wrap = $('bgmPlayerWrap');
+        var btn = $('btnBgmMini');
+        if (wrap) wrap.classList.toggle('bgm-mini', miniMode);
+        if (btn) btn.textContent = miniMode ? '\u5c55\u5f00' : '\u5c0f\u7a97';
+        try { localStorage.setItem('vh_bgm_mini', miniMode ? '1' : '0'); } catch (e) {}
+    }
+    function toggleMini() { applyMini(!miniMode); }
+
+    // ---------- 实时叠加：当前进度落在哪首 BGM 上 ----------
+    var lastOverlayId = null;
+    function tickOverlay() {
+        var v = $('bgmV');
+        if (!v || !playEp) return;
+        var marks = bgmMarks[playEp] || [];
+        var t = v.currentTime || 0;
+        var cur = null;
+        for (var i = 0; i < marks.length; i++) {
+            var m = marks[i];
+            if (t >= m.at && t <= m.to) { cur = m; break; }
+        }
+        var box = $('bgmNowSong');
+        if (!box) return;
+        if (cur) {
+            if (lastOverlayId !== cur.id) {
+                lastOverlayId = cur.id;
+                box.style.display = '';
+                box.style.borderColor = songColor(cur.id);
+                box.innerHTML = '\u{1f3b5} <b>' + esc(cur.name) + '</b> \u2014 ' + esc(cur.artist) +
+                    '<span style="color:var(--muted);font-size:10px;"> (' + cur.at + '~' + cur.to + 's)</span>';
+                // 同步高亮列表
+                highlightSong(cur.id, false);
+            }
+        } else {
+            if (lastOverlayId !== null) { lastOverlayId = null; }
+            box.style.display = 'none';
+        }
+    }
+
+    // 点叠加条 → 跳到识别列表并高亮
+    function jumpToSongList() {
+        var id = lastOverlayId;
+        highlightSong(id, true);
+    }
+
+    // ---------- 识别结果列表高亮 ----------
+    function highlightSong(id, scroll) {
+        var rows = document.querySelectorAll('#bgmResultList .bgm-item');
+        for (var i = 0; i < rows.length; i++) rows[i].classList.remove('bgm-hl');
+        if (id == null) return;
+        for (var k = 0; k < rows.length; k++) {
+            var rid = rows[k].getAttribute('data-song-id');
+            if (rid && String(rid) === String(id)) {
+                rows[k].classList.add('bgm-hl');
+                if (scroll) {
+                    try { rows[k].scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+                }
+                break;
+            }
+        }
+    }
+
+    // ---------- 该集已有缓存结果 → 直接展示（不重扒） ----------
+    function renderEpisodeSongList(ep) {
+        var c = getCached(ep);
+        if (!c || !c.songs || !c.songs.length) return false;
+        renderResult({ songs: c.songs, duration: c.duration, windows: c.windows, cached: true });
+        return true;
+    }
+
+    // ---------- 底部播放条 ----------
+    function syncBar() {
+        var v = $('bgmV');
+        var bar = $('bgmBar');
+        if (!v || !bar) return;
+        bar.style.display = '';
+        var tt = $('bgmBarTitle');
+        if (tt) tt.textContent = (playEp ? ('\u7b2c ' + playEp + ' \u96c6') : '\u672a\u5728\u64ad\u653e');
+        var pb = $('btnBgmBarPlay');
+        if (pb) pb.textContent = v.paused ? '\u25b6' : '\u23f8';
+        var cur = $('bgmBarCur'), dur = $('bgmBarDur');
+        if (cur) cur.textContent = fmtTime(v.currentTime || 0);
+        if (dur) dur.textContent = fmtTime(v.duration || 0);
+    }
+    function fmtTime(s) {
+        s = Math.max(0, Math.floor(s || 0));
+        var m = Math.floor(s / 60), ss = s % 60;
+        return m + ':' + (ss < 10 ? '0' : '') + ss;
+    }
+    function bindBar() {
+        var v = $('bgmV');
+        if (!v) return;
+        v.addEventListener('timeupdate', function () {
+            var cur = $('bgmBarCur');
+            if (cur) cur.textContent = fmtTime(v.currentTime || 0);
+            tickOverlay();
+        });
+        v.addEventListener('loadedmetadata', function () {
+            var dur = $('bgmBarDur');
+            if (dur) dur.textContent = fmtTime(v.duration || 0);
+            // 该集若已扒过，进度条色块按真实时长重画
+            drawMarkers(playEp);
+        });
+        v.addEventListener('play', syncBar);
+        v.addEventListener('pause', syncBar);
+        ['seeked', 'volumechange'].forEach(function (ev) { v.addEventListener(ev, syncBar); });
     }
 
     function bindEpToolbar() {
@@ -569,6 +743,27 @@
         selectedEps().forEach(function (ep) { if (localMap[ep]) files.push(localMap[ep].path); });
         if (!files.length) { flash('选中的集里没有已下载的'); return; }
         importFilesToPR(files, (curSeries && curSeries.name) || '短剧');
+    }
+
+    // 插入到当前时间线（播放头位置），复用 sfxInsertToTimelineStr
+    function insertToTimeline(filePath) {
+        try {
+            // 取当前播放头位置（秒）
+            csInterface.evalScript('(function(){try{var s=app.project.activeSequence;if(!s)return "0";return String(s.playerPosition||"0")}catch(e){return "0"}})()', function (posTicks) {
+                var sec = 0;
+                try { sec = Number(posTicks) / 254016000000; } catch (e) { sec = 0; }
+                if (!isFinite(sec) || sec < 0) sec = 0;
+                var payload = JSON.stringify({ path: filePath, positionSec: sec });
+                csInterface.evalScript('sfxInsertPayload = ' + payload + ';', function () {
+                    csInterface.evalScript('sfxInsertToTimelineStr()', function (r) {
+                        var o = null;
+                        try { o = JSON.parse(r); } catch (e) {}
+                        if (o && o.ok) flash('已插入时间线（第 ' + (o.positionSec || 0).toFixed(1) + ' 秒）');
+                        else flash('插入失败：' + ((o && o.error) || r));
+                    });
+                });
+            });
+        } catch (e) { flash('插入失败：' + e.message); }
     }
 
     function importFilesToPR(files, binName) {
@@ -637,8 +832,8 @@
     function showProgress(label) {
         var el = $('bgmProgress');
         if (el) el.style.display = '';
-        $('bgmResultWrap').style.display = 'none';
-        setProg(0, label + '：准备中…', '');
+        // 注意：不要隐藏结果列表 —— 点「下载」时列表要留着（此前 bug 就是这里把列表藏了）
+        setProg(0, label + '\uff1a\u51c6\u5907\u4e2d\u2026', '');
         var c = $('btnBgmCancel');
         if (c) c.style.display = '';
     }
@@ -733,6 +928,8 @@
             refreshLocal().then(function () { if (curSeries) renderSeries(); });
         }
         renderResult(res);
+        // 扒歌结果落盘缓存（单集时 playEp 可能为 0，用 lastPickEp 兜底）
+        if (res && res.songs && (playEp || lastPickEp)) cacheResult(playEp || lastPickEp, res);
     }
 
     function hideProgress() {
@@ -755,13 +952,15 @@
     function renderResult(res) {
         if (!res) return;
         lastResult = res;
+        // 该集结果入缓存（下次直接展示，不重扒）
+        if (playEp && res.songs) cacheResult(playEp, res);
         // 若当前正在播放该集，把命中点记下来画到进度条
         if (playEp && res.songs && res.songs.length) rememberMarks(playEp, res.songs);
         drawMarkers(playEp);
         selected = {};
         var wrap = $('bgmResultWrap'), box = $('bgmResultList');
         var songs = res.songs || [];
-        $('bgmResultTitle').textContent = '\u8bc6\u522b\u7ed3\u679c \u00b7 ' + songs.length + ' \u9996' +
+        $('bgmResultTitle').textContent = (res.cached ? '\u8bc6\u522b\u7ed3\u679c\uff08\u5df2\u7f13\u5b58\uff09 \u00b7 ' : '\u8bc6\u522b\u7ed3\u679c \u00b7 ') + songs.length + ' \u9996' +
             (res.duration ? '\uff08\u97f3\u9891 ' + res.duration + 's\uff0c\u626b\u63cf ' + res.windows + ' \u7a97' : '') +
             (res.episodes ? '\uff0c' + res.episodes + ' \u96c6' : '') + '\uff09';
 
@@ -790,12 +989,13 @@
             songs.forEach(function (s, i) {
                 var el = document.createElement('div');
                 el.className = 'bgm-item';
+                el.setAttribute('data-song-id', String(s.id));
                 var epTag = s.eps ? '<span class="bgm-item-ep">' + s.eps + ' \u96c6</span>' : '';
                 var timeTag = s.at != null ? '  @' + s.at + '~' + s.to + 's' : '';
                 el.innerHTML =
                     '<span class="bgm-item-idx">' + (i + 1) + '</span>' +
                     '<div class="bgm-item-main">' +
-                        '<div class="bgm-item-name">' + esc(s.name) + ' \u2014 ' + esc(s.artist) + '</div>' +
+                        '<div class="bgm-item-name"><span class="bgm-dot" style="background:' + songColor(s.id) + '"></span>' + esc(s.name) + ' \u2014 ' + esc(s.artist) + '</div>' +
                         '<div class="bgm-item-sub">' + (esc(s.album || '') || '\u672a\u77e5\u4e13\u8f91') +
                             '  \u00b7  \u547d\u4e2d ' + s.count + ' \u6b21' + timeTag + '</div>' +
                     '</div>' + epTag +
@@ -854,21 +1054,21 @@
     function attachSongDrag(row, filePath) {
         if (!row || !filePath) return;
         row.dataset.songPath = filePath;
-        if (row.querySelector('.bgm-m-drag')) return;
-        var sp = document.createElement('span');
-        sp.className = 'bgm-item-act bgm-m-drag';
-        sp.textContent = '\u62d6\u8fdb\u65f6\u95f4\u7ebf';
-        sp.draggable = true;
-        sp.title = '\u62d6\u5230 PR \u9879\u76ee\u9762\u677f / \u65f6\u95f4\u7ebf';
-        sp.addEventListener('dragstart', function (ev) {
-            try { ev.dataTransfer.setData('text/plain', filePath); } catch (e) {}
-            flash('\u62d6\u5230 PR \u65f6\u95f4\u7ebf\u6216\u7d20\u6750\u9762\u677f\u5373\u53ef\u4f7f\u7528');
-        });
-        sp.addEventListener('click', function (ev) {
-            ev.stopPropagation();
+        if (row.querySelector('.bgm-m-imp')) return;
+        var mk = function (cls, label, title, fn) {
+            var sp = document.createElement('span');
+            sp.className = 'bgm-item-act ' + cls;
+            sp.textContent = label;
+            sp.title = title;
+            sp.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); });
+            row.appendChild(sp);
+        };
+        mk('bgm-m-imp', '\u5bfc\u5165PR', '\u5bfc\u5165 PR \u9879\u76ee\u9762\u677f\u7d20\u6750\u5e93', function () {
             importFilesToPR([filePath], 'BGM');
         });
-        row.appendChild(sp);
+        mk('bgm-m-ins', '\u63d2\u5165\u65f6\u95f4\u7ebf', '\u63d2\u5165\u5230\u64ad\u653e\u5934\u4f4d\u7f6e', function () {
+            insertToTimeline(filePath);
+        });
     }
 
     // 批量记下已下载歌曲（按名字匹配行）
@@ -1000,6 +1200,31 @@
             if (auto && auto.checked) playNav(1);
         });
         wireHevcFallback();
+        bindBar();
+        // 小窗切换
+        var mb = $('btnBgmMini');
+        if (mb) mb.addEventListener('click', toggleMini);
+        // 恢复上次小窗偏好
+        try { if (localStorage.getItem('vh_bgm_mini') === '1') applyMini(true); } catch (e) {}
+        // 当前 BGM 叠加条 → 跳识别列表
+        var ns = $('bgmNowSong');
+        if (ns) ns.addEventListener('click', jumpToSongList);
+        // 底部播放条
+        var bp = $('btnBgmBarPlay');
+        if (bp) bp.addEventListener('click', function () {
+            var v = $('bgmV'); if (!v || !v.src) { flash('先选一集播放'); return; }
+            if (v.paused) v.play().catch(function () {}); else v.pause();
+            syncBar();
+        });
+        var bs = $('btnBgmBarStop');
+        if (bs) bs.addEventListener('click', function () {
+            var v = $('bgmV'); if (v) { try { v.pause(); v.currentTime = 0; } catch (e) {} }
+            syncBar();
+        });
+        var bprev = $('btnBgmBarPrev');
+        if (bprev) bprev.addEventListener('click', function () { playNav(-1); });
+        var bnext = $('btnBgmBarNext');
+        if (bnext) bnext.addEventListener('click', function () { playNav(1); });
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);

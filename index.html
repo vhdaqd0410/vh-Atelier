@@ -675,6 +675,7 @@
                     </label>
                     <button id="btnBgmPlayerPrev" class="tbtn" style="padding:3px 8px;font-size:11px;">◀ 上一集</button>
                     <button id="btnBgmPlayerNext" class="tbtn" style="padding:3px 8px;font-size:11px;">下一集 ▶</button>
+                    <button id="btnBgmMini" class="tbtn" style="padding:3px 8px;font-size:11px;">小窗</button>
                     <button id="btnBgmPlayerClose" class="tbtn" style="padding:3px 8px;font-size:11px;">✕ 关闭</button>
                 </div>
                 <video id="bgmV" controls playsinline preload="metadata"
@@ -682,6 +683,7 @@
                 <!-- BGM 命中点在进度条上的标记 -->
                 <div id="bgmMarkerBar" style="display:none;position:relative;height:10px;background:#1a1a1a;border-radius:3px;margin-top:6px;overflow:hidden;"></div>
                 <div id="bgmMarkerTip" style="font-size:10.5px;color:var(--muted);margin-top:3px;"></div>
+                <div id="bgmNowSong" style="display:none;" title="点这里跳到识别列表"></div>
                 <div id="bgmPlayerInfo" style="font-size:10.5px;color:var(--muted);margin-top:4px;"></div>
             </div>
 
@@ -726,6 +728,17 @@
                 <div id="bgmResultList" class="bgm-list"></div>
             </div>
 
+        </div>
+
+        <!-- 底部播放条（仿网易云） -->
+        <div id="bgmBar" style="display:none;">
+            <button id="btnBgmBarPlay" class="tbtn" style="padding:3px 10px;font-size:13px;">▶</button>
+            <button id="btnBgmBarStop" class="tbtn" style="padding:3px 8px;font-size:11px;">⏹</button>
+            <span class="bgm-bar-time" id="bgmBarCur">0:00</span>
+            <span class="bgm-bar-title" id="bgmBarTitle">未在播放</span>
+            <span class="bgm-bar-time" id="bgmBarDur">0:00</span>
+            <button id="btnBgmBarPrev" class="tbtn" style="padding:3px 8px;font-size:11px;">◀</button>
+            <button id="btnBgmBarNext" class="tbtn" style="padding:3px 8px;font-size:11px;">▶</button>
         </div>
     </div>
 
