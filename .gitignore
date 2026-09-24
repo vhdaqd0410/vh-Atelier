@@ -30,6 +30,10 @@ collect/video/
 # 短剧扒歌：批量结果落盘目录（运行时数据，不提交）
 collect/bgm/
 
+# 短剧 App 链路：设备号是运行时生成的本机标识，不入库
+py/hongguo_device.json
+
+
 # 用户运行时数据（替换字典/热键映射/备份等，绝不入仓，否则会覆盖用户真实数据）
 collect/replace_dict.json
 collect/hotkey.json

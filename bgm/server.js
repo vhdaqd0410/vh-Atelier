@@ -387,6 +387,45 @@ async function downloadVideo(url, outPath, limitSeconds) {
 
 function safeName(s) { return String(s || 'video').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) }
 
+// ── App 链路下载（可下官网限制外的集）────────────────────────────
+// 官网只开放前 3 集；后面的集走红果 App 接口（需字节签名 + 设备号）。
+// 签名库与依赖已内置在 py/libs + py/liushen，不依赖用户环境。
+function findPython() {
+  const cands = [
+    process.env.VH_PYTHON,
+    'C:\\Users\\Admin\\AppData\\Local\\Programs\\Python\\Python310\\python.exe',
+    'C:\\Users\\Admin\\AppData\\Local\\Programs\\Python\\Python313\\python.exe',
+    'C:\\Python310\\python.exe',
+  ]
+  for (const c of cands) {
+    try { if (c && fs.existsSync(c)) return c } catch (e) {}
+  }
+  return 'python'
+}
+
+const APP_DL = path.join(EXT_ROOT, 'py', 'hongguo_app_dl.py')
+
+async function appDownload(seriesId, vid, epNo, seriesName, outDir, onProgress) {
+  if (!fs.existsSync(APP_DL)) throw new Error('App 下载脚本缺失: ' + APP_DL)
+  const py = findPython()
+  const args = [APP_DL, '--vid', vid, '--ep', String(epNo), '--out', outDir]
+  if (seriesName) args.push('--name', seriesName)
+  const out = await runProc(py, args, { timeout: 900000 })
+  // 解析 JSON 行事件
+  let done = null, err = null
+  for (const line of String(out).split('\n')) {
+    const t = line.trim()
+    if (!t || t[0] !== '{') continue
+    let j = null
+    try { j = JSON.parse(t) } catch (e) { continue }
+    if (j.event === 'progress' && onProgress) onProgress(j.percent || 0, j.msg || '')
+    else if (j.event === 'done') done = j
+    else if (j.event === 'error') err = j.msg || '未知错误'
+  }
+  if (!done) throw new Error(err || 'App 链路下载失败')
+  return done   // { file, size, height, ep }
+}
+
 // 下载目录：优先用视频板块的 collect/video，回退 collect/bgm/downloads
 function videoDir() {
   const d = path.join(EXT_ROOT, 'collect', 'video')
@@ -431,43 +470,64 @@ function newJob(kind) {
   return jobs[id]
 }
 
+// 统一下载：官网优先（快、免签名）→ 失败用 App 链路（可下全剧）
+// 返回 { file, size, height }
+async function downloadEpisodeAny(seriesId, vid, epNo, seriesName, onProgress) {
+  const dir = videoDir()
+  const fn = safeName(seriesName || seriesId) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
+  const local = path.join(dir, fn)
+  if (fs.existsSync(local) && fs.statSync(local).size > 10000) {
+    if (onProgress) onProgress(30, `第 ${epNo} 集：用本地已有文件`)
+    return { file: local, size: fs.statSync(local).size, height: 0, reused: true }
+  }
+
+  // 1) 官网免签名明文 mp4
+  try {
+    if (onProgress) onProgress(6, `第 ${epNo} 集：官网取地址`)
+    const info = await resolveWebVideo(seriesId, vid)
+    if (info && info.url) {
+      if (onProgress) onProgress(12, `第 ${epNo} 集：官网下载（${info.frame || '?'}）`)
+      const size = await downloadVideo(info.url, local)
+      const h = parseInt(String(info.frame || '').split('x')[1], 10) || 0
+      return { file: local, size, height: h, via: 'web' }
+    }
+  } catch (e) {
+    // 官网未开放该集，转 App 链路
+  }
+
+  // 2) App 链路（签名 + 设备号，可下官网限制外的集）
+  if (onProgress) onProgress(20, `第 ${epNo} 集：转 App 链路（可下全剧）`)
+  const r = await appDownload(seriesId, vid, epNo, seriesName, dir, (pct, msg) => {
+    if (onProgress) onProgress(20 + Math.round(pct * 0.25), msg)
+  })
+  return { file: r.file, size: r.size, height: r.height || 0, via: 'app' }
+}
+
 // 仅下载（不扒歌）
 async function runDownload(job, seriesId, vid, seriesName, epNo) {
   try {
-    job.msg = '获取视频地址'; job.percent = 5
-    const info = await resolveWebVideo(seriesId, vid)
-    job.msg = `下载第 ${epNo} 集（${info.frame || '?'}）`; job.percent = 20
-    const dir = videoDir()
-    const fn = safeName((seriesName || info.name || seriesId)) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
-    const out = path.join(dir, fn)
-    const size = await downloadVideo(info.url, out)
-    job.result = { file: out, size, frame: info.frame, duration: info.duration, vid: info.vid }
-    job.state = 'done'; job.percent = 100; job.msg = `已下载 ${(size / 1048576).toFixed(1)}MB → ${fn}`
+    const r = await downloadEpisodeAny(seriesId, vid, epNo, seriesName, (p, m) => {
+      job.percent = p; job.msg = m
+    })
+    job.result = { file: r.file, size: r.size, frame: (r.height ? r.height + 'p' : '') , via: r.via }
+    job.state = 'done'; job.percent = 100
+    job.msg = `已下载 ${(r.size / 1048576).toFixed(1)}MB → ${path.basename(r.file)}`
   } catch (e) {
     job.state = 'error'; job.msg = e.message
   }
 }
 
 // 单集：自动下载再扒（默认行为）
-async function runEpisode(job, seriesId, vid, seriesName, epNo, start, end, keepFile) {
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vhbgm_'))
+async function runEpisode(job, seriesId, vid, seriesName, epNo, start, end) {
   try {
-    job.msg = '获取视频地址'; job.percent = 3
-    const info = await resolveWebVideo(seriesId, vid)
-    if (!info.url) throw new Error('该集未开放试看（官网只开放前 3 集）')
-    job.msg = `下载第 ${epNo} 集（${info.frame || '?'}）`; job.percent = 8
-
-    const dir = videoDir()
-    const fn = safeName((seriesName || info.name || seriesId)) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
-    const localPath = path.join(dir, fn)
-    const size = await downloadVideo(info.url, localPath, keepFile ? null : null)
-    job.msg = `已下载 ${(size / 1048576).toFixed(1)}MB，开始分离`; job.percent = 35
-
-    await ripWav(job, localPath, start, end)
+    const r = await downloadEpisodeAny(seriesId, vid, epNo, seriesName, (p, m) => {
+      // 下载阶段占 3~35%
+      job.percent = Math.min(35, Math.round(3 + p * 0.32))
+      job.msg = m
+    })
+    await ripWav(job, r.file, start, end)
   } catch (e) {
     job.state = 'error'; job.msg = e.message
-  } finally {
-    try { fs.rmSync(work, { recursive: true, force: true }) } catch (e) {}
   }
 }
 
@@ -572,7 +632,6 @@ async function runBatchOnline(job, seriesId, seriesName, fromEp, count) {
     const afp = loadAfp()
     const cookie = getCookie()
     const agg = {}, perEp = []
-    const dir = videoDir()
 
     for (let i = 0; i < vids.length; i++) {
       if (cancelled(job)) break
@@ -581,19 +640,14 @@ async function runBatchOnline(job, seriesId, seriesName, fromEp, count) {
       const base = i / vids.length
       job.percent = Math.round(5 + base * 90)
       try {
-        const fn = safeName(name) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
-        const localPath = path.join(dir, fn)
-        const src = localPath
-        const hasLocal = fs.existsSync(localPath) && fs.statSync(localPath).size > 10000
-        if (hasLocal) {
-          job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：用本地已有文件`
-        } else {
-          job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：取地址`
-          const info = await resolveWebVideo(seriesId, vid)
-          job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：下载（${info.frame || '?'}）`
-          await downloadVideo(info.url, localPath)
-        }
+        const base2 = i / vids.length
+        const dl = await downloadEpisodeAny(seriesId, vid, epNo, name, (p, m) => {
+          job.percent = Math.round(5 + base2 * 90)
+          job.msg = m
+        })
+        const src = dl.file
         job.msg = `[${i + 1}/${vids.length}] 第 ${epNo} 集：分离+扫描`
+        job.percent = Math.round(5 + (base2 + 0.5 / vids.length) * 90)
         const mix = await extractWav(src, path.join(work, `m_${i}.wav`), null, null)
         const accomp = await separate(sherpaDir, mix, path.join(work, `v_${i}.wav`), path.join(work, `a_${i}.wav`))
         const r = await scanWav(afp, accomp, cookie, { win: 3, step: 1.5 })
