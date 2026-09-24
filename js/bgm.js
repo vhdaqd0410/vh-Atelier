@@ -98,10 +98,10 @@
     }
 
     var lastSrvErr = '';
-    function ensureServer(retries) {
+    function ensureServer(retries, quiet) {
         var tries = retries || 0;
         return api('/health', { timeout: 8000 }).then(function (h) {
-            setSrvState('\u670d\u52a1\u6b63\u5e38', 'ok');
+            if (!quiet) setSrvState('\u670d\u52a1\u6b63\u5e38', 'ok');
             var hint = $('bgmLoginHint');
             if (hint) {
                 if (!h.logged) hint.textContent = '\u26a0 \u672a\u767b\u5f55\u7f51\u6613\u4e91\uff0c\u8bf7\u5148\u5728\u300c\u7f51\u6613\u4e91\u300d\u677f\u5757\u767b\u5f55';
@@ -113,12 +113,12 @@
             lastSrvErr = (e && e.message) || '\u672a\u77e5';
             if (tries < 6) {
                 if (tries === 0) spawnServer();
-                setSrvState('\u670d\u52a1\u542f\u52a8\u4e2d\u2026(' + (tries + 1) + '/6)', '');
+                if (!quiet) setSrvState('\u670d\u52a1\u542f\u52a8\u4e2d\u2026(' + (tries + 1) + '/6)', '');
                 return new Promise(function (res) {
                     setTimeout(function () { res(ensureServer(tries + 1)); }, 1500);
                 });
             }
-            setSrvState('\u670d\u52a1\u672a\u8fde\u63a5', 'err');
+            if (!quiet) setSrvState('\u670d\u52a1\u672a\u8fde\u63a5', 'err');
             throw new Error(srvErrMsg('\u540e\u7aef\u670d\u52a1\u542f\u52a8\u5931\u8d25', lastSrvErr));
         });
     }
@@ -2045,4 +2045,6 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
     else safeBind();
 
     window.__bgmOnShow = onShow;
+    // 供 main.js 启动预热：只确保本地服务在跑，不动界面
+    window.__bgmEnsure = function () { try { return ensureServer(0, true); } catch (e) { return null; } };
 })();

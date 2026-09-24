@@ -621,6 +621,8 @@
     function init() {
         bindEvents();
         // 暴露给 main.js 的懒启动钩子
+        // 供 main.js 启动预热：只确保本地服务在跑，不动界面
+        window.__videoEnsure = function () { try { return ensureServer(); } catch (e) { return null; } };
         window.__videoOnShow = function () {
             ensureServer().then(function (h) {
                 if (h && h.data && h.data.alive) {

@@ -172,6 +172,51 @@
         });
     });
 
+    // ---------- 启动预热：打开插件后陆续拉起本地服务 ----------
+    // 目的：不再等用户点进某个板块才启动该服务，减少首次操作时的等待。
+    // 策略：面板先渲染（不阻塞 UI），随后错峰预热，避免三个 node 同时抢占启动。
+    function warmupServices() {
+        var tasks = [
+            // [名称, 全局钩子名, 延迟 ms]
+            ['网易云', '__ncmEnsure', 300],
+            ['短剧扒歌', '__bgmEnsure', 1200],
+            ['视频下载', '__videoEnsure', 2200],
+        ];
+        tasks.forEach(function (t) {
+            var name = t[0], hook = t[1], delay = t[2];
+            setTimeout(function () {
+                try {
+                    var fn = window[hook];
+                    if (typeof fn === 'function') {
+                        var r = fn();
+                        if (r && typeof r.then === 'function') {
+                            r.then(function () {
+                                console.log('[warmup] ' + name + ' 服务就绪');
+                            }).catch(function (e) {
+                                console.log('[warmup] ' + name + ' 服务未就绪: ' + (e && e.message));
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.log('[warmup] ' + name + ' 预热异常: ' + (e && e.message));
+                }
+            }, delay);
+        });
+    }
+
+    // 面板渲染完成后再预热（用 requestIdleCallback 兜底，避免与首屏争资源）
+    function scheduleWarmup() {
+        var run = function () { setTimeout(warmupServices, 400); };
+        try {
+            if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 3000 });
+            else setTimeout(run, 800);
+        } catch (e) { setTimeout(run, 800); }
+    }
+    if (document.readyState === 'complete') scheduleWarmup();
+    else window.addEventListener('load', scheduleWarmup);
+    // 兜底：即便 load 事件错过也要预热
+    setTimeout(function () { try { warmupServices(); } catch (e) {} }, 4000);
+
     // ---------- 导航常驻：按真实高度校准 sticky 偏移 ----------
     // 三层导航（顶栏 / 工作台组栏 / 子标签栏）吸顶，偏移量按实际高度动态计算，
     // 避免写死像素导致字体或缩放变化时错位。

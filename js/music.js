@@ -2028,6 +2028,8 @@
         }
     }
     window.__musicOnShow = onTabVisible;
+    // 供 main.js 启动预热：只确保本地服务在跑，不动界面
+    window.__ncmEnsure = function () { try { return ensureServer(); } catch (e) { return null; } };
 
     // 恢复上次播放的歌曲与进度（不自动播放，只还原队列/当前曲/时间）
     function restorePlayerState() {
