@@ -876,16 +876,28 @@
     function toggleMini() { applyMini(!miniMode); }
 
     // ⑦ 播放时把播放窗口滚到视野中心（小窗模式则滚到右下角区域）
-    // 记录用户最近是否手动滚动过（避免自动聚焦打断用户浏览）
+    // 记录用户最近是否「真的滚动」过（避免自动聚焦打断浏览）
+    // 注意：不能用 mousedown —— 点击搜索/解析按钮也会触发，会把聚焦拦掉
     var lastUserScrollAt = 0;
+    var lastScrollY = 0;
     (function () {
         var mark = function () { lastUserScrollAt = Date.now(); };
-        ['wheel', 'touchmove', 'mousedown'].forEach(function (ev) {
+        // 滚轮 / 触摸拖动 = 明确的滚动意图，直接标记
+        ['wheel', 'touchmove'].forEach(function (ev) {
             window.addEventListener(ev, mark, { passive: true });
         });
         window.addEventListener('keydown', function (e) {
             if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].indexOf(e.key) >= 0) mark();
         });
+        // 拖动滚动条等：只在「滚动位置真的变化」时才算用户滚动
+        lastScrollY = window.pageYOffset || 0;
+        window.addEventListener('scroll', function () {
+            var y = window.pageYOffset || 0;
+            if (Math.abs(y - lastScrollY) > 2) {
+                lastScrollY = y;
+                mark();
+            }
+        }, { passive: true });
     })();
 
     // 通用：把某个元素平滑滚到视野中心（留出舒适边距）
@@ -893,8 +905,8 @@
         if (!el) return;
         if (miniMode) return;                 // 小窗固定定位，不滚
         opt = opt || {};
-        // 用户 2 秒内刚手动滚过 → 不打扰
-        if (Date.now() - lastUserScrollAt < 2000) return;
+        // 用户 1.2 秒内刚手动滚过 → 不打扰（用户主动滚动优先）
+        if (Date.now() - lastUserScrollAt < 1200) return;
         try {
             var rect = el.getBoundingClientRect();
             var vh = window.innerHeight || document.documentElement.clientHeight;
@@ -902,6 +914,11 @@
             var top = rect.top + window.pageYOffset - Math.max(0, (vh - rect.height) * bias);
             if (opt.maxTop != null) top = Math.min(top, opt.maxTop);
             window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+            // 程序滚动不算用户滚动：延迟同步基准值与时间戳
+            setTimeout(function () {
+                lastScrollY = window.pageYOffset || 0;
+                lastUserScrollAt = 0;
+            }, 500);
         } catch (e) {
             try { el.scrollIntoView({ behavior: 'smooth', block: opt.block || 'center' }); } catch (e2) {}
         }

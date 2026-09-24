@@ -3509,3 +3509,190 @@ body.cx-resizing *{cursor:col-resize !important;}
     background: currentColor;
     animation: bgmSkPulse 1s ease-in-out infinite;
 }
+
+/* ===== 导航常驻（向下滚动时保持可见）===== */
+/* 说明：面板滚动发生在 body/window，用 sticky 让三层导航吸顶 */
+body { padding-top: 0; }
+
+/* 第一层：顶栏（logo + 官网/历史/更新/反馈/日志） */
+.top-head {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    background: var(--bg);
+    padding: 14px 14px 8px;
+    margin: -14px -14px 0;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+}
+/* 第二层：工作台分组栏（素材/剧本/进度…） */
+.ws-groups {
+    position: sticky;
+    top: var(--sticky-top-head, 52px);
+    z-index: 55;
+    background: var(--bg);
+    padding: 8px 14px 6px;
+    margin: 0 -14px;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+}
+/* 第三层：子标签栏（每个板块内的导航） */
+.tabs.ws-subtabs {
+    position: sticky;
+    top: var(--sticky-top-groups, 104px);
+    z-index: 50;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 12px -6px rgba(0,0,0,.5);
+}
+/* 滚动时三层之间不留缝 */
+.sub { margin-top: 6px; }
+
+/* ===== 配色分层：区分「主操作 / 次级 / 危险 / 成功 / 特殊」===== */
+:root {
+    --btn-primary-bg: #3d6ef5;      /* 主操作：蓝 */
+    --btn-primary-hover: #5580ff;
+    --btn-alt-bg: #2f3b4d;          /* 次级：冷灰蓝 */
+    --btn-alt-fg: #a9c3e0;
+    --btn-ok-bg: #2f6b46;           /* 确认/下载完成：绿 */
+    --btn-warn-bg: #7a5a1e;         /* 警示/重来：琥珀 */
+    --btn-danger-bg: #8a3a3a;       /* 危险/停止：红 */
+    --btn-violet-bg: #6d4bc4;       /* 特殊/品牌：紫（保留但少用） */
+}
+
+/* 默认按钮改为中性冷灰蓝，不再是满屏紫 */
+button {
+    background: var(--btn-alt-bg);
+    color: var(--btn-alt-fg);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    flex: 1;
+    font-family: inherit;
+}
+button:hover { background: #3a4859; color: #d6e3f2; }
+
+/* 主按钮（搜索/解析/主要动作）*/
+button.primary, .tbtn.primary {
+    background: var(--btn-primary-bg); color: #fff; border-color: transparent;
+}
+button.primary:hover { background: var(--btn-primary-hover); }
+
+/* 绿色的确认类（下载、导入）*/
+.tbtn.ok, button.ok { background: var(--btn-ok-bg); color: #d9f5e2; border-color: transparent; }
+.tbtn.ok:hover { background: #3a8055; }
+
+/* 琥珀色（重扒、重试）*/
+.tbtn.warn { background: var(--btn-warn-bg); color: #ffe9b8; border-color: transparent; }
+.tbtn.warn:hover { background: #8f6a24; }
+
+/* 危险（停止、删除）*/
+.tbtn.danger, button.danger { background: var(--btn-danger-bg); color: #ffd9d9; border-color: transparent; }
+.tbtn.danger:hover { background: #a04444; }
+
+/* 工具/小按钮：更轻，描边风 */
+.tbtn {
+    background: rgba(255,255,255,.05);
+    color: #b8c6d6;
+    border: 1px solid rgba(255,255,255,.10);
+    font-size: 11.5px;
+    padding: 4px 10px;
+    flex: 0 0 auto;
+}
+.tbtn:hover { background: rgba(255,255,255,.12); color: #e6eef7; border-color: rgba(255,255,255,.2); }
+.tbtn.active { background: var(--btn-primary-bg); color: #fff; border-color: transparent; }
+
+/* 子标签激活态（原为满紫，改蓝）*/
+.tab.active { background: var(--btn-primary-bg); color: #fff; }
+/* 工作台分组激活态：描边 + 淡底，不用满色块 */
+.ws-group.active {
+    background: rgba(61,110,245,.14);
+    border-color: var(--btn-primary-bg);
+    color: #8fb4ff;
+    font-weight: 600;
+}
+/* 底部播放条按钮保持紧凑 */
+#bgmBar .tbtn { padding: 3px 9px; }
+
+/* ===== 短剧扒歌 · 排版优化 ===== */
+/* 1) 面板整体留白与节奏 */
+#panel-bgm { padding-bottom: 14px; }
+.bgm-wrap > .card {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+/* 2) 区块标题更清晰 */
+.bgm-sec-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .4px;
+    margin: 10px 0 6px;
+    padding-left: 2px;
+}
+.bgm-sec-title::before {
+    content: '';
+    width: 3px;
+    height: 11px;
+    border-radius: 2px;
+    background: var(--btn-primary-bg, #3d6ef5);
+    flex: 0 0 auto;
+}
+/* 3) 顶部搜索卡片：输入框更高更醒目 */
+#panel-bgm input[type="text"],
+#panel-bgm input[type="number"] {
+    background: #1b1b1b;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 7px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .15s, background .15s;
+}
+#panel-bgm input[type="text"]:focus,
+#panel-bgm input[type="number"]:focus {
+    border-color: var(--btn-primary-bg, #3d6ef5);
+    background: #202020;
+}
+#panel-bgm input::placeholder { color: #6f6f6f; }
+/* 4) 首页热榜 grid 更紧凑好看 */
+.bgm-grid { gap: 9px; }
+.bgm-grid-card {
+    border: 1px solid rgba(255,255,255,.05);
+    transition: transform .12s ease, border-color .12s ease;
+}
+.bgm-grid-card:hover {
+    border-color: var(--btn-primary-bg, #3d6ef5);
+}
+/* 5) 剧集列表行：hover 更明显，操作按钮与内容有分隔 */
+#bgmEpList .bgm-item,
+#bgmResultList .bgm-item {
+    gap: 7px;
+    padding: 8px 10px;
+}
+#bgmEpList .bgm-item:hover,
+#bgmResultList .bgm-item:hover {
+    background: rgba(61,110,245,.07);
+}
+#bgmEpList .bgm-item-act,
+#bgmResultList .bgm-item-act { flex: 0 0 auto; }
+/* 6) 工具条（全选/下载选中那行）更清楚 */
+#bgmEpList .bgm-item[style*="background:var(--panel)"] {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 10px;
+}
+/* 7) 骨架/状态留白 */
+.bgm-hot-status { padding: 30px 14px; }
+/* 8) 进度条更醒目 */
+#bgmProgress { border-radius: 8px; }

@@ -141,6 +141,7 @@
     // 切到某个 tab（面板 + 组条 + 高亮同步）
     function switchTab(name) {
         if (!panels[name]) return;
+        setTimeout(function () { try { window.__atSyncSticky && window.__atSyncSticky(); } catch (e) {} }, 0);
         var g = groupOf[name];
         if (!g) return;
         currentInGroup[g] = name;
@@ -170,6 +171,31 @@
             switchTab(t.dataset.tab);
         });
     });
+
+    // ---------- 导航常驻：按真实高度校准 sticky 偏移 ----------
+    // 三层导航（顶栏 / 工作台组栏 / 子标签栏）吸顶，偏移量按实际高度动态计算，
+    // 避免写死像素导致字体或缩放变化时错位。
+    function syncStickyOffsets() {
+        try {
+            var head = document.querySelector('.top-head');
+            var groups = document.querySelector('.ws-groups');
+            if (head) {
+                var h1 = Math.ceil(head.getBoundingClientRect().height);
+                document.documentElement.style.setProperty('--sticky-top-head', h1 + 'px');
+                if (groups) groups.style.top = h1 + 'px';
+                var h2 = groups ? Math.ceil(groups.getBoundingClientRect().height) : 0;
+                document.documentElement.style.setProperty('--sticky-top-groups', (h1 + h2) + 'px');
+                // 所有子标签栏统一偏移
+                subTabBars.forEach(function (bar) { bar.style.top = (h1 + h2) + 'px'; });
+            }
+        } catch (e) {}
+    }
+    syncStickyOffsets();
+    window.addEventListener('resize', syncStickyOffsets);
+    // 顶栏内容变化（如徽标出现）后重算
+    setTimeout(syncStickyOffsets, 400);
+    setTimeout(syncStickyOffsets, 1500);
+    window.__atSyncSticky = syncStickyOffsets;
 
     // 暴露给其他板块调用：字幕识别 → 字幕校对 联动时切 tab
     window.__atSwitchTab = switchTab;
