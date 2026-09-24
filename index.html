@@ -651,13 +651,34 @@
                         <input type="number" id="bgmLimit" placeholder="上限" style="width:60px;" min="1" title="本地目录批量时最多处理多少集，留空=全部">
                         <button id="btnBgmBatch" class="tbtn">扒本地目录</button>
                     </div>
-                    <div id="bgmSeriesHint" style="font-size:11px;color:var(--muted);margin-top:6px;"></div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                        <span id="bgmSeriesHint" style="font-size:11px;color:var(--muted);flex:1;"></span>
+                        <button id="btnBgmOpenDir" class="tbtn" style="padding:3px 8px;font-size:11px;">打开下载目录</button>
+                    </div>
+                    <div id="bgmEpMeta" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
                     <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
                         <span style="flex:1;"></span>
                         <button id="btnBgmCancel" class="tbtn danger" style="display:none;">⏹ 停止</button>
                     </div>
                 </div>
                 <div id="bgmEpList" class="bgm-list" style="margin-top:6px;"></div>
+            </div>
+
+            <!-- 剧集播放（本地已下载 / 边下边看） -->
+            <div id="bgmPlayerWrap" style="display:none;margin-top:8px;">
+                <div class="bgm-sec-title">
+                    <span>播放：<span id="bgmPlayerTitle"></span></span>
+                    <span style="flex:1;"></span>
+                    <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;">
+                        <input type="checkbox" id="bgmAutoNext" checked> 连播
+                    </label>
+                    <button id="btnBgmPlayerPrev" class="tbtn" style="padding:3px 8px;font-size:11px;">◀ 上一集</button>
+                    <button id="btnBgmPlayerNext" class="tbtn" style="padding:3px 8px;font-size:11px;">下一集 ▶</button>
+                    <button id="btnBgmPlayerClose" class="tbtn" style="padding:3px 8px;font-size:11px;">✕ 关闭</button>
+                </div>
+                <video id="bgmV" controls playsinline preload="metadata"
+                    style="width:100%;max-height:420px;background:#000;border:1px solid #333;border-radius:6px;"></video>
+                <div id="bgmPlayerInfo" style="font-size:10.5px;color:var(--muted);margin-top:4px;"></div>
             </div>
 
             <!-- 内嵌预览（直接嵌官网播放页，不依赖逆向解析） -->

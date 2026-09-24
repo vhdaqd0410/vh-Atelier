@@ -228,6 +228,7 @@
         $('bgmSeriesWrap').style.display = '';
         $('bgmSeriesName').textContent = d.name || d.series_id;
         $('bgmSeriesCount').textContent = '共 ' + d.count + ' 集';
+        refreshLocal();   // 拉本地已下载列表，标出哪些集已就绪
 
         // 剧集头：封面 + 标签 + 简介
         var head = $('bgmSeriesHead');
@@ -259,23 +260,24 @@
         box.innerHTML = '';
         // 只渲染前 60 集，避免一次塞太多 DOM
         (d.vid_list || []).slice(0, 60).forEach(function (v, i) {
+            var ep = i + 1;
+            var local = localMap[ep];
             var el = document.createElement('div');
             el.className = 'bgm-item';
             el.innerHTML =
-                '<span class="bgm-item-idx">' + (i + 1) + '</span>' +
-                '<div class="bgm-item-main"><div class="bgm-item-name">第 ' + (i + 1) + ' 集</div>' +
-                '<div class="bgm-item-sub">' + esc(v) + '</div></div>' +
-                '<span class="bgm-item-act bgm-look">看看</span>' +
-                '<span class="bgm-item-act bgm-dl">下载</span>' +
+                '<span class="bgm-item-idx">' + ep + '</span>' +
+                '<div class="bgm-item-main"><div class="bgm-item-name">第 ' + ep + ' 集</div>' +
+                '<div class="bgm-item-sub">' + (local ? '✔ 已下载 ' + local.sizeMB + 'MB' : esc(v)) + '</div></div>' +
+                (local ? '<span class="bgm-item-act on bgm-playnow">播放</span>' : '') +
+                '<span class="bgm-item-act bgm-watch">' + (local ? '重下' : '下载') + '</span>' +
                 '<span class="bgm-item-act bgm-pick">扒这集</span>';
-            el.querySelector('.bgm-look').addEventListener('click', function () {
-                previewEpisode(v, '第 ' + (i + 1) + ' 集');
-            });
-            el.querySelector('.bgm-dl').addEventListener('click', function () {
-                downloadEpisode(v, i + 1);
+            var pn = el.querySelector('.bgm-playnow');
+            if (pn) pn.addEventListener('click', function () { playEpisode(ep, v); });
+            el.querySelector('.bgm-watch').addEventListener('click', function () {
+                downloadEpisode(v, ep);
             });
             el.querySelector('.bgm-pick').addEventListener('click', function () {
-                pickEpisode(v, i + 1);
+                pickEpisode(v, ep);
             });
             box.appendChild(el);
         });
@@ -287,7 +289,7 @@
         }
         var hint = $('bgmSeriesHint');
         if (hint) {
-            hint.innerHTML = '「下载」= 存到本地；「扒这集」= 自动下载后直接扒。<span style="color:var(--fg-warn-soft);">注：官网只开放前 3 集免费试看，后面的集需 App 登录，自动下载会跳过。</span>';
+            hint.innerHTML = '本地已有则直接「播放」；没有则点「下载」（自动选官网/App 链路）';
         }
     }
 
@@ -301,11 +303,94 @@
     }
 
     // 仅下载这一集到本地
-    function downloadEpisode(vid, epNo) {
+    function downloadEpisode(vid, epNo, autoPlay) {
         if (!curSeries) return;
+        pendingAutoPlay = autoPlay ? epNo : 0;
         startBgm('/download', {
             series_id: curSeries.series_id, vid: vid, name: curSeries.name, ep: epNo,
         }, '下载第 ' + epNo + ' 集');
+    }
+
+    // ---------- 本地已下载列表 ----------
+    var localMap = {};    // ep -> { path, name, sizeMB }
+    var localAll = [];   // 全部本地视频
+
+    function refreshLocal() {
+        return api('/local-videos', { timeout: 15000 }).then(function (r) {
+            localAll = ((r.data || {}).files) || [];
+            localMap = {};
+            if (!curSeries) return r;
+            var safe = String(curSeries.name || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
+            localAll.forEach(function (f) {
+                // 文件名约定：<剧名>_<4位集号>.mp4
+                if (safe && f.name.indexOf(safe) !== 0) return;
+                var m = /_(\d{4})\.(mp4|mkv|mov|webm)$/i.exec(f.name);
+                if (!m) return;
+                var ep = parseInt(m[1], 10);
+                localMap[ep] = { path: f.path, name: f.name, sizeMB: (f.size / 1048576).toFixed(1) };
+            });
+            var meta = $('bgmEpMeta');
+            if (meta) {
+                var n = Object.keys(localMap).length;
+                meta.textContent = n ? ('本剧已下载 ' + n + ' 集到本地') : '';
+            }
+            return r;
+        }).catch(function () { return null; });
+    }
+
+    function openDownloadDir() {
+        api('/local-videos', { timeout: 10000 }).then(function (r) {
+            var dir = ((r.data || {}).dir) || '';
+            if (!dir) { flash('没拿到下载目录'); return; }
+            try { childProcess.exec('explorer.exe "' + dir + '"'); }
+            catch (e) { flash('打开目录失败'); }
+        }).catch(function (e) { flash(e.message); });
+    }
+
+    // ---------- 播放（本地文件，边下边看）----------
+    var playEp = 0;
+    var pendingAutoPlay = 0;   // 下载完成后自动播哪一集
+
+    function playEpisode(ep, vid) {
+        if (!localMap[ep]) {
+            flash('第 ' + ep + ' 集还没下载，正在下载…');
+            downloadEpisode(vid, ep, true);
+            return;
+        }
+        playLocal(ep);
+    }
+
+    function playLocal(ep) {
+        var loc = localMap[ep];
+        if (!loc) { flash('第 ' + ep + ' 集本地文件不存在'); return; }
+        var wrap = $('bgmPlayerWrap');
+        if (wrap) wrap.style.display = '';
+        playEp = ep;
+        $('bgmPlayerTitle').textContent = (curSeries && curSeries.name ? curSeries.name + ' ' : '') + '第 ' + ep + ' 集';
+        var v = $('bgmV');
+        if (!v) return;
+        v.src = API + '/video?file=' + encodeURIComponent(loc.path);
+        try { v.load(); v.play().catch(function () {}); } catch (e) {}
+        var info = $('bgmPlayerInfo');
+        if (info) info.textContent = loc.name + '  ' + loc.sizeMB + 'MB  ·  ' + loc.path;
+        try { localStorage.setItem('vh_bgm_last_ep', String(ep)); } catch (e) {}
+    }
+
+    function playNav(delta) {
+        if (!curSeries || !playEp) return;
+        var ep = playEp + delta;
+        if (ep < 1 || ep > (curSeries.vid_list || []).length) { flash('已经到头了'); return; }
+        var vid = curSeries.vid_list[ep - 1];
+        if (localMap[ep]) playLocal(ep);
+        else { flash('第 ' + ep + ' 集还没下载，正在下载…'); downloadEpisode(vid, ep, true); }
+    }
+
+    function closePlayer() {
+        var wrap = $('bgmPlayerWrap');
+        if (wrap) wrap.style.display = 'none';
+        var v = $('bgmV');
+        if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
+        playEp = 0;
     }
 
     // ---------- 扒歌 ----------
@@ -343,9 +428,12 @@
     }
 
     function startBgm(endpoint, body, label) {
+        // 纯下载 / 自动下载不需要网易云登录；只有扒歌（识别）才需要
+        var needLogin = (endpoint === '/single' || endpoint === '/batch')
+        var needSep = (endpoint !== '/download')
         ensureServer().then(function (h) {
-            if (!h.logged) { flash('未登录网易云，请先在「网易云」板块登录'); throw new Error('__stop'); }
-            if (!h.sherpa || !h.model) { flash('缺少人声分离组件'); throw new Error('__stop'); }
+            if (needLogin && !h.logged) { flash('未登录网易云，请先在「网易云」板块登录'); throw new Error('__stop'); }
+            if (needSep && (!h.sherpa || !h.model)) { flash('缺少人声分离组件'); throw new Error('__stop'); }
             return post(endpoint, body, 60000);
         }).then(function (r) {
             if (!r || r.code !== 0) { flash((r && r.msg) || '启动失败'); return; }
@@ -399,10 +487,35 @@
                 pollTimer = setTimeout(poll, 1200);
             } else {
                 hideProgress();
-                if (d.state === 'done') renderResult(d.result);
+                if (d.state === 'done') onJobDone(d);
                 else flash(d.msg || '任务结束');
             }
         }).catch(function () { pollTimer = setTimeout(poll, 2000); });
+    }
+
+    // 任务完成后的分发：下载类显示产物与路径，识别类渲染结果
+    function onJobDone(d) {
+        var res = d.result || {};
+        var jobKind = d.kind || '';
+        if (res.file) {
+            // 下载类任务
+            var mb = ((res.size || 0) / 1048576).toFixed(1);
+            flash('已下载 ' + mb + 'MB，共 ' + d.msg);
+            var info = $('bgmPlayerInfo');
+            if (info) info.textContent = '已保存到：' + res.file;
+            refreshLocal().then(function () {
+                if (pendingAutoPlay) {
+                    var ep = pendingAutoPlay;
+                    pendingAutoPlay = 0;
+                    if (localMap[ep]) playLocal(ep);
+                }
+            });
+            return;
+        }
+        if (jobKind === 'batch' || d.percent === 100) {
+            refreshLocal();
+        }
+        renderResult(res);
     }
 
     function hideProgress() {
@@ -513,6 +626,7 @@
     // ---------- 切 tab 时刷新 ----------
     function onShow() {
         ensureServer().catch(function () {});
+        refreshLocal();
     }
 
     function bind() {
@@ -536,6 +650,20 @@
         if (pc) pc.addEventListener('click', closePreview);
         var pe = $('btnBgmPreviewExternal');
         if (pe) pe.addEventListener('click', openExternalPreview);
+        // 下载目录 / 播放器
+        var od = $('btnBgmOpenDir');
+        if (od) od.addEventListener('click', openDownloadDir);
+        var pv = $('btnBgmPlayerPrev');
+        if (pv) pv.addEventListener('click', function () { playNav(-1); });
+        var nx = $('btnBgmPlayerNext');
+        if (nx) nx.addEventListener('click', function () { playNav(1); });
+        var cl = $('btnBgmPlayerClose');
+        if (cl) cl.addEventListener('click', closePlayer);
+        var vv = $('bgmV');
+        if (vv) vv.addEventListener('ended', function () {
+            var auto = $('bgmAutoNext');
+            if (auto && auto.checked) playNav(1);
+        });
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);

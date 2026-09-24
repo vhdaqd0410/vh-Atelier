@@ -433,6 +433,41 @@ function videoDir() {
   return d
 }
 
+// ── 本地视频供给（支持 Range，供 <video> 拖动进度）──
+function serveVideo(req, res, filePath) {
+  let st
+  try { st = fs.statSync(filePath) } catch (e) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' })
+    return res.end('not found')
+  }
+  const size = st.size
+  const range = req.headers.range
+  const base = {
+    'Content-Type': 'video/mp4',
+    'Accept-Ranges': 'bytes',
+    'Access-Control-Allow-Origin': '*',
+  }
+  if (range) {
+    const m = /bytes=(\d*)-(\d*)/.exec(range)
+    let start = m && m[1] ? parseInt(m[1], 10) : 0
+    let end = m && m[2] ? parseInt(m[2], 10) : size - 1
+    if (isNaN(start) || start < 0) start = 0
+    if (isNaN(end) || end >= size) end = size - 1
+    if (start > end) {
+      res.writeHead(416, Object.assign({}, base, { 'Content-Range': 'bytes */' + size }))
+      return res.end()
+    }
+    res.writeHead(206, Object.assign({}, base, {
+      'Content-Range': `bytes ${start}-${end}/${size}`,
+      'Content-Length': end - start + 1,
+    }))
+    fs.createReadStream(filePath, { start, end }).pipe(res)
+  } else {
+    res.writeHead(200, Object.assign({}, base, { 'Content-Length': size }))
+    fs.createReadStream(filePath).pipe(res)
+  }
+}
+
 // ── HTTP 服务 ──
 function send(res, code, obj) {
   const body = Buffer.from(JSON.stringify(obj), 'utf8')
@@ -878,13 +913,43 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { code: 0, data: info })
     }
 
+    if (p === '/video') {
+      // 供 <video> 播放本地已下载的集；只允许播放 collect/video 下的文件
+      const f = u.searchParams.get('file') || ''
+      const base = path.resolve(videoDir())
+      const full = path.resolve(f)
+      if (!f || full.indexOf(base) !== 0) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' })
+        return res.end('forbidden')
+      }
+      return serveVideo(req, res, full)
+    }
+
+    if (p === '/local-videos') {
+      // 列出已下载的视频（供播放器选集）
+      const dir = videoDir()
+      const out = []
+      try {
+        for (const f of fs.readdirSync(dir)) {
+          if (!/\.(mp4|mkv|mov|webm)$/i.test(f)) continue
+          const full = path.join(dir, f)
+          let sz = 0
+          try { sz = fs.statSync(full).size } catch (e) {}
+          if (sz < 10000) continue
+          out.push({ name: f, path: full, size: sz, mtime: fs.statSync(full).mtimeMs })
+        }
+      } catch (e) {}
+      out.sort((a, b) => b.mtime - a.mtime)
+      return send(res, 200, { code: 0, data: { dir, files: out } })
+    }
+
     if (p === '/status') {
       const id = u.searchParams.get('jobId') || ''
       const j = jobs[id]
       if (!j) return send(res, 200, { code: -1, msg: '任务不存在' })
       return send(res, 200, {
         code: 0, data: {
-          id: j.id, state: j.state, percent: j.percent, msg: j.msg,
+          id: j.id, kind: j.kind, state: j.state, percent: j.percent, msg: j.msg,
           elapsed: Math.round((Date.now() - j.startedAt) / 1000), result: j.result,
         },
       })
