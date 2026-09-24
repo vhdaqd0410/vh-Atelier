@@ -3442,3 +3442,70 @@ body.cx-resizing *{cursor:col-resize !important;}
     transition: width .12s linear;
 }
 .bgm-bar-seek:hover { height: 8px; }
+
+/* ===== 短剧扒歌 · 首页加载骨架屏 ===== */
+.bgm-sk { pointer-events: none; }
+.bgm-sk-cover {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    background: #262626;
+    border-radius: 6px;
+    animation: bgmSkPulse 1.3s ease-in-out infinite;
+}
+.bgm-sk-line {
+    height: 9px;
+    margin-top: 6px;
+    border-radius: 4px;
+    background: #262626;
+    animation: bgmSkPulse 1.3s ease-in-out infinite;
+}
+.bgm-sk-line.short { width: 60%; }
+.bgm-sk-cover, .bgm-sk-line { animation-delay: var(--d, 0s); }
+@keyframes bgmSkPulse {
+    0%, 100% { opacity: .45; }
+    50%      { opacity: .9; }
+}
+/* 错开相位，看起来更像在"流动" */
+.bgm-grid-card:nth-child(1)  .bgm-sk-cover, .bgm-grid-card:nth-child(1)  .bgm-sk-line { --d: 0s; }
+.bgm-grid-card:nth-child(2)  .bgm-sk-cover, .bgm-grid-card:nth-child(2)  .bgm-sk-line { --d: .1s; }
+.bgm-grid-card:nth-child(3)  .bgm-sk-cover, .bgm-grid-card:nth-child(3)  .bgm-sk-line { --d: .2s; }
+.bgm-grid-card:nth-child(4)  .bgm-sk-cover, .bgm-grid-card:nth-child(4)  .bgm-sk-line { --d: .3s; }
+.bgm-grid-card:nth-child(5)  .bgm-sk-cover, .bgm-grid-card:nth-child(5)  .bgm-sk-line { --d: .4s; }
+.bgm-grid-card:nth-child(6)  .bgm-sk-cover, .bgm-grid-card:nth-child(6)  .bgm-sk-line { --d: .5s; }
+.bgm-grid-card:nth-child(7)  .bgm-sk-cover, .bgm-grid-card:nth-child(7)  .bgm-sk-line { --d: .6s; }
+.bgm-grid-card:nth-child(8)  .bgm-sk-cover, .bgm-grid-card:nth-child(8)  .bgm-sk-line { --d: .7s; }
+
+/* 状态提示（等待服务/失败重试）*/
+.bgm-hot-status {
+    grid-column: 1 / -1;
+    padding: 26px 14px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.bgm-hot-status.err { color: var(--fg-warn-soft); }
+.bgm-hot-status::before {
+    content: '';
+    width: 22px;
+    height: 22px;
+    margin-bottom: 10px;
+    border: 2px solid rgba(255,255,255,.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: bgmSpin .8s linear infinite;
+}
+.bgm-hot-status.err::before { display: none; }
+@keyframes bgmSpin { to { transform: rotate(360deg); } }
+/* 服务启动中的状态文字加个小脉冲 */
+.music-server:not(.ok):not(.err)::after {
+    content: '';
+    display: inline-block;
+    width: 4px; height: 4px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: bgmSkPulse 1s ease-in-out infinite;
+}

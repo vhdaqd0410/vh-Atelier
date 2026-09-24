@@ -136,18 +136,80 @@
 
     // ---------- 首页热门瀑布流 ----------
     var hotKind = 'all';
-    function loadHot(kind) {
+    // 骨架屏（等待服务启动时给视觉反馈）
+    function hotSkeleton() {
+        var grid = $('bgmHotGrid');
+        if (!grid) return;
+        var s = '';
+        for (var i = 0; i < 8; i++) {
+            s += '<div class="bgm-grid-card bgm-sk"><div class="bgm-sk-cover"></div>' +
+                 '<div class="bgm-sk-line"></div><div class="bgm-sk-line short"></div></div>';
+        }
+        grid.innerHTML = s;
+        grid.setAttribute('data-loaded', '0');
+    }
+
+    function hotStatus(text, isErr, retry) {
+        var grid = $('bgmHotGrid');
+        if (!grid) return;
+        grid.innerHTML = '<div class="bgm-hot-status' + (isErr ? ' err' : '') + '">' +
+            '<div>' + esc(text) + '</div>' +
+            (retry ? '<button class="tbtn" id="bgmHotRetry" style="margin-top:8px;padding:3px 10px;font-size:11px;">重试</button>' : '') +
+            '</div>';
+        grid.setAttribute('data-loaded', '0');
+        if (retry) {
+            var b = $('bgmHotRetry');
+            if (b) b.addEventListener('click', function () { loadHot(hotKind, true); });
+        }
+    }
+
+    var hotLoading = false;
+    var hotAutoRetry = 0;          // 自动重试次数（有上限，防无限循环）
+    function loadHot(kind, force) {
+        if (force) hotAutoRetry = 0;   // 手动触发时重置
         hotKind = kind || hotKind;
         var grid = $('bgmHotGrid');
         if (!grid) return;
-        grid.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--muted);">\u6b63\u5728\u52a0\u8f7d\u70ed\u699c\u2026</div>';
-        api('/hot?kind=' + encodeURIComponent(hotKind), { timeout: 40000 }).then(function (r) {
-            if (r.code !== 0) { grid.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--ff-err-soft);">\u52a0\u8f7d\u5931\u8d25</div>'; return; }
-            renderHot(r.data || []);
+        // 非强制刷新 && 已加载过 → 不重复请求
+        if (!force && grid.getAttribute('data-loaded') === '1') return;
+        if (hotLoading) return;
+        hotLoading = true;
+
+        hotSkeleton();
+        // 关键：先等服务就绪（首次打开要 spawn node + 探测资源，可能几秒）
+        ensureServer().then(function () {
+            return api('/hot?kind=' + encodeURIComponent(hotKind), { timeout: 40000 });
+        }).then(function (r) {
+            hotLoading = false;
+            if (!r || r.code !== 0) {
+                hotStatus('榜单加载失败，请重试', true, true);
+                return;
+            }
+            var list = r.data || [];
+            renderHot(list);
+            grid.setAttribute('data-loaded', '1');
+            hotAutoRetry = 0;
         }).catch(function (e) {
-            grid.innerHTML = '<div style="padding:10px;font-size:11px;color:var(--muted);">\u52a0\u8f7d\u5931\u8d25\uff1a' + esc(e.message) + '</div>';
+            hotLoading = false;
+            // 服务未就绪：给一次自动重试，再失败才让用户点
+            var st = $('bgmSrvState');
+            var notReady = !st || st.textContent.indexOf('服务正常') < 0;
+            hotStatus(notReady ? '正在等待本地服务启动…' : ('加载失败：' + (e && e.message || e)),
+                      true, true);
+            // 最多自动再试 2 轮（服务通常几秒内就绪），之后交给用户点「重试」
+            if (hotAutoRetry < 2) {
+                hotAutoRetry++;
+                hotStatus(notReady ? ('正在等待本地服务启动…（已重试 ' + hotAutoRetry + '/2）')
+                                   : ('加载失败：' + (e && e.message || e) + '（已重试 ' + hotAutoRetry + '/2）'),
+                          true, true);
+                setTimeout(function () {
+                    var g2 = $('bgmHotGrid');
+                    if (g2 && g2.getAttribute('data-loaded') !== '1') loadHot(hotKind, true);
+                }, 3000);
+            }
         });
     }
+
 
     function renderHot(list) {
         var grid = $('bgmHotGrid');
@@ -174,11 +236,11 @@
             b.addEventListener('click', function () {
                 document.querySelectorAll('.bgm-hot-tab').forEach(function (x) { x.classList.remove('active'); });
                 b.classList.add('active');
-                loadHot(b.getAttribute('data-kind'));
+                loadHot(b.getAttribute('data-kind'), true);
             });
         });
         var rf = $('bgmHotRefresh');
-        if (rf) rf.addEventListener('click', function () { loadHot(hotKind); });
+        if (rf) rf.addEventListener('click', function () { loadHot(hotKind, true); });
     }
 
     // ---------- 搜索历史 ----------
@@ -1614,7 +1676,8 @@
         try { renderHist(); } catch (e) {}
         try {
             var grid = $('bgmHotGrid');
-            if (grid && !grid.children.length) loadHot('all');
+            // 用 data-loaded 标记判断（骨架屏会填充 children，不能用 children.length）
+            if (grid && grid.getAttribute('data-loaded') !== '1') loadHot('all');
         } catch (e) {}
     }
 
