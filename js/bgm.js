@@ -683,7 +683,7 @@
     // 强制重扒
     function rePickEpisode(vid, epNo) {
         if (!curSeries) return;
-        delete resultCache[epNo]; saveResults();
+        delete resultCache[ckey(epNo)]; saveResults();
         lastPickEp = epNo;
         startBgm('/episode', {
             series_id: curSeries.series_id, vid: vid, name: curSeries.name, ep: epNo,
@@ -711,10 +711,10 @@
     try {
         resultCache = JSON.parse(localStorage.getItem('vh_bgm_results') || '{}');
         // 迁移：旧格式 key 是纯数字集号（会跨剧串），上线隔离后清掉一次
-        if (localStorage.getItem('vh_bgm_keyver') !== '2') {
+        if (localStorage.getItem('vh_bgm_keyver') !== '3') {
             resultCache = {};
             bgmMarks = {};
-            localStorage.setItem('vh_bgm_keyver', '2');
+            localStorage.setItem('vh_bgm_keyver', '3');
         }
     } catch (e) { resultCache = {}; }
     function saveResults() { try { localStorage.setItem('vh_bgm_results', JSON.stringify(resultCache)); } catch (e) {} }
@@ -1633,7 +1633,20 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             refreshLocal().then(function () { if (curSeries) renderSeries(); });
         }
         renderResult(res);
-        if (res && res.songs && (playEp || lastPickEp)) cacheResult(playEp || lastPickEp, res);
+        // 统一在此写缓存：批量结果带 perEp（逐集），单集结果带 ep
+        try {
+            if (res && res.songs && res.ep) {
+                cacheResult(res.ep, res);
+            } else if (res && res.perEp && res.perEp.length) {
+                res.perEp.forEach(function (pe) {
+                    if (pe && pe.ep && pe.songs && pe.songs.length) {
+                        cacheResult(pe.ep, { songs: pe.songs });
+                    }
+                });
+            } else if (res && res.songs && lastPickEp) {
+                cacheResult(lastPickEp, res);   // 兜底：按最近扒过的那集
+            }
+        } catch (e) {}
     }
 
     function hideProgress() {
@@ -1656,8 +1669,9 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
     function renderResult(res) {
         if (!res) return;
         lastResult = res;
-        // 该集结果入缓存（下次直接展示，不重扒）
-        if (playEp && res.songs) cacheResult(playEp, res);
+        // 该集结果入缓存：用结果自带的集号（服务端返回）
+        // 缓存对象（cached:true）不会再写，避免覆盖
+        if (res.ep && res.songs && !res.cached) cacheResult(res.ep, res);
         // 若当前正在播放该集，把命中点记下来画到进度条
         if (playEp && res.songs && res.songs.length) rememberMarks(playEp, res.songs);
         drawMarkers(playEp);

@@ -887,6 +887,8 @@ async function runEpisode(job, seriesId, vid, seriesName, epNo, start, end) {
       job.msg = m
     })
     await ripWav(job, r.file, start, end)
+    // 让结果自带集号，前端据此写缓存（不再依赖"正在播放的那集"）
+    if (job.result) job.result.ep = epNo
   } catch (e) {
     job.state = 'error'; job.msg = e.message
   }
