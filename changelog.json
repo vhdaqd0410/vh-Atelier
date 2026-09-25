@@ -4,6 +4,27 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "修转码产物损坏（卡顿/花屏/死循环根因）",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "转码统一用 libx264：原来 h264_nvenc 参数错误直接失败、h264_mf 产 Constrained Baseline 导致软解卡顿花屏"
+        },
+        {
+          "kind": "fix",
+          "text": "转码加进程锁：下载后静默转码与点播放转码并发写同一文件会写坏，现在只转一次"
+        },
+        {
+          "kind": "fix",
+          "text": "临时文件+原子重命名：杜绝半成品/损坏产物被播放器读到"
+        },
+        {
+          "kind": "fix",
+          "text": "临时文件放系统临时目录，避开中文剧名超长路径限制"
+        }
+      ]
+    },
+    {
       "title": "修转码完成无限循环",
       "items": [
         {

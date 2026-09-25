@@ -516,32 +516,57 @@ async function downloadSongFile(songId, name, artist, cookie) {
 
 // ── 转码兜底：HEVC → H.264（部分机器 Chromium 硬解不支持会黑屏）──
 // 产物缓存到 collect/video/_h264/，同名 .mp4，避免重复转码。
-async function ensureH264(srcPath) {
-  const dir = path.join(videoDir(), '_h264')
-  fs.mkdirSync(dir, { recursive: true })
-  const dst = path.join(dir, path.basename(srcPath))
-  if (fs.existsSync(dst) && fs.statSync(dst).size > 10000) return dst
+// 转码互斥锁：同一目标文件并发只转一次（下载后静默队列 + 用户点播放可能同时触发）
+const h264Locks = {}        // dstPath -> Promise（进行中的转码）
 
-  // 编码器探测：按硬件优先，逐个实际试编一帧
-  const cands = ['h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_mf', 'libx264']
-  for (const enc of cands) {
-    try {
-      await runProc(findFfmpeg(), [
-        '-y', '-v', 'error', '-i', srcPath, '-t', '0.1',
-        '-c:v', enc, '-an', '-f', 'null', '-',
-      ], { timeout: 30000 })
-    } catch (e) { continue }
+function h264Target(srcPath) {
+  return path.join(videoDir(), '_h264', path.basename(srcPath))
+}
+
+function ensureH264(srcPath) {
+  // 只转 H.264，供 CEP 的 Chromium(99) 软解播放。
+  // 统一用 libx264：标准 High profile，软解流畅、画质正常，参数简单可靠。
+  // 不能用 h264_nvenc（本机 ffmpeg 的 nvenc 要数字 preset，传 veryfast 直接失败）
+  // 也不能用 h264_mf（Media Foundation 产 Constrained Baseline，软解卡顿花屏）
+  const dst = h264Target(srcPath)
+  fs.mkdirSync(path.dirname(dst), { recursive: true })
+
+  // 已有完整产物，直接返回
+  try {
+    if (fs.existsSync(dst) && fs.statSync(dst).size > 10000) return Promise.resolve(dst)
+  } catch (e) {}
+
+  // 同一目标正在转：复用那个 Promise，等它完成，不重复转
+  if (h264Locks[dst]) return h264Locks[dst]
+
+  const job = (async () => {
+    // 临时文件放系统临时目录（短路径），避免中文剧名 + 后缀导致超过 Windows 路径上限
+    const tmp = path.join(os.tmpdir(), 'vhbgm_h264_' + Date.now() + '_' + Math.floor(Math.random() * 100000) + '.mp4')
     try {
       await runProc(findFfmpeg(), [
         '-y', '-v', 'error', '-i', srcPath,
-        '-c:v', enc, '-preset', 'veryfast', '-crf', '20',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+        '-profile:v', 'high', '-pix_fmt', 'yuv420p',
         '-c:a', 'aac', '-b:a', '128k',
-        '-movflags', '+faststart', dst,
+        '-movflags', '+faststart', tmp,
       ], { timeout: 3600000 })
-      if (fs.existsSync(dst) && fs.statSync(dst).size > 10000) return dst
-    } catch (e) { /* 换下一个编码器 */ }
-  }
-  throw new Error('转码失败：没有可用的 H.264 编码器')
+      if (!fs.existsSync(tmp) || fs.statSync(tmp).size <= 10000) {
+        throw new Error('转码产物为空或过小')
+      }
+      // 原子替换：先删旧的再改名，避免半成品被读到
+      try { fs.unlinkSync(dst) } catch (e) {}
+      fs.renameSync(tmp, dst)
+      return dst
+    } catch (e) {
+      try { fs.unlinkSync(tmp) } catch (e2) {}
+      throw e
+    }
+  })()
+
+  h264Locks[dst] = job
+  // 完成后清理锁（成功/失败都清）
+  job.then(function () { delete h264Locks[dst] }, function () { delete h264Locks[dst] })
+  return job
 }
 
 // ── 探测视频编码（HEVC 在 CEP 的 Chromium 里解不了，会黑屏有声音）──
