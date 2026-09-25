@@ -876,7 +876,9 @@
         // 从歌曲模式切回视频：停掉试听
         songMode = false;
         if (inlineAudio) { try { inlineAudio.pause(); } catch (e) {} }
-        v.src = API + '/video?file=' + encodeURIComponent(loc.path);
+        // prefer=h264：服务端若有转码好的 H.264 版就供给它。
+        // CEP 的 Chromium(99) 解不了 HEVC，直接播原文件会黑屏有声音。
+        v.src = API + '/video?prefer=h264&t=' + Date.now() + '&file=' + encodeURIComponent(loc.path);
         v.dataset.ep = String(ep);
         try { v.load(); v.play().catch(function () {}); } catch (e) {}
         drawMarkers(ep);
@@ -894,17 +896,26 @@
         var v = $('bgmV');
         if (!v) return;
         v.addEventListener('playing', function () {
-            // 播 2.5 秒后检查是否真的在当前时间推进（黑屏时 readyState 高但画面不动）
-            var t0 = v.currentTime, ep = v.dataset.ep;
-            setTimeout(function () {
+            // 判据用 videoWidth：解不出画面时它是 0（HEVC 黑屏的典型特征）。
+            // 原来用 currentTime 判断是错的 —— 黑屏时音频照常播、时间照常走，永不触发。
+            var ep = v.dataset.ep;
+            var tries = 0;
+            var chk = function () {
+                tries++;
                 if (v.paused || !ep) return;
-                if (v.currentTime - t0 < 0.3) {
-                    flash('该集在本地播放异常，正在转码为兼容格式…');
-                    post('/transcode', { file: localMap[ep] ? localMap[ep].path : '' }, 60000).then(function (r) {
-                        if (r && r.code === 0) { curJobId = r.data.jobId; showProgress('转码'); poll(); }
-                    }).catch(function () {});
-                }
-            }, 2500);
+                if (v.videoWidth > 0) return;            // 有画面，正常
+                if (tries < 4) { setTimeout(chk, 700); return; }
+                // 确认黑屏：自动转码并接续播放
+                flash('这集是 HEVC 编码，播放器解不了，正在转码…');
+                post('/transcode', { file: localMap[ep] ? localMap[ep].path : '' }, 60000).then(function (r) {
+                    if (r && r.code === 0) {
+                        curJobId = r.data.jobId;
+                        showProgress('转码');
+                        pollTranscode(r.data.jobId, ep);
+                    }
+                }).catch(function () {});
+            };
+            setTimeout(chk, 1200);
         });
         // 彻底报错也有提示
         v.addEventListener('error', function () {
@@ -1587,6 +1598,58 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         }).catch(function () { pollTimer = setTimeout(poll, 2000); });
     }
 
+    // 转码任务：转完自动接续播放该集（用户不用手动重开）
+    function pollTranscode(jobId, ep) {
+        if (!jobId) return;
+        if (pollTimer) clearTimeout(pollTimer);
+        api('/status?jobId=' + encodeURIComponent(jobId), { timeout: 15000 }).then(function (r) {
+            var d = r.data || {};
+            if (r.code !== 0) { flash('转码任务丢失'); hideProgress(); return; }
+            setProg(d.percent || 0, d.msg || '转码中', '转码为 H.264（播放器兼容格式）');
+            if (d.state === 'running') {
+                pollTimer = setTimeout(function () { pollTranscode(jobId, ep); }, 1200);
+            } else {
+                hideProgress();
+                if (d.state === 'done') {
+                    flash('转码完成，重新播放第 ' + ep + ' 集');
+                    var loc = localMap[ep];
+                    if (loc) { playLocal(ep); }   // 用新生成的 H.264 版重开
+                } else {
+                    flash(d.msg || '转码失败');
+                }
+            }
+        }).catch(function () { pollTimer = setTimeout(function () { pollTranscode(jobId, ep); }, 2000); });
+    }
+
+    // 后台静默转码队列：显示"后台优化中 N 集"，转完自动刷新本地列表
+    var tcTimer = null, tcLastPending = -1;
+    function watchTranscodeQueue() {
+        if (tcTimer) return;
+        var tick = function () {
+            api('/transcode-status', { timeout: 10000 }).then(function (r) {
+                var dz = r.data || {};
+                var pend = dz.pending || 0;
+                var el = $('bgmTcHint');
+                if (el) {
+                    if (pend > 0) {
+                        el.style.display = '';
+                        el.textContent = '后台优化中（HEVC→H.264）剩 ' + pend + ' 集' +
+                            (dz.done ? '，已完成 ' + dz.done : '');
+                    } else {
+                        el.style.display = 'none';
+                    }
+                }
+                // 从"有任务"变"没任务" = 转完一批，刷新本地列表
+                if (tcLastPending > 0 && pend === 0) {
+                    try { refreshLocal().then(function () {}); } catch (e) {}
+                }
+                tcLastPending = pend;
+            }).catch(function () {});
+            tcTimer = setTimeout(tick, 4000);
+        };
+        tick();
+    }
+
     // 任务完成后的分发：下载类显示产物与路径，识别类渲染结果
     function onJobDone(d) {
         var res = d.result || {};
@@ -1998,6 +2061,7 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
     var uiRestored = false;
     function onShow() {
         try { ensureServer().catch(function () {}); } catch (e) {}
+        try { watchTranscodeQueue(); } catch (e) {}
         try { refreshLocal().then(function () { try { saveUiState(); } catch (e) {} }); } catch (e) {}
         try { renderHist(); } catch (e) {}
         // 首次进入本会话：尝试恢复上次页面；已有内容则不动

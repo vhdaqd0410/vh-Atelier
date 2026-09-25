@@ -2,24 +2,23 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>vh-Atelier A</title>
+    <title>vh-Atelier</title>
     <link rel="stylesheet" href="css/atelier.css">
 </head>
 <body>
     <div class="top-head">
-        <h1>vh-Atelier A</h1>
+        <h1>vh-Atelier</h1>
         <button type="button" id="btnSite" class="site-btn" title="打开官网：功能说明 / 截图 / 下载 / 提需求">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8c2.5 3 3.8 5.9 3.8 9.2S14.5 18.2 12 21.2c-2.5-3-3.8-5.9-3.8-9.2S9.5 5.8 12 2.8z"/></svg>
             官网<span class="sd"></span>
         </button>
-        <button type="button" id="btnLicense" class="log-btn" title="授权：登录账号解锁受限功能">🔑 授权</button>
         <span class="sep"></span>
         <button type="button" id="btnHistory" class="log-btn" title="版本更新历史：每个版本改了什么、修了什么">📋 历史</button>
-        <button type="button" id="btnUpdate" class="log-btn" title="在线更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
+        <button type="button" id="btnUpdate" class="log-btn" title="检查更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
         <button type="button" id="btnFeedback" class="log-btn" title="在线反馈：提 Bug / 需求 / 意见">📮 反馈</button>
         <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">📄<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
     </div>
-    <div class="sub">素材 · 剧本 · 超分 · 声音 · 审片 · 交付 六工作台</div>
+    <div class="sub">素材 · 剧本 · 超分 · 字幕 · 声音 · 审片 · 交付 · 进度 八工作台</div>
 
     <!-- 错误日志浮层 -->
     <div id="logOverlay" class="log-overlay" style="display:none;">
@@ -40,80 +39,33 @@
     </div>
 
     <div class="ws-groups">
-        <button class="ws-group active" data-group="home">🏠 首页</button>
         <button class="ws-group" data-group="media">🗂 素材</button>
         <button class="ws-group" data-group="script">📖 剧本</button>
+        <button class="ws-group active" data-group="progress">进度</button>
+        <button class="ws-group" data-group="todo">📝 待办</button>
         <button class="ws-group" data-group="upscale">✨ 超分</button>
+        <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
-        <button class="ws-group" data-group="prconv">🔧 工具</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
+        <button class="ws-group" data-group="prconv">🔧 工具</button>
+        <button class="ws-group" data-group="admin">⚙ 管理<span id="adminBadge" class="ws-badge" style="display:none;">0</span></button>
     </div>
 
-    <!-- ==================== 首页（启动默认展示，工作台快捷入口） ==================== -->
-    <div class="tab-panel" id="panel-home">
-        <div class="home-hero">
-            <div class="home-kick">vh-Atelier A · 剪辑工作台</div>
-            <h1 class="home-title">从一个工作台开始</h1>
-            <p class="home-lede">素材导入 → 剧本阅读 → 超分去字幕 → 声音处理 → 审片 → 多版本交付。点下面的卡片直接进入对应工作台。</p>
-        </div>
-
-        <div class="home-grid">
-            <button type="button" class="home-card" data-goto="media">
-                <span class="hc-ico">🗂</span>
-                <span class="hc-t">素材</span>
-                <span class="hc-d">浏览本地目录，勾选后批量导入 PR 素材箱</span>
-            </button>
-            <button type="button" class="home-card" data-goto="script">
-                <span class="hc-ico">📖</span>
-                <span class="hc-t">剧本</span>
-                <span class="hc-d">读 docx / pdf，自动拆解角色与集数</span>
-            </button>
-            <button type="button" class="home-card" data-goto="upscale">
-                <span class="hc-ico">✨</span>
-                <span class="hc-t">超分</span>
-                <span class="hc-d">超分 / 去字幕，导出送云端处理后自动导回</span>
-            </button>
-            <button type="button" class="home-card" data-goto="audio">
-                <span class="hc-ico">🎵</span>
-                <span class="hc-t">声音</span>
-                <span class="hc-d">人声分离 · 音效库 · 音乐库 · 网易云</span>
-            </button>
-            <button type="button" class="home-card" data-goto="shenpian">
-                <span class="hc-ico">🎬</span>
-                <span class="hc-t">审片</span>
-                <span class="hc-d">分秒帧内嵌，看批注不用切出 PR</span>
-            </button>
-            <button type="button" class="home-card" data-goto="deliver">
-                <span class="hc-ico">📦</span>
-                <span class="hc-t">交付</span>
-                <span class="hc-d">多版本导出 · 视频下载</span>
-            </button>
-        </div>
-
-        <div class="home-sec">快速上手</div>
-        <div class="home-steps">
-            <div class="home-step"><b>1</b><div><span>导入素材</span><i>「素材」里选目录，勾选后一键进 PR 素材箱</i></div></div>
-            <div class="home-step"><b>2</b><div><span>处理画面</span><i>选中序列或片段，「超分」送云端处理并自动导回</i></div></div>
-            <div class="home-step"><b>3</b><div><span>补声音</span><i>「声音」里分离人声、找音效与音乐，拖进时间轴</i></div></div>
-            <div class="home-step"><b>4</b><div><span>出成片</span><i>「交付」里勾版本，成片 / 无字幕 / 无音乐一次导出</i></div></div>
-        </div>
-
-        <div class="home-foot">
-            <span id="homeVer">vh-Atelier A</span>
-            <span class="home-links">
-                <a href="#" id="homeUpd">检查更新</a>
-                <a href="#" id="homeFb">提反馈</a>
-            </span>
-        </div>
+    <div class="tabs ws-subtabs" data-group="progress">
+        <button class="tab active" data-tab="progress">项目进度</button>
     </div>
-
-    
-    
-    
+    <div class="tabs ws-subtabs" data-group="todo" style="display:none;">
+        <button class="tab active" data-tab="todo">今日待办</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="sub" style="display:none;">
+        <button class="tab active" data-tab="subtitle">字幕识别</button>
+        <button class="tab" data-tab="check">字幕校对</button>
+    </div>
     <div class="tabs ws-subtabs" data-group="audio" style="display:none;">
-        <button class="tab active" data-tab="separate">人声分离</button>
+        <button class="tab" data-tab="separate">人声分离</button>
+        <button class="tab" data-tab="clone">语音克隆</button>
         <button class="tab" data-tab="musiclib">音乐库</button>
         <button class="tab" data-tab="sfx">音效库</button>
         <button class="tab" data-tab="music">网易云</button>
@@ -123,12 +75,11 @@
         <button class="tab" data-tab="export">多版本导出</button>
         <button class="tab" data-tab="video">视频下载</button>
     </div>
-    <div class="tabs ws-subtabs" data-group="media" style="display:none;">
-        <button class="tab active" data-tab="media">素材库</button>
-        <button class="tab" data-tab="project">项目</button>
-    </div>
     <div class="tabs ws-subtabs" data-group="script" style="display:none;">
         <button class="tab" data-tab="script">剧本阅读</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="media" style="display:none;">
+        <button class="tab active" data-tab="media">素材浏览</button>
     </div>
     <div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
         <button class="tab active" data-tab="upscale">去字幕 / 超分</button>
@@ -136,9 +87,85 @@
     <div class="tabs ws-subtabs" data-group="feedback" style="display:none;">
         <button class="tab active" data-tab="feedback">反馈中心</button>
     </div>
-<div class="tabs ws-subtabs" data-group="prconv" style="display:none;">
+    <div class="tabs ws-subtabs" data-group="prconv" style="display:none;">
         <button class="tab active" data-tab="prconv">PR 版本转换</button>
+        <button class="tab" data-tab="colorxml">调色 XML</button>
     </div>
+
+    <!-- ==================== 板块一：字幕识别 ==================== -->
+    <div class="tab-panel" id="panel-subtitle" style="display:none;">
+        <div class="card">
+            <h2>1 · 序列（可多选）</h2>
+            <div class="row">
+                <button id="btnRefreshSeq" class="secondary">刷新序列列表</button>
+                <button id="btnToggleAll" class="secondary">全选</button>
+            </div>
+            <div id="seqList"><div class="hint" style="padding:6px 8px;">点「刷新序列列表」加载项目所有序列</div></div>
+        </div>
+
+        <div class="card">
+            <h2>2 · 识别设置</h2>
+            <label>语言</label>
+            <select id="selLang">
+                <option value="zh" selected>中文</option>
+                <option value="en">英文</option>
+                <option value="auto">自动检测</option>
+                <option value="ja">日语</option>
+                <option value="ko">韩语</option>
+            </select>
+            <label style="margin-top:10px;">识别基准</label>
+            <select id="selRange">
+                <option value="all" selected>整条时间轴</option>
+                <option value="inout">入点到出点</option>
+                <option value="selection">选中的片段</option>
+            </select>
+            <div class="note" style="margin-top:4px;">入点/出点：先在时间轴按 I / O 设置范围；选中片段：先在时间轴点选块</div>
+            <label style="margin-top:10px;">模型</label>
+            <select id="selModel">
+                <option value="funasr-zh">FunASR（中文·paraformer，1.2GB）</option>
+                <option value="ggml-large-v3-q5_0.bin">large-v3（英文/多语言，1.0GB）</option>
+            </select>
+            <div class="note" style="margin-top:4px;">中文→FunASR（paraformer，断句细、抗噪强）；英文/其他→whisper large-v3</div>
+            <div class="check-row">
+                <input type="checkbox" id="chkGpu" checked>
+                <label for="chkGpu" style="margin:0; display:inline;">使用 GPU 加速（NVIDIA CUDA）</label>
+            </div>
+            <div class="note" style="margin-top:4px;">GPU 仅对英文 whisper 生效；中文 FunASR 纯 CPU 已比实时快 30 倍</div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 执行</h2>
+            <div class="row">
+                <button id="btnBatch">批量识别选中序列</button>
+                <button id="btnStop" class="danger" style="flex:0 0 64px; display:none;">停止</button>
+            </div>
+            <div class="progress-wrap" id="wsProgressWrap">
+                <div class="progress-bar"><div class="fill indet" id="wsProgressFill"></div></div>
+                <div id="wsProgressText"></div>
+                <div id="wsProgressTime"></div>
+            </div>
+            <div id="wsStatus"></div>
+        </div>
+
+        <div class="card" id="resultCard" style="display:none;">
+            <h2>4 · 识别结果</h2>
+            <div id="resultSummary"></div>
+            <div id="subtitleList"></div>
+            <div class="row" style="margin-top:10px;">
+                <button id="btnWriteBack">回写当前序列</button>
+                <button id="btnExportSrt" class="secondary">导出当前 SRT</button>
+                <button id="btnToCheck" class="secondary">校对当前字幕</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="btnTranslate" class="secondary">翻译成中文（剧情参考）</button>
+                <button id="btnBilingual" class="secondary">导入双语字幕</button>
+            </div>
+        </div>
+
+        
+    </div>
+
+    
 
     <!-- 人声分离（从字幕工作台迁至声音工作台） -->
     <div class="tab-panel" id="panel-sep" style="display:none;">
@@ -169,7 +196,116 @@
         </div>
     </div>
 
-<!-- ==================== 板块三：音效库 ==================== -->
+<!-- ==================== 板块二：语音克隆 ==================== -->
+    <div class="tab-panel" id="panel-clone" style="display:none;">
+        <div class="card">
+            <h2>1 · 参考音色</h2>
+            <div class="hint" style="margin-bottom:6px;">两种方式拿参考音频：① 时间轴选片段点「抓取」；② 从项目素材列表选一个并指定片段范围。</div>
+            <div class="row">
+                <button id="btnGrab">从时间轴抓取参考音色</button>
+            </div>
+            <div class="ref-box" id="refInfo">尚未抓取参考音频</div>
+            <label style="margin-top:10px;">参考音频对应文字（说什么就填什么）</label>
+            <div class="row" style="margin-top:4px;">
+                <input type="text" id="refText" placeholder="例如：今天天气真不错" style="flex:1;">
+                <button id="btnAutoRef" class="secondary mini">自动识别</button>
+            </div>
+            <div class="hint">自动识别会用 whisper 听一遍参考音频，识别结果自动填入，建议核对后使用。</div>
+
+            <div class="divider"></div>
+            <h2 style="margin-top:2px;">或从项目素材选择</h2>
+            <div class="row" style="margin-top:6px;">
+                <select id="projectMediaSel" style="flex:1;"><option value="">（点「刷新」加载项目素材）</option></select>
+                <button id="btnRefreshMedia" class="secondary mini">刷新</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <label style="margin:0;flex:0 0 auto;">起始秒</label>
+                <input type="text" id="mediaStart" placeholder="0" style="flex:1;">
+                <label style="margin:0;flex:0 0 auto;">时长秒</label>
+                <input type="text" id="mediaDur" placeholder="5" style="flex:1;">
+            </div>
+            <div class="row" style="margin-top:8px;">
+                <button id="btnGrabFromMedia" class="secondary">从项目素材截取参考音频</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>2 · 合成文本 & 语速</h2>
+            <label>要克隆说出的文字</label>
+            <textarea id="ttsText" rows="3" placeholder="输入要合成的话，中英文均可"></textarea>
+            <div class="grid2" style="margin-top:10px;">
+                <div>
+                    <label>语速 <span id="speedVal" style="color:var(--accent);font-weight:600;">1.0</span>×</label>
+                    <div class="speed-row">
+                        <input type="range" id="speedRange" min="0.5" max="2.0" step="0.05" value="1.0">
+                        <span class="val" id="speedLabel">1.0×</span>
+                    </div>
+                </div>
+                <div>
+                    <label>模型</label>
+                    <select id="modelSel">
+                        <option value="base" selected>基础版（llm.pt）</option>
+                        <option value="rl">RL 强化学习版（llm.rl.pt）</option>
+                    </select>
+                </div>
+            </div>
+            <div class="hint">模型：基础版音色稳定；RL 版内容准确度更高（官方 CER 0.81 vs 1.21），效果不满意可切换对比。</div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 生成</h2>
+            <div class="row">
+                <button id="btnClone" disabled>克隆生成</button>
+            </div>
+            <div class="progress-wrap" id="vcProgressWrap">
+                <div class="progress-bar"><div class="fill indet" id="vcProgressFill"></div></div>
+                <div id="vcProgressText"></div>
+            </div>
+            <div id="vcStatus"></div>
+            <div class="result-info" id="resultInfo"></div>
+            <div class="row" style="margin-top:10px;">
+                <button id="btnPlay" class="secondary" disabled>▶ 试听</button>
+                <button id="btnImport" class="secondary" disabled>导入素材箱</button>
+            </div>
+            <div class="player-panel" id="playerPanel">
+                <span class="ptime" id="playCur">0:00</span>
+                <div class="seek" id="seekBar"><div class="seek-fill" id="seekFill"></div></div>
+                <span class="ptime" id="playDur">0:00</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>4 · 导入到时间线</h2>
+            <div class="grid2">
+                <div>
+                    <label>目标音轨</label>
+                    <select id="trackSel"><option value="">（未加载）</option></select>
+                </div>
+                <div>
+                    <label>标签颜色</label>
+                    <select id="colorSel">
+                        <option value="0">蓝 Iris</option>
+                        <option value="1">绿 Forest</option>
+                        <option value="2">粉 Rose</option>
+                        <option value="3" selected>橙 Mango</option>
+                        <option value="4">紫 Violet</option>
+                        <option value="5">青 Caribbean</option>
+                        <option value="6">紫红 Lavender</option>
+                        <option value="7">灰 Slate</option>
+                    </select>
+                </div>
+            </div>
+            <label style="margin-top:8px;">插入位置（秒，默认播放头）</label>
+            <input type="text" id="insertPos" placeholder="留空 = 播放头位置">
+            <div class="row" style="margin-top:8px;">
+                <button id="btnRefreshTrack" class="secondary mini">刷新音轨</button>
+                <button id="btnInsertTimeline" class="secondary" disabled>插入到时间线</button>
+            </div>
+            <div class="hint">插入语义：新片段插到指定轨道，后续片段整体后移，不覆盖任何已有音频。</div>
+        </div>
+    </div>
+
+    <!-- ==================== 板块三：音效库 ==================== -->
     <div class="tab-panel" id="panel-sfx" style="display:none;">
         <!-- 本地音效库视图 -->
         <div id="sfx-local">
@@ -462,8 +598,6 @@
         <audio id="musicAudio" style="display:none;"></audio>
     </div>
 
-    
-
     <!-- ==================== 板块：短剧扒歌 ==================== -->
     <div class="tab-panel" id="panel-bgm" style="display:none;">
         <div class="bgm-wrap">
@@ -606,6 +740,7 @@
                     <div class="bgm-player-foot">
                         <div id="bgmMarkerBar" style="display:none;"></div>
                         <div id="bgmMarkerTip" class="bgm-player-tip"></div>
+                        <div id="bgmTcHint" class="bgm-player-tip" style="display:none;color:var(--fg-warn-soft);"></div>
                     </div>
                     <div id="bgmPlayerInfo" class="bgm-player-info"></div>
                 </div>
@@ -672,7 +807,8 @@
                 style="width:64px;flex:0 0 auto;" title="音量">
         </div>
     </div>
-<!-- ==================== 板块四：多版本导出 ==================== -->
+
+    <!-- ==================== 板块四：多版本导出 ==================== -->
     <div class="tab-panel" id="panel-export" style="display:none;">
         <div class="exp-header">
             <span class="dot" id="status-dot"></span>
@@ -748,159 +884,265 @@
 
         <div class="btns">
             <button id="btn-go">一键导出</button>
-            <button id="btn-preflight" title="导出前先检查配置：序列/目录/预设/权限，避免导到一半才失败">🔍 导出前体检</button>
             <button id="btn-stop" disabled>停止</button>
             <button id="btn-refresh">刷新</button>
             <button id="btn-open-out" title="导出完成后用文件管理器打开输出文件夹">📂 打开输出目录</button>
         </div>
 
-        <!-- 体检结果面板 -->
-        <div class="group" id="preflight-box" style="display:none;">
-            <div class="group-title">
-                <span>导出前体检</span>
-                <span id="preflight-sum"></span>
-            </div>
-            <div id="preflight-list" style="font-size:12px;line-height:1.85;"></div>
-        </div>
-
         <div class="log" id="log"></div>
     </div>
 
-    <!-- ==================== 项目（NAS 拉素材 + 建本地项目） ==================== -->
-    <div class="tab-panel" id="panel-project" style="display:none;">
-        <div class="pj-wrap">
+    <!-- ==================== 板块五：字幕校对 ==================== -->
+    <div class="tab-panel" id="panel-check" style="display:none;">
+        <div class="card">
+            <h2>1 · 选字幕与剧本</h2>
+            <label>字幕 SRT（在项目面板点选一个字幕素材，然后点「读取选中」）</label>
+            <div class="row" style="margin-top:4px;">
+                <button id="ckPickSelected" class="secondary">读取项目选中的字幕</button>
+                <span class="ck-path" id="ckSrtPath">未选择</span>
+                <span class="ck-srt-badge" id="ckSrtBadge">✓ 已选择</span>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="ckPickSrt" class="secondary">或选择 SRT 文件…</button>
+            </div>
+            <label style="margin-top:10px;">剧本 docx（台词标准答案）</label>
+            <div class="row">
+                <button id="ckPickDocx" class="secondary">选择剧本目录…</button>
+                <span class="ck-path" id="ckDocxPath">未选择</span>
+                <span class="ck-srt-badge" id="ckDocxBadge">✓ 已选择</span>
+            </div>
+            <div id="ckDocxList" style="display:none;"></div>
+            <label style="margin-top:10px;">校对集数</label>
+            <div class="row">
+                <input type="text" id="ckEpisode" value="第一集" placeholder="例如：第一集 / 1 / 第2集" style="flex:1;">
+            </div>
+            <div class="hint" style="margin-top:6px;">集数写「第一集」「1」「第2集」都行；剧本台词是标准答案，字幕应逐字对齐。</div>
+        </div>
 
-            <!-- 路径配置（可折叠） -->
-            <div class="pj-group" id="pjCfgGroup">
-                <div class="pj-ghead">
-                    <span id="pjCfgToggle" class="pj-toggle">▾</span>
-                    <span>路径配置</span>
-                    <span id="pjCfgSummary" class="pj-cfg-sum" style="display:none;"></span>
-                    <button id="pjSaveCfg" class="secondary mini" style="margin-left:auto;">保存配置</button>
+        <div class="card">
+            <h2>2 · 全局替换字典（所有项目通用，应用修正时自动生效）</h2>
+            <div class="hint" style="margin-bottom:6px;">中英文通用：英文如 bitch → b*tch（按词边界），中文如 傻逼 → **（直接替换）。字典存成本地文件，可手动批量编辑，长期维护。</div>
+            <div class="row" style="margin-top:4px;">
+                <button id="ckDictToggle" class="secondary mini">收起列表</button>
+                <span id="ckDictCount" style="font-size:11px;color:var(--muted);flex:0 0 auto;"></span>
+                <input type="text" id="ckDictSearch" placeholder="搜索原词或替换词…" style="flex:1;">
+            </div>
+            <div class="row" id="ckDictAddRow" style="margin-top:6px;">
+                <input type="text" id="ckDictFrom" placeholder="原词，如 bitch / 傻逼" style="flex:1;">
+                <span class="ck-dict-arrow">→</span>
+                <input type="text" id="ckDictTo" placeholder="替换为，如 b*tch / **" style="flex:1;">
+                <button id="ckDictAdd" class="secondary">添加</button>
+            </div>
+            <div id="ckDictList"></div>
+            <div class="row" style="margin-top:8px;">
+                <button id="ckDictOpen" class="secondary mini">打开字典文件</button>
+                <button id="ckDictReload" class="secondary mini">重新加载</button>
+                <span class="ck-path" id="ckDictPath" title=""></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 执行校对</h2>
+            <div class="row">
+                <button id="ckRun">开始校对</button>
+                <button id="ckDictOnly" class="secondary">只套用字典（敏感词替换）</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="ckTranslate" class="secondary">翻译成中文（剧情参考）</button>
+                <button id="ckBilingual" class="secondary">导入双语字幕</button>
+            </div>
+            <div id="ckStatus"></div>
+        </div>
+
+        <div class="card" id="ckResultCard">
+            <h2>4 · 差异清单</h2>
+            <div id="ckSummary"></div>
+            <div class="row" id="ckTypeRow" style="margin-top:6px; display:none;">
+                <button id="ckSelReplace" class="secondary mini">全选听错</button>
+                <button id="ckSelInsert" class="secondary mini">全选漏词</button>
+                <button id="ckSelDelete" class="secondary mini">全选多余</button>
+            </div>
+            <div id="ckList"></div>
+            <div class="row" id="ckApplyRow" style="margin-top:10px; display:none;">
+                <button id="ckSelectAll" class="secondary">全选</button>
+                <button id="ckApply">应用选中的修正</button>
+                <button id="ckExportFixed" class="secondary">导出修正 SRT</button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="player" style="display:none;"></audio>
+
+    <!-- ==================== 板块六：视频下载 ==================== -->
+    <div class="tab-panel" id="panel-video" style="display:none;">
+        <div class="v-cookiebar">
+            <span class="dot" id="vCookieDot"></span>
+            <span class="txt" id="vCookieTxt">未配置浏览器 Cookie（抖音 / B 站高清需登录态）</span>
+            <button id="btnVCookie" class="vbtn">粘贴 Cookie</button>
+        </div>
+        <div class="sfx-toolbar">
+            <div class="tr">
+                <textarea id="vUrl" rows="3" placeholder="粘贴视频链接，可一次粘多个（每行一个，或直接粘抖音/B站分享文案，自动提取链接）"></textarea>
+            </div>
+            <div class="tr">
+                <button id="btnVParse" class="tbtn">解析（第一个链接）</button>
+                <button id="btnVGv" class="tbtn" title="自动模式：yt-dlp 优先，失败自动切免登录通道">免登录通道</button>
+                <button id="btnVDownloadAll" class="tbtn">批量下载全部</button>
+                <button id="btnVOpenDir" class="tbtn">打开下载目录</button>
+            </div>
+        </div>
+        <div class="v-result" id="vResult">
+            <img class="v-thumb" id="vThumb" alt="">
+            <div class="v-meta">
+                <div class="v-title" id="vTitle"></div>
+                <div class="v-sub" id="vSub"></div>
+            </div>
+            <div class="v-formats">
+                <select id="vFormat"></select>
+            </div>
+            <div class="v-actions">
+                <button id="btnVDownload" class="primary">下载</button>
+                <button id="btnVImport" class="secondary">下载并导入 PR</button>
+            </div>
+        </div>
+        <div class="v-progress" id="vProgress"><div class="fill" id="vProgressFill"></div></div>
+        <div class="v-progress-meta" id="vProgressMeta" style="font-size:11px;color:var(--muted);margin-top:4px;display:none;"></div>
+        <div class="v-history" id="vHistoryWrap">
+            <div class="v-history-head">
+                <span>历史记录（最近 10 条，点击文件名或「导入」重新导入 PR）</span>
+                <button id="btnVClearHistory" class="vbtn">清空</button>
+            </div>
+            <div class="v-history-list" id="vHistoryList"></div>
+        </div>
+        <div class="v-log" id="vLog"></div>
+        <div class="v-status" id="vStatus"></div>
+    </div>
+
+    <!-- ==================== 待办（独立板块：逐条列待办 → 打勾 → 生成当日总结） ==================== -->
+    <div class="tab-panel" id="panel-todo" style="display:none;">
+        <div class="td-wrap">
+            <div class="td-main">
+                <div class="td-card">
+                    <div class="td-head">
+                        <span class="td-date" id="tdDate">今天</span>
+                        <button id="tdBackToday" class="secondary mini" style="display:none;">回到今天</button>
+                        <label class="td-roll" title="凌晨 4 点前算前一天，适合夜班">
+                            <input type="checkbox" id="tdRollover" checked>
+                            <span>凌晨归前一天</span>
+                        </label>
+                    </div>
+                    <div class="td-prog">
+                        <div class="td-prog-bar"><div class="td-prog-fill" id="tdProgFill"></div></div>
+                        <span class="td-prog-txt" id="tdProgTxt">还没有待办</span>
+                    </div>
+                    <div class="td-addrow">
+                        <input type="text" id="tdInput" placeholder="加一条待办，回车即可">
+                    </div>
+                    <div class="td-pickrow">
+                        <div class="td-picker" id="tdProjPicker">
+                            <button type="button" class="td-pick-btn" id="tdProjBtn" title="关联项目（数据来自视频工作台）">
+                                <span class="td-pick-lab">项目</span>
+                                <span class="td-pick-val" id="tdProjVal">不限</span>
+                            </button>
+                            <div class="td-pick-panel" id="tdProjPanel" style="display:none;">
+                                <div class="td-pick-head">
+                                    <input type="text" class="td-pick-search" id="tdProjSearch" placeholder="搜索项目…">
+                                    <button type="button" class="td-pick-refresh" id="tdProjRefresh" title="重新从工作台拉取">↻</button>
+                                </div>
+                                <div class="td-pick-list" id="tdProjList"></div>
+                            </div>
+                        </div>
+                        <div class="td-picker" id="tdAsgPicker">
+                            <button type="button" class="td-pick-btn" id="tdAsgBtn" title="关联负责人（数据来自工作台人员配置）">
+                                <span class="td-pick-lab">负责人</span>
+                                <span class="td-pick-val" id="tdAsgVal">不限</span>
+                            </button>
+                            <div class="td-pick-panel" id="tdAsgPanel" style="display:none;">
+                                <div class="td-pick-head">
+                                    <input type="text" class="td-pick-search" id="tdAsgSearch" placeholder="搜索负责人…">
+                                </div>
+                                <div class="td-pick-list" id="tdAsgList"></div>
+                            </div>
+                        </div>
+                        <button id="tdAdd" class="td-addbtn">加</button>
+                    </div>
+                    <div class="td-carry" id="tdCarry" style="display:none;">
+                        <span id="tdCarryTxt"></span>
+                        <button id="tdCarryBtn" class="secondary mini">一键结转到今天</button>
+                    </div>
+                    <div class="td-list" id="tdList"></div>
                 </div>
-                <div id="pjCfgBody">
-                    <div class="pj-row">
-                        <label class="pj-lb">组内 NAS 目录</label>
-                        <input type="text" id="pjNasDir" placeholder="例如：\\NAS\短剧\进行中">
-                        <button id="pjBrowseNas" class="secondary mini">浏览…</button>
-                    </div>
-                    <div class="pj-row">
-                        <label class="pj-lb">本地项目根目录</label>
-                        <input type="text" id="pjLocalRoot" placeholder="例如：D:\剪辑项目">
-                        <button id="pjBrowseLocal" class="secondary mini">浏览…</button>
-                    </div>
-                    <div class="pj-row">
-                        <label class="pj-lb">项目模板结构</label>
-                        <input type="text" id="pjTemplateDir" placeholder="可选：新人模板目录">
-                        <button id="pjBrowseTemplate" class="secondary mini">浏览…</button>
-                    </div>
-                    <div class="pj-row">
-                        <label class="pj-lb">PR 模板工程</label>
-                        <input type="text" id="pjPrTemplate" placeholder="可选：xxx.prproj">
-                        <button id="pjBrowsePr" class="secondary mini">选择文件…</button>
-                    </div>
-                    <div class="pj-row">
-                        <label class="pj-lb">默认 PR 版本</label>
-                        <select id="pjPrVersion" style="flex:1;min-width:0;"></select>
-                    </div>
-                    <div class="pj-row">
-                        <label class="pj-lb">自动重扫间隔</label>
-                        <select id="pjScanInterval" style="flex:1;min-width:0;" title="打开面板时若缓存过期会自动重扫">
-                            <option value="0">不自动（仅手动扫描）</option>
-                            <option value="10">每 10 分钟</option>
-                            <option value="30">每 30 分钟</option>
-                            <option value="60">每 1 小时</option>
-                            <option value="180">每 3 小时</option>
-                        </select>
-                    </div>
-                    <div class="pj-row">
-                        <label class="pj-lb">排除目录（、分隔）</label>
-                        <input type="text" id="pjExcludeDirs" placeholder="00已完成、0000新人">
-                    </div>
-                    <div class="pj-checks">
-                        <label class="pj-ck"><input type="checkbox" id="pjCopyTpl" checked> 复制模板结构</label>
-                        <label class="pj-ck"><input type="checkbox" id="pjCopyRough" checked> 拉取粗剪</label>
-                        <label class="pj-ck"><input type="checkbox" id="pjAutoOpen" checked> 创建后用 PR 打开</label>
-                    </div>
+                <div class="td-card">
+                    <div class="td-sec-title">备忘</div>
+                    <textarea id="tdMemo" class="td-memo" placeholder="当天想到的、临时记的、后面要跟进的，都可写这里"></textarea>
                 </div>
             </div>
-
-            <!-- 进度 -->
-            <div class="pj-prog" id="pjProgWrap" style="display:none;">
-                <div class="pj-prog-txt" id="pjProgTxt"></div>
-                <div class="pj-prog-pct" id="pjProgPct"></div>
-                <div class="pj-prog-track"><div class="pj-prog-bar" id="pjProgBar"></div></div>
-            </div>
-
-            <!-- 左右并排：进行中项目 | 本地项目 -->
-            <div class="pj-cols" id="pjCols">
-
-                <!-- 左：NAS 进行中项目 -->
-                <div class="pj-group pj-col">
-                    <div class="pj-ghead">
-                        <span>进行中项目</span>
-                        <span id="pjProjCount" class="pj-cnt"></span>
-                        <span id="pjScanHint" class="pj-cnt" style="margin-left:6px;"></span>
-                        <button id="pjScan" class="secondary mini" style="margin-left:auto;">开始扫描</button>
-                    </div>
-                    <div class="pj-toolbar">
-                        <input type="text" id="pjSearch" class="pj-search" placeholder="搜索项目名…">
-                        <select id="pjSort" class="pj-sortsel" title="排序方式">
-                            <option value="name">按名称</option>
-                            <option value="time">按时间</option>
-                            <option value="eps">按集数</option>
-                        </select>
-                        <select id="pjSortDir" class="pj-sortsel" title="排序方向">
-                            <option value="asc">升序</option>
-                            <option value="desc">降序</option>
-                        </select>
-                    </div>
-                    <div id="pjProjList" class="pj-list">
-                        <div class="hint">先设置 NAS 目录，再点「开始扫描」。</div>
-                    </div>
-                    <div class="pj-selbar">
-                        <div class="pj-selinfo" id="pjSelInfo">未选择项目 · 点项目的「选集 ▸」开始</div>
-                        <button id="pjCreate" class="pj-main" disabled>创建本地项目</button>
+            <div class="td-side">
+                <div class="td-card">
+                    <div class="td-sec-title">当日工作总结</div>
+                    <div class="td-sum" id="tdSummary"></div>
+                    <div class="td-sum-acts">
+                        <button id="tdGen" class="td-btn-main">生成</button>
+                        <button id="tdCopy" class="secondary mini">复制</button>
+                        <button id="tdSave" class="secondary mini">存为 .md</button>
                     </div>
                 </div>
-
-                <!-- 右：本地项目 -->
-                <div class="pj-group pj-col">
-                    <div class="pj-ghead">
-                        <span>本地项目</span>
-                        <span id="pjLocalInfo" class="pj-cnt"></span>
-                        <button id="pjRefreshLocal" class="secondary mini" style="margin-left:auto;">刷新</button>
-                    </div>
-                    <div class="pj-toolbar">
-                        <input type="text" id="pjLocalSearch" class="pj-search" placeholder="🔍 搜本地项目名…">
-                        <select id="pjLocalSort" class="pj-sortsel" title="排序方式">
-                            <option value="name">按名称</option>
-                            <option value="seq">按序号</option>
-                            <option value="time">按时间</option>
-                        </select>
-                        <select id="pjLocalSortDir" class="pj-sortsel" title="排序方向">
-                            <option value="asc">升序</option>
-                            <option value="desc">降序</option>
-                        </select>
-                    </div>
-                    <div id="pjLocalList" class="pj-list pj-list-local"></div>
-                    <div id="pjLocalMore" style="display:none;"></div>
+                <div class="td-card">
+                    <div class="td-sec-title">按项目 / 负责人汇总</div>
+                    <div class="td-group-sum" id="tdGroupSum"></div>
+                </div>
+                <div class="td-card">
+                    <div class="td-sec-title">往期</div>
+                    <div class="td-history" id="tdHistory"></div>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <!-- 可拖动分割条：调整上半区（项目/本地）与日志的高度 -->
-            <div class="en-splitter" id="pjSplitter" title="上下拖动调整列表区与日志的高度；双击还原默认">
-                <span class="en-splitter-grip"></span>
-            </div>
+    <!-- ==================== 板块八：项目进度（视频工作台联动） ==================== -->
+    <div class="tab-panel" id="panel-progress">
+        <!-- 服务状态条 -->
+        <div class="prg-statusbar" id="prgStatusBar">
+            <span class="prg-dot" id="prgDot"></span>
+            <span class="prg-status" id="prgStatusText">检测视频工作台服务…</span>
+            <button id="prgRefresh" class="secondary mini" style="flex:0 0 auto;">刷新</button>
+            <button id="prgScanAll" class="secondary mini" style="flex:0 0 auto;" title="重新扫描所有剪辑中项目的输出目录，刷新进度">⚡ 一键刷新进度</button>
+        </div>
 
-            <!-- 日志（可最大化） -->
-            <div class="pj-group" id="pjLogWrap">
-                <div class="pj-ghead">
-                    <span>运行日志</span>
-                    <button id="pjLogMax" class="secondary mini" style="margin-left:auto;">⤢ 最大化</button>
-                </div>
-                <div id="pjLog" class="pj-log"></div>
+        <!-- 概览 -->
+        <div class="prg-overview" id="prgOverview" style="display:none;">
+            <div class="prg-metric"><div class="prg-mv prg-mv-left" id="prgMLeft">-</div><div class="prg-ml">上月遗留</div></div>
+            <div class="prg-metric"><div class="prg-mv prg-mv-month" id="prgMProducing">-</div><div class="prg-ml">本月项目</div></div>
+            <div class="prg-metric"><div class="prg-mv prg-mv-active" id="prgMActive">-</div><div class="prg-ml">本月制作中</div></div>
+            <div class="prg-metric"><div class="prg-mv prg-mv-done" id="prgMDone">-</div><div class="prg-ml">本月已完成</div></div>
+        </div>
+
+        <!-- 离线引导 -->
+        <div class="prg-offline" id="prgOffline" style="display:none;">
+            <div style="margin-bottom:8px;">视频工作台未运行，无法读取项目进度。</div>
+            <div class="row">
+                <button id="prgLaunch">启动视频工作台</button>
+                <button id="prgRetry" class="secondary">重试检测</button>
             </div>
+            <div class="hint">启动后约需几秒服务就绪，点「重试检测」即可。</div>
+        </div>
+
+        <!-- 进行中项目列表 -->
+        <div class="prg-sec" id="prgActiveWrap" style="display:none;">
+            <div class="prg-sec-head"><span>组内进行中</span><span class="prg-count" id="prgActiveCount"></span></div>
+            <div class="prg-filters">
+                <input type="text" id="prgSearch" class="prg-filter" placeholder="🔍 搜项目名/编号…" style="flex:1;min-width:0;">
+                <select id="prgFilterState" class="prg-filter" title="按状态筛选">
+                    <option value="">全部状态</option>
+                </select>
+                <label class="prg-chk" title="只看已有集数进度的项目">
+                    <input type="checkbox" id="prgFilterProgress" style="width:auto;"> 只看有进度
+                </label>
+                <label class="prg-chk prg-chk-mine" title="只看分集里有我的项目（我参与）">
+                    <input type="checkbox" id="prgFilterMine" style="width:auto;"> ⭐ 只看我参与
+                </label>
+            </div>
+            <div class="prg-list" id="prgActiveList"></div>
         </div>
     </div>
 
@@ -975,52 +1217,105 @@
 
         </div>
     </div>
-    <!-- ==================== 板块六：视频下载 ==================== -->
-    <div class="tab-panel" id="panel-video" style="display:none;">
-        <div class="v-cookiebar">
-            <span class="dot" id="vCookieDot"></span>
-            <span class="txt" id="vCookieTxt">未配置浏览器 Cookie（抖音 / B 站高清需登录态）</span>
-            <button id="btnVCookie" class="vbtn">粘贴 Cookie</button>
-        </div>
-        <div class="sfx-toolbar">
-            <div class="tr">
-                <textarea id="vUrl" rows="3" placeholder="粘贴视频链接，可一次粘多个（每行一个，或直接粘抖音/B站分享文案，自动提取链接）"></textarea>
-            </div>
-            <div class="tr">
-                <button id="btnVParse" class="tbtn">解析（第一个链接）</button>
-                <button id="btnVGv" class="tbtn" title="自动模式：yt-dlp 优先，失败自动切免登录通道">免登录通道</button>
-                <button id="btnVDownloadAll" class="tbtn">批量下载全部</button>
-                <button id="btnVOpenDir" class="tbtn">打开下载目录</button>
-            </div>
-        </div>
-        <div class="v-result" id="vResult">
-            <img class="v-thumb" id="vThumb" alt="">
-            <div class="v-meta">
-                <div class="v-title" id="vTitle"></div>
-                <div class="v-sub" id="vSub"></div>
-            </div>
-            <div class="v-formats">
-                <select id="vFormat"></select>
-            </div>
-            <div class="v-actions">
-                <button id="btnVDownload" class="primary">下载</button>
-                <button id="btnVImport" class="secondary">下载并导入 PR</button>
-            </div>
-        </div>
-        <div class="v-progress" id="vProgress"><div class="fill" id="vProgressFill"></div></div>
-        <div class="v-progress-meta" id="vProgressMeta" style="font-size:11px;color:var(--muted);margin-top:4px;display:none;"></div>
-        <div class="v-history" id="vHistoryWrap">
-            <div class="v-history-head">
-                <span>历史记录（最近 10 条，点击文件名或「导入」重新导入 PR）</span>
-                <button id="btnVClearHistory" class="vbtn">清空</button>
-            </div>
-            <div class="v-history-list" id="vHistoryList"></div>
-        </div>
-        <div class="v-log" id="vLog"></div>
-        <div class="v-status" id="vStatus"></div>
-    </div>
+    <!-- ==================== PR 工具：调色 XML 清理 ==================== -->
+    <div class="tab-panel" id="panel-colorxml" style="display:none;">
+        <div class="cx-layout">
 
-    <!-- ==================== 审片（内嵌分秒帧，看批注不切出 PR） ==================== -->
+            <!-- 左：配置 -->
+            <div class="cx-left">
+
+                <div class="cx-card">
+                    <div class="cx-card-head">
+                        <span class="cx-card-ico">🎨</span>
+                        <span class="cx-card-title">调色 XML 清理</span>
+                        <span class="pt-sum" id="cxStatus">未读取序列</span>
+                    </div>
+                    <div class="cx-card-body">
+                        <div class="cx-tip">
+                            剪辑完成后，把序列导出成<b>只给达芬奇调色</b>的单轨 XML。
+                            自动删除被禁用的镜头、水印 / 调整图层 / 转场等装饰轨、全部音频，
+                            多条视频轨合并成一条 V1。<b>原工程不会被改动。</b>
+                        </div>
+
+                        <!-- 序列 -->
+                        <div class="cx-row">
+                            <label class="cx-lb">序列</label>
+                            <select id="cxSeq" class="cx-in" title="选择要处理的序列（列出当前工程里的全部序列）"></select>
+                            <button id="cxRefreshSeq" class="secondary mini"
+                                    title="重新读取工程里的序列列表（在 PR 里新建/改名序列后点这里）">↻</button>
+                        </div>
+
+                        <!-- 步骤按钮 -->
+                        <div class="cx-steps">
+                            <button id="cxReadSeq" class="primary cx-step-btn"
+                                    title="第一步：把所选序列导出为 XML 并读取轨道结构（只读，不会修改工程）">
+                                <span class="cx-step-no">1</span>读取当前序列
+                            </button>
+                            <button id="cxGo" class="primary cx-step-btn"
+                                    title="第二步：按当前轨道选择生成调色 XML，输出到下方指定目录">
+                                <span class="cx-step-no">2</span>生成调色 XML
+                            </button>
+                            <button id="cxOpenOut" class="secondary mini" style="display:none;"
+                                    title="在资源管理器中定位刚生成的文件">打开输出位置</button>
+                        </div>
+
+                        <!-- 保留轨道 -->
+                        <div class="cx-group" id="cxTracksWrap" style="display:none;">
+                            <div class="cx-group-head">
+                                <span class="cx-group-title">保留轨道</span>
+                                <span class="cx-group-hint">勾选 = 参与合轨；不勾 = 整轨丢弃（水印/调整图层等请取消勾选）</span>
+                                <button id="cxAll" class="secondary mini" title="勾选全部有内容的轨道">全选</button>
+                                <button id="cxNone" class="secondary mini" title="只保留 V1，其余全部丢弃">仅留 V1</button>
+                            </div>
+                            <div id="cxTracks" class="cx-tracks"></div>
+                        </div>
+
+                        <!-- 预览 -->
+                        <div class="cx-summary" id="cxSummaryRow" style="display:none;">
+                            <span class="cx-summary-ico">📊</span>
+                            <span id="cxSummary"></span>
+                        </div>
+
+                        <!-- 输出 -->
+                        <div class="cx-row">
+                            <label class="cx-lb">输出目录</label>
+                            <input type="text" id="cxOutDir" class="cx-in" placeholder="选择 XML 输出目录">
+                            <button id="cxOutBrowse" class="secondary mini" title="选择输出目录（会记住上次位置）">浏览…</button>
+                        </div>
+                        <div class="cx-row">
+                            <label class="cx-lb">文件名</label>
+                            <input type="text" id="cxOutName" class="cx-in" placeholder="读取序列后自动填充">
+                            <label class="cx-chk" title="勾选后不在 XML 里保留转场（转场会在输出里表现为两段重叠）">
+                                <input type="checkbox" id="cxDropTrans" style="width:auto;"> 丢弃转场
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 中间：拖动分隔条（左右宽度自由调整） -->
+            <div class="cx-split" id="cxSplit" title="拖动调整左右宽度（双击恢复默认）"></div>
+
+            <!-- 右：日志 -->
+            <div class="cx-right">
+                <div class="cx-card cx-logcard">
+                    <div class="cx-card-head">
+                        <span class="cx-card-ico">📄</span>
+                        <span class="cx-card-title">运行日志</span>
+                        <span class="cx-logstat" id="cxLogStat"></span>
+                        <button id="cxPurgeTmp" class="secondary mini"
+                                title="清理各板块在系统临时目录遗留的中间文件（听歌识曲录音、字幕音频、调色 XML 等）；只删插件自己的文件">🧹 清理缓存</button>
+                        <button id="cxClearLog" class="secondary mini" title="清空日志">清空</button>
+                    </div>
+                    <div class="cx-card-body cx-logbody">
+                        <div id="cxLog" class="cx-log"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
     <div class="tab-panel" id="panel-shenpian" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
             <div class="wb-nav">
@@ -1034,19 +1329,34 @@
             <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
         </div>
     </div>
+
+    <!-- ==================== 反馈中心（内嵌自建反馈服务） ==================== -->
     <div class="tab-panel" id="panel-feedback" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
             <div class="wb-nav">
-                <button class="wb-nav-btn" id="fbNavReload" title="刷新页面">&#8635;</button>
-                <button class="wb-nav-btn" id="fbNavHome" title="回到首页">&#127968;</button>
-                <button class="wb-nav-btn wb-nav-ext" id="fbNavExternal" title="在外部浏览器打开">&#8599;</button>
+                <button class="wb-nav-btn" id="fbNavReload" title="刷新页面">↻</button>
+                <button class="wb-nav-btn" id="fbNavHome" title="回到首页">🏠</button>
+                <button class="wb-nav-btn wb-nav-ext" id="fbNavExternal" title="在外部浏览器打开">↗</button>
                 <span class="wb-nav-url" id="fbNavHint" style="display:flex;align-items:center;color:var(--muted);font-size:11px;">加载中…</span>
-                <button class="wb-nav-btn" id="fbNavSubmit" title="提交新反馈" style="color:#7fd68b;">&#128238; 提反馈</button>
+                <button class="wb-nav-btn" id="fbNavSubmit" title="提交新反馈" style="color:#7fd68b;">📮 提反馈</button>
             </div>
             <iframe id="fbFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#0f1115;" src="about:blank"></iframe>
         </div>
     </div>
 
+    <!-- ==================== 管理（内嵌授权管理台；主插件专用，不参与授权管控） ==================== -->
+    <div class="tab-panel" id="panel-admin" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
+            <div class="wb-nav">
+                <button class="wb-nav-btn" id="adNavReload" title="刷新页面">↻</button>
+                <button class="wb-nav-btn" id="adNavHome" title="回到管理台首页">🏠</button>
+                <button class="wb-nav-btn wb-nav-ext" id="adNavExternal" title="在外部浏览器打开">↗</button>
+                <span class="wb-nav-url" id="adNavHint" style="display:flex;align-items:center;color:var(--muted);font-size:11px;">加载中…</span>
+                <button class="wb-nav-btn" id="adNavReqs" title="待处理申请" style="color:#fcd34d;">📩 申请 <span id="adReqCount">0</span></button>
+            </div>
+            <iframe id="adFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#0f1115;" src="about:blank"></iframe>
+        </div>
+    </div>
 
     <!-- ==================== 超分（一键导出并超分 + 外站工具） ==================== -->
     <div class="tab-panel" id="panel-upscale" style="display:none;">
@@ -1071,7 +1381,7 @@
                             <option value="inout">入点→出点</option>
                         </select>
                     </label>
-                    <span class="en-clip-tip" style="font-size:10px;color:#8a8a8a;">选「入点→出点」时，按时间轴 I / O 设定的区间处理</span>
+                    <span style="font-size:10px;color:#8a8a8a;">选「入点→出点」时，按时间轴 I / O 设定的区间处理</span>
                 </div>
                 <div class="en-row2">
                     <label class="en-f"><span>处理类型</span>
@@ -1186,20 +1496,20 @@
     </div>
 
     
-<!-- ==================== 剧本阅读（动态面板：由 script.js 填充） ==================== -->
+<!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
     <div class="tab-panel" id="panel-script" style="display:none;"></div>
 
     <script src="js/CSInterface.js"></script>
     <script src="js/errorlog.js"></script>
-    <!-- license.js 必须在 main.js 之前：main.js 启动时会注册授权状态回调 -->
-    <script src="js/license.js"></script>
     <script src="js/updater.js"></script>
     <script src="js/main.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/tmp-clean.js"></script>
     <script src="js/translate.js"></script>
+    <script src="js/subtitle.js"></script>
+    <script src="js/clone.js"></script>
     <script src="js/wavesurfer.js"></script>
     <script src="js/clip-select.js"></script>
-    <script src="js/separate.js"></script>
     <script src="js/sfx.js"></script>
     <script src="js/sfx-capture.js"></script>
     <script src="js/musiclib.js"></script>
@@ -1208,21 +1518,25 @@
     <script src="js/export.js"></script>
     <script src="js/enhance.js"></script>
     <script src="js/media.js"></script>
-    <script src="js/project.js"></script>
-    <script src="js/project-ui.js"></script>
-    <script src="js/pr-convert.js"></script>
-    <script src="js/pr-convert-ui.js"></script>
-    <script src="js/font-install.js"></script>
-    <script src="js/font-fix.js"></script>
-    <script src="js/font-fix-ui.js"></script>
-    <script src="js/tool-panel.js"></script>
+    <script src="js/check.js"></script>
     <script src="js/video.js"></script>
     <script src="js/script.js"></script>
+    <script src="js/progress.js"></script>
+    <script src="js/local-project-create.js"></script>
+    <script src="js/todo.js"></script>
     <script src="js/iframe-nav.js"></script>
     <script src="js/feedback.js"></script>
     <script src="js/feedback-ui.js"></script>
     <script src="js/feedback-panel.js"></script>
-    <script src="js/license-ui.js"></script>
+    <script src="js/admin-panel.js"></script>
+    <script src="js/pr-convert.js"></script>
+    <script src="js/pr-convert-ui.js"></script>
+    <script src="js/flatten-xml.js"></script>
+    <script src="js/flatten-ui.js"></script>
+    <script src="js/font-install.js"></script>
+    <script src="js/font-fix.js"></script>
+    <script src="js/font-fix-ui.js"></script>
+    <script src="js/tool-panel.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================
@@ -1239,6 +1553,7 @@
         if (hbtn && window.__vhUpdate && window.__vhUpdate.history) {
             hbtn.addEventListener('click', function () { window.__vhUpdate.history(); });
         }
+        // 启动后自动检查一次（有新版本才弹窗）
         if (window.__vhUpdate && window.__vhUpdate.autoCheck) {
             window.__vhUpdate.autoCheck();
         }
