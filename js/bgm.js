@@ -1583,8 +1583,19 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
                 var n = res.count || 0;
                 flash('\u5df2\u4e0b\u8f7d ' + n + ' \u9996\u5230 ' + (res.dir || ''));
                 var bad = (res.failed || []).length;
-                if (bad) flash('\u6709 ' + bad + ' \u9996\u5931\u8d25\uff08\u53ef\u80fd\u9700\u4f1a\u5458\uff09');
                 markSongsDownloaded(res.files || []);
+                // 有失败就把每首的原因列出来（不再吞掉）
+                if (bad) {
+                    var info3 = $('bgmSongInfo');
+                    if (info3) {
+                        info3.innerHTML = '<span style="color:var(--fg-warn-soft);">' + bad +
+                            ' \u9996\u672a\u4e0b\u8f7d\uff1a</span>' +
+                            (res.failed || []).map(function (f) {
+                                return esc(f.name || '') + '<span style="color:var(--muted);">\uff08' +
+                                    esc(f.msg || '') + '\uff09</span>';
+                            }).join('\u3001');
+                    }
+                }
             } else if (res.file) {
                 flash('\u5df2\u4e0b\u8f7d\uff1a' + res.file.split('\\').pop());
                 var info2 = $('bgmSongInfo');

@@ -482,7 +482,29 @@ async function downloadSongFile(songId, name, artist, cookie) {
   // 1) 拿直链（走本地 ncm 服务）
   const j = await httpGetJson('http://127.0.0.1:17890/song/url?id=' + encodeURIComponent(songId) + '&br=320000')
   const d = (j.data || [])[0]
-  if (!d || !d.url) throw new Error('拿不到歌曲直链（可能需会员或版权限制）')
+  if (!d || !d.url) {
+    // \u7ec6\u5206\u5931\u8d25\u539f\u56e0\uff0c\u907f\u514d\u4e00\u5f8b\u8bf4\u300c\u53ef\u80fd\u9700\u8981\u4f1a\u5458\u300d\u8bef\u5bfc
+    var why = 'song:url \u672a\u8fd4\u56de\u76f4\u94fe'
+    if (!d) why = '\u63a5\u53e3\u65e0\u6570\u636e\uff08id \u53ef\u80fd\u65e0\u6548\uff09'
+    else if (d.freeTrialInfo) why = '\u4ec5\u8bd5\u542c\u7247\u6bb5\uff08\u9700\u8981\u4f1a\u5458\uff09'
+    else if (d.level === null || d.level === 'none') why = '\u65e0\u7248\u6743/\u5df2\u4e0b\u67b6\uff08\u6b64\u6b4c\u653e\u4e0d\u4e86\uff09'
+    else why = '\u5f53\u524d\u7801\u7387\u4e0d\u53ef\u7528\uff08code=' + (d.code || '?') + '\uff09'
+    // \u518d\u8bd5\u4f4e\u7801\u7387\uff1a\u6709\u65f6 320k \u4e0d\u53ef\u7528\u4f46 128k \u53ef\u7528
+    try {
+      const j2 = await httpGetJson('http://127.0.0.1:17890/song/url?id=' + encodeURIComponent(songId) + '&br=128000')
+      const d2 = (j2.data || [])[0]
+      if (d2 && d2.url) {
+        const dir0 = musicDir()
+        const fn0 = safeName((name || 'song') + (artist ? ' - ' + artist : '')) + '.mp3'
+        const out0 = path.join(dir0, fn0)
+        if (!(fs.existsSync(out0) && fs.statSync(out0).size > 10000)) {
+          await runProc(findFfmpeg(), ['-y', '-v', 'error', '-i', d2.url, '-c', 'copy', out0], { timeout: 600000 })
+        }
+        return { file: out0, size: fs.statSync(out0).size, lowered: true }
+      }
+    } catch (e) {}
+    throw new Error(why)
+  }
   const dir = musicDir()
   const fn = safeName((name || 'song') + (artist ? ' - ' + artist : '')) + '.mp3'
   const out = path.join(dir, fn)
@@ -1316,7 +1338,10 @@ const server = http.createServer(async (req, res) => {
         }
         job.result = { count: ok.length, files: ok, failed: fail, dir: musicDir() }
         job.state = 'done'; job.percent = 100
-        job.msg = `完成：成功 ${ok.length} 首` + (fail.length ? `，失败 ${fail.length} 首` : '')
+        var reasons = {}
+        fail.forEach(function (f) { reasons[f.msg] = (reasons[f.msg] || 0) + 1 })
+        var reasonTxt = Object.keys(reasons).map(function (k) { return k + '×' + reasons[k] }).join('；')
+        job.msg = `完成：成功 ${ok.length} 首` + (fail.length ? `，失败 ${fail.length} 首（${reasonTxt}）` : '')
       })()
       return send(res, 200, { code: 0, data: { jobId: job.id, dir: musicDir() } })
     }
