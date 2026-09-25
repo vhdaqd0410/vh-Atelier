@@ -1403,6 +1403,16 @@ const server = http.createServer(async (req, res) => {
       } })
     }
 
+    if (p === '/probe-codec') {
+      // 探测某文件的视频编码（前端播放前判断是否需要转码）
+      const f = u.searchParams.get('file') || ''
+      const base = path.resolve(videoDir())
+      const full = path.resolve(f)
+      if (!f || full.indexOf(base) !== 0) return send(res, 200, { code: -1, msg: '非法路径' })
+      const codec = await probeVideoCodec(full)
+      return send(res, 200, { code: 0, data: { codec: codec } })
+    }
+
     if (p === '/song/download' && req.method === 'POST') {
       const b = await readBody(req)
       if (!b.id) return send(res, 200, { code: -1, msg: '缺少歌曲 id' })
