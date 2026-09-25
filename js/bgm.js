@@ -701,7 +701,7 @@
     }
 
     // ---------- 进度条上标出 BGM 命中点 ----------
-    // 结构：bgmMarks[ep] = [{ name, artist, at, to, count }]
+    // 结构：bgmMarks['剧号:集号'] = [{ name, artist, at, to, count }]
     var bgmMarks = {};
     try { bgmMarks = JSON.parse(localStorage.getItem('vh_bgm_marks') || '{}'); } catch (e) { bgmMarks = {}; }
     function saveMarks() { try { localStorage.setItem('vh_bgm_marks', JSON.stringify(bgmMarks)); } catch (e) {} }
@@ -710,11 +710,11 @@
     var resultCache = {};
     try {
         resultCache = JSON.parse(localStorage.getItem('vh_bgm_results') || '{}');
-        // 迁移：旧格式 key 是纯数字集号（会跨剧串），上线隔离后清掉一次
-        if (localStorage.getItem('vh_bgm_keyver') !== '3') {
+        // 迁移：旧格式 key 是纯数字集号（会跨剧串），只清结果缓存
+        // 注意：不要清 bgmMarks —— 那是用户的进度条标记，清掉等于抹掉已扒的痕迹
+        if (localStorage.getItem('vh_bgm_keyver') !== '4') {
             resultCache = {};
-            bgmMarks = {};
-            localStorage.setItem('vh_bgm_keyver', '3');
+            localStorage.setItem('vh_bgm_keyver', '4');
         }
     } catch (e) { resultCache = {}; }
     function saveResults() { try { localStorage.setItem('vh_bgm_results', JSON.stringify(resultCache)); } catch (e) {} }
@@ -756,17 +756,26 @@
         var tip = $('bgmMarkerTip');
         var v = $('bgmV');
         if (!box || !v) return;
-        var marks = bgmMarks[ep] || [];
+        var marks = bgmMarks[ckey(ep)] || [];
         var sig = ep + '|' + (v.duration || 0) + '|' + marks.length;
         if (box.getAttribute('data-sig') === sig) return;   // 同签名不重建，避免闪烁
         box.setAttribute('data-sig', sig);
         if (!marks.length) {
             clearMarks();
-            if (tip) tip.textContent = '\u8fd9\u96c6\u8fd8\u6ca1\u626c\u8fc7\uff0c\u70b9\u300c\u626c\u8fd9\u96c6\u300d\u540e\u5c31\u80fd\u5728\u8fdb\u5ea6\u6761\u4e0a\u770b\u5230 BGM \u4f4d\u7f6e';
+            if (tip) tip.textContent = '\u8fd9\u96c6\u8fd8\u6ca1\u626c\u8fc7\uff1a\u70b9\u300c\u626c\u8fd9\u96c6\u300d\u626c\u5b8c\u540e\uff0c\u518d\u70b9\u8be5\u96c6\u64ad\u653e\uff0c\u8fdb\u5ea6\u6761\u4e0a\u5c31\u4f1a\u51fa\u73b0 BGM \u8272\u5757';
             return;
         }
         var dur = v.duration || 0;
-        if (!dur) { setTimeout(function () { drawMarkers(ep); }, 600); return; }
+        if (!dur) {
+            // 播放器还没拿到时长（未打开/未加载）：有限重试，避免无限空转
+            var tries = parseInt(box.getAttribute('data-wait') || '0', 10);
+            if (tries < 12) {
+                box.setAttribute('data-wait', String(tries + 1));
+                setTimeout(function () { drawMarkers(ep); }, 600);
+            }
+            return;
+        }
+        box.removeAttribute('data-wait');
         box.innerHTML = '';
         box.style.display = '';
         marks.forEach(function (m) {
@@ -919,13 +928,6 @@
         if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
         playEp = 0;
     }
-    function closePlayer() {
-        var wrap = $('bgmPlayerWrap');
-        if (wrap) wrap.style.display = 'none';
-        var v = $('bgmV');
-        if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
-        playEp = 0;
-    }
 
     // ---------- 小窗（画中画式）模式 ----------
     var miniMode = false;
@@ -975,7 +977,20 @@
             var rect = el.getBoundingClientRect();
             var vh = window.innerHeight || document.documentElement.clientHeight;
             var bias = opt.bias == null ? 0.5 : opt.bias;   // 0=顶部,0.5=居中
-            var top = rect.top + window.pageYOffset - Math.max(0, (vh - rect.height) * bias);
+            // 吸顶导航（顶栏/分组栏/子标签）会盖住页面顶部，聚焦时须避让，
+            // 否则元素被滚到 sticky 栏背后，看起来"没聚焦 / 滚过头"
+            var occl = 0;
+            try {
+                ['top-head', 'ws-groups'].forEach(function (c) {
+                    var n = document.querySelector('.' + c);
+                    if (n && n.offsetParent !== null) occl += n.offsetHeight;
+                });
+                // 子标签有多个（每工作台一组），只算当前可见的
+                document.querySelectorAll('.ws-subtabs').forEach(function (n) {
+                    if (n.offsetParent !== null) occl += n.offsetHeight;
+                });
+            } catch (e) {}
+            var top = rect.top + window.pageYOffset - Math.max(0, (vh - rect.height) * bias) - occl;
             if (opt.maxTop != null) top = Math.min(top, opt.maxTop);
             window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
             // 程序滚动不算用户滚动：延迟同步基准值与时间戳
@@ -1672,9 +1687,12 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         // 该集结果入缓存：用结果自带的集号（服务端返回）
         // 缓存对象（cached:true）不会再写，避免覆盖
         if (res.ep && res.songs && !res.cached) cacheResult(res.ep, res);
-        // 若当前正在播放该集，把命中点记下来画到进度条
-        if (playEp && res.songs && res.songs.length) rememberMarks(playEp, res.songs);
-        drawMarkers(playEp);
+        // 把命中点记下来画到进度条：
+        // 用结果自带的集号（res.ep），不再只认"正在播放的那集"——
+        // 否则单独扒完一集不记标记，之后再播放也看不到色块
+        var markEp = res.ep || playEp;
+        if (markEp && res.songs && res.songs.length) rememberMarks(markEp, res.songs);
+        drawMarkers(playEp || markEp);
         selected = {};
         lastHlId = null;
         var wrap = $('bgmResultWrap'), box = $('bgmResultList');
