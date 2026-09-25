@@ -4,6 +4,23 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "修播放失败但没转码按钮",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "播放前先探测编码，HEVC 自动转码后再播，不再直接播原文件报错"
+        },
+        {
+          "kind": "fix",
+          "text": "播放报错时自动转码并接续播放，去掉「点转码重试」这种没有按钮的提示"
+        },
+        {
+          "kind": "fix",
+          "text": "存量已下载的 HEVC 集，第一次点播也会自动转码（不再只覆盖新下载的）"
+        }
+      ]
+    },
+    {
       "title": "修 HEVC 黑屏（自动转码+缓存）",
       "items": [
         {

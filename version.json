@@ -3,7 +3,7 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.23.0",
+  "version": "1.23.1",
   "buildTime": "2026-09-25 11:30:00",
   "skipDirs": [
     "collect",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修 HEVC 黑屏：下载后自动探测编码，HEVC 静默转 H.264 并缓存复用，播放优先取转码版；黑屏检测判据修正（改用画面尺寸），黑屏时自动转码并接续播放。"
+  "notes": "修「本地播放失败但没转码按钮」：播放前先探测编码，HEVC 自动转码后再播；播放报错时自动转码接续，不再提示不存在的按钮。"
 }
