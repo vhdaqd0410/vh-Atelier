@@ -863,33 +863,46 @@
         playLocal(ep);
     }
 
+    // 「转码中」集合：按集号记录，杜绝重复触发（error 事件与播放前探测可能同时命中）
+    var transcodePending = {};
+
+    // 请求转码（带全局守卫），完成后回调
+    function requestTranscode(ep, loc, onDone) {
+        if (!loc) return;
+        if (transcodePending[ep]) return;      // 已经在转，忽略重复请求
+        transcodePending[ep] = true;
+        showProgress('转码');
+        flash('这集是 HEVC 编码，正在转换…');
+        post('/transcode', { file: loc.path }, 60000).then(function (r) {
+            if (r && r.code === 0) {
+                curJobId = r.data.jobId;
+                pollTranscode(r.data.jobId, ep, onDone);
+            } else {
+                delete transcodePending[ep];
+                hideProgress();
+                flash('转码启动失败：' + (r.msg || ''));
+            }
+        }).catch(function (e) {
+            delete transcodePending[ep];
+            hideProgress();
+            flash('转码失败：' + e.message);
+        });
+    }
+
     // 播放前转码：无 H.264 版时先转，转完自动接续播放
     function startTranscodeFor(ep, loc) {
         if (!loc) return;
-        // 先探测编码：非 HEVC 就直接播（避免白转）
         api('/probe-codec?file=' + encodeURIComponent(loc.path), { timeout: 30000 }).then(function (r) {
             var codec = ((r.data || {}).codec || '').toLowerCase();
             if (codec === 'h264' || codec === 'avc1') {
                 loc.hasH264 = true;
-                var v = $('bgmV');
-                if (v) { v.src = API + '/video?prefer=h264&t=' + Date.now() + '&file=' + encodeURIComponent(loc.path); try { v.load(); v.play().catch(function () {}); } catch (e) {} }
+                playLocal(ep);   // 已是 H.264，走完整播放逻辑
                 return;
             }
-            flash('正在转码为兼容格式（约几秒）…');
-            post('/transcode', { file: loc.path }, 60000).then(function (r2) {
-                if (r2 && r2.code === 0) {
-                    curJobId = r2.data.jobId;
-                    showProgress('转码');
-                    pollTranscode(r2.data.jobId, ep);
-                } else {
-                    flash('转码启动失败：' + (r2.msg || ''));
-                }
-            }).catch(function (e) { flash('转码失败：' + e.message); });
+            requestTranscode(ep, loc, function () { playLocal(ep); });
         }).catch(function () {
             // 探测失败：保守起见直接转码
-            post('/transcode', { file: loc.path }, 60000).then(function (r2) {
-                if (r2 && r2.code === 0) { curJobId = r2.data.jobId; showProgress('转码'); pollTranscode(r2.data.jobId, ep); }
-            }).catch(function (e) { flash('转码失败：' + e.message); });
+            requestTranscode(ep, loc, function () { playLocal(ep); });
         });
     }
 
@@ -937,35 +950,19 @@
                 if (v.paused || !ep) return;
                 if (v.videoWidth > 0) return;            // 有画面，正常
                 if (tries < 4) { setTimeout(chk, 700); return; }
-                // 确认黑屏：自动转码并接续播放
-                flash('这集是 HEVC 编码，播放器解不了，正在转码…');
-                post('/transcode', { file: localMap[ep] ? localMap[ep].path : '' }, 60000).then(function (r) {
-                    if (r && r.code === 0) {
-                        curJobId = r.data.jobId;
-                        showProgress('转码');
-                        pollTranscode(r.data.jobId, ep);
-                    }
-                }).catch(function () {});
+                // 确认黑屏：自动转码并接续播放（统一走守卫，防重复）
+                var loc = localMap[ep];
+                if (loc) requestTranscode(ep, loc, function () { playLocal(ep); });
             };
             setTimeout(chk, 1200);
         });
-        // 播放报错：多为编码不支持（HEVC）。自动转码，不再让用户找不存在的按钮
+        // 播放报错：多为编码不支持（HEVC）。自动转码，转完接续播放
         v.addEventListener('error', function () {
             var ep = v.dataset.ep;
             if (!ep) return;
             var loc = localMap[ep];
             if (!loc) return;
-            // 防止 error 事件重复触发导致重复转码
-            if (loc._tcStarted) return;
-            loc._tcStarted = true;
-            flash('编码不支持，正在自动转码…');
-            post('/transcode', { file: loc.path }, 60000).then(function (r) {
-                if (r && r.code === 0) {
-                    curJobId = r.data.jobId;
-                    showProgress('转码');
-                    pollTranscode(r.data.jobId, ep);
-                }
-            }).catch(function () {});
+            requestTranscode(ep, loc, function () { playLocal(ep); });
         });
     }
 
@@ -1644,27 +1641,34 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         }).catch(function () { pollTimer = setTimeout(poll, 2000); });
     }
 
-    // 转码任务：转完自动接续播放该集（用户不用手动重开）
-    function pollTranscode(jobId, ep) {
+    // 转码任务：转完先刷新本地列表（拿到 hasH264），再按需接续播放
+    function pollTranscode(jobId, ep, onDone) {
         if (!jobId) return;
         if (pollTimer) clearTimeout(pollTimer);
         api('/status?jobId=' + encodeURIComponent(jobId), { timeout: 15000 }).then(function (r) {
             var d = r.data || {};
-            if (r.code !== 0) { flash('转码任务丢失'); hideProgress(); return; }
+            if (r.code !== 0) { delete transcodePending[ep]; flash('转码任务丢失'); hideProgress(); return; }
             setProg(d.percent || 0, d.msg || '转码中', '转码为 H.264（播放器兼容格式）');
             if (d.state === 'running') {
-                pollTimer = setTimeout(function () { pollTranscode(jobId, ep); }, 1200);
+                pollTimer = setTimeout(function () { pollTranscode(jobId, ep, onDone); }, 1200);
             } else {
                 hideProgress();
+                delete transcodePending[ep];      // 复位守卫（无论成功失败）
                 if (d.state === 'done') {
-                    flash('转码完成，重新播放第 ' + ep + ' 集');
-                    var loc = localMap[ep];
-                    if (loc) { playLocal(ep); }   // 用新生成的 H.264 版重开
+                    // 关键：先刷新本地列表，让 localMap[ep].hasH264 变成 true，
+                    // 再重播。否则 playLocal 会因 hasH264 仍为 false 再次转码 → 死循环。
+                    refreshLocal().then(function () {
+                        if (onDone) { onDone(); }
+                        else if (localMap[ep]) { playLocal(ep); }
+                    }).catch(function () {
+                        if (onDone) onDone();
+                        else if (localMap[ep]) { playLocal(ep); }
+                    });
                 } else {
                     flash(d.msg || '转码失败');
                 }
             }
-        }).catch(function () { pollTimer = setTimeout(function () { pollTranscode(jobId, ep); }, 2000); });
+        }).catch(function () { pollTimer = setTimeout(function () { pollTranscode(jobId, ep, onDone); }, 2000); });
     }
 
     // 后台静默转码队列：显示"后台优化中 N 集"，转完自动刷新本地列表
@@ -1727,12 +1731,6 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
                 if (pendingSongRow) attachSongDrag(pendingSongRow, res.file);
                 pendingSongRow = null;
             }
-            return;
-        }
-
-        if (jobKind === 'transcode') {
-            flash(d.msg || '\u8f6c\u7801\u5b8c\u6210');
-            refreshLocal().then(function () { if (curSeries) renderSeries(); });
             return;
         }
 
