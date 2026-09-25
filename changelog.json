@@ -4,6 +4,19 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "扒歌记忆上次页面",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "切板块或重开插件后回到短剧扒歌，自动停在上次那个页面"
+        },
+        {
+          "kind": "feat",
+          "text": "剧名/集数/榜单分类/最后播放集一并还原"
+        }
+      ]
+    },
+    {
       "title": "新增短剧扒歌板块",
       "items": [
         {

@@ -134,6 +134,67 @@
     }
 
 
+    // ---------- 上次页面持久化（关插件/切板块后回来仍停在原页面）----------
+    var UI_KEY = 'vh_bgm_uistate';
+    function saveUiState() {
+        try {
+            var st = {
+                view: 'home',
+                series: null,
+                hotKind: hotKind,
+                playEp: playEp || 0,
+                at: Date.now(),
+            };
+            // 判断当前停在哪个视图（按显示优先级：播放器 > 结果 > 剧集 > 搜索 > 首页）
+            if (curSeries && curSeries.series_id && $('bgmSeriesWrap') && $('bgmSeriesWrap').style.display !== 'none') {
+                st.view = 'series';
+                st.series = {
+                    series_id: curSeries.series_id,
+                    name: curSeries.name || '',
+                    count: curSeries.count || 0,
+                };
+            } else {
+                var sw = $('bgmSearchWrap');
+                if (sw && sw.style.display !== 'none' && sw.innerHTML) st.view = 'search';
+            }
+            localStorage.setItem(UI_KEY, JSON.stringify(st));
+        } catch (e) {}
+    }
+    function loadUiState() {
+        try { return JSON.parse(localStorage.getItem(UI_KEY) || 'null'); } catch (e) { return null; }
+    }
+
+    // 恢复上次停留的页面
+    function restoreUiState() {
+        var st = loadUiState();
+        if (!st) return false;
+        // 榜单分类还原
+        if (st.hotKind && st.hotKind !== hotKind) {
+            hotKind = st.hotKind;
+            document.querySelectorAll('.bgm-hot-tab').forEach(function (b) {
+                b.classList.toggle('active', b.getAttribute('data-kind') === hotKind);
+            });
+        }
+        // 剧集页还原：有剧号就重新拉一次剧集信息（vid_list 不缓存，避免过期）
+        if (st.view === 'series' && st.series && st.series.series_id) {
+            ensureServer().then(function () {
+                return api('/series?series_id=' + encodeURIComponent(st.series.series_id), { timeout: 40000 });
+            }).then(function (r) {
+                if (r && r.code === 0 && r.data) {
+                    curSeries = r.data;
+                    renderSeriesNow();
+                    // 还原最后播放集（若本地已下载则准备好播放器）
+                    if (st.playEp && localMap[st.playEp]) {
+                        playEp = st.playEp;
+                    }
+                    setTimeout(function () { saveUiState(); }, 300);
+                }
+            }).catch(function () { /* 恢复失败就停在首页 */ });
+            return true;
+        }
+        return false;
+    }
+
     // ---------- 首页热门瀑布流 ----------
     var hotKind = 'all';
     // 骨架屏（等待服务启动时给视觉反馈）
@@ -237,6 +298,7 @@
                 document.querySelectorAll('.bgm-hot-tab').forEach(function (x) { x.classList.remove('active'); });
                 b.classList.add('active');
                 loadHot(b.getAttribute('data-kind'), true);
+                saveUiState();
             });
         });
         var rf = $('bgmHotRefresh');
@@ -384,6 +446,7 @@
         $('bgmSeriesWrap').style.display = 'none';
         $('bgmResultWrap').style.display = 'none';
         focusSearchResult();   // 结果出来自动滚到视野
+        saveUiState();
     }
 
     function esc(s) {
@@ -435,6 +498,7 @@
     // ---------- 剧集 ----------
     // 换剧清理：清掉结果列表、色块、叠加条、当前播放集（缓存本身保留，按剧号隔离）
     function resetForSeries() {
+        try { saveUiState(); } catch (e) {}
         try { closePlayer(); } catch (e) {}
         try { clearMarks(); } catch (e) {}
         try {
@@ -481,6 +545,7 @@
         var d = curSeries;
         if (!d) return;
         focusSeries();   // 进剧集页自动聚焦
+        saveUiState();
         $('bgmSearchWrap').style.display = 'none';
         $('bgmSeriesWrap').style.display = '';
         $('bgmSeriesName').textContent = d.name || d.series_id;
@@ -1887,14 +1952,22 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
     }
 
     // ---------- 切 tab 时刷新 ----------
+    var uiRestored = false;
     function onShow() {
         try { ensureServer().catch(function () {}); } catch (e) {}
-        try { refreshLocal(); } catch (e) {}
+        try { refreshLocal().then(function () { try { saveUiState(); } catch (e) {} }); } catch (e) {}
         try { renderHist(); } catch (e) {}
+        // 首次进入本会话：尝试恢复上次页面；已有内容则不动
+        if (!uiRestored) {
+            uiRestored = true;
+            var ok = false;
+            try { ok = restoreUiState(); } catch (e) { ok = false; }
+            if (ok) return;   // 正在恢复剧集页，不再加载首页
+        }
         try {
             var grid = $('bgmHotGrid');
             // 用 data-loaded 标记判断（骨架屏会填充 children，不能用 children.length）
-            if (grid && grid.getAttribute('data-loaded') !== '1') loadHot('all');
+            if (grid && grid.getAttribute('data-loaded') !== '1') loadHot(hotKind);
         } catch (e) {}
     }
 
@@ -1928,6 +2001,7 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             $('bgmSearchWrap').style.display = '';
             $('bgmResultWrap').style.display = '';
         });
+        saveUiState();
         on('btnBgmPickFile', startSingleByFile, 'click');
         on('btnBgmPickDir', startBatchByDir, 'click');
         on('btnBgmBatch', startBatchByDir, 'click');
