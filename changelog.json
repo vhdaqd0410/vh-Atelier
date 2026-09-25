@@ -4,6 +4,23 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "歌曲下载失败原因细分",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "不再一律提示「可能需要会员」，区分无版权/试听受限/接口无数据"
+        },
+        {
+          "kind": "impro",
+          "text": "320k 拿不到时自动降 128k 重试"
+        },
+        {
+          "kind": "fix",
+          "text": "批量下载列出每首失败原因，不再只说「成功 N 首」"
+        }
+      ]
+    },
+    {
       "title": "扒歌记忆上次页面",
       "items": [
         {
