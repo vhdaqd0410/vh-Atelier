@@ -4,6 +4,27 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "title": "修转码完成无限循环",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "转码完成后先刷新本地列表（hasH264 置 true）再重播，杜绝反复进转码的死循环"
+        },
+        {
+          "kind": "fix",
+          "text": "统一转码入口 requestTranscode 加守卫，error/黑屏/播放前三路触发只转一次"
+        },
+        {
+          "kind": "fix",
+          "text": "删除重复的转码完成分支与「重新播放」等多余提示"
+        },
+        {
+          "kind": "impro",
+          "text": "播放前探测到已是 H.264 时走完整播放逻辑（补全标题/标记/聚焦）"
+        }
+      ]
+    },
+    {
       "title": "修播放失败但没转码按钮",
       "items": [
         {

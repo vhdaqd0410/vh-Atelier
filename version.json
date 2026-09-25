@@ -3,7 +3,7 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.31.1",
+  "version": "1.31.2",
   "buildTime": "2026-09-25 11:30:00",
   "skipDirs": [
     "collect",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修「本地播放失败但没转码按钮」：播放前先探测编码，HEVC 自动转码后再播；播放报错时自动转码接续，不再提示不存在的按钮。"
+  "notes": "修转码完成无限循环：转码完成后先刷新 hasH264 再重播，避免反复进转码；统一转码入口加守卫防重复触发；清理重复的转码分支与多余提示。"
 }
