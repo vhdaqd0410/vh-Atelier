@@ -544,6 +544,83 @@ async function ensureH264(srcPath) {
   throw new Error('转码失败：没有可用的 H.264 编码器')
 }
 
+// ── 探测视频编码（HEVC 在 CEP 的 Chromium 里解不了，会黑屏有声音）──
+async function probeVideoCodec(filePath) {
+  // 用 ffmpeg 读编码。注意两点：
+  //  1) 扩展 bin 里没有独立 ffprobe，不能依赖它
+  //  2) `ffmpeg -i 文件` 无输出文件时返回码为 1，而 runProc 在非 0 时 reject
+  //     且只保留输出末尾 250 字符，流信息在中间会被截掉。
+  //     故这里直接拿 spawn 的完整输出，不经过 runProc。
+  return new Promise(resolve => {
+    let buf = ''
+    let cp
+    try {
+      cp = spawn(findFfmpeg(), ['-hide_banner', '-i', filePath], { windowsHide: true })
+    } catch (e) { return resolve('') }
+    runningChildren.add(cp)
+    const done = () => {
+      clearTimeout(timer)
+      runningChildren.delete(cp)
+      const m = /Video:\s*([A-Za-z0-9_]+)/i.exec(buf)
+      resolve(m ? m[1].toLowerCase() : '')
+    }
+    if (cp.stdout) cp.stdout.on('data', d => { buf += d })
+    if (cp.stderr) cp.stderr.on('data', d => { buf += d })
+    const timer = setTimeout(() => { try { cp.kill() } catch (e) {} }, 30000)
+    cp.on('error', done)
+    cp.on('close', done)
+  })
+}
+
+// ── 静默转码队列：下载完即转，串行、去重、可查进度 ──
+// 目标：HEVC 集在用户点开播放前就已转好，观看无感；产物落 _h264/ 复用
+const tcq = { items: {}, order: [], running: false, done: 0, failed: 0 }
+
+function tcqKey(filePath) { return path.basename(filePath) }
+
+function tcqEnqueue(filePath, codec) {
+  const k = tcqKey(filePath)
+  if (!tcq.items[k]) {
+    tcq.items[k] = { file: filePath, codec, state: 'pending', tries: 0, at: Date.now() }
+    tcq.order.push(k)
+  }
+  tcqPump()
+}
+
+async function tcqPump() {
+  if (tcq.running) return
+  tcq.running = true
+  try {
+    while (true) {
+      const k = tcq.order.find(x => tcq.items[x] && tcq.items[x].state === 'pending')
+      if (!k) break
+      const it = tcq.items[k]
+      it.state = 'running'
+      try {
+        await ensureH264(it.file)
+        it.state = 'done'; tcq.done++
+      } catch (e) {
+        it.tries++
+        it.state = it.tries >= 2 ? 'failed' : 'pending'
+        if (it.state === 'failed') tcq.failed++
+        it.err = e.message
+      }
+    }
+  } finally { tcq.running = false }
+}
+
+// 下载成功后调用：HEVC（含 bytevc1）才需要转，H.264 直接跳过
+async function maybeQueueTranscode(filePath) {
+  try {
+    const codec = await probeVideoCodec(filePath)
+    if (!codec) return ''
+    // CEP 的 Chromium(99) 只保证 H.264；hevc/h265/bytedance 出的 hevc 都要转
+    if (codec === 'h264' || codec === 'avc1') return codec
+    tcqEnqueue(filePath, codec)
+    return codec
+  } catch (e) { return '' }
+}
+
 // ── 本地视频供给（支持 Range，供 <video> 拖动进度）──
 // 若带 h264=1 则自动转码后再供给（部分机器 HEVC 黑屏的兜底）
 function serveVideo(req, res, filePath) {
@@ -871,6 +948,8 @@ async function runDownload(job, seriesId, vid, seriesName, epNo) {
       job.percent = p; job.msg = m
     })
     job.result = { file: r.file, size: r.size, frame: (r.height ? r.height + 'p' : '') , via: r.via }
+    // HEVC 静默入转码队列
+    try { job.result.codec = await maybeQueueTranscode(r.file) } catch (e) {}
     job.state = 'done'; job.percent = 100
     job.msg = `已下载 ${(r.size / 1048576).toFixed(1)}MB → ${path.basename(r.file)}`
   } catch (e) {
@@ -889,6 +968,10 @@ async function runEpisode(job, seriesId, vid, seriesName, epNo, start, end) {
     await ripWav(job, r.file, start, end)
     // 让结果自带集号，前端据此写缓存（不再依赖"正在播放的那集"）
     if (job.result) job.result.ep = epNo
+    // 下载完若为 HEVC，静默入转码队列（用户点开播放前转好，观看无感）
+    maybeQueueTranscode(r.file).then(function (c) {
+      if (job.result) job.result.codec = c
+    }).catch(function () {})
   } catch (e) {
     job.state = 'error'; job.msg = e.message
   }
@@ -1307,6 +1390,19 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { code: 0, data: { jobId: job.id } })
     }
 
+    if (p === '/transcode-status') {
+      // 静默转码队列状态（前端用于显示"后台优化中 N/M"）
+      const items = Object.keys(tcq.items).map(function (k) {
+        const it = tcq.items[k]
+        return { name: k, state: it.state, codec: it.codec, err: it.err || '' }
+      })
+      const pending = items.filter(function (x) { return x.state === 'pending' || x.state === 'running' }).length
+      return send(res, 200, { code: 0, data: {
+        pending: pending, done: tcq.done, failed: tcq.failed,
+        total: items.length, items: items,
+      } })
+    }
+
     if (p === '/song/download' && req.method === 'POST') {
       const b = await readBody(req)
       if (!b.id) return send(res, 200, { code: -1, msg: '缺少歌曲 id' })
@@ -1397,7 +1493,15 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(403, { 'Content-Type': 'text/plain' })
         return res.end('forbidden')
       }
-      return serveVideo(req, res, full)
+      // prefer=h264：优先供给转码好的 H.264 版（CEP 的 Chromium 解不了 HEVC）
+      let target = full
+      try {
+        if (u.searchParams.get('prefer') === 'h264') {
+          const h264 = path.join(videoDir(), '_h264', path.basename(full))
+          if (fs.existsSync(h264) && fs.statSync(h264).size > 10000) target = h264
+        }
+      } catch (e) {}
+      return serveVideo(req, res, target)
     }
 
     if (p === '/local-videos') {
@@ -1411,7 +1515,13 @@ const server = http.createServer(async (req, res) => {
           let sz = 0
           try { sz = fs.statSync(full).size } catch (e) {}
           if (sz < 10000) continue
-          out.push({ name: f, path: full, size: sz, mtime: fs.statSync(full).mtimeMs })
+          // 标记是否已有转码好的 H.264 版（前端据此决定播放源）
+          let hasH264 = false
+          try {
+            const hp = path.join(dir, '_h264', f)
+            hasH264 = fs.existsSync(hp) && fs.statSync(hp).size > 10000
+          } catch (e) {}
+          out.push({ name: f, path: full, size: sz, mtime: fs.statSync(full).mtimeMs, hasH264: hasH264 })
         }
       } catch (e) {}
       out.sort((a, b) => b.mtime - a.mtime)
