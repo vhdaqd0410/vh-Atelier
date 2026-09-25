@@ -31,3 +31,10 @@ collect/feedback.json
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# 短剧扒歌：设备号是运行时生成的本机标识，不入库
+py/hongguo_device.json
+# 短剧扒歌：批量结果落盘目录（运行时数据）
+collect/bgm/
+# 短剧扒歌：下载与转码缓存
+collect/video/

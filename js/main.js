@@ -10,6 +10,7 @@
         sfx: document.getElementById('panel-sfx'),
         musiclib: document.getElementById('panel-musiclib'),
         music: document.getElementById('panel-music'),
+        bgm: document.getElementById('panel-bgm'),
         export: document.getElementById('panel-export'),
         video: document.getElementById('panel-video'),
         script: document.getElementById('panel-script'),
@@ -22,7 +23,7 @@
     var groups = {
         home: { members: ['home'], default: 'home' },
         media: { members: ['media', 'project'], default: 'media' },
-        audio: { members: ['separate', 'sfx', 'musiclib', 'music'], default: 'separate' },
+        audio: { members: ['separate', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
@@ -76,6 +77,9 @@
     function lazyInit(name) {
         if (name === 'music' && window.__musicOnShow) {
             try { window.__musicOnShow(); } catch (e) {}
+        }
+        if (name === 'bgm' && window.__bgmOnShow) {
+            try { window.__bgmOnShow(); } catch (e) {}
         }
         if (name === 'video' && window.__videoOnShow) {
             try { window.__videoOnShow(); } catch (e) {}
@@ -185,6 +189,76 @@
             switchTab(t.dataset.tab);
         });
     });
+
+    // ---------- 启动预热：打开插件后陆续拉起本地服务 ----------
+    // 目的：不再等用户点进某个板块才启动该服务，减少首次操作时的等待。
+    // 策略：面板先渲染（不阻塞 UI），随后错峰预热，避免三个 node 同时抢占启动。
+    function warmupServices() {
+        var tasks = [
+            // [名称, 全局钩子名, 延迟 ms]
+            ['网易云', '__ncmEnsure', 300],
+            ['短剧扒歌', '__bgmEnsure', 1200],
+            ['视频下载', '__videoEnsure', 2200],
+        ];
+        tasks.forEach(function (t) {
+            var name = t[0], hook = t[1], delay = t[2];
+            setTimeout(function () {
+                try {
+                    var fn = window[hook];
+                    if (typeof fn === 'function') {
+                        var r = fn();
+                        if (r && typeof r.then === 'function') {
+                            r.then(function () {
+                                console.log('[warmup] ' + name + ' 服务就绪');
+                            }).catch(function (e) {
+                                console.log('[warmup] ' + name + ' 服务未就绪: ' + (e && e.message));
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.log('[warmup] ' + name + ' 预热异常: ' + (e && e.message));
+                }
+            }, delay);
+        });
+    }
+
+    // 面板渲染完成后再预热（用 requestIdleCallback 兜底，避免与首屏争资源）
+    function scheduleWarmup() {
+        var run = function () { setTimeout(warmupServices, 400); };
+        try {
+            if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 3000 });
+            else setTimeout(run, 800);
+        } catch (e) { setTimeout(run, 800); }
+    }
+    if (document.readyState === 'complete') scheduleWarmup();
+    else window.addEventListener('load', scheduleWarmup);
+    // 兜底：即便 load 事件错过也要预热
+    setTimeout(function () { try { warmupServices(); } catch (e) {} }, 4000);
+
+    // ---------- 导航常驻：按真实高度校准 sticky 偏移 ----------
+    // 三层导航（顶栏 / 工作台组栏 / 子标签栏）吸顶，偏移量按实际高度动态计算，
+    // 避免写死像素导致字体或缩放变化时错位。
+    function syncStickyOffsets() {
+        try {
+            var head = document.querySelector('.top-head');
+            var groups = document.querySelector('.ws-groups');
+            if (head) {
+                var h1 = Math.ceil(head.getBoundingClientRect().height);
+                document.documentElement.style.setProperty('--sticky-top-head', h1 + 'px');
+                if (groups) groups.style.top = h1 + 'px';
+                var h2 = groups ? Math.ceil(groups.getBoundingClientRect().height) : 0;
+                document.documentElement.style.setProperty('--sticky-top-groups', (h1 + h2) + 'px');
+                // 所有子标签栏统一偏移
+                subTabBars.forEach(function (bar) { bar.style.top = (h1 + h2) + 'px'; });
+            }
+        } catch (e) {}
+    }
+    syncStickyOffsets();
+    window.addEventListener('resize', syncStickyOffsets);
+    // 顶栏内容变化（如徽标出现）后重算
+    setTimeout(syncStickyOffsets, 400);
+    setTimeout(syncStickyOffsets, 1500);
+    window.__atSyncSticky = syncStickyOffsets;
 
     // 暴露给其他板块调用：字幕识别 → 字幕校对 联动时切 tab
     window.__atSwitchTab = switchTab;
