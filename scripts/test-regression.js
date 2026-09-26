@@ -334,6 +334,26 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('下载中卡片有进度条', /bgm-dl-prog/.test(bgm) && /\.bgm-dl-prog/.test(css));
     ok('已下载显示 X/总 Y 集', /已下载 ' \+ item\.eps\.length \+ ' \/ ' \+ totalCnt/.test(bgm));
 
+    // 13) 已下载页改封面卡片 + 详情视图
+    ok('已下载用首页同款卡片类', /el\.className = 'bgm-grid-card'/.test(bgm));
+    ok('卡片带 data-dlname', /el\.setAttribute\('data-dlname'/.test(bgm));
+    ok('有封面占位块', /bgm-cover-ph/.test(bgm) && /\.bgm-cover-ph/.test(css));
+    ok('有下载中徽标', /bgm-card-badge/.test(bgm) && /\.bgm-card-badge/.test(css));
+    ok('有已下载标记', /bgm-card-dl-mark/.test(bgm) && /\.bgm-card-dl-mark/.test(css));
+    ok('有剧元数据缓存', /var META_KEY = 'vh_bgm_series_meta'/.test(bgm));
+    ok('有 rememberSeriesMeta', /function rememberSeriesMeta\s*\(/.test(bgm));
+    ok('打开剧集页时记封面', /rememberSeriesMeta\(r\.data\.name, r\.data\)/.test(bgm));
+    ok('下载时记封面', /rememberSeriesMeta\(info\.name \|\| it\.name, info\)/.test(bgm));
+    ok('收藏时记封面', /rememberSeriesMeta\(it\.name, it\)/.test(bgm));
+    // 详情视图
+    ok('有详情容器 bgmDlDetail', /id="bgmDlDetail"/.test(idx));
+    ok('JS 有 showDlDetail', /function showDlDetail\s*\(/.test(bgm));
+    ok('JS 有 closeDlDetail', /function closeDlDetail\s*\(/.test(bgm));
+    ok('点卡片进详情', /showDlDetail\(n\)/.test(bgm));
+    ok('详情页有返回按钮', /id="btnBgmDlBack"/.test(idx));
+    ok('详情页有删除该剧', /id="btnBgmDlDelAll"/.test(idx));
+    ok('切标签时收起详情', /hotKind !== 'downloaded'[\s\S]{0,200}bgmDlDetail/.test(bgm));
+
     // 9) 恢复播放进度（关面板后重开回到原位置）
     ok('saveUiState 存 playerOpen', /st\.playerOpen = /.test(bgm));
     ok('saveUiState 存 pos', /st\.pos = /.test(bgm));

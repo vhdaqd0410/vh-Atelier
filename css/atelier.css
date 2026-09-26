@@ -3681,6 +3681,97 @@ body.cx-resizing *{cursor:col-resize !important;}
     margin-left: 6px;
 }
 
+/* ---- 已下载页：封面卡片增强 ---- */
+/* 无封面时的占位（本地文件没有封面图，用色块 + 图标占位） */
+.bgm-cover-ph {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    color: rgba(255,255,255,.22);
+    background: linear-gradient(135deg, #3a3a44, #26262e);
+}
+
+/* 卡片右上角徽标（下载中 X/Y） */
+.bgm-card-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 3;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(139, 124, 246, .92);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,.4);
+    white-space: nowrap;
+}
+
+/* 卡片左上角「已下载」标记 */
+.bgm-card-dl-mark {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 3;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
+    border-radius: 50%;
+    background: rgba(0,0,0,.5);
+    color: #78d98a;
+    font-size: 12px;
+}
+
+/* 下载中卡片：描边高亮 */
+.bgm-grid-card.is-downloading {
+    border-color: rgba(139, 124, 246, .55);
+}
+/* 封面上的细进度条 */
+.bgm-dl-prog-cover {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    margin: 0;
+    border-radius: 0;
+    background: rgba(0,0,0,.5);
+}
+
+/* ---- 已下载详情页（某剧的集列表）---- */
+.bgm-dl-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0 8px;
+}
+.bgm-dl-detail-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--fg-title, #dcdcdc);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-dl-detail-sub {
+    font-size: 11px;
+    color: var(--fg-dim, #9aa3b2);
+    padding: 0 0 8px;
+}
+.bgm-dl-detail-list {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255,255,255,.02);
+}
+.bgm-dl-detail-list .bgm-dl-ep {
+    padding-left: 10px;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.bgm-dl-detail-list .bgm-dl-ep:last-child { border-bottom: none; }
+
 /* ---- 已下载剧集（按剧分组管理）---- */
 .bgm-dl-series {
     border: 1px solid var(--border);
