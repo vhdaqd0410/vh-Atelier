@@ -354,6 +354,23 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('详情页有删除该剧', /id="btnBgmDlDelAll"/.test(idx));
     ok('切标签时收起详情', /hotKind !== 'downloaded'[\s\S]{0,200}bgmDlDetail/.test(bgm));
 
+    // 14) 详情页全集列表 + 勾选下载
+    ok('有通用下载函数 downloadEps', /function downloadEps\s*\(/.test(bgm));
+    ok('有选取下载 downloadPickedEps', /function downloadPickedEps\s*\(/.test(bgm));
+    ok('有补全剧集信息 fillSeriesInfo', /function fillSeriesInfo\s*\(/.test(bgm));
+    ok('整剧下载复用 downloadEps', /downloadEps\(info, miss\)/.test(bgm));
+    ok('列表按总集数列出', /for \(var ep = 1; ep <= showTotal; ep\+\+\)/.test(bgm));
+    ok('已下载行标记 is-have', /is-have/.test(bgm) && /\.bgm-dl-ep\.is-have/.test(css));
+    ok('未下载行标记 is-missing', /is-missing/.test(bgm) && /\.bgm-dl-ep\.is-missing/.test(css));
+    ok('未下载行有复选框', /bgm-dl-cb/.test(bgm) && /\.bgm-dl-cb\s*\{/.test(css));
+    ok('已下载行有打勾', /bgm-dl-ok/.test(bgm));
+    ok('有工具栏', /bgm-dl-toolbar/.test(bgm) && /\.bgm-dl-toolbar\s*\{/.test(css));
+    ok('有「选未下载」', /bgmDlPickMissing/.test(bgm));
+    ok('有「下载选中」', /bgmDlDownloadPicked/.test(bgm));
+    ok('有「一键下载未下载」', /bgmDlDownloadMissing/.test(bgm));
+    ok('下载前与本地比对（跳过已下载）', /have\.indexOf\(e\) >= 0[\s\S]{0,120}skipped\.push/.test(bgm));
+    ok('比对后提示跳过数', /已下载，自动跳过/.test(bgm));
+
     // 9) 恢复播放进度（关面板后重开回到原位置）
     ok('saveUiState 存 playerOpen', /st\.playerOpen = /.test(bgm));
     ok('saveUiState 存 pos', /st\.pos = /.test(bgm));

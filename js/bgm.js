@@ -780,47 +780,247 @@
         var wrap = $('bgmDlDetail');
         var grid = $('bgmHotGrid');
         if (!wrap || !grid) return;
-        // 隐藏列表，显示详情
         grid.style.display = 'none';
         wrap.style.display = '';
+        $('bgmDlDetailTitle').textContent = name;
+
+        // 当前剧的元数据：剧号、总集数（用于列出未下载的集）
         var meta = metaOf(name);
         var totalCnt = seriesTotalOf(name) || meta.count || 0;
-        $('bgmDlDetailTitle').textContent = name;
         var mine = item.eps.map(function (e) { return e.ep; });
         var maxEp = mine.length ? Math.max.apply(null, mine) : 0;
-        var sizeTxt = item.totalMB >= 1024
-            ? (item.totalMB / 1024).toFixed(1) + ' GB'
-            : item.totalMB.toFixed(0) + ' MB';
-        $('bgmDlDetailSub').textContent = (totalCnt
-            ? ('已下载 ' + item.eps.length + ' / ' + totalCnt + ' 集')
-            : ('已下载 ' + item.eps.length + ' 集')) +
-            ' · ' + item.totalMB.toFixed(0) + ' MB' +
-            (maxEp > item.eps.length ? (' · 集号有缺口（最大第 ' + maxEp + ' 集）') : '');
+        // 总集数未知时，至少按「已下载最大集号」列，避免只显示已下载的
+        var showTotal = totalCnt || maxEp;
 
-        // 剧集列表
+        var sub = $('bgmDlDetailSub');
+        var baseTxt = totalCnt
+            ? ('已下载 ' + item.eps.length + ' / ' + totalCnt + ' 集')
+            : ('已下载 ' + item.eps.length + ' 集' + (maxEp > item.eps.length ? ('（最大第 ' + maxEp + ' 集）') : ''));
+        sub.textContent = baseTxt + ' · ' + item.totalMB.toFixed(0) + ' MB';
+
+        // 缺剧号或总集数时，异步补一次剧集信息；拿到后重渲染以列出全集
+        if (!meta.series_id || !totalCnt) {
+            sub.textContent += '　（正在获取剧集信息…）';
+            fillSeriesInfo(name, function (ok) {
+                var dw = $('bgmDlDetail');
+                var dt = $('bgmDlDetailTitle');
+                if (dw && dw.style.display !== 'none' && dt && dt.textContent === name) {
+                    if (ok) { showDlDetail(name); }
+                    else {
+                        sub.textContent = baseTxt + ' · ' + item.totalMB.toFixed(0) + ' MB' +
+                            '　（未取到剧集信息，仅显示已下载的集）';
+                    }
+                }
+            });
+        }
+
         var box = $('bgmDlDetailList');
         box.innerHTML = '';
-        item.eps.forEach(function (e) {
-            var row = document.createElement('div');
-            row.className = 'bgm-dl-ep';
-            row.innerHTML =
-                '<span class="bgm-dl-epno">第 ' + e.ep + ' 集</span>' +
-                '<span class="bgm-dl-epsize">' + e.sizeMB.toFixed(1) + ' MB</span>' +
-                '<span class="bgm-dl-epactions">' +
-                    '<button class="tbtn bgm-dl-play">播放</button>' +
-                    '<button class="tbtn danger bgm-dl-del">删除</button>' +
-                '</span>';
-            row.querySelector('.bgm-dl-play').addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                playDlEp(name, e.ep);
-            });
-            row.querySelector('.bgm-dl-del').addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                delDlFiles([e.path], name + ' 第 ' + e.ep + ' 集');
-            });
-            box.appendChild(row);
+
+        var epSet = {};
+        mine.forEach(function (e) { epSet[e] = true; });
+
+        // 工具栏：全选未下载 / 下载选中
+        var bar = document.createElement('div');
+        bar.className = 'bgm-dl-toolbar';
+        var missCnt = 0;
+        for (var i2 = 1; i2 <= showTotal; i2++) if (!epSet[i2]) missCnt++;
+
+        bar.innerHTML =
+            '<button class="tbtn" id="bgmDlPickMissing">选未下载（' + missCnt + '）</button>' +
+            '<button class="tbtn" id="bgmDlPickNone">取消全选</button>' +
+            '<span style="flex:1;"></span>' +
+            '<button class="tbtn primary" id="bgmDlDownloadPicked">下载选中</button>' +
+            '<button class="tbtn" id="bgmDlDownloadMissing">一键下载未下载</button>';
+        box.appendChild(bar);
+
+        var picked = {};   // 勾选的集号
+
+        // 集列表：1..总集数，已下载/未下载用不同样式
+        for (var ep = 1; ep <= showTotal; ep++) {
+            (function (ep) {
+                var have = !!epSet[ep];
+                var rec = null;
+                item.eps.forEach(function (e) { if (e.ep === ep) rec = e; });
+                var row = document.createElement('div');
+                row.className = 'bgm-dl-ep' + (have ? ' is-have' : ' is-missing');
+                row.setAttribute('data-ep', String(ep));
+
+                var cb = '';
+                if (!have) {
+                    cb = '<input type="checkbox" class="bgm-dl-cb" data-ep="' + ep + '">';
+                } else {
+                    cb = '<span class="bgm-dl-ok">✔</span>';
+                }
+                var sizeTxt = have ? (rec.sizeMB.toFixed(1) + ' MB') : '未下载';
+                var acts = have
+                    ? ('<button class="tbtn bgm-dl-play">播放</button>' +
+                       '<button class="tbtn danger bgm-dl-del">删除</button>')
+                    : ('<button class="tbtn bgm-dl-dlone">下载</button>');
+
+                row.innerHTML =
+                    cb +
+                    '<span class="bgm-dl-epno">第 ' + ep + ' 集</span>' +
+                    '<span class="bgm-dl-epsize">' + sizeTxt + '</span>' +
+                    '<span class="bgm-dl-epactions">' + acts + '</span>';
+
+                // 勾选
+                var cbEl = row.querySelector('.bgm-dl-cb');
+                if (cbEl) {
+                    cbEl.addEventListener('change', function () {
+                        if (cbEl.checked) picked[ep] = true; else delete picked[ep];
+                        updatePickCount();
+                    });
+                }
+                // 已下载：播放 / 删除
+                var pb = row.querySelector('.bgm-dl-play');
+                if (pb) pb.addEventListener('click', function (ev) { ev.stopPropagation(); playDlEp(name, ep); });
+                var db = row.querySelector('.bgm-dl-del');
+                if (db) db.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    delDlFiles([rec.path], name + ' 第 ' + ep + ' 集');
+                });
+                // 未下载：单独下载
+                var one = row.querySelector('.bgm-dl-dlone');
+                if (one) one.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    downloadPickedEps(name, [ep]);
+                });
+                box.appendChild(row);
+            })(ep);
+        }
+
+        function updatePickCount() {
+            var btn = document.getElementById('bgmDlDownloadPicked');
+            if (!btn) return;
+            var n = Object.keys(picked).length;
+            btn.textContent = n ? ('下载选中（' + n + '）') : '下载选中';
+        }
+
+        // 选未下载
+        var pm = document.getElementById('bgmDlPickMissing');
+        if (pm) pm.addEventListener('click', function () {
+            picked = {};
+            var cbs = box.querySelectorAll('.bgm-dl-cb');
+            for (var k = 0; k < cbs.length; k++) {
+                cbs[k].checked = true;
+                picked[parseInt(cbs[k].getAttribute('data-ep'), 10)] = true;
+            }
+            updatePickCount();
+        });
+        // 取消全选
+        var pn = document.getElementById('bgmDlPickNone');
+        if (pn) pn.addEventListener('click', function () {
+            picked = {};
+            var cbs = box.querySelectorAll('.bgm-dl-cb');
+            for (var k = 0; k < cbs.length; k++) cbs[k].checked = false;
+            updatePickCount();
+        });
+        // 下载选中
+        var dp = document.getElementById('bgmDlDownloadPicked');
+        if (dp) dp.addEventListener('click', function () {
+            var eps = Object.keys(picked).map(function (x) { return parseInt(x, 10); });
+            if (!eps.length) { flash('还没勾选集数'); return; }
+            downloadPickedEps(name, eps);
+        });
+        // 一键下载未下载
+        var dm = document.getElementById('bgmDlDownloadMissing');
+        if (dm) dm.addEventListener('click', function () {
+            var eps = [];
+            for (var e2 = 1; e2 <= showTotal; e2++) if (!epSet[e2]) eps.push(e2);
+            if (!eps.length) { flash('没有未下载的集'); return; }
+            downloadPickedEps(name, eps);
         });
     }
+
+    // 补全某剧的剧集信息（剧号 + 总集数）。
+    // 与 fetchCoverFor 的区别：不受 coverTried 会话去重限制，可重复调用。
+    function fillSeriesInfo(name, cb) {
+        if (!name) { cb && cb(false); return; }
+        var meta = metaOf(name);
+        var done = function (ok) { cb && cb(ok); };
+        // 有剧号：直接查
+        if (meta.series_id) {
+            api('/series?series_id=' + encodeURIComponent(meta.series_id), { timeout: 40000 })
+                .then(function (r) {
+                    if (r && r.code === 0 && r.data) {
+                        rememberSeriesMeta(name, r.data);
+                        done(!!r.data.vid_list && r.data.vid_list.length > 0);
+                    } else done(false);
+                }).catch(function () { done(false); });
+            return;
+        }
+        // 没剧号：按剧名搜索，取名字一致的
+        api('/search?keyword=' + encodeURIComponent(name), { timeout: 40000 })
+            .then(function (r) {
+                var list = (r && r.data) || [];
+                var hit = null;
+                for (var i = 0; i < list.length; i++) {
+                    if (list[i].name === name) { hit = list[i]; break; }
+                }
+                if (!hit && list.length) hit = list[0];
+                if (!hit) { done(false); return; }
+                // 搜到剧号后再拉一次详情，才有总集数
+                return api('/series?series_id=' + encodeURIComponent(hit.series_id), { timeout: 40000 })
+                    .then(function (r2) {
+                        if (r2 && r2.code === 0 && r2.data) {
+                            rememberSeriesMeta(name, r2.data);
+                            done(!!r2.data.vid_list && r2.data.vid_list.length > 0);
+                        } else done(false);
+                    });
+            }).catch(function () { done(false); });
+    }
+
+    // 下载指定集（会先与本地比对，跳过已下载的）
+    function downloadPickedEps(name, eps) {
+        var meta = metaOf(name);
+        var sid = meta.series_id;
+        if (!sid) {
+            bgmDialog.alert({
+                title: '无法下载',
+                body: '这部剧缺少剧号信息，无法下载。\n\n请先在首页搜索或从榜单打开这部剧一次，再回来下载。'
+            });
+            return;
+        }
+        ensureServer().then(function () {
+            return api('/series?series_id=' + encodeURIComponent(sid), { timeout: 40000 });
+        }).then(function (r) {
+            if (!r || r.code !== 0 || !r.data) { bgmDialog.alert({ title: '失败', body: '获取剧集信息失败，请稍后重试' }); return; }
+            var info = r.data;
+            rememberSeriesMeta(name, info);
+            var vids = info.vid_list || [];
+            // 与本地比对：跳过已下载的
+            return refreshLocal().then(function () {
+                var have = dlEpsOf(info.name || name);
+                var want = [], skipped = [];
+                eps.forEach(function (e) {
+                    if (have.indexOf(e) >= 0) skipped.push(e);
+                    else if (vids[e - 1]) want.push(e);
+                });
+                if (!want.length) {
+                    bgmDialog.alert({
+                        title: '无需下载',
+                        body: '选中的 ' + eps.length + ' 集里，' + skipped.length + ' 集已经下载过了' +
+                              (skipped.length < eps.length ? '，其余集不存在' : '') + '。'
+                    });
+                    return;
+                }
+                var msg = '本次将下载 ' + want.length + ' 集。';
+                if (skipped.length) msg += '\n其中 ' + skipped.length + ' 集已下载，自动跳过。';
+                bgmDialog.confirm({
+                    title: '下载确认',
+                    body: '《' + (info.name || name) + '》\n' + msg + '\n\n开始下载？',
+                    okText: '开始下载',
+                    cancelText: '取消'
+                }).then(function (yes) {
+                    if (!yes) return;
+                    downloadEps(info, want);
+                });
+            });
+        }).catch(function (e) { flash('下载失败：' + (e && e.message || e)); });
+    }
+
+
 
     // 从详情返回列表
     function closeDlDetail() {
@@ -3387,6 +3587,57 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         }, 10);
     }
 
+    // ---------- 通用：下载指定的集 ----------
+    // epList 是「已经算好要下载的集号数组」（调用方负责跳过已下载的）。
+    // 串行逐集下载：服务端一次只处理一个下载任务，并发会互相拖慢。
+    function downloadEps(info, epList) {
+        if (!info || !epList || !epList.length) return;
+        var vids = info.vid_list || [];
+        var name = info.name || '';
+        curSeries = info;
+        dlJobStart(info.series_id, name, epList.length);
+        if (hotKind === 'downloaded') renderDlGrid();
+
+        var idx = 0, idxDone = 0;
+        showProgress('下载 ' + epList.length + ' 集');
+        function next() {
+            if (idx >= epList.length) {
+                flash('已提交全部 ' + epList.length + ' 集，下载完成');
+                dlJobFinish(info.series_id);
+                refreshLocal().then(function () {
+                    if (hotKind === 'downloaded') {
+                        var d = $('bgmDlDetail');
+                        // 若正停在该剧详情页，刷新详情（让已下载集变色）
+                        if (d && d.style.display !== 'none') {
+                            var cur = $('bgmDlDetailTitle').textContent;
+                            if (cur === name) showDlDetail(name);
+                        } else {
+                            renderDlGrid();
+                        }
+                    }
+                });
+                return;
+            }
+            var ep = epList[idx++];
+            var vid = vids[ep - 1];
+            if (!vid) { setTimeout(next, 100); return; }
+            post('/download', { series_id: info.series_id, vid: vid, name: name, ep: ep }, 60000)
+                .then(function (rr) {
+                    if (!rr || rr.code !== 0) {
+                        flash('第 ' + ep + ' 集启动失败，跳过');
+                        setTimeout(next, 300);
+                        return;
+                    }
+                    pollDownloadJob(rr.data.jobId, ep, function () {
+                        idxDone++;
+                        setTimeout(next, 200);
+                    }, { sid: info.series_id, name: name, total: epList.length, done: idxDone });
+                })
+                .catch(function () { setTimeout(next, 500); });
+        }
+        next();
+    }
+
     // 下载整部剧：拉剧集信息 → 跳过已下载的集 → 对缺口逐集下载
     function downloadWholeSeries(it) {
         if (!it || !it.series_id) return;
@@ -3418,38 +3669,7 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
                     cancelText: '取消'
                 }).then(function (yes) {
                 if (!yes) return;
-                // 逐集触发下载（服务端串行处理，这里按顺序发，避免并发）
-                curSeries = info;
-                var idx = 0;
-                dlJobStart(info.series_id, info.name || it.name, miss.length);
-                // 若用户正停在「已下载」页，切回去让他看到新卡片
-                if (hotKind === 'downloaded') renderDlGrid();
-                function next() {
-                    if (idx >= miss.length) {
-                        flash('该剧下载完成');
-                        dlJobFinish(info.series_id);
-                        refreshLocal();
-                        return;
-                    }
-                    var ep = miss[idx++];
-                    var vid = vids[ep - 1];
-                    post('/download', { series_id: info.series_id, vid: vid, name: info.name, ep: ep }, 60000)
-                        .then(function (rr) {
-                            if (!rr || rr.code !== 0) {
-                                flash('第 ' + ep + ' 集启动失败，跳过');
-                                setTimeout(next, 300);
-                                return;
-                            }
-                            pollDownloadJob(rr.data.jobId, ep, function () {
-                                idxDone++;
-                                setTimeout(next, 200);
-                            }, { sid: info.series_id, name: info.name || it.name, total: miss.length, done: idxDone });
-                        })
-                        .catch(function () { setTimeout(next, 500); });
-                }
-                var idxDone = 0;
-                showProgress('下载该剧');
-                next();
+                downloadEps(info, miss);   // 复用通用下载逻辑
                 });
             });
         }).catch(function (e) { flash('下载失败：' + (e && e.message || e)); });

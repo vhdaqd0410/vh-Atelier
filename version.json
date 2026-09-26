@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.35.0",
-  "buildTime": "2026-09-26 17:28:42",
+  "version": "1.36.0",
+  "buildTime": "2026-09-26 17:55:47",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "已下载页封面不显示修复：封面改为多源回退查找（缓存/收藏/播放历史），并对无封面剧自动补齐"
+  "notes": "已下载详情页改为全集列表（已下载/未下载区分），支持勾选下载与一键下载未下载集，下载前自动比对跳过已下载"
 }
