@@ -3890,3 +3890,32 @@ button.primary:hover { background: var(--btn-primary-hover); }
     color: var(--fg-title);
 }
 
+/* ===== 播放器内「扒此集」大按钮 ===== */
+.bgm-player-rip {
+    padding: 0 10px 6px;
+}
+.bgm-rip-btn {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--btn-primary-bg, #3d6ef5);
+    border: 1px solid transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background .14s;
+}
+.bgm-rip-btn:hover {
+    background: var(--accent-hover, #4d7dff);
+}
+.bgm-rip-btn.done {
+    background: var(--sel-green-bg, #2a4d3a);
+    color: var(--fg-ok, #7fd68b);
+    border-color: rgba(127,214,139,.4);
+}
+/* 小窗模式下也保留（紧贴画面）*/
+#bgmPlayerWrap.bgm-mini .bgm-player-rip { padding: 4px 8px 6px; }
+#bgmPlayerWrap.bgm-mini .bgm-rip-btn { padding: 6px 10px; font-size: 12px; }
+
+

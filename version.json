@@ -3,7 +3,7 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.24.0",
+  "version": "1.24.1",
   "buildTime": "2026-09-25 11:30:00",
   "skipDirs": [
     "collect",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "短剧扒歌板块排版优化：剧集页分区为「扒歌」与「下载」两块，语义清晰；剧集行主按钮突出，低频操作（导入PR/插入时间线）收进「⋯」菜单；合并重复的本地批量入口。"
+  "notes": "播放器内新增「扒此集」大按钮，看视频时可直接扒不用回列表；修切换集时识别结果残留上一集的 bug。"
 }

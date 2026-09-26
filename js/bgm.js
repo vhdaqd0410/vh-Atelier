@@ -928,12 +928,38 @@
         }
         try { v.load(); v.play().catch(function () {}); } catch (e) {}
         drawMarkers(ep);
-        renderEpisodeSongList(ep);
+        // 该集有缓存 → 显示结果；无缓存 → 清空旧结果，避免残留上一集的内容
+        var shown = renderEpisodeSongList(ep);
+        if (!shown) clearResultArea();
         syncBar();
         focusPlayer();
+        updateRipBtn(ep);
         var info = $('bgmPlayerInfo');
         if (info) info.textContent = loc.name + '  ' + loc.sizeMB + 'MB';
         try { localStorage.setItem('vh_bgm_last_ep', String(ep)); } catch (e) {}
+    }
+
+    // 清空识别结果区（切换集时避免残留上一集内容）
+    function clearResultArea() {
+        var wrap = $('bgmResultWrap'), box = $('bgmResultList'), title = $('bgmResultTitle');
+        if (box) box.innerHTML = '';
+        if (title) title.textContent = '识别结果 · 本集还没扒';
+        // 保留结果区可见，但内容清空（不隐藏，避免布局跳动）
+        if (wrap) wrap.style.display = '';
+    }
+
+    // 更新播放器内「扒此集」按钮：按当前集缓存状态变文字
+    function updateRipBtn(ep) {
+        var b = $('btnBgmRipThis');
+        if (!b) return;
+        var cached = !!getCached(ep);
+        if (cached) {
+            b.textContent = '✓ 已扒 · 看结果';
+            b.classList.add('done');
+        } else {
+            b.textContent = '🎵 扒此集';
+            b.classList.remove('done');
+        }
     }
 
     // HEVC 黑屏兜底：检测到"有进度但无画面"则提示转码
@@ -1840,6 +1866,8 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         lastHlId = null;
         var wrap = $('bgmResultWrap'), box = $('bgmResultList');
         var songs = res.songs || [];
+        // 更新播放器内「扒此集」按钮状态（当前集扒完 → 变为已扒·看结果）
+        if (res.ep) { try { updateRipBtn(res.ep); } catch (e) {} }
         $('bgmResultTitle').textContent = (res.cached ? '\u8bc6\u522b\u7ed3\u679c\uff08\u5df2\u7f13\u5b58\uff09 \u00b7 ' : '\u8bc6\u522b\u7ed3\u679c \u00b7 ') + songs.length + ' \u9996' +
             (res.duration ? '\uff08\u97f3\u9891 ' + res.duration + 's\uff0c\u626b\u63cf ' + res.windows + ' \u7a97' : '') +
             (res.episodes ? '\uff0c' + res.episodes + ' \u96c6' : '') + '\uff09';
@@ -2214,6 +2242,12 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         // 下载目录 / 播放器
         var od = $('btnBgmOpenDir');
         if (od) od.addEventListener('click', openDownloadDir);
+        // 播放器内「扒此集」大按钮
+        on('btnBgmRipThis', function () {
+            if (!curSeries || !playEp) { flash('先在下面选一集播放'); return; }
+            var vid = curSeries.vid_list && curSeries.vid_list[playEp - 1];
+            pickEpisode(vid, playEp);
+        }, 'click');
         var pv = $('btnBgmPlayerPrev');
         if (pv) pv.addEventListener('click', function () { playNav(-1); });
         var nx = $('btnBgmPlayerNext');
