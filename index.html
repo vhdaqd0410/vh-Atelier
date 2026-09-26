@@ -633,6 +633,15 @@
 
             <!-- 首页：热门短剧瀑布流 -->
             <div id="bgmHome" class="bgm-home">
+                <!-- 播放历史：接着看（首屏第一眼位置） -->
+                <div id="bgmPlayHistWrap" style="display:none;">
+                    <div class="bgm-sec-title">
+                        <span>播放历史</span>
+                        <span style="flex:1;"></span>
+                        <span id="bgmPlayHistClear" class="bgm-mini-link">清空</span>
+                    </div>
+                    <div id="bgmPlayHist" class="bgm-ph-list"></div>
+                </div>
                 <div class="bgm-sec-title">
                     <span>热门短剧</span>
                     <span style="flex:1;"></span>
@@ -644,6 +653,8 @@
                     <button class="tbtn bgm-hot-tab" data-kind="real">真人剧榜</button>
                     <button class="tbtn bgm-hot-tab" data-kind="ai">AI 剧榜</button>
                     <button class="tbtn bgm-hot-tab" data-kind="comic">漫剧榜</button>
+                    <button class="tbtn bgm-hot-tab" id="bgmFavTab" data-kind="fav">⭐ 收藏</button>
+                    <button class="tbtn bgm-hot-tab" id="bgmDlTab" data-kind="downloaded">⬇ 已下载</button>
                 </div>
                 <!-- 题材分类 -->
                 <div class="bgm-tab-row">
@@ -726,7 +737,22 @@
                     </div>
                     <!-- 画面 -->
                     <div class="bgm-player-stage">
-                        <video id="bgmV" controls playsinline preload="metadata"></video>
+                        <!-- 注意：不用原生 controls —— CEP 自带的原生控件与下方自制控制条重复，
+                             两套控件干同一件事。改由 .bgm-player-bar 统一接管。 -->
+                        <video id="bgmV" playsinline preload="metadata"></video>
+                        <!-- 就绪前遮罩：点播后立刻可见，覆盖 下载中/转码中/准备播放/失败 四种状态。
+                             以前这些只靠 2.2 秒的 flash 浮字提示，画面区是黑屏，用户感觉不到反馈。 -->
+                        <div id="bgmBuf" class="bgm-buf" style="display:none;">
+                            <div class="bgm-buf-inner">
+                                <div class="bgm-buf-spin"></div>
+                                <div class="bgm-buf-msg" id="bgmBufMsg">准备播放…</div>
+                                <div class="bgm-buf-bar" id="bgmBufBarWrap" style="display:none;">
+                                    <div class="bgm-buf-fill" id="bgmBufFill"></div>
+                                </div>
+                                <div class="bgm-buf-sub" id="bgmBufSub"></div>
+                                <button class="bgm-buf-cancel" id="bgmBufCancel" style="display:none;">取消</button>
+                            </div>
+                        </div>
                         <!-- 悬浮听歌识曲（复用网易云板块的识曲链路）-->
                         <button id="bgmIdentifyFab" class="bgm-fab" title="听歌识曲：录 6 秒正在播放的声音并识别">🎧</button>
                         <div id="bgmIdentifyPanel" class="bgm-fab-panel" style="display:none;">
@@ -738,13 +764,46 @@
                             <div id="bgmIdentifyProgress" class="bgm-fab-prog"></div>
                             <div id="bgmIdentifyResult" class="bgm-fab-res" style="display:none;"></div>
                         </div>
-                        <div id="bgmNowSong" style="display:none;" title="点这里跳到识别列表"></div>
+                        <!-- 正在播放的 BGM 提示已改为进度条上的临时气泡（见 bgmProgWrap 内） -->
+                        <!-- 选集浮层（控制条「☰」触发，不用回列表） -->
+                        <div id="bgmEpPicker" class="bgm-eppick" style="display:none;">
+                            <div class="bgm-eppick-head">
+                                <span>选集</span>
+                                <span style="flex:1;"></span>
+                                <button class="bgm-pbtn" id="btnBgmEpPickerClose" title="关闭">✕</button>
+                            </div>
+                            <div class="bgm-eppick-grid" id="bgmEpPickerGrid"></div>
+                        </div>
                     </div>
-                    <!-- 进度 + BGM 标记（合在一条更清晰） -->
+                    <!-- 进度条 + BGM 色块（合一）：整条就是进度条（底色=轨道、高亮=已播、色块=BGM 区间），
+                         点击/拖动可跳转；当前播放的那首色块会放大+发光。
+                         原来视频上另蒙了一层半透明遮罩，挡住画面，已去掉。 -->
                     <div class="bgm-player-foot">
-                        <div id="bgmMarkerBar" style="display:none;"></div>
+                        <div id="bgmProgWrap" class="bgm-pbar" style="display:none;">
+                            <!-- 当前 BGM 气泡：从进度条对应位置滑出，播完收回 -->
+                            <div id="bgmNowSong" class="bgm-nsbub" title="点这里跳到识别列表"></div>
+                            <span class="bgm-pbar-time" id="bgmPbarCur">0:00</span>
+                            <div class="bgm-pbar-hit" id="bgmPbarHit" title="点击/拖动跳转">
+                                <div class="bgm-pbar-fill" id="bgmPbarFill"></div>
+                                <div id="bgmMarkerBar"></div>
+                                <div class="bgm-pbar-knob" id="bgmPbarKnob"></div>
+                            </div>
+                            <span class="bgm-pbar-time" id="bgmPbarDur">0:00</span>
+                        </div>
                         <div id="bgmMarkerTip" class="bgm-player-tip"></div>
                         <div id="bgmTcHint" class="bgm-player-tip" style="display:none;color:var(--fg-warn-soft);"></div>
+                    </div>
+                    <!-- 播放器自带控制条（原面板底部 #bgmBar 挪入此处，与画面同体） -->
+                    <div id="bgmBar" class="bgm-player-bar" style="display:none;">
+                        <button id="btnBgmBarPlay" class="bgm-pbtn" title="播放/暂停">▶</button>
+                        <span class="bgm-bar-time" id="bgmBarCur">0:00</span>
+                        <span class="bgm-pbar-spacer"></span>
+                        <button id="btnBgmBarPrev" class="bgm-pbtn" title="上一集">◀</button>
+                        <button id="btnBgmBarPick" class="bgm-pbtn" title="选集">☰</button>
+                        <button id="btnBgmBarNext" class="bgm-pbtn" title="下一集">▶</button>
+                        <button id="btnBgmBarFull" class="bgm-pbtn" title="全屏">⛶</button>
+                        <input type="range" id="bgmBarVol" min="0" max="1" step="0.01" value="0.8"
+                            style="width:56px;flex:0 0 auto;" title="音量">
                     </div>
                     <!-- 播放器内直接扒此集（大按钮，省得回列表点） -->
                     <div class="bgm-player-rip">
@@ -799,21 +858,6 @@
 
         </div>
 
-        <!-- 底部播放条（仿网易云） -->
-        <div id="bgmBar" style="display:none;">
-            <button id="btnBgmBarPlay" class="tbtn" style="padding:3px 10px;font-size:13px;">▶</button>
-            <button id="btnBgmBarStop" class="tbtn" style="padding:3px 8px;font-size:11px;">⏹</button>
-            <span class="bgm-bar-time" id="bgmBarCur">0:00</span>
-            <div class="bgm-bar-seek" id="bgmBarSeek" title="点击/拖动跳转">
-                <div class="bgm-bar-fill" id="bgmBarFill"></div>
-            </div>
-            <span class="bgm-bar-time" id="bgmBarDur">0:00</span>
-            <span class="bgm-bar-title" id="bgmBarTitle">未在播放</span>
-            <button id="btnBgmBarPrev" class="tbtn" style="padding:3px 8px;font-size:11px;">◀</button>
-            <button id="btnBgmBarNext" class="tbtn" style="padding:3px 8px;font-size:11px;">▶</button>
-            <input type="range" id="bgmBarVol" min="0" max="1" step="0.01" value="0.8"
-                style="width:64px;flex:0 0 auto;" title="音量">
-        </div>
     </div>
 
     <!-- ==================== 板块四：多版本导出 ==================== -->
@@ -1512,6 +1556,7 @@
     <script src="js/updater.js"></script>
     <script src="js/main.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/localsvc.js"></script>
     <script src="js/tmp-clean.js"></script>
     <script src="js/translate.js"></script>
     <script src="js/subtitle.js"></script>

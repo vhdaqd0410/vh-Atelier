@@ -15,6 +15,18 @@
     var videoSvcIndex = path.join(videoSvcDir, 'index.js');
     var videoChild = null;
 
+    // 本地服务句柄（共享模块：探活 / HTTP 调用 / node 查找）
+    var svc = window.__vhLocalSvc.create({
+        base: API,
+        name: '视频下载',
+        defaultTimeout: 8000,
+        retries: 1,
+        interval: 2000,
+        errorStatusMessage: '连不上本地服务（' + API + '）',
+        errorNetMessage: '无法连接本地服务（' + API + '）',
+        spawn: function () { return spawnSvc(); }
+    });
+
     var parsedInfo = null;    // 解析结果
     var lastOutPath = '';     // 最近下载完成的文件路径
     var batching = false;     // 批量下载进行中标志
@@ -27,6 +39,11 @@
 
     function setStatus(msg, type) {
         var s = $('vStatus');
+        // 失败信息同时落盘到 collect/error.log：面板一关界面提示就没了，
+        // 下载/导入出问题时排障只能靠现象反推。只落 err，避免刷满日志。
+        if (type === 'err') {
+            try { if (window.__vhLog) window.__vhLog.err('[video] ' + msg); } catch (e) {}
+        }
         if (!s) return;
         s.textContent = msg || '';
         s.className = 'v-status ' + (type || '');
@@ -51,46 +68,14 @@
     }
 
     // ---------- fetch 封装 ----------
-    // 失败时尽量带上 HTTP 状态与响应片段，避免所有错误都变成笼统的「响应解析失败」
+    // 失败时尽量带上 HTTP 状态与响应片段，避免所有错误都变成笼统的「响应解析失败」。
+    // 实现已抽到 js/localsvc.js，此处保留同名函数以免改动各处调用。
     function api(pathname) {
-        return new Promise(function (resolve, reject) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', API + pathname, true);
-            xhr.timeout = 8000;
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState !== 4) return;
-                if (xhr.status === 0) { reject(new Error('连不上本地服务（' + API + '）')); return; }
-                var txt = xhr.responseText || '';
-                try { resolve(JSON.parse(txt)); }
-                catch (e) {
-                    reject(new Error('响应解析失败（HTTP ' + xhr.status + '，返回：' + txt.slice(0, 80).replace(/\s+/g, ' ') + '）'));
-                }
-            };
-            xhr.onerror = function () { reject(new Error('无法连接本地服务（' + API + '）')); };
-            xhr.ontimeout = function () { reject(new Error('请求超时')); };
-            xhr.send();
-        });
+        return svc.api(pathname);
     }
 
     function apiPost(pathname, body) {
-        return new Promise(function (resolve, reject) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', API + pathname, true);
-            xhr.timeout = 8000;
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState !== 4) return;
-                if (xhr.status === 0) { reject(new Error('连不上本地服务（' + API + '）')); return; }
-                var txt = xhr.responseText || '';
-                try { resolve(JSON.parse(txt)); }
-                catch (e) {
-                    reject(new Error('响应解析失败（HTTP ' + xhr.status + '，返回：' + txt.slice(0, 80).replace(/\s+/g, ' ') + '）'));
-                }
-            };
-            xhr.onerror = function () { reject(new Error('无法连接本地服务（' + API + '）')); };
-            xhr.ontimeout = function () { reject(new Error('请求超时')); };
-            xhr.send(JSON.stringify(body || {}));
-        });
+        return svc.api(pathname, { method: 'POST', body: body || {} });
     }
 
     function enc(v) { return encodeURIComponent(v); }
@@ -198,22 +183,9 @@
     }
 
     // ---------- 服务自举 ----------
+    // findNode / 探活重试 已抽到 js/localsvc.js；spawnSvc 保留（报错文案是本板块特有的）
     function findNode() {
-        var candidates = [
-            'C:\\Program Files\\nodejs\\node.exe',
-            'C:\\Program Files (x86)\\nodejs\\node.exe'
-        ];
-        for (var i = 0; i < candidates.length; i++) {
-            if (fs.existsSync(candidates[i])) return candidates[i];
-        }
-        try {
-            var which = childProcess.spawnSync('where', ['node'], { encoding: 'utf8' });
-            if (which.status === 0 && which.stdout) {
-                var first = which.stdout.split('\n')[0].trim();
-                if (first) return first;
-            }
-        } catch (e) {}
-        return null;
+        return svc.findNode();
     }
 
     function spawnSvc() {
@@ -238,18 +210,7 @@
     }
 
     function ensureServer(retries) {
-        var tries = retries || 0;
-        return api('/health').then(function (h) {
-            return h;
-        }).catch(function () {
-            if (tries < 1) {
-                spawnSvc();
-                return new Promise(function (resolve) {
-                    setTimeout(function () { resolve(ensureServer(tries + 1)); }, 2000);
-                });
-            }
-            throw new Error('服务启动失败，请检查 Node.js 安装');
-        });
+        return svc.ensureServer(retries);
     }
 
     // ---------- cookie 状态 ----------

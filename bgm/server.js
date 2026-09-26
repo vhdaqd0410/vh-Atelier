@@ -1563,6 +1563,53 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { code: 0, data: { dir, files: out } })
     }
 
+    // ── 本地文件管理（删除 / 占用统计）──
+    // 安全铁律：只允许操作 videoDir() 之内的文件。
+    // 用 path.resolve 后再校验前缀，杜绝 ../ 路径穿越。
+    function insideVideoDir(target) {
+      try {
+        const root = path.resolve(videoDir())
+        const full = path.resolve(target)
+        return full === root || full.startsWith(root + path.sep)
+      } catch (e) { return false }
+    }
+
+    if (p === '/local-delete' && req.method === 'POST') {
+      const b = await readBody(req)
+      const files = Array.isArray(b.files) ? b.files : (b.file ? [b.file] : [])
+      if (!files.length) return send(res, 200, { code: -1, msg: '没有指定要删除的文件' })
+      const dir = videoDir()
+      const h264Dir = path.join(dir, '_h264')
+      const ok = [], fail = []
+      for (const f of files) {
+        try {
+          if (!insideVideoDir(f)) { fail.push({ file: f, msg: '路径不在下载目录内，拒绝删除' }); continue }
+          if (!fs.existsSync(f)) { fail.push({ file: f, msg: '文件不存在' }); continue }
+          fs.unlinkSync(f)
+          // 顺带删掉对应的转码缓存（同名的 _h264 版本）
+          try {
+            const h = path.join(h264Dir, path.basename(f))
+            if (fs.existsSync(h)) fs.unlinkSync(h)
+          } catch (e) {}
+          ok.push(f)
+        } catch (e) { fail.push({ file: f, msg: e.message }) }
+      }
+      return send(res, 200, { code: 0, data: { ok, fail, count: ok.length } })
+    }
+
+    if (p === '/local-usage') {
+      // 统计下载占用（供「已下载」页展示）
+      const dir = videoDir()
+      let total = 0, count = 0
+      try {
+        for (const f of fs.readdirSync(dir)) {
+          if (!/\.(mp4|mkv|mov|webm)$/i.test(f)) continue
+          try { total += fs.statSync(path.join(dir, f)).size; count++ } catch (e) {}
+        }
+      } catch (e) {}
+      return send(res, 200, { code: 0, data: { dir, total, count } })
+    }
+
     if (p === '/status') {
       const id = u.searchParams.get('jobId') || ''
       const j = jobs[id]

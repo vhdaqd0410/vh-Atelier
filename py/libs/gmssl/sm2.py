@@ -1,7 +1,11 @@
 import binascii
 from random import choice
 from . import sm3, func
-from Cryptodome.Util.asn1 import DerSequence, DerInteger
+# 兼容 pycryptodome(Crypto.*) 与 pycryptodomex(Cryptodome.*) 两种安装形式。
+try:
+    from Crypto.Util.asn1 import DerSequence, DerInteger
+except ImportError:
+    from Cryptodome.Util.asn1 import DerSequence, DerInteger
 from binascii import unhexlify
 # 选择素域，设置椭圆曲线参数
 

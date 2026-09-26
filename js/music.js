@@ -15,6 +15,18 @@
     var ncmIndex = path.join(ncmDir, 'index.js');
     var ncmChild = null;
 
+    // 本地服务句柄（共享模块：探活 / HTTP 调用 / node 查找）
+    var svc = window.__vhLocalSvc.create({
+        base: API,
+        name: '网易云',
+        defaultTimeout: 8000,
+        retries: 1,
+        interval: 2000,
+        errorStatusMessage: '无法连接本地服务',
+        errorNetMessage: '无法连接本地服务',
+        spawn: function () { return spawnNcm(); }
+    });
+
     // ---- 下载到音乐库 - 状态 ----
     var DL_DIR_KEY = 'vh_music_dl_dir';   // 上次下载保存目录（绝对路径）
     var selSet = {};                       // 批量下载多选：songId -> song
@@ -159,69 +171,22 @@
     }
 
     // ---------- fetch 封装 ----------
+    // 实现已抽到 js/localsvc.js，此处保留同名函数以免改动各处调用
     function api(pathname) {
-        return new Promise(function (resolve, reject) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', API + pathname, true);
-            xhr.timeout = 8000;
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
-                    try {
-                        var data = JSON.parse(xhr.responseText);
-                        resolve(data);
-                    } catch (e) {
-                        reject(new Error('响应解析失败'));
-                    }
-                }
-            };
-            xhr.onerror = function () { reject(new Error('无法连接本地服务')); };
-            xhr.ontimeout = function () { reject(new Error('请求超时')); };
-            xhr.send();
-        });
+        return svc.api(pathname);
     }
 
     function enc(v) { return encodeURIComponent(v); }
 
     // ---------- fetch 封装（POST，JSON body） ----------
     function apiPost(pathname, body) {
-        return new Promise(function (resolve, reject) {
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', API + pathname, true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.timeout = 10000;
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === 4) {
-                    try {
-                        var data = JSON.parse(xhr.responseText);
-                        resolve(data);
-                    } catch (e) {
-                        reject(new Error('响应解析失败'));
-                    }
-                }
-            };
-            xhr.onerror = function () { reject(new Error('无法连接本地服务')); };
-            xhr.ontimeout = function () { reject(new Error('请求超时')); };
-            xhr.send(JSON.stringify(body || {}));
-        });
+        return svc.api(pathname, { method: 'POST', body: body || {}, timeout: 10000 });
     }
 
     // ---------- 服务自举 ----------
+    // findNode / 探活重试 已抽到 js/localsvc.js；spawnNcm 保留（状态栏文案是本板块特有的）
     function findNode() {
-        var candidates = [
-            'C:\\Program Files\\nodejs\\node.exe',
-            'C:\\Program Files (x86)\\nodejs\\node.exe'
-        ];
-        for (var i = 0; i < candidates.length; i++) {
-            if (fs.existsSync(candidates[i])) return candidates[i];
-        }
-        try {
-            var which = childProcess.spawnSync('where', ['node'], { encoding: 'utf8' });
-            if (which.status === 0 && which.stdout) {
-                var first = which.stdout.split('\n')[0].trim();
-                if (first) return first;
-            }
-        } catch (e) {}
-        return null;
+        return svc.findNode();
     }
 
     function spawnNcm() {
@@ -250,22 +215,9 @@
     }
 
     // 探测服务，没跑就拉起；返回 Promise<health>
+    // 探活重试逻辑已抽到 js/localsvc.js
     function ensureServer(retries) {
-        var tries = retries || 0;
-        return api('/health').then(function (h) {
-            return h;
-        }).catch(function () {
-            if (tries < 1) {
-                spawnNcm();
-                // 等 2 秒再探一次
-                return new Promise(function (resolve) {
-                    setTimeout(function () {
-                        resolve(ensureServer(tries + 1));
-                    }, 2000);
-                });
-            }
-            throw new Error('服务启动失败，请检查 Node.js 安装');
-        });
+        return svc.ensureServer(retries);
     }
 
     // ---------- 服务健康检测 ----------

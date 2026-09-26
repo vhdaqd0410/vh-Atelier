@@ -181,8 +181,10 @@
     }
 
     // 渲染「跨版本变更」：标题 + 每个版本的条目，带类型配色
-    var KIND_LABEL = { feat: '新增', fix: '修复', impr: '改进', note: '说明' };
-    var KIND_COLOR = { feat: '#56d364', fix: '#ff8a80', impr: '#7fb2ff', note: '#9aa3b2' };
+    // 兼容 kind 的两种历史写法：早期条目写过 impro，后来统一为 impr。
+    // 二者混用时若只认一种，另一类条目会丢失「改进」标签（文字还在，但看不出类型）。
+    var KIND_LABEL = { feat: '新增', fix: '修复', impr: '改进', impro: '改进', note: '说明' };
+    var KIND_COLOR = { feat: '#56d364', fix: '#ff8a80', impr: '#7fb2ff', impro: '#7fb2ff', note: '#9aa3b2' };
 
     function renderChanges(list) {
         if (!list || !list.length) return '';

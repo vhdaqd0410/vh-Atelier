@@ -72,6 +72,13 @@
   var resultDir = '';   // 运行时确定（async 初始化）
 
   function log(msg, cls) {
+    // 失败信息同时落盘到 collect/error.log：面板一关界面日志就没了，
+    // 超分/去字幕出问题时排障只能靠现象反推。只落 err/warn。
+    if (cls === 'err') {
+      try { if (window.__vhLog) window.__vhLog.err('[enhance] ' + msg); } catch (e) {}
+    } else if (cls === 'warn') {
+      try { if (window.__vhLog) window.__vhLog.warn('[enhance] ' + msg); } catch (e) {}
+    }
     if (!enLog) return;
     var d = document.createElement('div');
     d.className = cls || '';

@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.32.1",
-  "buildTime": "2026-09-25 11:30:00",
+  "version": "1.33.0",
+  "buildTime": "2026-09-26 16:11:03",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "播放器内新增「扒此集」大按钮，看视频时可直接扒不用回列表；修切换集时识别结果残留上一集的 bug。"
+  "notes": "播放器体验重做（点击画面播放/暂停、进度条+BGM色块高亮、BGM气泡、恢复播放进度）+ 剧集收藏 + 已下载板块与右键菜单 + 弹窗UI与下载进度优化"
 }

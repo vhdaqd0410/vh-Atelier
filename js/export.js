@@ -68,6 +68,12 @@
     if (level === true || level === 'err' || level === 'error') lv = 'error';
     else if (level === 'warn' || level === 'warning') lv = 'warn';
     else if (level === 'success' || level === 'ok') lv = 'success';
+    // 失败信息同时落盘到 collect/error.log：面板一关界面日志就没了，
+    // 导出出问题时排障只能靠现象反推。只落 error/warn，避免正常流程刷满日志。
+    try {
+      if (lv === 'error' && window.__vhLog) window.__vhLog.err('[export] ' + msg);
+      else if (lv === 'warn' && window.__vhLog) window.__vhLog.warn('[export] ' + msg);
+    } catch (e) {}
     var line = document.createElement('div');
     line.className = 'log-line ' + lv;
     var ts = document.createElement('span');

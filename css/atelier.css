@@ -3230,8 +3230,7 @@ body.cx-resizing *{cursor:col-resize !important;}
 #bgmPlayerWrap.bgm-mini .bgm-player-head { padding: 5px 7px; }
 #bgmPlayerWrap.bgm-mini .bgm-player-foot,
 #bgmPlayerWrap.bgm-mini .bgm-player-info { display: none; }
-#bgmPlayerWrap.bgm-mini #bgmNowSong { left: 6px; right: 6px; bottom: 6px; font-size: 10.5px; padding: 3px 7px; }
-.bgm-dot {
+#bgmPlayerWrap.bgm-mini .bgm-dot {
     display: inline-block;
     width: 8px; height: 8px;
     border-radius: 50%;
@@ -3261,19 +3260,690 @@ body.cx-resizing *{cursor:col-resize !important;}
     border-radius: 8px;
     font-size: 11.5px;
 }
-#bgmBar .bgm-bar-time { font-family: Consolas, monospace; color: var(--muted); min-width: 34px; }
-#bgmBar .bgm-bar-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-#bgmNowSong {
-    margin-top: 6px;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-left-width: 4px;
-    border-radius: 6px;
-    background: rgba(255,255,255,.04);
+
+/* 挪入播放器内部后的控制条：不再是面板底部的独立吸底条，
+   而是画面下方紧贴的一条，与播放器同体。 */
+.bgm-player-bar {
+    position: static;
+    bottom: auto;
+    margin-top: 0;
+    border: none;
+    border-top: 1px solid rgba(255,255,255,.06);
+    border-radius: 0;
+    background: rgba(255,255,255,.02);
+    font-size: 11px;
+    padding: 6px 8px;
+    gap: 6px;
+}
+
+/* 小型播放器按钮（控制条内用，比 .tbtn 紧凑） */
+.bgm-pbtn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--fg-title, #dcdcdc);
+    border-radius: 5px;
+    padding: 3px 7px;
     font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: background .12s, border-color .12s;
+}
+.bgm-pbtn:hover {
+    background: rgba(255,255,255,.08);
+    border-color: rgba(255,255,255,.12);
+}
+
+/* ---- 就绪前遮罩（下载/转码/准备/失败）---- */
+.bgm-buf {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8, 10, 14, .82);
+    backdrop-filter: blur(2px);
+}
+
+.bgm-buf-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    width: 78%;
+    max-width: 300px;
+    text-align: center;
+}
+
+/* 旋转动画 */
+.bgm-buf-spin {
+    width: 26px;
+    height: 26px;
+    border: 2.5px solid rgba(255,255,255,.14);
+    border-top-color: var(--accent, #8b7cf6);
+    border-radius: 50%;
+    animation: bgm-buf-rotate .85s linear infinite;
+}
+@keyframes bgm-buf-rotate {
+    to { transform: rotate(360deg); }
+}
+
+.bgm-buf-msg {
+    font-size: 12.5px;
+    color: #e8e8ea;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.bgm-buf-bar {
+    width: 100%;
+    height: 5px;
+    background: rgba(255,255,255,.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.bgm-buf-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 3px;
+    transition: width .25s ease;
+}
+
+.bgm-buf-sub {
+    font-size: 10.5px;
+    color: var(--fg-dim, #9aa3b2);
+    line-height: 1.5;
+    min-height: 14px;
+}
+
+.bgm-buf-cancel {
+    margin-top: 2px;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.16);
+    color: #dcdcdc;
+    border-radius: 6px;
+    padding: 3px 14px;
+    font-size: 11px;
     cursor: pointer;
 }
-#bgmNowSong:hover { background: rgba(255,255,255,.09); }
+.bgm-buf-cancel:hover { background: rgba(255,255,255,.14); }
+/* 失败态：换掉旋转图标为叹号，颜色转警示 */
+.bgm-buf.is-error .bgm-buf-spin {
+    border-color: rgba(240, 120, 120, .5);
+    border-top-color: #f2879a;
+    animation: none;
+}
+.bgm-buf.is-error .bgm-buf-msg { color: #f6a3b1; }
+
+/* ---- 播放进度条 + BGM 色块（合一）---- */
+/* 整条即进度条：轨道底色 + 已播高亮 + BGM 区间色块，点击/拖动可跳转。
+   色块高亮效果与原来的视频叠加层一致（放大 + 白边 + 发光）。 */
+/* ---- 当前 BGM 气泡：从进度条位置滑出，播完收回 ---- */
+/* 不再常驻画面上（那样挡观看），而是在进度条上方临时浮出。 */
+.bgm-nsbub {
+    position: absolute;
+    bottom: 100%;           /* 贴在进度条上方 */
+    left: 0;
+    margin-bottom: 6px;
+    max-width: 92%;
+    padding: 5px 10px;
+    border-radius: 7px;
+    border: 1px solid rgba(255,255,255,.14);
+    border-left-width: 3px;  /* 左侧色条：用歌曲主色 */
+    background: rgba(14, 16, 20, .94);
+    box-shadow: 0 4px 16px rgba(0,0,0,.55);
+    font-size: 11.5px;
+    color: #e8e8ea;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    z-index: 20;
+    /* 默认：收起状态（向下滑出视野 + 淡出 + 微缩） */
+    opacity: 0;
+    transform: translateY(6px) scale(.92);
+    transform-origin: left bottom;
+    pointer-events: none;
+    transition: opacity .22s ease, transform .26s cubic-bezier(.22, 1.2, .36, 1);
+}
+/* 展开：滑入 + 淡入 + 回弹到正常大小 */
+.bgm-nsbub.is-in {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+/* 气泡下方小尖角，指向进度条 */
+.bgm-nsbub::after {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 100%;
+    width: 0;
+    height: 0;
+    border: 5px solid transparent;
+    border-top-color: rgba(14, 16, 20, .94);
+}
+.bgm-nsbub b { color: #fff; font-weight: 700; }
+.bgm-nsbub .bgm-nsbub-art { color: var(--fg-dim, #9aa3b2); }
+
+.bgm-pbar {
+    position: relative;
+    padding: 7px 0 5px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.bgm-pbar-time {
+    flex: 0 0 auto;
+    font-family: Consolas, monospace;
+    font-size: 10.5px;
+    color: var(--fg-num, #9aa3b2);
+    min-width: 30px;
+}
+
+/* 控制条里的弹性空位（把右侧按钮推到右边）*/
+.bgm-pbar-spacer { flex: 1 1 auto; }
+
+.bgm-pbar-hit {
+    position: relative;
+    flex: 1 1 auto;
+    height: 9px;
+    background: #151515;
+    border-radius: 5px;
+    cursor: pointer;
+    /* 让放大后的色块能溢出显示（不裁切）*/
+    overflow: visible;
+}
+/* 内层用伪元素做轨道裁切，保证已播填充也被裁进圆角 */
+.bgm-pbar-hit::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 5px;
+    background: #151515;
+    overflow: hidden;
+}
+
+/* 已播部分 */
+.bgm-pbar-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 5px;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* 播放头小圆点 */
+.bgm-pbar-knob {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 11px;
+    height: 11px;
+    margin-left: -5.5px;
+    margin-top: -5.5px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(139, 124, 246, .55), 0 1px 4px rgba(0,0,0,.5);
+    z-index: 4;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.bgm-pbar-hit:hover .bgm-pbar-knob { opacity: 1; }
+
+/* BGM 色块层：在填充之上，随时间轴定位 */
+#bgmMarkerBar {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: 5px;
+    overflow: visible;
+}
+
+/* 单个 BGM 区间色块 */
+.bgm-mark {
+    position: absolute;
+    height: 100%;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+    transform-origin: center;
+}
+
+/* 当前正在播放的那首：与视频叠加层一致的放大 + 白边 + 发光 */
+.bgm-mark.is-current {
+    transform: scaleY(2.1);
+    box-shadow: 0 0 0 2px #fff, 0 0 10px rgba(255,255,255,.7), 0 2px 8px rgba(0,0,0,.6);
+    z-index: 5;
+}
+
+/* ---- 播放历史（首页「接着看」）---- */
+/* ---- 统一弹窗（替代原生 confirm/alert）---- */
+.bgm-dlg-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: bgm-dlg-fade .16s ease;
+}
+@keyframes bgm-dlg-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.bgm-dlg {
+    width: min(340px, 88vw);
+    background: var(--panel, #242424);
+    border: 1px solid var(--border, #444);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.55);
+    overflow: hidden;
+    animation: bgm-dlg-pop .2s cubic-bezier(.22, 1.2, .36, 1);
+}
+@keyframes bgm-dlg-pop {
+    from { opacity: 0; transform: translateY(8px) scale(.96); }
+    to { opacity: 1; transform: none; }
+}
+
+.bgm-dlg-head {
+    padding: 12px 16px 0;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--fg-title, #dcdcdc);
+}
+.bgm-dlg.is-danger .bgm-dlg-head { color: #f2879a; }
+
+.bgm-dlg-body {
+    padding: 8px 16px 4px;
+    font-size: 12px;
+    line-height: 1.75;
+    color: var(--fg-body, #c8cdd6);
+    white-space: pre-line;   /* 支持 \n 换行 */
+}
+
+.bgm-dlg-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 16px 14px;
+}
+
+.bgm-dlg-btn {
+    min-width: 76px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border, #444);
+    background: var(--btn-alt-bg, rgba(255,255,255,.06));
+    color: var(--fg-title, #dcdcdc);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.bgm-dlg-btn:hover { background: rgba(255,255,255,.12); }
+
+.bgm-dlg-btn.is-primary {
+    background: var(--btn-primary-bg, #3d6ef5);
+    border-color: var(--btn-primary-bg, #3d6ef5);
+    color: #fff;
+    font-weight: 600;
+}
+.bgm-dlg-btn.is-primary:hover { background: var(--btn-primary-hover, #4f7cf7); }
+
+.bgm-dlg-btn.is-danger {
+    background: #b8443f;
+    border-color: #b8443f;
+}
+.bgm-dlg-btn.is-danger:hover { background: #cc4f4a; }
+
+/* ---- 轻提示胶囊（顶部滑入，多条堆叠）---- */
+.bgm-toast-host {
+    position: fixed;
+    top: 54px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10060;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.bgm-toast {
+    max-width: 78vw;
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: rgba(20, 24, 20, .95);
+    border: 1px solid rgba(127, 214, 139, .35);
+    color: #9fe0ab;
+    font-size: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    opacity: 0;
+    transform: translateY(-8px) scale(.96);
+    transition: opacity .22s ease, transform .26s cubic-bezier(.22, 1.2, .36, 1);
+}
+.bgm-toast.is-in {
+    opacity: 1;
+    transform: none;
+}
+/* 类型变体 */
+.bgm-toast.is-warn {
+    background: rgba(30, 26, 16, .95);
+    border-color: rgba(230, 196, 105, .4);
+    color: #e6c469;
+}
+.bgm-toast.is-err {
+    background: rgba(30, 18, 20, .95);
+    border-color: rgba(242, 135, 154, .4);
+    color: #f6a3b1;
+}
+
+/* ---- 已下载页：下载中卡片 + 进度条 + 缺口标记 ---- */
+.bgm-dl-series.is-downloading {
+    border-color: rgba(139, 124, 246, .45);
+    background: rgba(139, 124, 246, .06);
+}
+.bgm-dl-series.is-downloading .bgm-dl-arrow {
+    color: var(--accent, #8b7cf6);
+    animation: bgm-dl-bounce .9s ease-in-out infinite;
+}
+@keyframes bgm-dl-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(2px); }
+}
+
+.bgm-dl-prog {
+    height: 3px;
+    margin: 0 10px 8px;
+    background: rgba(255,255,255,.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.bgm-dl-prog > i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 2px;
+    transition: width .3s ease;
+}
+
+.bgm-dl-gap {
+    color: var(--fg-warn-soft, #e6c469);
+    margin-left: 6px;
+}
+
+/* ---- 已下载剧集（按剧分组管理）---- */
+.bgm-dl-series {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    overflow: hidden;
+    background: rgba(255,255,255,.02);
+}
+
+.bgm-dl-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 10px;
+    cursor: pointer;
+    user-select: none;
+}
+.bgm-dl-head:hover { background: rgba(255,255,255,.05); }
+
+.bgm-dl-arrow {
+    flex: 0 0 auto;
+    width: 12px;
+    font-size: 11px;
+    color: var(--fg-dim, #9aa3b2);
+}
+
+.bgm-dl-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-title, #dcdcdc);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bgm-dl-meta {
+    flex: 0 0 auto;
+    font-size: 10.5px;
+    color: var(--fg-dim, #9aa3b2);
+}
+
+.bgm-dl-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 4px;
+}
+.bgm-dl-actions .tbtn { padding: 2px 7px; font-size: 10.5px; }
+
+/* 展开后的集列表 */
+.bgm-dl-eps {
+    border-top: 1px solid rgba(255,255,255,.06);
+    background: rgba(0,0,0,.15);
+}
+
+.bgm-dl-ep {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px 6px 28px;
+    font-size: 11.5px;
+}
+.bgm-dl-ep:hover { background: rgba(255,255,255,.04); }
+
+.bgm-dl-epno { flex: 0 0 auto; color: var(--fg-title, #dcdcdc); min-width: 52px; }
+.bgm-dl-epsize { flex: 1; color: var(--fg-dim, #9aa3b2); font-size: 10.5px; }
+.bgm-dl-epactions { flex: 0 0 auto; display: flex; gap: 4px; }
+.bgm-dl-epactions .tbtn { padding: 2px 8px; font-size: 10.5px; }
+
+/* ---- 剧集卡片上的收藏星标 ---- */
+/* 盖在封面右上角；未收藏半透明，收藏后金色高亮 */
+.bgm-card-fav {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 3;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
+    font-size: 14px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .45);
+    color: rgba(255, 255, 255, .72);
+    cursor: pointer;
+    user-select: none;
+    transition: transform .14s ease, color .14s ease, background .14s ease;
+}
+.bgm-card-fav:hover {
+    background: rgba(0, 0, 0, .7);
+    transform: scale(1.15);
+}
+/* 已收藏：金色 + 微光 */
+.bgm-card-fav.is-on {
+    color: #ffd45e;
+    background: rgba(0, 0, 0, .55);
+    text-shadow: 0 0 6px rgba(255, 212, 94, .8);
+}
+
+/* ---- 播放历史（首页「接着看」）---- */
+.bgm-ph-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 4px;
+}
+
+.bgm-ph-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: rgba(255,255,255,.02);
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.bgm-ph-item:hover {
+    background: rgba(255,255,255,.07);
+    border-color: var(--accent, #8b7cf6);
+}
+
+/* 封面：有图用图，无图用色块占位 */
+.bgm-ph-cover {
+    width: 34px;
+    height: 46px;
+    flex: 0 0 auto;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #3a3a44, #26262e);
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: rgba(255,255,255,.35);
+}
+
+.bgm-ph-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.bgm-ph-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-title, #dcdcdc);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bgm-ph-meta {
+    font-size: 10.5px;
+    color: var(--fg-dim, #9aa3b2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 进度条（看到多少）*/
+.bgm-ph-prog {
+    height: 3px;
+    background: rgba(255,255,255,.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 2px;
+}
+.bgm-ph-prog > i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 2px;
+}
+
+.bgm-ph-go {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--accent, #8b7cf6);
+    white-space: nowrap;
+}
+
+/* 单条上的删除小叉 */
+.bgm-ph-del {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: var(--fg-dim, #6b7280);
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+}
+.bgm-ph-del:hover { color: #f2879a; }
+
+/* ---- 选集浮层 ---- */
+.bgm-eppick {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    z-index: 70;
+    width: 78%;
+    max-width: 300px;
+    max-height: 62%;
+    display: flex;
+    flex-direction: column;
+    background: rgba(14, 16, 20, .95);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.5);
+    overflow: hidden;
+}
+
+.bgm-eppick-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    font-size: 11.5px;
+    color: #dcdcdc;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+}
+
+.bgm-eppick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    gap: 4px;
+    padding: 7px;
+    overflow-y: auto;
+}
+
+.bgm-eppick-item {
+    text-align: center;
+    padding: 4px 2px;
+    font-size: 11px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.04);
+    color: #cfd3da;
+    cursor: pointer;
+    user-select: none;
+}
+.bgm-eppick-item:hover { background: rgba(255,255,255,.12); }
+
+/* 已下载的集：绿色左边框，一眼可辨 */
+.bgm-eppick-item.is-local {
+    border-color: rgba(120, 217, 138, .45);
+    color: #bfe8c8;
+}
+
+/* 当前正在播的集 */
+.bgm-eppick-item.is-cur {
+    background: var(--accent, #8b7cf6);
+    border-color: var(--accent, #8b7cf6);
+    color: #fff;
+    font-weight: 700;
+}
+#bgmBar .bgm-bar-time { font-family: Consolas, monospace; color: var(--muted); min-width: 34px; }
+#bgmBar .bgm-bar-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 
 /* ===== 短剧扒歌 · 首页瀑布流 ===== */
 .bgm-grid {
@@ -3282,6 +3952,7 @@ body.cx-resizing *{cursor:col-resize !important;}
     gap: 8px;
 }
 .bgm-grid-card {
+    position: relative;
     cursor: pointer;
     border-radius: 6px;
     overflow: hidden;
@@ -3326,8 +3997,7 @@ body.cx-resizing *{cursor:col-resize !important;}
     contain: paint;
 }
 #bgmPlayerWrap.bgm-mini video { contain: paint; }
-#bgmNowSong { will-change: contents; }
-#bgmMarkerBar { contain: strict; }
+
 
 /* ===== 短剧扒歌 · 播放器（优化版）===== */
 .bgm-player {
@@ -3386,25 +4056,6 @@ body.cx-resizing *{cursor:col-resize !important;}
     background: #000;
     outline: none;
 }
-#bgmNowSong {
-    position: absolute;
-    left: 10px;
-    bottom: 10px;
-    right: 10px;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-left-width: 4px;
-    border-radius: 6px;
-    background: rgba(12,12,12,.82);
-    backdrop-filter: blur(4px);
-    font-size: 12px;
-    color: #eee;
-    cursor: pointer;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-#bgmNowSong:hover { background: rgba(30,30,30,.92); }
 .bgm-player-foot { padding: 8px 10px 0; }
 .bgm-player-tip { font-size: 10.5px; color: var(--muted); padding: 4px 0 6px; }
 .bgm-player-info {
@@ -3416,13 +4067,7 @@ body.cx-resizing *{cursor:col-resize !important;}
     white-space: nowrap;
 }
 /* 进度条上的 BGM 色块（换成更精致的高度） */
-#bgmMarkerBar {
-    position: relative;
-    height: 8px;
-    background: #151515;
-    border-radius: 4px;
-    overflow: hidden;
-}
+
 
 /* ===== 底部播放条（对齐网易云板块）===== */
 .bgm-bar-seek {

@@ -829,6 +829,10 @@
     if (text) importModal.txt.textContent = text;
   }
   function showResultModal(title, detail) {
+    // 导入失败同时落盘：这是个一次性弹窗，关掉就再没入口查原因了。
+    if (title && title.indexOf('失败') >= 0) {
+      try { if (window.__vhLog) window.__vhLog.err('[media] ' + title + '：' + String(detail || '').replace(/\n/g, ' | ')); } catch (e) {}
+    }
     if (importModal) { try { importModal.ov.parentNode && importModal.ov.parentNode.removeChild(importModal.ov); } catch (e) {} importModal = null; }
     var ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10011;display:flex;align-items:center;justify-content:center;';
