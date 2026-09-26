@@ -3819,6 +3819,87 @@ body.cx-resizing *{cursor:col-resize !important;}
     padding-left: 8px;
 }
 
+/* ---- 已下载详情：紧凑集号格子（替代一集一行）---- */
+.bgm-dl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+    gap: 5px;
+    padding: 10px;
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(0,0,0,.12);
+}
+
+.bgm-dl-cell {
+    position: relative;
+    height: 34px;
+    line-height: 34px;
+    text-align: center;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    border: 1px solid transparent;
+    transition: transform .1s ease, background .12s ease, border-color .12s ease;
+}
+.bgm-dl-cell:hover { transform: translateY(-1px); }
+
+/* 已下载：绿色调 + 左下角小点 */
+.bgm-dl-cell.is-have {
+    background: rgba(120, 217, 138, .13);
+    border-color: rgba(120, 217, 138, .38);
+    color: #bfe8c8;
+    font-weight: 600;
+}
+.bgm-dl-cell.is-have:hover {
+    background: rgba(120, 217, 138, .22);
+    border-color: rgba(120, 217, 138, .6);
+}
+.bgm-dl-cell.is-have::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    bottom: 4px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #78d98a;
+}
+
+/* 未下载：暗色虚线框 */
+.bgm-dl-cell.is-missing {
+    background: rgba(255,255,255,.03);
+    border-color: rgba(255,255,255,.16);
+    border-style: dashed;
+    color: #8b93a3;
+}
+.bgm-dl-cell.is-missing:hover {
+    background: rgba(255,255,255,.08);
+    border-color: rgba(255,255,255,.3);
+    color: #cfd3da;
+}
+
+/* 勾选态：紫色实心描边 + 打勾角标 */
+.bgm-dl-cell.is-picked {
+    background: rgba(139, 124, 246, .3);
+    border-color: var(--accent, #8b7cf6);
+    border-style: solid;
+    color: #fff;
+    box-shadow: 0 0 0 1px rgba(139, 124, 246, .5);
+}
+.bgm-dl-cell.is-picked::before {
+    content: '✓';
+    position: absolute;
+    right: 3px;
+    top: 1px;
+    font-size: 9px;
+    color: #fff;
+}
+
+/* 旧的行式列表样式保留（不改动其他引用），但详情页不再用 */
+
 /* ---- 已下载剧集（按剧分组管理）---- */
 .bgm-dl-series {
     border: 1px solid var(--border);

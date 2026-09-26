@@ -836,95 +836,78 @@
 
         var picked = {};   // 勾选的集号
 
-        // 集列表：1..总集数，已下载/未下载用不同样式
+        // 集列表：紧凑数字格子（不占空间，一屏能看完全集）
+        var gridBox = document.createElement('div');
+        gridBox.className = 'bgm-dl-grid';
+        box.appendChild(gridBox);
+
         for (var ep = 1; ep <= showTotal; ep++) {
             (function (ep) {
                 var have = !!epSet[ep];
                 var rec = null;
                 item.eps.forEach(function (e) { if (e.ep === ep) rec = e; });
-                var row = document.createElement('div');
-                row.className = 'bgm-dl-ep' + (have ? ' is-have' : ' is-missing');
-                row.setAttribute('data-ep', String(ep));
-
-                var cb = '';
-                if (!have) {
-                    cb = '<input type="checkbox" class="bgm-dl-cb" data-ep="' + ep + '">';
-                } else {
-                    cb = '<span class="bgm-dl-ok">✔</span>';
-                }
-                var sizeTxt = have ? (rec.sizeMB.toFixed(1) + ' MB') : '未下载';
-                var acts = have
-                    ? ('<button class="tbtn bgm-dl-play">播放</button>' +
-                       '<button class="tbtn danger bgm-dl-del">删除</button>')
-                    : ('<button class="tbtn bgm-dl-dlone">下载</button>');
-
-                row.innerHTML =
-                    cb +
-                    '<span class="bgm-dl-epno">第 ' + ep + ' 集</span>' +
-                    '<span class="bgm-dl-epsize">' + sizeTxt + '</span>' +
-                    '<span class="bgm-dl-epactions">' + acts + '</span>';
-
-                // 勾选
-                var cbEl = row.querySelector('.bgm-dl-cb');
-                if (cbEl) {
-                    cbEl.addEventListener('change', function () {
-                        if (cbEl.checked) picked[ep] = true; else delete picked[ep];
-                        updatePickCount();
-                    });
-                }
-                // 已下载：播放 / 删除
-                var pb = row.querySelector('.bgm-dl-play');
-                if (pb) pb.addEventListener('click', function (ev) { ev.stopPropagation(); playDlEp(name, ep); });
-                var db = row.querySelector('.bgm-dl-del');
-                if (db) db.addEventListener('click', function (ev) {
-                    ev.stopPropagation();
-                    delDlFiles([rec.path], name + ' 第 ' + ep + ' 集');
+                var cell = document.createElement('div');
+                cell.className = 'bgm-dl-cell' + (have ? ' is-have' : ' is-missing');
+                cell.setAttribute('data-ep', String(ep));
+                cell.textContent = String(ep);
+                cell.title = '第 ' + ep + ' 集' +
+                    (have ? ('　已下载（' + rec.sizeMB.toFixed(1) + ' MB）\n左键播放，右键更多')
+                          : '　未下载\n点击勾选，右键直接下载');
+                // 未下载的点击 = 切换勾选；已下载的点击 = 播放
+                cell.addEventListener('click', function () {
+                    if (have) { playDlEp(name, ep); return; }
+                    if (picked[ep]) { delete picked[ep]; cell.classList.remove('is-picked'); }
+                    else { picked[ep] = true; cell.classList.add('is-picked'); }
+                    updatePickCount();
                 });
-                // 未下载：单独下载
-                var one = row.querySelector('.bgm-dl-dlone');
-                if (one) one.addEventListener('click', function (ev) {
+                // 右键：更多操作
+                cell.addEventListener('contextmenu', function (ev) {
+                    ev.preventDefault();
                     ev.stopPropagation();
-                    downloadPickedEps(name, [ep]);
+                    showCellMenu(name, ep, have, rec, function () {
+                        // 删除后刷新详情页
+                        refreshLocal().then(function () { showDlDetail(name); });
+                    }, ev);
                 });
-                box.appendChild(row);
+                gridBox.appendChild(cell);
             })(ep);
         }
 
         function updatePickCount() {
-            var btn = document.getElementById('bgmDlDownloadPicked');
+            var btn = box.querySelector('#bgmDlDownloadPicked') || document.getElementById('bgmDlDownloadPicked');
             if (!btn) return;
             var n = Object.keys(picked).length;
             btn.textContent = n ? ('下载选中（' + n + '）') : '下载选中';
         }
 
-        // 选未下载
-        var pm = document.getElementById('bgmDlPickMissing');
+        // 选未下载：把所有未下载格子标为选中
+        var pm = box.querySelector('#bgmDlPickMissing') || document.getElementById('bgmDlPickMissing');
         if (pm) pm.addEventListener('click', function () {
             picked = {};
-            var cbs = box.querySelectorAll('.bgm-dl-cb');
-            for (var k = 0; k < cbs.length; k++) {
-                cbs[k].checked = true;
-                picked[parseInt(cbs[k].getAttribute('data-ep'), 10)] = true;
+            var cells = gridBox.querySelectorAll('.bgm-dl-cell.is-missing');
+            for (var k = 0; k < cells.length; k++) {
+                cells[k].classList.add('is-picked');
+                picked[parseInt(cells[k].getAttribute('data-ep'), 10)] = true;
             }
             updatePickCount();
         });
         // 取消全选
-        var pn = document.getElementById('bgmDlPickNone');
+        var pn = box.querySelector('#bgmDlPickNone') || document.getElementById('bgmDlPickNone');
         if (pn) pn.addEventListener('click', function () {
             picked = {};
-            var cbs = box.querySelectorAll('.bgm-dl-cb');
-            for (var k = 0; k < cbs.length; k++) cbs[k].checked = false;
+            var cells = gridBox.querySelectorAll('.bgm-dl-cell.is-picked');
+            for (var k = 0; k < cells.length; k++) cells[k].classList.remove('is-picked');
             updatePickCount();
         });
         // 下载选中
-        var dp = document.getElementById('bgmDlDownloadPicked');
+        var dp = box.querySelector('#bgmDlDownloadPicked') || document.getElementById('bgmDlDownloadPicked');
         if (dp) dp.addEventListener('click', function () {
             var eps = Object.keys(picked).map(function (x) { return parseInt(x, 10); });
             if (!eps.length) { flash('还没勾选集数'); return; }
             downloadPickedEps(name, eps);
         });
         // 一键下载未下载
-        var dm = document.getElementById('bgmDlDownloadMissing');
+        var dm = box.querySelector('#bgmDlDownloadMissing') || document.getElementById('bgmDlDownloadMissing');
         if (dm) dm.addEventListener('click', function () {
             var eps = [];
             for (var e2 = 1; e2 <= showTotal; e2++) if (!epSet[e2]) eps.push(e2);
@@ -969,6 +952,54 @@
                         } else done(false);
                     });
             }).catch(function () { done(false); });
+    }
+
+    // 集格子右键菜单：已下载 -> 播放/删除；未下载 -> 下载
+    function showCellMenu(name, ep, have, rec, afterDelete, ev) {
+        var old = document.getElementById('bgmCellMenu');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var menu = document.createElement('div');
+        menu.id = 'bgmCellMenu';
+        menu.style.cssText = 'position:fixed;z-index:9999;min-width:150px;background:#2b2b2b;' +
+            'border:1px solid #444;border-radius:6px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.45);font-size:12px;';
+        function mi(text, fn, danger) {
+            var el = document.createElement('div');
+            el.style.cssText = 'padding:7px 12px;cursor:pointer;border-radius:4px;white-space:nowrap;' +
+                (danger ? 'color:#f2879a;' : 'color:var(--text);');
+            el.textContent = text;
+            el.addEventListener('mouseenter', function () { el.style.background = 'rgba(255,255,255,.08)'; });
+            el.addEventListener('mouseleave', function () { el.style.background = ''; });
+            el.addEventListener('click', function () {
+                menu.remove();
+                try { fn(); } catch (e) { flash('操作出错：' + (e && e.message || e)); }
+            });
+            menu.appendChild(el);
+        }
+        if (have) {
+            mi('▶ 播放第 ' + ep + ' 集', function () { playDlEp(name, ep); });
+            mi('⬇ 重新下载这一集', function () {
+                delDlFiles([rec.path], name + ' 第 ' + ep + ' 集');
+            }, false);
+            mi('🗑 删除本地文件', function () {
+                delDlFiles([rec.path], name + ' 第 ' + ep + ' 集');
+                if (afterDelete) setTimeout(afterDelete, 300);
+            }, true);
+        } else {
+            mi('⬇ 下载第 ' + ep + ' 集', function () { downloadPickedEps(name, [ep]); });
+        }
+        document.body.appendChild(menu);
+        // 定位在鼠标右键处（坐标由调用方传入）
+        var x = (ev && ev.clientX) || 100, y = (ev && ev.clientY) || 100;
+        if (x + 160 > window.innerWidth) x = window.innerWidth - 165;
+        if (y + (menu.offsetHeight || 120) > window.innerHeight) y = window.innerHeight - (menu.offsetHeight || 120) - 4;
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+        setTimeout(function () {
+            var kill = function (e2) {
+                if (!menu.contains(e2.target)) { menu.remove(); document.removeEventListener('click', kill); }
+            };
+            document.addEventListener('click', kill);
+        }, 10);
     }
 
     // 下载指定集（会先与本地比对，跳过已下载的）

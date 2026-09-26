@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.36.0",
-  "buildTime": "2026-09-26 17:55:47",
+  "version": "1.37.0",
+  "buildTime": "2026-09-26 18:03:39",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "已下载详情页改为全集列表（已下载/未下载区分），支持勾选下载与一键下载未下载集，下载前自动比对跳过已下载"
+  "notes": "已下载详情页的集列表改为紧凑数字网格（原一集一行太占空间），已下载/未下载分色，点击勾选、右键更多操作"
 }
