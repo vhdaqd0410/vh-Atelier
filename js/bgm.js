@@ -452,7 +452,158 @@
         seriesMeta[name] = m;
         saveSeriesMeta();
     }
-    function metaOf(name) { return seriesMeta[name] || {}; }
+    // 取某剧的元数据（封面/总集数）。
+    // 多源回退：本地缓存 -> 收藏记录 -> 播放历史。
+    // 原因：封面缓存是后来才加的，之前下载的剧不在缓存里，
+    //       但收藏与播放历史里其实早就存过 cover，不该丢掉。
+    // 剧名归一化：文件名里的剧名会被 safeName 替换过特殊字符，
+    // 用它做一次宽松匹配，避免「文件名剧名 ≠ 缓存 key」导致取不到封面。
+    function normName(n) { return String(n || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80); }
+    function findMetaKey(name) {
+        if (seriesMeta[name]) return name;
+        var nn = normName(name);
+        var keys = Object.keys(seriesMeta);
+        for (var i = 0; i < keys.length; i++) {
+            if (normName(keys[i]) === nn) return keys[i];
+        }
+        return name;
+    }
+
+    function metaOf(name) {
+        if (!name) return {};
+        var key = findMetaKey(name);
+        var m = seriesMeta[key];
+        if (m && m.cover) return m;
+
+        var found = { cover: '', count: 0, series_id: '' };
+        if (m) { found.cover = m.cover || ''; found.count = m.count || 0; found.series_id = m.series_id || ''; }
+
+        // 收藏记录
+        if (!found.cover) {
+            try {
+                var favs = loadFavSeries();
+                for (var i = 0; i < favs.length; i++) {
+                    if (favs[i].name === name && favs[i].cover) {
+                        found.cover = favs[i].cover;
+                        if (!found.count && favs[i].count) found.count = favs[i].count;
+                        if (!found.series_id && favs[i].series_id) found.series_id = favs[i].series_id;
+                        break;
+                    }
+                }
+            } catch (e) {}
+        }
+        // 播放历史
+        if (!found.cover) {
+            try {
+                var hist = loadPlayHist();
+                for (var k = 0; k < hist.length; k++) {
+                    if (hist[k].name === name && hist[k].cover) {
+                        found.cover = hist[k].cover;
+                        if (!found.count && hist[k].count) found.count = hist[k].count;
+                        if (!found.series_id && hist[k].series_id) found.series_id = hist[k].series_id;
+                        break;
+                    }
+                }
+            } catch (e) {}
+        }
+        // 回写缓存，下次直接用
+        if (found.cover || found.count) {
+            try {
+                seriesMeta[key] = Object.assign({}, seriesMeta[key] || {}, found);
+                saveSeriesMeta();
+            } catch (e) {}
+        }
+        return found;
+    }
+
+    // 补封面：本地有文件但缓存里没封面时，自动拉一次。
+    //   有剧号  -> 直接查 /series
+    //   没剧号  -> 用剧名搜索，取第一条的封面
+    // 每次进入已下载页最多补 6 部，避免一次性打太多请求。
+    var coverFetching = {};
+    var coverTried = {};   // 本会话内已尝试过的剧名，避免反复请求
+    function fetchCoverFor(name, onDone) {
+        if (!name || coverFetching[name] || coverTried[name]) return;
+        coverFetching[name] = true;
+        coverTried[name] = true;
+        var meta = metaOf(name);
+        var done = function () {
+            coverFetching[name] = false;
+            if (onDone) onDone();
+        };
+        // 诊断：记录补封面过程（排障用）
+        var dbg = function (how, got) {
+            try {
+                if (window.__vhLog && window.__vhLog.info) {
+                    window.__vhLog.info('[bgm-cover] ' + name + ' via=' + how +
+                        ' cover=' + (got ? got.slice(0, 60) : '（未取到）'));
+                }
+            } catch (e) {}
+        };
+        // 有剧号：直接查
+        if (meta.series_id) {
+            api('/series?series_id=' + encodeURIComponent(meta.series_id), { timeout: 40000 })
+                .then(function (r) {
+                    var got = '';
+                    if (r && r.code === 0 && r.data) {
+                        rememberSeriesMeta(name, r.data);
+                        got = r.data.cover || '';
+                    }
+                    dbg('series', got);
+                    done();
+                }).catch(function () { dbg('series', ''); done(); });
+            return;
+        }
+        // 没剧号：用剧名搜索
+        api('/search?keyword=' + encodeURIComponent(name), { timeout: 40000 })
+            .then(function (r) {
+                var list = (r && r.data) || [];
+                // 优先名字完全一致的，否则取第一条
+                var hit = null;
+                for (var i = 0; i < list.length; i++) {
+                    if (list[i].name === name) { hit = list[i]; break; }
+                }
+                if (!hit && list.length) hit = list[0];
+                if (hit) rememberSeriesMeta(name, hit);
+                dbg('search', hit ? (hit.cover || '') : '');
+                done();
+            }).catch(function () { dbg('search', ''); done(); });
+    }
+
+    // 批量补封面（进入已下载页时调用）。
+    // 注意：补完只更新对应卡片的封面 DOM，不整体重渲染 ——
+    // 否则 renderDlGrid -> fetchMissingCovers -> renderDlGrid 会形成循环。
+    function fetchMissingCovers() {
+        var grid = $('bgmHotGrid');
+        if (!grid) return;
+        var todo = [];
+        Object.keys(dlSeries).forEach(function (n) {
+            if (!metaOf(n).cover) todo.push(n);
+        });
+        if (!todo.length) return;
+        todo = todo.slice(0, 6);
+        todo.forEach(function (n) {
+            fetchCoverFor(n, function () {
+                var m = metaOf(n);
+                if (!m.cover) return;
+                // 只替换这张卡片里的封面元素
+                var cards = grid.querySelectorAll('[data-dlname]');
+                for (var i = 0; i < cards.length; i++) {
+                    if (cards[i].getAttribute('data-dlname') !== n) continue;
+                    var ph = cards[i].querySelector('.bgm-cover-ph');
+                    if (ph) {
+                        var img = document.createElement('img');
+                        img.className = 'bgm-grid-cover';
+                        img.src = m.cover;
+                        img.loading = 'lazy';
+                        img.setAttribute('onerror', "this.style.background='#222';this.removeAttribute('src')");
+                        ph.parentNode.replaceChild(img, ph);
+                    }
+                    break;
+                }
+            });
+        });
+    }
 
     // 下载中的任务：剧号 -> { name, total, done, curEp, percent }
     // 目的：触发下载后立刻能在「已下载」板块看到这部剧（文件还没落地时靠它先建卡片）
@@ -617,6 +768,8 @@
             grid.appendChild(el);
         });
         grid.setAttribute('data-loaded', '1');
+        // 有剧没封面：自动补（最多 6 部，补完会刷新一次）
+        try { fetchMissingCovers(); } catch (e) {}
     }
 
     // ---------- 已下载详情：某剧的集列表 ----------
