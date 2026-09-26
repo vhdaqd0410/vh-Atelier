@@ -400,6 +400,8 @@
             score: it.score || '',
             at: Date.now(),
         });
+        // 顺手记封面，供已下载页展示
+        try { rememberSeriesMeta(it.name, it); } catch (e) {}
         saveFavSeries(list);
         refreshFavCards();
         if (hotKind === 'fav') renderFavGrid();
@@ -431,6 +433,27 @@
     // 反推出「剧名 → 已下载的集号集合」，用于「已下载」页的按剧管理。
     // 缓存一份，供已下载页与右键菜单共用（refreshLocal 时刷新）。
     var dlSeries = {};   // name -> { name, eps: [{ep, path, sizeMB, hasH264}], totalMB, latest }
+    // 剧元数据缓存：剧名 -> { cover, count, series_id }
+    // 本地文件名里没有封面，所以把「见过的剧」的封面与总集数记下来，供已下载页展示。
+    var META_KEY = 'vh_bgm_series_meta';
+    var seriesMeta = {};
+    try { seriesMeta = JSON.parse(localStorage.getItem(META_KEY) || '{}'); } catch (e) { seriesMeta = {}; }
+    function saveSeriesMeta() {
+        try { localStorage.setItem(META_KEY, JSON.stringify(seriesMeta)); } catch (e) {}
+    }
+    // 记一部剧的元数据（打开剧集页 / 收藏 / 下载时调用）
+    function rememberSeriesMeta(name, info) {
+        if (!name || !info) return;
+        var m = seriesMeta[name] || {};
+        var cover = info.cover || info.cover_url || info.pic || '';
+        if (cover) m.cover = cover;
+        if (info.count) m.count = info.count;
+        if (info.series_id) m.series_id = info.series_id;
+        seriesMeta[name] = m;
+        saveSeriesMeta();
+    }
+    function metaOf(name) { return seriesMeta[name] || {}; }
+
     // 下载中的任务：剧号 -> { name, total, done, curEp, percent }
     // 目的：触发下载后立刻能在「已下载」板块看到这部剧（文件还没落地时靠它先建卡片）
     var dlJobs = {};
@@ -515,16 +538,18 @@
     function renderDlGrid() {
         var grid = $('bgmHotGrid');
         if (!grid) return;
+        // 进入列表页时先复位详情页（否则从详情切回来会看不到列表）
+        var dw = $('bgmDlDetail');
+        if (dw) dw.style.display = 'none';
+        grid.style.display = '';
         var obj = rebuildDlSeries();
         var names = Object.keys(obj);
 
-        // 下载中的剧（文件还没落地）也要出现在这里，让用户看到进展
-        var jobKeys = Object.keys(dlJobs);
+        // 下载中的剧也一起展示（文件还没落地，靠 dlJobs 先建卡片）
         var downloading = [];
-        jobKeys.forEach(function (k) {
+        Object.keys(dlJobs).forEach(function (k) {
             var j = dlJobs[k];
-            // 已完成落地的不再作为「下载中」重复显示
-            if (j.name && obj[j.name] && obj[j.name].eps.length >= j.done && j.done >= j.total) return;
+            if (j.name && obj[j.name] && j.done >= j.total && obj[j.name].eps.length >= j.done) return;
             downloading.push({ sid: k, job: j });
         });
 
@@ -543,103 +568,117 @@
         });
         grid.innerHTML = '';
 
-        // 先画「下载中」的剧（要标出 X/Y 集与进度）
-        downloading.forEach(function (d) {
-            var j = d.job;
+        // ---- 下载中的卡片（封面形式，右上角显示进度百分比）----
+        downloading.forEach(function (dd) {
+            var j = dd.job;
             var pct = Math.max(0, Math.min(100, j.percent || 0));
-            var card = document.createElement('div');
-            card.className = 'bgm-dl-series is-downloading';
-            card.innerHTML =
-                '<div class="bgm-dl-head">' +
-                    '<span class="bgm-dl-arrow">↓</span>' +
-                    '<span class="bgm-dl-name">' + esc(j.name || '(未命名)') + '</span>' +
-                    '<span class="bgm-dl-meta">下载中 ' + j.done + ' / ' + j.total + ' 集 · ' + pct + '%</span>' +
-                '</div>' +
-                '<div class="bgm-dl-prog"><i style="width:' + pct + '%"></i></div>';
-            grid.appendChild(card);
+            var meta = metaOf(j.name);
+            var el = document.createElement('div');
+            el.className = 'bgm-grid-card is-downloading';
+            el.title = j.name;
+            el.innerHTML =
+                (meta.cover
+                    ? '<img class="bgm-grid-cover" src="' + esc(meta.cover) + '" loading="lazy" ' +
+                      'onerror="this.style.background=\'#222\';this.removeAttribute(\'src\')">'
+                    : '<div class="bgm-grid-cover bgm-cover-ph">🎬</div>') +
+                '<span class="bgm-card-badge">下载中 ' + j.done + '/' + j.total + '</span>' +
+                '<div class="bgm-grid-name">' + esc(j.name || '(未命名)') + '</div>' +
+                '<div class="bgm-grid-sub">' + pct + '%</div>' +
+                '<div class="bgm-dl-prog bgm-dl-prog-cover"><i style="width:' + pct + '%"></i></div>';
+            grid.appendChild(el);
         });
 
+        // ---- 已下载的剧：封面卡片（与首页一致）----
         names.forEach(function (n) {
             var item = obj[n];
-            var card = document.createElement('div');
-            card.className = 'bgm-dl-series';
-            var open = !!dlExpanded[n];
-            var sizeTxt = item.totalMB >= 1024
-                ? (item.totalMB / 1024).toFixed(1) + ' GB'
-                : item.totalMB.toFixed(0) + ' MB';
-            // 总集数：优先用已知的剧信息（当前剧/收藏里存的 count），否则只显示已下载数
+            var meta = metaOf(n);
+            var totalCnt = seriesTotalOf(n) || meta.count || 0;
             var mine = item.eps.map(function (e) { return e.ep; });
             var maxEp = mine.length ? Math.max.apply(null, mine) : 0;
-            var totalCnt = seriesTotalOf(n);
-            var epsTxt = totalCnt
+            var subTxt = totalCnt
                 ? ('已下载 ' + item.eps.length + ' / ' + totalCnt + ' 集')
                 : ('已下载 ' + item.eps.length + ' 集');
-            // 有缺口时提示（靠 max 集号推断，仅供参考）
-            var gapTxt = '';
-            if (maxEp > item.eps.length) {
-                gapTxt = '<span class="bgm-dl-gap" title="已下载集号不连续，中间有缺口">缺 ' +
-                    (maxEp - item.eps.length) + ' 集</span>';
-            }
-            card.innerHTML =
-                '<div class="bgm-dl-head">' +
-                    '<span class="bgm-dl-arrow">' + (open ? '▾' : '▸') + '</span>' +
-                    '<span class="bgm-dl-name">' + esc(n) + '</span>' +
-                    '<span class="bgm-dl-meta">' + epsTxt + ' · ' + sizeTxt + gapTxt + '</span>' +
-                    '<span class="bgm-dl-actions">' +
-                        '<button class="tbtn bgm-dl-open" title="打开所在目录">📂</button>' +
-                        '<button class="tbtn danger bgm-dl-delall" title="删除这部剧的全部本地文件">删除</button>' +
-                    '</span>' +
-                '</div>' +
-                '<div class="bgm-dl-eps" style="display:' + (open ? '' : 'none') + ';"></div>';
-
-            // 展开/收起
-            var head = card.querySelector('.bgm-dl-head');
-            head.addEventListener('click', function (ev) {
-                if (ev.target.tagName === 'BUTTON') return;   // 点按钮不触发折叠
-                dlExpanded[n] = !dlExpanded[n];
-                renderDlGrid();
-            });
-            // 打开目录
-            card.querySelector('.bgm-dl-open').addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                var first = item.eps[0];
-                if (!first) return;
-                try { childProcess.spawn('explorer.exe', ['/select,' + first.path]); } catch (e) {}
-            });
-            // 删除整剧
-            card.querySelector('.bgm-dl-delall').addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                delDlFiles(item.eps.map(function (e) { return e.path; }), n + '（' + item.eps.length + ' 集）');
-            });
-
-            // 展开的集列表
-            var box = card.querySelector('.bgm-dl-eps');
-            if (open) {
-                item.eps.forEach(function (e) {
-                    var row = document.createElement('div');
-                    row.className = 'bgm-dl-ep';
-                    row.innerHTML =
-                        '<span class="bgm-dl-epno">第 ' + e.ep + ' 集</span>' +
-                        '<span class="bgm-dl-epsize">' + e.sizeMB.toFixed(1) + ' MB</span>' +
-                        '<span class="bgm-dl-epactions">' +
-                            '<button class="tbtn bgm-dl-play" title="播放这一集">播放</button>' +
-                            '<button class="tbtn danger bgm-dl-del" title="删除这一集">删除</button>' +
-                        '</span>';
-                    row.querySelector('.bgm-dl-play').addEventListener('click', function (ev) {
-                        ev.stopPropagation();
-                        playDlEp(n, e.ep);
-                    });
-                    row.querySelector('.bgm-dl-del').addEventListener('click', function (ev) {
-                        ev.stopPropagation();
-                        delDlFiles([e.path], n + ' 第 ' + e.ep + ' 集');
-                    });
-                    box.appendChild(row);
-                });
-            }
-            grid.appendChild(card);
+            // 集号不连续时给出缺口提示
+            if (maxEp > item.eps.length) subTxt += '  缺 ' + (maxEp - item.eps.length);
+            var el = document.createElement('div');
+            el.className = 'bgm-grid-card';
+            el.title = n + '  ' + subTxt;
+            el.setAttribute('data-dlname', n);
+            el.innerHTML =
+                (meta.cover
+                    ? '<img class="bgm-grid-cover" src="' + esc(meta.cover) + '" loading="lazy" ' +
+                      'onerror="this.style.background=\'#222\';this.removeAttribute(\'src\')">'
+                    : '<div class="bgm-grid-cover bgm-cover-ph">🎬</div>') +
+                // 已下载标识（左上角）
+                '<span class="bgm-card-dl-mark" title="已下载到本地">⬇</span>' +
+                '<div class="bgm-grid-name">' + esc(n) + '</div>' +
+                '<div class="bgm-grid-sub">' + esc(subTxt) + '</div>';
+            el.addEventListener('click', function () { showDlDetail(n); });
+            grid.appendChild(el);
         });
         grid.setAttribute('data-loaded', '1');
     }
+
+    // ---------- 已下载详情：某剧的集列表 ----------
+    function showDlDetail(name) {
+        rebuildDlSeries();
+        var item = dlSeries[name];
+        if (!item) { flash('这部剧的本地文件已不存在'); renderDlGrid(); return; }
+        var wrap = $('bgmDlDetail');
+        var grid = $('bgmHotGrid');
+        if (!wrap || !grid) return;
+        // 隐藏列表，显示详情
+        grid.style.display = 'none';
+        wrap.style.display = '';
+        var meta = metaOf(name);
+        var totalCnt = seriesTotalOf(name) || meta.count || 0;
+        $('bgmDlDetailTitle').textContent = name;
+        var mine = item.eps.map(function (e) { return e.ep; });
+        var maxEp = mine.length ? Math.max.apply(null, mine) : 0;
+        var sizeTxt = item.totalMB >= 1024
+            ? (item.totalMB / 1024).toFixed(1) + ' GB'
+            : item.totalMB.toFixed(0) + ' MB';
+        $('bgmDlDetailSub').textContent = (totalCnt
+            ? ('已下载 ' + item.eps.length + ' / ' + totalCnt + ' 集')
+            : ('已下载 ' + item.eps.length + ' 集')) +
+            ' · ' + item.totalMB.toFixed(0) + ' MB' +
+            (maxEp > item.eps.length ? (' · 集号有缺口（最大第 ' + maxEp + ' 集）') : '');
+
+        // 剧集列表
+        var box = $('bgmDlDetailList');
+        box.innerHTML = '';
+        item.eps.forEach(function (e) {
+            var row = document.createElement('div');
+            row.className = 'bgm-dl-ep';
+            row.innerHTML =
+                '<span class="bgm-dl-epno">第 ' + e.ep + ' 集</span>' +
+                '<span class="bgm-dl-epsize">' + e.sizeMB.toFixed(1) + ' MB</span>' +
+                '<span class="bgm-dl-epactions">' +
+                    '<button class="tbtn bgm-dl-play">播放</button>' +
+                    '<button class="tbtn danger bgm-dl-del">删除</button>' +
+                '</span>';
+            row.querySelector('.bgm-dl-play').addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                playDlEp(name, e.ep);
+            });
+            row.querySelector('.bgm-dl-del').addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                delDlFiles([e.path], name + ' 第 ' + e.ep + ' 集');
+            });
+            box.appendChild(row);
+        });
+    }
+
+    // 从详情返回列表
+    function closeDlDetail() {
+        var wrap = $('bgmDlDetail');
+        var grid = $('bgmHotGrid');
+        if (wrap) wrap.style.display = 'none';
+        if (grid) grid.style.display = '';
+        if (hotKind === 'downloaded') renderDlGrid();
+    }
+
+
 
     // 删除本地文件（二次确认）
     function delDlFiles(paths, label) {
@@ -713,6 +752,13 @@
             grid.removeAttribute('data-loaded');
             renderFavGrid();
             return;
+        }
+        // 切到其他标签时收起已下载详情
+        if (hotKind !== 'downloaded') {
+            var dw2 = $('bgmDlDetail');
+            if (dw2) dw2.style.display = 'none';
+            var g3 = $('bgmHotGrid');
+            if (g3) g3.style.display = '';
         }
         // 已下载也是本地数据：先刷新本地列表再渲染
         if (hotKind === 'downloaded') {
@@ -1219,6 +1265,7 @@
         }).then(function (r) {
             if (r.code !== 0) { flash(r.msg || '获取剧集失败'); return; }
             curSeries = r.data;
+            rememberSeriesMeta(r.data.name, r.data);   // 记封面/总集数
             renderSeries();
         }).catch(function (e) { flash(e.message); });
     }
@@ -3196,6 +3243,7 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         }).then(function (r) {
             if (!r || r.code !== 0 || !r.data) { flash('获取剧集失败'); return; }
             var info = r.data;
+            rememberSeriesMeta(info.name || it.name, info);   // 记封面，供已下载页展示
             var vids = info.vid_list || [];
             if (!vids.length) { flash('这部剧没有可下载的集'); return; }
             // 刷新本地列表，算出缺口
@@ -3498,6 +3546,23 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             try { localStorage.removeItem(HIST_KEY); } catch (e) {}
             renderHist();
         });
+        // 已下载详情页：返回
+        on('btnBgmDlBack', function () { closeDlDetail(); });
+        // 打开该剧所在目录
+        on('btnBgmDlOpen', function () {
+            var name = $('bgmDlDetailTitle') ? $('bgmDlDetailTitle').textContent : '';
+            var item = dlSeries[name];
+            if (!item || !item.eps.length) return;
+            try { childProcess.spawn('explorer.exe', ['/select,' + item.eps[0].path]); } catch (e) {}
+        });
+        // 删除该剧全部本地文件
+        on('btnBgmDlDelAll', function () {
+            var name = $('bgmDlDetailTitle') ? $('bgmDlDetailTitle').textContent : '';
+            var item = dlSeries[name];
+            if (!item || !item.eps.length) return;
+            delDlFiles(item.eps.map(function (e) { return e.path; }), name + '（' + item.eps.length + ' 集）');
+        });
+
         // 播放历史清空（首页「接着看」）
         on('bgmPlayHistClear', function () {
             clearPlayHist();

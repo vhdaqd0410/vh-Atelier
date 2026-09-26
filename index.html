@@ -537,6 +537,18 @@
                     <button class="tbtn bgm-hot-tab" data-kind="cat:action-adventure">动作</button>
                 </div>
                 <div id="bgmHotGrid" class="bgm-grid"></div>
+                <!-- 已下载详情（点封面卡片后显示）：某剧的集列表 -->
+                <div id="bgmDlDetail" style="display:none;">
+                    <div class="bgm-dl-detail-head">
+                        <button id="btnBgmDlBack" class="tbtn">‹ 返回</button>
+                        <span class="bgm-dl-detail-title" id="bgmDlDetailTitle"></span>
+                        <span style="flex:1;"></span>
+                        <button id="btnBgmDlOpen" class="tbtn" title="打开所在目录">📂</button>
+                        <button id="btnBgmDlDelAll" class="tbtn danger" title="删除这部剧的全部本地文件">删除该剧</button>
+                    </div>
+                    <div class="bgm-dl-detail-sub" id="bgmDlDetailSub"></div>
+                    <div id="bgmDlDetailList" class="bgm-dl-detail-list"></div>
+                </div>
             </div>
 
             <!-- 搜索结果 -->
