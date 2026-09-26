@@ -5288,3 +5288,51 @@ button.primary:hover { background: var(--btn-primary-hover); }
 }
 .bgm-dl-detail-list .bgm-dl-ep:last-child { border-bottom: none; }
 
+/* ===== 与主插件同步：全集列表样式 ===== */
+/* ---- 已下载详情：工具栏 + 全集列表 ---- */
+.bgm-dl-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0 10px;
+    flex-wrap: wrap;
+}
+.bgm-dl-toolbar .tbtn { padding: 3px 9px; font-size: 11px; }
+
+/* 集行：已下载 / 未下载 两种视觉 */
+.bgm-dl-detail-list .bgm-dl-ep.is-have {
+    background: rgba(120, 217, 138, .05);
+}
+.bgm-dl-detail-list .bgm-dl-ep.is-missing {
+    background: rgba(255,255,255,.015);
+    color: var(--fg-dim, #9aa3b2);
+}
+/* 未下载的集号用淡色，已下载的用亮色 */
+.bgm-dl-detail-list .bgm-dl-ep.is-have .bgm-dl-epno { color: #bfe8c8; }
+.bgm-dl-detail-list .bgm-dl-ep.is-missing .bgm-dl-epno { color: #8b93a3; }
+.bgm-dl-detail-list .bgm-dl-ep.is-missing .bgm-dl-epsize { color: #6b7280; }
+
+/* 行内复选框 */
+.bgm-dl-cb {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    margin: 0 2px 0 0;
+    cursor: pointer;
+    accent-color: var(--accent, #8b7cf6);
+}
+/* 已下载的打勾标记 */
+.bgm-dl-ok {
+    flex: 0 0 auto;
+    width: 14px;
+    text-align: center;
+    color: #78d98a;
+    font-size: 12px;
+    margin-right: 2px;
+}
+
+/* 行左侧留白适配复选框 */
+.bgm-dl-detail-list .bgm-dl-ep {
+    padding-left: 8px;
+}
+
