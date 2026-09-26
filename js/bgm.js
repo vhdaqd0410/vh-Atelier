@@ -13,6 +13,10 @@
     var bgmIndex = path.join(bgmDir, 'server.js');
     var bgmChild = null;
 
+    // 共享模块句柄在下方（setSrvState / $ / srvErrMsg 定义之后）创建，
+    // 否则闭包里的函数表达式会捕获尚未初始化的变量。
+    var svc = null;
+
     var curSeries = null;      // { series_id, name, vid_list }
     var curJobId = null;
     var pollTimer = null;
@@ -21,33 +25,114 @@
 
     function $(id) { return document.getElementById(id); }
 
-    function flash(msg) {
-        if (window.__copyFlash) { try { window.__copyFlash(msg); return; } catch (e) {} }
+    // 轻提示：顶部滑入的小胶囊，自动消失。多条会纵向堆叠，不互相覆盖。
+    var flashHost = null;
+    function flash(msg, kind) {
+        if (window.__copyFlash && !kind) { try { window.__copyFlash(msg); return; } catch (e) {} }
         try {
+            if (!flashHost) {
+                flashHost = document.createElement('div');
+                flashHost.className = 'bgm-toast-host';
+                document.body.appendChild(flashHost);
+            }
             var t = document.createElement('div');
+            t.className = 'bgm-toast' + (kind ? (' is-' + kind) : '');
             t.textContent = msg;
-            t.style.cssText = 'position:fixed;left:50%;top:40%;transform:translateX(-50%);background:#2a3a2a;color:#7fd68b;padding:6px 14px;border-radius:6px;font-size:12px;z-index:10001;pointer-events:none;';
-            document.body.appendChild(t);
-            setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 2200);
+            flashHost.appendChild(t);
+            // 入场
+            void t.offsetWidth;
+            t.classList.add('is-in');
+            setTimeout(function () {
+                t.classList.remove('is-in');
+                setTimeout(function () {
+                    if (t.parentNode) t.parentNode.removeChild(t);
+                    if (flashHost && !flashHost.children.length) {
+                        if (flashHost.parentNode) flashHost.parentNode.removeChild(flashHost);
+                        flashHost = null;
+                    }
+                }, 260);
+            }, 2200);
         } catch (e) {}
     }
 
+    // ============ 统一弹窗（替代原生 confirm / alert） ============
+    // 原生弹窗在 CEP 里样式丑陋、且会阻塞；这里用自建层，风格与面板一致。
+    //   bgmDialog.confirm({title, body, okText, cancelText, danger}) -> Promise<bool>
+    //   bgmDialog.alert({title, body, okText})                      -> Promise<void>
+    var bgmDialog = (function () {
+        function open(opt) {
+            opt = opt || {};
+            return new Promise(function (resolve) {
+                var mask = document.createElement('div');
+                mask.className = 'bgm-dlg-mask';
+                var box = document.createElement('div');
+                box.className = 'bgm-dlg' + (opt.danger ? ' is-danger' : '');
+
+                var head = document.createElement('div');
+                head.className = 'bgm-dlg-head';
+                head.textContent = opt.title || '提示';
+                box.appendChild(head);
+
+                var body = document.createElement('div');
+                body.className = 'bgm-dlg-body';
+                // 支持 \n 换行（用 textContent + pre-line 由 CSS 处理）
+                body.textContent = opt.body || '';
+                box.appendChild(body);
+
+                var foot = document.createElement('div');
+                foot.className = 'bgm-dlg-foot';
+                var isConfirm = !!opt.cancelText || opt.confirm === true;
+
+                function close(v) {
+                    try { if (mask.parentNode) mask.parentNode.removeChild(mask); } catch (e) {}
+                    document.removeEventListener('keydown', onKey);
+                    resolve(v);
+                }
+                function onKey(e) {
+                    if (e.key === 'Escape') close(false);
+                    else if (e.key === 'Enter') close(true);
+                }
+
+                if (isConfirm) {
+                    var btnC = document.createElement('button');
+                    btnC.className = 'bgm-dlg-btn';
+                    btnC.textContent = opt.cancelText || '取消';
+                    btnC.addEventListener('click', function () { close(false); });
+                    foot.appendChild(btnC);
+                }
+                var btnO = document.createElement('button');
+                btnO.className = 'bgm-dlg-btn is-primary' + (opt.danger ? ' is-danger' : '');
+                btnO.textContent = opt.okText || '确定';
+                btnO.addEventListener('click', function () { close(true); });
+                foot.appendChild(btnO);
+                box.appendChild(foot);
+
+                mask.appendChild(box);
+                document.body.appendChild(mask);
+                document.addEventListener('keydown', onKey);
+                // 遮罩点击 = 取消（确认框）或关闭（提示框）
+                mask.addEventListener('click', function (e) { if (e.target === mask) close(false); });
+                setTimeout(function () { try { btnO.focus(); } catch (e) {} }, 20);
+            });
+        }
+        return {
+            confirm: function (opt) {
+                if (typeof opt === 'string') opt = { body: opt };
+                opt.confirm = true;
+                return open(opt);
+            },
+            alert: function (opt) {
+                if (typeof opt === 'string') opt = { body: opt };
+                opt.cancelText = '';
+                opt.okText = opt.okText || '知道了';
+                return open(opt);
+            }
+        };
+    })();
+
     function api(url, opt) {
-        return new Promise(function (resolve, reject) {
-            var xhr = new XMLHttpRequest();
-            xhr.open(opt && opt.method ? opt.method : 'GET', API + url, true);
-            if (opt && opt.body) xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.timeout = opt && opt.timeout ? opt.timeout : 30000;
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState !== 4) return;
-                if (xhr.status === 0) return reject(new Error('服务未连接'));
-                try { resolve(JSON.parse(xhr.responseText || '{}')); }
-                catch (e) { reject(new Error('响应解析失败')); }
-            };
-            xhr.ontimeout = function () { reject(new Error('请求超时')); };
-            xhr.onerror = function () { reject(new Error('服务未连接')); };
-            xhr.send(opt && opt.body ? JSON.stringify(opt.body) : null);
-        });
+        // 实现已抽到 js/localsvc.js，文案保持本板块原样（服务未连接 / 响应解析失败）
+        return svc.api(url, opt);
     }
 
     function post(url, body, timeout) {
@@ -55,14 +140,10 @@
     }
 
     // ---------- 服务自举 ----------
+    // findNode / 探活重试 已抽到 js/localsvc.js；spawnServer 保留
+    // （它要采集子进程 stdout/stderr 到 srvLog，供报错时展示排障信息）
     function findNode() {
-        var cands = ['C:\\Program Files\\nodejs\\node.exe', 'C:\\Program Files (x86)\\nodejs\\node.exe'];
-        for (var i = 0; i < cands.length; i++) if (fs.existsSync(cands[i])) return cands[i];
-        try {
-            var w = childProcess.spawnSync('where', ['node'], { encoding: 'utf8' });
-            if (w.status === 0 && w.stdout) return w.stdout.split('\n')[0].trim();
-        } catch (e) {}
-        return null;
+        return svc.findNode();
     }
 
     var srvLog = '';
@@ -91,6 +172,10 @@
     }
 
     function setSrvState(txt, cls) {
+        // 服务侧失败同时落盘：扒歌出错时提示一闪而过，没地方查原因。
+        if (cls === 'err') {
+            try { if (window.__vhLog) window.__vhLog.err('[bgm] ' + txt); } catch (e) {}
+        }
         var el = $('bgmSrvState');
         if (!el) return;
         el.textContent = txt;
@@ -98,29 +183,9 @@
     }
 
     var lastSrvErr = '';
+    // 探活重试逻辑已抽到 js/localsvc.js；lastSrvErr 由 onError 钩子记录
     function ensureServer(retries, quiet) {
-        var tries = retries || 0;
-        return api('/health', { timeout: 8000 }).then(function (h) {
-            if (!quiet) setSrvState('\u670d\u52a1\u6b63\u5e38', 'ok');
-            var hint = $('bgmLoginHint');
-            if (hint) {
-                if (!h.logged) hint.textContent = '\u26a0 \u672a\u767b\u5f55\u7f51\u6613\u4e91\uff0c\u8bf7\u5148\u5728\u300c\u7f51\u6613\u4e91\u300d\u677f\u5757\u767b\u5f55';
-                else if (!h.sherpa || !h.model) hint.textContent = '\u26a0 \u7f3a\u5c11\u4eba\u58f0\u5206\u79bb\u7ec4\u4ef6';
-                else hint.textContent = '';
-            }
-            return h;
-        }).catch(function (e) {
-            lastSrvErr = (e && e.message) || '\u672a\u77e5';
-            if (tries < 6) {
-                if (tries === 0) spawnServer();
-                if (!quiet) setSrvState('\u670d\u52a1\u542f\u52a8\u4e2d\u2026(' + (tries + 1) + '/6)', '');
-                return new Promise(function (res) {
-                    setTimeout(function () { res(ensureServer(tries + 1)); }, 1500);
-                });
-            }
-            if (!quiet) setSrvState('\u670d\u52a1\u672a\u8fde\u63a5', 'err');
-            throw new Error(srvErrMsg('\u540e\u7aef\u670d\u52a1\u542f\u52a8\u5931\u8d25', lastSrvErr));
-        });
+        return svc.ensureServer(retries, quiet);
     }
 
     // 组合可读的错误原因（区分没装 node / 端口占用 / 文件缺失 / 启动超时）
@@ -133,9 +198,42 @@
         return prefix + '\uff08' + tips.join('\uff1b') + '\uff09' + (detail ? ' / ' + detail : '');
     }
 
+    // 本地服务句柄：放在 setSrvState / $ / findNode / srvErrMsg 定义之后创建，
+    // 确保闭包里的这些函数都已就绪。
+    svc = window.__vhLocalSvc.create({
+        base: API,
+        name: '\u77ed\u5267\u6252\u6b4c',
+        defaultTimeout: 30000,
+        healthTimeout: 8000,
+        retries: 6,
+        interval: 1500,
+        emptyAsObject: true,
+        errorStatusMessage: '服务未连接',
+        errorNetMessage: '服务未连接',
+        spawn: function () { return spawnServer(); },
+        onState: function (t, c) { setSrvState(t, c); },
+        onHealth: function (h) {
+            var hint = $('bgmLoginHint');
+            if (hint) {
+                if (!h.logged) hint.textContent = '\u26a0 \u672a\u767b\u5f55\u7f51\u6613\u4e91\uff0c\u8bf7\u5148\u5728\u300c\u7f51\u6613\u4e91\u300d\u677f\u5757\u767b\u5f55';
+                else if (!h.sherpa || !h.model) hint.textContent = '\u26a0 \u7f3a\u5c11\u4eba\u58f0\u5206\u79bb\u7ec4\u4ef6';
+                else hint.textContent = '';
+            }
+        },
+        onError: function (e) {
+            lastSrvErr = (e && e.message) || '\u672a\u77e5';
+        },
+        errorMessage: function () {
+            return srvErrMsg('\u540e\u7aef\u670d\u52a1\u542f\u52a8\u5931\u8d25', lastSrvErr);
+        }
+    });
+
 
     // ---------- 上次页面持久化（关插件/切板块后回来仍停在原页面）----------
     var UI_KEY = 'vh_bgm_uistate';
+    // 上次播放位置（秒）：暂停/卸载时 currentTime 可能已丢失，用它兜底
+    var lastPlayPos = 0;
+    var lastPosSaveAt = 0;
     function saveUiState() {
         try {
             var st = {
@@ -153,9 +251,24 @@
                     name: curSeries.name || '',
                     count: curSeries.count || 0,
                 };
+                // 记录播放器是否开着、开的哪一集、播到多少秒
+                // （用户希望重开面板后直接回到上次暂停的位置）
+                var pw = $('bgmPlayerWrap');
+                var pv = $('bgmV');
+                st.playerOpen = !!(pw && pw.style.display !== 'none');
+                if (st.playerOpen && playEp) {
+                    st.playEp = playEp;
+                    // 暂停时的位置优先用实际 currentTime；否则用上次记下的
+                    var ct = 0;
+                    try { ct = pv ? (pv.currentTime || 0) : 0; } catch (e) { ct = 0; }
+                    st.pos = ct > 1 ? ct : (lastPlayPos || 0);
+                } else {
+                    st.pos = 0;
+                }
             } else {
                 var sw = $('bgmSearchWrap');
                 if (sw && sw.style.display !== 'none' && sw.innerHTML) st.view = 'search';
+                st.playerOpen = false;
             }
             localStorage.setItem(UI_KEY, JSON.stringify(st));
         } catch (e) {}
@@ -183,11 +296,24 @@
                 if (r && r.code === 0 && r.data) {
                     curSeries = r.data;
                     renderSeriesNow();
-                    // 还原最后播放集（若本地已下载则准备好播放器）
-                    if (st.playEp && localMap[st.playEp]) {
-                        playEp = st.playEp;
+                    // 上次停在播放器里 → 重新打开播放器并回到原进度
+                    var wantEp = st.playEp || 0;
+                    if (st.playerOpen && wantEp) {
+                        // 等本地列表就绪（refreshLocal 在 renderSeries 里异步进行）
+                        setTimeout(function () {
+                            try {
+                                if (!localMap[wantEp]) {
+                                    // 文件不在了（被清过），就不强行恢复
+                                    saveUiState();
+                                    return;
+                                }
+                                resumeInto(wantEp, st.pos || 0);
+                            } catch (e) {}
+                        }, 500);
+                    } else if (wantEp && localMap[wantEp]) {
+                        playEp = wantEp;
                     }
-                    setTimeout(function () { saveUiState(); }, 300);
+                    setTimeout(function () { saveUiState(); }, 900);
                 }
             }).catch(function () { /* 恢复失败就停在首页 */ });
             return true;
@@ -226,11 +352,375 @@
 
     var hotLoading = false;
     var hotAutoRetry = 0;          // 自动重试次数（有上限，防无限循环）
+    // ---------- 剧集收藏 ----------
+    // 存：剧号、剧名、封面、热度等卡片信息。同一剧按 series_id 去重。
+    var FAV_KEY = 'vh_bgm_fav_series';
+    var FAV_MAX = 200;
+
+    function loadFavSeries() {
+        try {
+            var a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]');
+            return Array.isArray(a) ? a : [];
+        } catch (e) { return []; }
+    }
+    function saveFavSeries(list) {
+        try { localStorage.setItem(FAV_KEY, JSON.stringify(list.slice(0, FAV_MAX))); } catch (e) {}
+    }
+    function isFavSeries(sid) {
+        if (!sid) return false;
+        var list = loadFavSeries();
+        for (var i = 0; i < list.length; i++) {
+            if (String(list[i].series_id) === String(sid)) return true;
+        }
+        return false;
+    }
+    // 切换收藏；返回切换后的状态（true=已收藏）
+    function toggleFavSeries(it) {
+        if (!it || !it.series_id) return false;
+        var sid = String(it.series_id);
+        var list = loadFavSeries();
+        var idx = -1;
+        for (var i = 0; i < list.length; i++) {
+            if (String(list[i].series_id) === sid) { idx = i; break; }
+        }
+        if (idx >= 0) {
+            list.splice(idx, 1);
+            saveFavSeries(list);
+            refreshFavCards();
+            if (hotKind === 'fav') renderFavGrid();
+            return false;
+        }
+        list.unshift({
+            series_id: it.series_id,
+            name: it.name || '',
+            cover: it.cover || '',
+            hot: it.hot || '',
+            fav: it.fav || '',
+            like: it.like || '',
+            score: it.score || '',
+            at: Date.now(),
+        });
+        saveFavSeries(list);
+        refreshFavCards();
+        if (hotKind === 'fav') renderFavGrid();
+        return true;
+    }
+    function clearFavSeries() {
+        try { localStorage.removeItem(FAV_KEY); } catch (e) {}
+        refreshFavCards();
+        if (hotKind === 'fav') renderFavGrid();
+    }
+
+    // 收藏列表页（复用瀑布流卡片）
+    function renderFavGrid() {
+        var grid = $('bgmHotGrid');
+        if (!grid) return;
+        var list = loadFavSeries();
+        if (!list.length) {
+            grid.innerHTML = '<div style="padding:14px 10px;font-size:11.5px;color:var(--muted);line-height:1.7;">' +
+                '还没有收藏的短剧。<br>在任意剧的封面上点 ☆ 即可收藏，之后在这里集中查看。</div>';
+            grid.setAttribute('data-loaded', '1');
+            return;
+        }
+        renderHot(list);
+        grid.setAttribute('data-loaded', '1');
+    }
+
+    // ---------- 已下载剧集（从本地文件名聚合）----------
+    // 文件名约定：<剧名>_<4位集号>.mp4
+    // 反推出「剧名 → 已下载的集号集合」，用于「已下载」页的按剧管理。
+    // 缓存一份，供已下载页与右键菜单共用（refreshLocal 时刷新）。
+    var dlSeries = {};   // name -> { name, eps: [{ep, path, sizeMB, hasH264}], totalMB, latest }
+    // 下载中的任务：剧号 -> { name, total, done, curEp, percent }
+    // 目的：触发下载后立刻能在「已下载」板块看到这部剧（文件还没落地时靠它先建卡片）
+    var dlJobs = {};
+    function dlJobStart(sid, name, total) {
+        dlJobs[String(sid)] = { name: name || '', total: total || 0, done: 0, curEp: 0, percent: 0 };
+        if (hotKind === 'downloaded') renderDlGrid();
+    }
+    function dlJobProgress(sid, done, curEp, percent) {
+        var j = dlJobs[String(sid)];
+        if (!j) return;
+        j.done = done; j.curEp = curEp; j.percent = percent || 0;
+        if (hotKind === 'downloaded') renderDlGrid();
+    }
+    function dlJobFinish(sid) {
+        delete dlJobs[String(sid)];
+        if (hotKind === 'downloaded') renderDlGrid();
+    }
+    function dlJobOfSeries(name) {
+        var keys = Object.keys(dlJobs);
+        for (var i = 0; i < keys.length; i++) {
+            if (dlJobs[keys[i]].name === name) return { sid: keys[i], job: dlJobs[keys[i]] };
+        }
+        return null;
+    }
+
+    function rebuildDlSeries() {
+        dlSeries = {};
+        (localAll || []).forEach(function (f) {
+            var m = /^(.*)_(\d{4})\.(mp4|mkv|mov|webm)$/i.exec(f.name);
+            if (!m) return;
+            var sname = m[1] || '(未命名)';
+            var ep = parseInt(m[2], 10);
+            if (!dlSeries[sname]) dlSeries[sname] = { name: sname, eps: [], totalMB: 0 };
+            dlSeries[sname].eps.push({
+                ep: ep,
+                path: f.path,
+                name: f.name,
+                sizeMB: (f.size / 1048576),
+                hasH264: !!f.hasH264,
+                mtime: f.mtime || 0,
+            });
+            dlSeries[sname].totalMB += (f.size / 1048576);
+        });
+        Object.keys(dlSeries).forEach(function (k) {
+            dlSeries[k].eps.sort(function (a, b) { return a.ep - b.ep; });
+        });
+        return dlSeries;
+    }
+
+    // 某剧的总集数：从已知来源查（当前剧信息 / 收藏记录），查不到返回 0
+    // 用于在已下载页显示「已下载 X / 总 Y 集」
+    function seriesTotalOf(name) {
+        if (!name) return 0;
+        // 1) 当前打开的剧
+        if (curSeries && curSeries.name === name && curSeries.count) return curSeries.count;
+        // 2) 收藏记录里存过 count
+        try {
+            var favs = loadFavSeries();
+            for (var i = 0; i < favs.length; i++) {
+                if (favs[i].name === name && favs[i].count) return favs[i].count;
+            }
+        } catch (e) {}
+        // 3) 播放历史里存过 count
+        try {
+            var hist = loadPlayHist();
+            for (var k = 0; k < hist.length; k++) {
+                if (hist[k].name === name && hist[k].count) return hist[k].count;
+            }
+        } catch (e) {}
+        return 0;
+    }
+
+    // 某剧的已下载集号列表（供右键菜单判断"下载该剧"要不要跳过已下载的集）
+    function dlEpsOf(seriesName) {
+        var key = String(seriesName || '').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
+        var obj = dlSeries[key];
+        return obj ? obj.eps.map(function (e) { return e.ep; }) : [];
+    }
+
+    // 已下载页：按剧列出，点剧展开看集
+    var dlExpanded = {};   // 剧名 -> 是否展开
+    function renderDlGrid() {
+        var grid = $('bgmHotGrid');
+        if (!grid) return;
+        var obj = rebuildDlSeries();
+        var names = Object.keys(obj);
+
+        // 下载中的剧（文件还没落地）也要出现在这里，让用户看到进展
+        var jobKeys = Object.keys(dlJobs);
+        var downloading = [];
+        jobKeys.forEach(function (k) {
+            var j = dlJobs[k];
+            // 已完成落地的不再作为「下载中」重复显示
+            if (j.name && obj[j.name] && obj[j.name].eps.length >= j.done && j.done >= j.total) return;
+            downloading.push({ sid: k, job: j });
+        });
+
+        if (!names.length && !downloading.length) {
+            grid.innerHTML = '<div style="padding:14px 10px;font-size:11.5px;color:var(--muted);line-height:1.7;">' +
+                '本地还没有已下载的短剧。<br>在剧集页点「下载全集」，或在卡片右键选「下载该剧」。</div>';
+            grid.setAttribute('data-loaded', '1');
+            return;
+        }
+        // 按最近下载时间排序
+        names.sort(function (a, b) {
+            var la = 0, lb = 0;
+            obj[a].eps.forEach(function (e) { if (e.mtime > la) la = e.mtime; });
+            obj[b].eps.forEach(function (e) { if (e.mtime > lb) lb = e.mtime; });
+            return lb - la;
+        });
+        grid.innerHTML = '';
+
+        // 先画「下载中」的剧（要标出 X/Y 集与进度）
+        downloading.forEach(function (d) {
+            var j = d.job;
+            var pct = Math.max(0, Math.min(100, j.percent || 0));
+            var card = document.createElement('div');
+            card.className = 'bgm-dl-series is-downloading';
+            card.innerHTML =
+                '<div class="bgm-dl-head">' +
+                    '<span class="bgm-dl-arrow">↓</span>' +
+                    '<span class="bgm-dl-name">' + esc(j.name || '(未命名)') + '</span>' +
+                    '<span class="bgm-dl-meta">下载中 ' + j.done + ' / ' + j.total + ' 集 · ' + pct + '%</span>' +
+                '</div>' +
+                '<div class="bgm-dl-prog"><i style="width:' + pct + '%"></i></div>';
+            grid.appendChild(card);
+        });
+
+        names.forEach(function (n) {
+            var item = obj[n];
+            var card = document.createElement('div');
+            card.className = 'bgm-dl-series';
+            var open = !!dlExpanded[n];
+            var sizeTxt = item.totalMB >= 1024
+                ? (item.totalMB / 1024).toFixed(1) + ' GB'
+                : item.totalMB.toFixed(0) + ' MB';
+            // 总集数：优先用已知的剧信息（当前剧/收藏里存的 count），否则只显示已下载数
+            var mine = item.eps.map(function (e) { return e.ep; });
+            var maxEp = mine.length ? Math.max.apply(null, mine) : 0;
+            var totalCnt = seriesTotalOf(n);
+            var epsTxt = totalCnt
+                ? ('已下载 ' + item.eps.length + ' / ' + totalCnt + ' 集')
+                : ('已下载 ' + item.eps.length + ' 集');
+            // 有缺口时提示（靠 max 集号推断，仅供参考）
+            var gapTxt = '';
+            if (maxEp > item.eps.length) {
+                gapTxt = '<span class="bgm-dl-gap" title="已下载集号不连续，中间有缺口">缺 ' +
+                    (maxEp - item.eps.length) + ' 集</span>';
+            }
+            card.innerHTML =
+                '<div class="bgm-dl-head">' +
+                    '<span class="bgm-dl-arrow">' + (open ? '▾' : '▸') + '</span>' +
+                    '<span class="bgm-dl-name">' + esc(n) + '</span>' +
+                    '<span class="bgm-dl-meta">' + epsTxt + ' · ' + sizeTxt + gapTxt + '</span>' +
+                    '<span class="bgm-dl-actions">' +
+                        '<button class="tbtn bgm-dl-open" title="打开所在目录">📂</button>' +
+                        '<button class="tbtn danger bgm-dl-delall" title="删除这部剧的全部本地文件">删除</button>' +
+                    '</span>' +
+                '</div>' +
+                '<div class="bgm-dl-eps" style="display:' + (open ? '' : 'none') + ';"></div>';
+
+            // 展开/收起
+            var head = card.querySelector('.bgm-dl-head');
+            head.addEventListener('click', function (ev) {
+                if (ev.target.tagName === 'BUTTON') return;   // 点按钮不触发折叠
+                dlExpanded[n] = !dlExpanded[n];
+                renderDlGrid();
+            });
+            // 打开目录
+            card.querySelector('.bgm-dl-open').addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                var first = item.eps[0];
+                if (!first) return;
+                try { childProcess.spawn('explorer.exe', ['/select,' + first.path]); } catch (e) {}
+            });
+            // 删除整剧
+            card.querySelector('.bgm-dl-delall').addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                delDlFiles(item.eps.map(function (e) { return e.path; }), n + '（' + item.eps.length + ' 集）');
+            });
+
+            // 展开的集列表
+            var box = card.querySelector('.bgm-dl-eps');
+            if (open) {
+                item.eps.forEach(function (e) {
+                    var row = document.createElement('div');
+                    row.className = 'bgm-dl-ep';
+                    row.innerHTML =
+                        '<span class="bgm-dl-epno">第 ' + e.ep + ' 集</span>' +
+                        '<span class="bgm-dl-epsize">' + e.sizeMB.toFixed(1) + ' MB</span>' +
+                        '<span class="bgm-dl-epactions">' +
+                            '<button class="tbtn bgm-dl-play" title="播放这一集">播放</button>' +
+                            '<button class="tbtn danger bgm-dl-del" title="删除这一集">删除</button>' +
+                        '</span>';
+                    row.querySelector('.bgm-dl-play').addEventListener('click', function (ev) {
+                        ev.stopPropagation();
+                        playDlEp(n, e.ep);
+                    });
+                    row.querySelector('.bgm-dl-del').addEventListener('click', function (ev) {
+                        ev.stopPropagation();
+                        delDlFiles([e.path], n + ' 第 ' + e.ep + ' 集');
+                    });
+                    box.appendChild(row);
+                });
+            }
+            grid.appendChild(card);
+        });
+        grid.setAttribute('data-loaded', '1');
+    }
+
+    // 删除本地文件（二次确认）
+    function delDlFiles(paths, label) {
+        if (!paths || !paths.length) return;
+        bgmDialog.confirm({
+            title: '删除本地文件',
+            body: '确定删除 ' + label + ' 的本地文件吗？\n\n文件将被永久删除，不可恢复；对应的转码缓存也会一并清除。',
+            okText: '删除',
+            cancelText: '取消',
+            danger: true
+        }).then(function (yes) {
+        if (!yes) return;
+        post('/local-delete', { files: paths }, 60000).then(function (r) {
+            if (r && r.code === 0) {
+                var n = (r.data || {}).count || 0;
+                var fail = (r.data || {}).fail || [];
+                flash('已删除 ' + n + ' 个文件' + (fail.length ? ('，' + fail.length + ' 个失败') : ''));
+                if (fail.length) { try { window.__vhLog && window.__vhLog.err('[bgm] 删除失败: ' + JSON.stringify(fail.slice(0, 3))); } catch (e) {} }
+                refreshLocal().then(function () {
+                    if (hotKind === 'downloaded') renderDlGrid();
+                });
+            } else {
+                flash((r && r.msg) || '删除失败');
+            }
+        }).catch(function (e) { flash('删除失败：' + (e && e.message || e)); });
+        });
+    }
+
+    // 播放本地某剧某集（不依赖当前剧集页）
+    function playDlEp(seriesName, ep) {
+        var obj = dlSeries[seriesName];
+        if (!obj) return;
+        var found = null;
+        obj.eps.forEach(function (e) { if (e.ep === ep) found = e; });
+        if (!found) return;
+        // 构造一个最小 curSeries，让 playLocal 能复用
+        var vids = [];
+        for (var i = 0; i < ep; i++) vids.push(null);
+        curSeries = { series_id: '_local_' + seriesName, name: seriesName, vid_list: vids, count: vids.length };
+        localMap = {};
+        obj.eps.forEach(function (e) {
+            localMap[e.ep] = { path: e.path, name: e.name, sizeMB: e.sizeMB.toFixed(1), hasH264: e.hasH264 };
+        });
+        playLocal(ep);
+    }
+
+    // 卡片上的星标状态刷新（不重建整个列表，避免滚动位置丢失）
+    function refreshFavCards() {
+        var grid = $('bgmHotGrid');
+        if (!grid) return;
+        var cards = grid.querySelectorAll('.bgm-grid-card');
+        for (var i = 0; i < cards.length; i++) {
+            var sid = cards[i].getAttribute('data-sid');
+            var st = cards[i].querySelector('.bgm-card-fav');
+            if (!st || !sid) continue;
+            var on = isFavSeries(sid);
+            st.textContent = on ? '★' : '☆';
+            st.classList.toggle('is-on', on);
+            st.title = on ? '取消收藏' : '收藏';
+        }
+    }
+
     function loadHot(kind, force) {
         if (force) hotAutoRetry = 0;   // 手动触发时重置
         hotKind = kind || hotKind;
         var grid = $('bgmHotGrid');
         if (!grid) return;
+        // 收藏是纯本地数据，不请求服务
+        if (hotKind === 'fav') {
+            hotLoading = false;
+            grid.removeAttribute('data-loaded');
+            renderFavGrid();
+            return;
+        }
+        // 已下载也是本地数据：先刷新本地列表再渲染
+        if (hotKind === 'downloaded') {
+            hotLoading = false;
+            grid.removeAttribute('data-loaded');
+            refreshLocal().then(function () { renderDlGrid(); }, function () { renderDlGrid(); });
+            return;
+        }
         // 非强制刷新 && 已加载过 → 不重复请求
         if (!force && grid.getAttribute('data-loaded') === '1') return;
         if (hotLoading) return;
@@ -281,13 +771,37 @@
             var el = document.createElement('div');
             el.className = 'bgm-grid-card';
             el.title = it.name;
+            if (it.series_id) el.setAttribute('data-sid', String(it.series_id));
+            var faved = isFavSeries(it.series_id);
             el.innerHTML =
                 '<img class="bgm-grid-cover" src="' + esc(it.cover || '') + '" loading="lazy" ' +
                     'onerror="this.style.background=\'#222\';this.removeAttribute(\'src\')">' +
+                // 收藏星标（盖在封面右上角）
+                '<span class="bgm-card-fav' + (faved ? ' is-on' : '') + '" title="' +
+                    (faved ? '取消收藏' : '收藏') + '">' + (faved ? '★' : '☆') + '</span>' +
                 '<div class="bgm-grid-name">' + esc(it.name || '') + '</div>' +
                 '<div class="bgm-grid-sub">' + esc(it.hot || it.fav || it.like || '') +
                     (it.score ? ('  \u8bc4' + esc(it.score)) : '') + '</div>';
+            // 星标点击：只切收藏，不进剧集页
+            var st = el.querySelector('.bgm-card-fav');
+            if (st) {
+                st.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    ev.preventDefault();
+                    var on = toggleFavSeries(it);
+                    st.textContent = on ? '★' : '☆';
+                    st.classList.toggle('is-on', on);
+                    st.title = on ? '取消收藏' : '收藏';
+                    if (on) flash('已收藏：' + (it.name || ''));
+                });
+            }
             el.addEventListener('click', function () { openSeries(it); });
+            // 右键菜单：收藏 / 下载该剧 / 打开
+            el.addEventListener('contextmenu', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                showSeriesMenu(it, ev);
+            });
             grid.appendChild(el);
         });
     }
@@ -337,6 +851,193 @@
             });
             box.appendChild(el);
         });
+    }
+
+    // ---------- 播放历史（首页「接着看」）----------
+    // 记录看过哪部剧、看到第几集、看到多少秒。
+    // 同一部剧只保留一条（重复看同一部只更新时间与进度），最多 30 部。
+    var PLAY_HIST_KEY = 'vh_bgm_play_hist';
+    var PLAY_HIST_MAX = 30;
+
+    function loadPlayHist() {
+        try {
+            var a = JSON.parse(localStorage.getItem(PLAY_HIST_KEY) || '[]');
+            return Array.isArray(a) ? a : [];
+        } catch (e) { return []; }
+    }
+    function savePlayHist(list) {
+        try { localStorage.setItem(PLAY_HIST_KEY, JSON.stringify(list.slice(0, PLAY_HIST_MAX))); } catch (e) {}
+    }
+
+    // 记一条播放历史。ep/pos 可省略（只更新剧信息时用）。
+    // 不记未识别的媒体；同一剧按 series_id 去重并置顶。
+    function addPlayHist(opt) {
+        if (!opt || !opt.series_id) return;
+        var list = loadPlayHist();
+        var sid = String(opt.series_id);
+        list = list.filter(function (x) { return String(x.series_id) !== sid; });
+        var old = null;
+        try {
+            var raw = JSON.parse(localStorage.getItem(PLAY_HIST_KEY) || '[]');
+            for (var i = 0; i < raw.length; i++) {
+                if (String(raw[i].series_id) === sid) { old = raw[i]; break; }
+            }
+        } catch (e) {}
+        list.unshift({
+            series_id: opt.series_id,
+            name: opt.name || (old && old.name) || '',
+            cover: opt.cover || (old && old.cover) || '',
+            count: opt.count || (old && old.count) || 0,
+            ep: (opt.ep != null && opt.ep) ? opt.ep : ((old && old.ep) || 1),
+            pos: (opt.pos != null) ? opt.pos : ((old && old.pos) || 0),
+            dur: opt.dur || (old && old.dur) || 0,
+            at: Date.now(),
+        });
+        savePlayHist(list);
+        renderPlayHist();
+    }
+
+    function removePlayHist(sid) {
+        var list = loadPlayHist().filter(function (x) { return String(x.series_id) !== String(sid); });
+        savePlayHist(list);
+        renderPlayHist();
+    }
+
+    // 只更新某部剧的观看进度（不置顶、不动其他字段）。
+    // 与 addPlayHist 的区别：用于播放中高频更新，不能重排序（否则看着看着列表就跳了）。
+    function updatePlayHistPos(ep, pos, dur) {
+        if (!curSeries || !curSeries.series_id) return;
+        var sid = String(curSeries.series_id);
+        var list = loadPlayHist();
+        var hit = false;
+        for (var i = 0; i < list.length; i++) {
+            if (String(list[i].series_id) === sid) {
+                list[i].ep = ep || list[i].ep;
+                list[i].pos = pos || 0;
+                if (dur) list[i].dur = dur;
+                list[i].at = Date.now();
+                hit = true;
+                break;
+            }
+        }
+        if (!hit) {
+            addPlayHist({
+                series_id: curSeries.series_id, name: curSeries.name,
+                cover: curSeries.cover || curSeries.cover_url || curSeries.pic,
+                count: curSeries.count, ep: ep, pos: pos, dur: dur
+            });
+            return;
+        }
+        savePlayHist(list);
+        renderPlayHist();
+    }
+
+    function clearPlayHist() {
+        try { localStorage.removeItem(PLAY_HIST_KEY); } catch (e) {}
+        renderPlayHist();
+    }
+
+    // 相对时间（刚刚 / N 分钟前 / N 小时前 / N 天前）
+    function relTime(t) {
+        if (!t) return '';
+        var d = Date.now() - t;
+        if (d < 60000) return '刚刚';
+        if (d < 3600000) return Math.floor(d / 60000) + ' 分钟前';
+        if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
+        if (d < 2592000000) return Math.floor(d / 86400000) + ' 天前';
+        return new Date(t).toLocaleDateString();
+    }
+
+    function renderPlayHist() {
+        var wrap = $('bgmPlayHistWrap'), box = $('bgmPlayHist');
+        if (!wrap || !box) return;
+        var list = loadPlayHist();
+        if (!list.length) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        box.innerHTML = '';
+        list.forEach(function (it) {
+            var row = document.createElement('div');
+            row.className = 'bgm-ph-item';
+
+            var cover = document.createElement('div');
+            cover.className = 'bgm-ph-cover';
+            if (it.cover) {
+                cover.style.backgroundImage = 'url("' + String(it.cover).replace(/"/g, '') + '")';
+            } else {
+                cover.textContent = '🎬';
+            }
+
+            var main = document.createElement('div');
+            main.className = 'bgm-ph-main';
+
+            var nm = document.createElement('div');
+            nm.className = 'bgm-ph-name';
+            nm.textContent = it.name || it.series_id;
+
+            var meta = document.createElement('div');
+            meta.className = 'bgm-ph-meta';
+            var epTxt = '第 ' + (it.ep || 1) + ' 集';
+            var posTxt = (it.pos > 1) ? ('看到 ' + fmtTime(it.pos)) : '';
+            meta.textContent = [epTxt, posTxt, relTime(it.at)].filter(function (x) { return x; }).join(' · ');
+
+            main.appendChild(nm);
+            main.appendChild(meta);
+
+            // 进度条（有总时长与位置时才有意义）
+            if (it.dur > 0 && it.pos > 0) {
+                var pb = document.createElement('div');
+                pb.className = 'bgm-ph-prog';
+                var fill = document.createElement('i');
+                fill.style.width = Math.min(100, Math.max(0, (it.pos / it.dur) * 100)) + '%';
+                pb.appendChild(fill);
+                main.appendChild(pb);
+            }
+
+            var go = document.createElement('span');
+            go.className = 'bgm-ph-go';
+            go.textContent = '继续 ▶';
+
+            var del = document.createElement('span');
+            del.className = 'bgm-ph-del';
+            del.textContent = '✕';
+            del.title = '从历史中移除';
+            del.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                removePlayHist(it.series_id);
+            });
+
+            row.appendChild(cover);
+            row.appendChild(main);
+            row.appendChild(go);
+            row.appendChild(del);
+
+            row.addEventListener('click', function () { openPlayHist(it); });
+            box.appendChild(row);
+        });
+    }
+
+    // 点播放历史：打开该剧，并恢复该集与该位置（不自动播，由用户按播放）
+    function openPlayHist(it) {
+        if (!it || !it.series_id) return;
+        ensureServer().then(function () {
+            return api('/series?series_id=' + encodeURIComponent(it.series_id), { timeout: 40000 });
+        }).then(function (r) {
+            if (!r || r.code !== 0 || !r.data) { flash((r && r.msg) || '打开失败'); return; }
+            curSeries = r.data;
+            renderSeries({ noFocus: true });
+            var wantEp = it.ep || 1;
+            var wantPos = it.pos || 0;
+            // 等本地列表就绪再进播放器
+            setTimeout(function () {
+                if (!localMap[wantEp]) {
+                    // 该集不在本地：进剧集页并提示，不强行下载
+                    focusSeries();
+                    flash('第 ' + wantEp + ' 集还没下载，可在列表里点它播放');
+                    return;
+                }
+                try { resumeInto(wantEp, wantPos, true); } catch (e) {}   // true = 自动播放
+            }, 600);
+        }).catch(function (e) { flash('打开失败：' + (e && e.message || e)); });
     }
 
     // ---------- 输入自动补全 ----------
@@ -523,28 +1224,35 @@
     }
 
     // 对外入口：先拉本地已下载列表，再渲染（修复“进页时已下载信息不显示”）
-    function renderSeries() {
+    // 刷新列表但不自动聚焦（下载完成后刷新集的「已下载」状态时用，
+    // 避免把用户的视线从正在看的播放器拽回上面的集数列表）
+    function renderSeriesQuiet() {
+        renderSeries({ noFocus: true });
+    }
+
+    function renderSeries(opt) {
         if (!curSeries) return;
         // 先给个即时反馈
         $('bgmSearchWrap').style.display = 'none';
         $('bgmSeriesWrap').style.display = '';
         $('bgmSeriesName').textContent = curSeries.name || curSeries.series_id;
-        $('bgmSeriesCount').textContent = '\u5171 ' + curSeries.count + ' \u96c6';
+        $('bgmSeriesCount').textContent = '共 ' + curSeries.count + ' 集';
         bindEpToolbar();
         var meta = $('bgmEpMeta');
-        if (meta) meta.textContent = '\u6b63\u5728\u8bfb\u53d6\u672c\u5730\u5df2\u4e0b\u8f7d\u5217\u8868\u2026';
+        if (meta) meta.textContent = '正在读取本地已下载列表…';
         // 关键：等本地列表回来后再渲染剧集行
         refreshLocal().then(function () {
-            try { renderSeriesNow(); } catch (e) { flash('\u6e32\u67d3\u5931\u8d25: ' + (e && e.message || e)); }
+            try { renderSeriesNow(opt); } catch (e) { flash('渲染失败: ' + (e && e.message || e)); }
         }).catch(function () {
-            try { renderSeriesNow(); } catch (e) {}
+            try { renderSeriesNow(opt); } catch (e) {}
         });
     }
 
-    function renderSeriesNow() {
+    function renderSeriesNow(opt) {
         var d = curSeries;
         if (!d) return;
-        focusSeries();   // 进剧集页自动聚焦
+        // 只有真正切换剧集时才自动聚焦；下载后刷新列表不聚焦（保留在播放器）
+        if (!(opt && opt.noFocus)) focusSeries();
         saveUiState();
         $('bgmSearchWrap').style.display = 'none';
         $('bgmSeriesWrap').style.display = '';
@@ -799,6 +1507,143 @@
     }
 
 
+    // ---------- 选集浮层 ----------
+    // 在播放器内直接选集，不必把视线拉回上面的集数列表。
+    function toggleEpPicker() {
+        var pk = $('bgmEpPicker');
+        if (!pk) return;
+        if (pk.style.display === 'none' || !pk.style.display) {
+            renderEpPicker();
+            pk.style.display = '';
+        } else {
+            pk.style.display = 'none';
+        }
+    }
+
+    function renderEpPicker() {
+        var grid = $('bgmEpPickerGrid');
+        if (!grid) return;
+        var vids = (curSeries && curSeries.vid_list) || [];
+        grid.innerHTML = '';
+        for (var i = 1; i <= vids.length; i++) {
+            var b = document.createElement('div');
+            b.className = 'bgm-eppick-item';
+            if (localMap[i]) b.className += ' is-local';
+            if (i === playEp) b.className += ' is-cur';
+            b.textContent = String(i);
+            b.title = '第 ' + i + ' 集' + (localMap[i] ? '（已下载）' : '（未下载，点击后自动下载）');
+            (function (ep) {
+                b.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    var pk = $('bgmEpPicker');
+                    if (pk) pk.style.display = 'none';
+                    jumpToEp(ep);
+                });
+            })(i);
+            // 直接 append（不用 fragment：避免依赖 fragment 展开行为，也便于测试）
+            grid.appendChild(b);
+        }
+        // 把当前集滚到可见
+        var curEl = null;
+        for (var k = 0; k < grid.children.length; k++) {
+            if (grid.children[k].className && grid.children[k].className.indexOf('is-cur') >= 0) { curEl = grid.children[k]; break; }
+        }
+        if (curEl && curEl.scrollIntoView) {
+            try { curEl.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+        }
+    }
+
+    // ---------- 进度条上的 BGM 色块 ----------
+    // 进度条本身负责播放进度（更新在 updateBarFill）；
+    // 这里负责把 BGM 区间按真实起止画上去，并将当前播放的那首高亮。
+    // 函数名沿用 drawEpTimeline / syncEpTimelineCurrent，调用点无需改。
+    var epTlMarks = [];      // 当前进度条对应的 marks
+    var epTlCurId = null;    // 当前高亮的歌曲 id
+
+    function drawEpTimeline(ep) {
+        var wrap = $('bgmProgWrap');
+        var box = $('bgmMarkerBar');
+        var tip = $('bgmMarkerTip');
+        var v = $('bgmV');
+        if (!wrap || !box || !v) return;
+        var marks = bgmMarks[ckey(ep)] || [];
+        epTlMarks = marks;
+        if (!marks.length) {
+            // 没扒过：进度条仍显示（纯进度），只是没有色块
+            wrap.style.display = '';
+            box.innerHTML = '';
+            epTlCurId = null;
+            if (tip) tip.textContent = '';
+            return;
+        }
+        var dur = v.duration || 0;
+        if (!dur) {
+            // 时长未知（还没 loadedmetadata）：有限重试
+            var tries = parseInt(wrap.getAttribute('data-wait') || '0', 10);
+            if (tries < 12) {
+                wrap.setAttribute('data-wait', String(tries + 1));
+                setTimeout(function () { drawEpTimeline(ep); }, 600);
+            }
+            return;
+        }
+        wrap.removeAttribute('data-wait');
+        wrap.style.display = '';
+        // 关键：重建色块后必须重置高亮缓存，否则新色块永远拿不到 is-current
+        epTlCurId = null;
+        var sorted = marks.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+        box.innerHTML = '';
+        sorted.forEach(function (m) {
+            var c = songColor(m.id);
+            var left = Math.min(100, Math.max(0, ((m.at || 0) / dur) * 100));
+            var w = Math.max(0.8, (((m.to == null ? m.at : m.to) - (m.at || 0)) / dur) * 100);
+            if (left + w > 100) w = Math.max(0.8, 100 - left);
+            var el = document.createElement('div');
+            el.className = 'bgm-mark';
+            el.setAttribute('data-id', String(m.id));
+            el.style.left = left + '%';
+            el.style.width = w + '%';
+            el.style.top = '0';
+            el.style.bottom = '0';
+            el.style.background = c;
+            el.style.opacity = '.85';
+            el.title = (m.name || '') + ' — ' + (m.artist || '') +
+                '  (' + (m.at || 0) + '~' + (m.to || 0) + 's)  点击跳转';
+            el.addEventListener('click', function (ev) {
+                ev.stopPropagation();   // 不让点击冒泡成"跳转进度"
+                try { v.currentTime = m.at || 0; v.play().catch(function () {}); } catch (e) {}
+                highlightSong(m.id, true);
+            });
+            box.appendChild(el);
+        });
+        if (tip) tip.textContent = '本集命中 ' + marks.length + ' 首 BGM（色块点击跳转）';
+        syncEpTimelineCurrent();
+    }
+
+    // 根据当前播放时间，高亮所在的那首（放在进度条色块上）
+    function syncEpTimelineCurrent() {
+        var box = $('bgmMarkerBar');
+        if (!box || !epTlMarks.length) return;
+        var v = $('bgmV');
+        var t = v ? (v.currentTime || 0) : 0;
+        var TOL = 1.5;   // 区间缝隙容差（秒），双向，避免高亮闪烁
+        var cur = null, bestDist = Infinity;
+        for (var i = 0; i < epTlMarks.length; i++) {
+            var m = epTlMarks[i];
+            var a = m.at || 0, b = (m.to == null ? m.at : m.to) || 0;
+            if (t >= a && t <= b) { cur = m; break; }
+            var d = (t < a) ? (a - t) : (t - b);
+            if (d <= TOL && d < bestDist) { bestDist = d; cur = m; }
+        }
+        var id = cur ? String(cur.id) : null;
+        if (id === epTlCurId) return;   // 无变化不重绘
+        epTlCurId = id;
+        var chips = box.children;
+        for (var k = 0; k < chips.length; k++) {
+            var on = chips[k].getAttribute('data-id') === id;
+            chips[k].classList.toggle('is-current', on);
+        }
+    }
+
     // ---------- 本地已下载列表 ----------
     var localMap = {};    // ep -> { path, name, sizeMB }
     var localAll = [];   // 全部本地视频
@@ -856,11 +1701,89 @@
 
     function playEpisode(ep, vid) {
         if (!localMap[ep]) {
-            flash('第 ' + ep + ' 集还没下载，正在下载…');
+            // 未下载：立刻在播放器画面区亮遮罩（以前只有 2.2 秒的 flash 浮字，
+            // 且进度条在面板底部，视线焦点处是黑屏，用户感觉不到反馈）
+            showPlayer();
+            bufEp = ep;   // 标记：用户正在等这一集
+            bufShow('正在下载第 ' + ep + ' 集', { pct: 0, sub: '下载完成后将自动播放', cancellable: true });
             downloadEpisode(vid, ep, true);
             return;
         }
         playLocal(ep);
+    }
+
+    // ============ 就绪前遮罩 ============
+    // 点播后立刻可见，覆盖四种状态：下载中 / 转码中 / 准备播放 / 失败。
+    // 目的：任何等待与失败都在用户视线焦点（画面区）有明确反馈，
+    //       不再依赖一闪而过的 flash 浮字，也不出现无声黑屏。
+    var bufTimer = null;      // 长时间无 canplay 的兜底计时
+    var bufEp = 0;            // 当前遮罩对应的集号
+
+    function bufShow(msg, opt) {
+        opt = opt || {};
+        var el = $('bgmBuf');
+        if (!el) return;
+        el.style.display = '';
+        el.classList.toggle('is-error', !!opt.error);
+        var m = $('bgmBufMsg');
+        if (m) m.textContent = msg;
+        var wrap = $('bgmBufBarWrap');
+        var fill = $('bgmBufFill');
+        if (opt.pct === undefined || opt.pct === null) {
+            if (wrap) wrap.style.display = 'none';
+        } else {
+            if (wrap) wrap.style.display = '';
+            if (fill) fill.style.width = Math.max(0, Math.min(100, opt.pct)) + '%';
+        }
+        var sub = $('bgmBufSub');
+        if (sub) sub.textContent = opt.sub || '';
+        var c = $('bgmBufCancel');
+        if (c) c.style.display = opt.cancellable ? '' : 'none';
+    }
+
+    function bufHide() {
+        var el = $('bgmBuf');
+        if (el) el.style.display = 'none';
+        if (bufTimer) { clearTimeout(bufTimer); bufTimer = null; }
+        bufEp = 0;
+    }
+
+    // 播放器容器显示出来（遮罩要盖在它上面）
+    function showPlayer() {
+        var wrap = $('bgmPlayerWrap');
+        if (wrap) wrap.style.display = '';
+        var bar = $('bgmBar');
+        if (bar) bar.style.display = '';
+    }
+
+    // 等 video 真的可播（canplay）才算就绪；超时无响应给提示，避免无声黑屏。
+    // 关键：以前是 v.load(); v.play().catch(function(){}) —— 错误被吞掉，
+    // 文件损坏/解码失败全是静默黑屏，用户只看到卡住。
+    function waitCanPlay(v, ep, onReady) {
+        var settled = false;
+        function done(ok, msg) {
+            if (settled) return;
+            settled = true;
+            v.removeEventListener('canplay', onCan);
+            v.removeEventListener('error', onErr);
+            if (bufTimer) { clearTimeout(bufTimer); bufTimer = null; }
+            if (!ok) { bufShow(msg, { error: true }); }
+            else { bufHide(); onReady && onReady(); }
+        }
+        function onCan() { done(true); }
+        function onErr() {
+            var e = v.error;
+            var reason = e ? (e.code === 4 ? '格式不支持' : (e.message || ('错误 ' + e.code))) : '未知错误';
+            done(false, '播放失败：' + reason);
+        }
+        v.addEventListener('canplay', onCan);
+        v.addEventListener('error', onErr);
+        // 兜底：12 秒仍未 canplay 也没 error，说明加载卡住 —— 给可见提示，不静默等待
+        if (bufTimer) clearTimeout(bufTimer);
+        bufTimer = setTimeout(function () {
+            done(false, '加载超时，这集可能损坏。可重试或重新下载。');
+        }, 12000);
+        bufEp = ep;
     }
 
     // 「转码中」集合：按集号记录，杜绝重复触发（error 事件与播放前探测可能同时命中）
@@ -872,7 +1795,8 @@
         if (transcodePending[ep]) return;      // 已经在转，忽略重复请求
         transcodePending[ep] = true;
         showProgress('转码');
-        flash('这集是 HEVC 编码，正在转换…');
+        // 画面区遮罩：转码阶段有明确反馈（原先只有一闪而过的 flash）
+        bufShow('正在转码（HEVC → H.264）', { pct: 0, sub: '第 ' + ep + ' 集 · 转码后自动播放' });
         post('/transcode', { file: loc.path }, 60000).then(function (r) {
             if (r && r.code === 0) {
                 curJobId = r.data.jobId;
@@ -880,40 +1804,51 @@
             } else {
                 delete transcodePending[ep];
                 hideProgress();
-                flash('转码启动失败：' + (r.msg || ''));
+                bufShow('转码启动失败：' + (r.msg || ''), { error: true });
             }
         }).catch(function (e) {
             delete transcodePending[ep];
             hideProgress();
-            flash('转码失败：' + e.message);
+            bufShow('转码失败：' + e.message, { error: true });
         });
     }
 
     // 播放前转码：无 H.264 版时先转，转完自动接续播放
-    function startTranscodeFor(ep, loc) {
+    // 期间在画面区显示遮罩（用户点播后立即有反馈，不再是黑屏）
+    function startTranscodeFor(ep, loc, startAtPos, noAutoPlay) {
         if (!loc) return;
+        bufShow('正在检查视频格式…', { pct: null, sub: '第 ' + ep + ' 集' });
         api('/probe-codec?file=' + encodeURIComponent(loc.path), { timeout: 30000 }).then(function (r) {
             var codec = ((r.data || {}).codec || '').toLowerCase();
             if (codec === 'h264' || codec === 'avc1') {
                 loc.hasH264 = true;
-                playLocal(ep);   // 已是 H.264，走完整播放逻辑
+                playLocal(ep, startAtPos, noAutoPlay);   // 已是 H.264，走完整播放逻辑
                 return;
             }
-            requestTranscode(ep, loc, function () { playLocal(ep); });
+            requestTranscode(ep, loc, function () { playLocal(ep, startAtPos, noAutoPlay); });
         }).catch(function () {
             // 探测失败：保守起见直接转码
-            requestTranscode(ep, loc, function () { playLocal(ep); });
+            requestTranscode(ep, loc, function () { playLocal(ep, startAtPos, noAutoPlay); });
         });
     }
 
-    function playLocal(ep) {
+    // 恢复现场：打开播放器、定位到上次进度。
+    //   autoPlay=true  —— 点播放历史「继续」：跳过去就接着放
+    //   autoPlay=false —— 重开面板恢复上次现场：只定位不开播（避免一开面板就出声）
+    function resumeInto(ep, pos, autoPlay) {
+        try { playLocal(ep, pos || 0, !autoPlay); } catch (e) {}
+    }
+
+    // playLocal(ep, startAtPos, noAutoPlay)
+    //   startAtPos : 就绪后跳到该秒数（用于恢复上次播放进度）
+    //   noAutoPlay : true 时不自动播放（恢复现场时只定位不开播）
+    function playLocal(ep, startAtPos, noAutoPlay) {
         var loc = localMap[ep];
-        if (!loc) { flash('\u7b2c ' + ep + ' \u96c6\u672c\u5730\u6587\u4ef6\u4e0d\u5b58\u5728'); return; }
-        var wrap = $('bgmPlayerWrap');
-        if (wrap) wrap.style.display = '';
+        if (!loc) { flash('第 ' + ep + ' 集本地文件不存在'); return; }
+        showPlayer();
         if (miniMode) applyMini(true);
         playEp = ep;
-        $('bgmPlayerTitle').textContent = (curSeries && curSeries.name ? curSeries.name + ' ' : '') + '\u7b2c ' + ep + ' \u96c6';
+        $('bgmPlayerTitle').textContent = (curSeries && curSeries.name ? curSeries.name + ' ' : '') + '第 ' + ep + ' 集';
         var v = $('bgmV');
         if (!v) return;
         songMode = false;
@@ -923,11 +1858,53 @@
         if (loc.hasH264) {
             v.src = API + '/video?prefer=h264&t=' + Date.now() + '&file=' + encodeURIComponent(loc.path);
         } else {
-            startTranscodeFor(ep, loc);
+            // 需要转码：转完再进（把目标位置一并带过去）
+            startTranscodeFor(ep, loc, startAtPos, noAutoPlay);
             return;
         }
-        try { v.load(); v.play().catch(function () {}); } catch (e) {}
+        // 切换集时收起选集浮层
+        var pk0 = $('bgmEpPicker');
+        if (pk0) pk0.style.display = 'none';
+        bufShow('正在准备播放…', { pct: null, sub: loc.name });
+        // 切集时先清掉上一集的位置（避免上一集的位置污染本集）
+        if (!startAtPos) lastPlayPos = 0;
+        // 先挂 canplay/error 监听，再 load；就绪后才真正 play。
+        // 以前是 load+play 一把梭、错误被 catch 吞掉，损坏文件就是静默黑屏。
+        waitCanPlay(v, ep, function () {
+            // 恢复现场：先定位到上次位置，不自动播
+            if (startAtPos && startAtPos > 1) {
+                try { v.currentTime = startAtPos; } catch (e) {}
+                lastPlayPos = startAtPos;
+            } else {
+                lastPlayPos = 0;
+            }
+            if (!noAutoPlay) {
+                try { v.play().catch(function () {}); } catch (e) {}
+            } else {
+                syncBar();
+            }
+            // 记一条播放历史（真正开始播才算）
+            try {
+                addPlayHist({
+                    series_id: curSeries && curSeries.series_id,
+                    name: curSeries && curSeries.name,
+                    cover: curSeries && (curSeries.cover || curSeries.cover_url || curSeries.pic),
+                    count: curSeries && curSeries.count,
+                    ep: ep,
+                    pos: startAtPos || 0,
+                    dur: v.duration || 0,
+                });
+            } catch (e) {}
+            // 本集就绪后，静默预加载下一集（不影响当前播放）
+            setTimeout(preloadNext, 800);
+            saveUiState();
+        });
+        try { v.load(); } catch (e) {}
         drawMarkers(ep);
+        drawEpTimeline(ep);
+        // 进度条一旦有集在播就显示（没扒过也有纯进度）
+        var pw2 = $('bgmProgWrap');
+        if (pw2) pw2.style.display = '';
         // 该集有缓存 → 显示结果；无缓存 → 清空旧结果，避免残留上一集的内容
         var shown = renderEpisodeSongList(ep);
         if (!shown) clearResultArea();
@@ -996,17 +1973,62 @@
         if (!curSeries || !playEp) return;
         var ep = playEp + delta;
         if (ep < 1 || ep > (curSeries.vid_list || []).length) { flash('已经到头了'); return; }
-        var vid = curSeries.vid_list[ep - 1];
-        if (localMap[ep]) playLocal(ep);
-        else { flash('第 ' + ep + ' 集还没下载，正在下载…'); downloadEpisode(vid, ep, true); }
+        jumpToEp(ep);
+    }
+
+    // 跳到某集：已下载直接播，未下载先下载（画面区亮遮罩，与点列表保持一致）
+    function jumpToEp(ep) {
+        if (!curSeries) return;
+        var vids = curSeries.vid_list || [];
+        if (ep < 1 || ep > vids.length) return;
+        var vid = vids[ep - 1];
+        if (localMap[ep]) { playLocal(ep); return; }
+        showPlayer();
+        bufEp = ep;
+        bufShow('正在下载第 ' + ep + ' 集', { pct: 0, sub: '下载完成后将自动播放', cancellable: true });
+        downloadEpisode(vid, ep, true);
+    }
+
+    // ---------- 预加载下一集 ----------
+    // 当前集就绪后，静默把下一集下载好（不自动播放）。
+    // 注意：只预下载、不预转码 —— 预转码会与用户可能立即的播放争抢 CPU，
+    // 且转码很快（实测约 2s），播时再转完全来得及。
+    var preloadEp = 0;
+    function preloadNext() {
+        if (!curSeries || !playEp) return;
+        var vids = curSeries.vid_list || [];
+        var next = playEp + 1;
+        if (next < 1 || next > vids.length) return;
+        if (localMap[next]) return;          // 已有，不重复
+        if (preloadEp === next) return;      // 已在预加载中
+        if (pendingAutoPlay) return;         // 用户点播正在下载，不抢
+        preloadEp = next;
+        try {
+            post('/download', {
+                series_id: curSeries.series_id, vid: vids[next - 1],
+                name: curSeries.name, ep: next,
+            }, 60000).then(function () {
+                preloadEp = 0;
+                refreshLocal();   // 静默刷新本地列表（不聚焦）
+            }).catch(function () { preloadEp = 0; });
+        } catch (e) { preloadEp = 0; }
     }
 
     function closePlayer() {
         var wrap = $('bgmPlayerWrap');
         if (wrap) wrap.style.display = 'none';
+        bufHide();   // 遮罩一并收起
+        pendingAutoPlay = 0;
+        // 浮层也收起，避免下次打开时残留
+        var pk = $('bgmEpPicker');
+        if (pk) pk.style.display = 'none';
         var v = $('bgmV');
         if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
         playEp = 0;
+        // 关播放器 = 明确退出播放状态：位置清掉，playerOpen 置 false，
+        // 下次打开面板就不再弹回播放器（尊重用户的“关闭”意图）
+        lastPlayPos = 0;
+        saveUiState();
     }
 
     // ---------- 小窗（画中画式）模式 ----------
@@ -1110,30 +2132,50 @@
         var v = $('bgmV');
         if (!v || !playEp) return;
         var marks = bgmMarks[ckey(playEp)] || [];
-        if (!marks.length) return;              // 没标记直接跳过，不做任何 DOM 操作
+        var box = $('bgmNowSong');
+        if (!box) return;
+        if (!marks.length) {
+            // 没扒过：确保气泡收起
+            if (lastOverlayId !== null) { lastOverlayId = null; box.classList.remove('is-in'); }
+            return;
+        }
         var t = v.currentTime || 0;
         var cur = null;
         for (var i = 0; i < marks.length; i++) {
             var m = marks[i];
             if (t >= m.at && t <= m.to) { cur = m; break; }
         }
-        var box = $('bgmNowSong');
-        if (!box) return;
         var newId = cur ? String(cur.id) : null;
-        if (newId === lastOverlayId) return;    // 关键：没变就不碰 DOM，避免每帧重绘闪烁
+        if (newId === lastOverlayId) return;    // 没变就不碰 DOM，避免每帧重绘闪烁
         lastOverlayId = newId;
         if (cur) {
-            box.style.display = '';
-            box.style.borderColor = songColor(cur.id);
-            box.textContent = '';               // 用 textContent 组装，避免 innerHTML 触发重排
+            // 定位到该曲在进度条上的起点，气泡从那里滑出
+            var dur = v.duration || 0;
+            var pct = dur ? Math.min(100, Math.max(0, (cur.at / dur) * 100)) : 0;
+            // 靠右时改成右对齐，避免气泡超出容器
+            var rightSide = pct > 60;
+            box.style.left = rightSide ? 'auto' : pct + '%';
+            box.style.right = rightSide ? '0' : 'auto';
+            box.style.borderLeftColor = songColor(cur.id);
+            // 组装内容（先清空，避免重复叠加）
+            box.textContent = '';
             var b = document.createElement('b');
-            b.textContent = '\u266b ' + cur.name;
+            b.textContent = '♫ ' + (cur.name || '');
             box.appendChild(b);
-            box.appendChild(document.createTextNode(' \u2014 ' + (cur.artist || '') +
-                '  (' + cur.at + '~' + cur.to + 's)'));
-            highlightSong(cur.id, false);       // 高亮但不滚动（滚动会引发布局抖动）
+            if (cur.artist) {
+                var art = document.createElement('span');
+                art.className = 'bgm-nsbub-art';
+                art.textContent = ' — ' + cur.artist;
+                box.appendChild(art);
+            }
+            // 入场：下一帧加类，触发 transition（先归位再展开，保证动画每次都播）
+            box.classList.remove('is-in');
+            void box.offsetWidth;   // 强制重排，让浏览器识别状态变化
+            box.classList.add('is-in');
+            highlightSong(cur.id, false);   // 高亮但不滚动（滚动会抖）
         } else {
-            box.style.display = 'none';
+            // 播完：收回
+            box.classList.remove('is-in');
         }
     }
 
@@ -1183,13 +2225,14 @@
         var bar = $('bgmBar');
         if (!v || !bar) return;
         bar.style.display = '';
-        var tt = $('bgmBarTitle');
-        if (tt) tt.textContent = (playEp ? ('\u7b2c ' + playEp + ' \u96c6') : '\u672a\u5728\u64ad\u653e');
         var pb = $('btnBgmBarPlay');
         if (pb) pb.textContent = v.paused ? '\u25b6' : '\u23f8';
-        var cur = $('bgmBarCur'), dur = $('bgmBarDur');
+        var cur = $('bgmBarCur');
         if (cur) cur.textContent = fmtTime(v.currentTime || 0);
-        if (dur) dur.textContent = fmtTime(v.duration || 0);
+        // 新进度条（画面下方，带 BGM 色块）的时间标签
+        var pc = $('bgmPbarCur'), pd = $('bgmPbarDur');
+        if (pc) pc.textContent = fmtTime(v.currentTime || 0);
+        if (pd) pd.textContent = fmtTime(v.duration || 0);
         updateBarFill();
     }
     function fmtTime(s) {
@@ -1204,9 +2247,13 @@
     }
     function updateBarFill() {
         var m = curMedia();
-        var f = $('bgmBarFill');
-        if (!f || !m || !m.duration) { if (f) f.style.width = '0%'; return; }
-        f.style.width = Math.min(100, (m.currentTime / m.duration) * 100) + '%';
+        var pct = 0;
+        if (m && m.duration) pct = Math.min(100, (m.currentTime / m.duration) * 100);
+        // 新进度条（画面下方那条，带 BGM 色块）
+        var pf = $('bgmPbarFill');
+        if (pf) pf.style.width = pct + '%';
+        var pk = $('bgmPbarKnob');
+        if (pk) pk.style.left = pct + '%';
     }
 
     // 歌曲模式的底部条
@@ -1214,13 +2261,12 @@
         var bar = $('bgmBar');
         if (!bar) return;
         bar.style.display = '';
-        var tt = $('bgmBarTitle');
-        if (tt) tt.textContent = curSong ? ('\u266b ' + curSong.name + ' \u2014 ' + (curSong.artist || '')) : '\u672a\u5728\u64ad\u653e';
         var pb = $('btnBgmBarPlay');
         if (pb && inlineAudio) pb.textContent = inlineAudio.paused ? '\u25b6' : '\u23f8';
-        var cur = $('bgmBarCur'), dur = $('bgmBarDur');
+        var cur = $('bgmBarCur'), pcur = $('bgmPbarCur'), pdur = $('bgmPbarDur');
         if (cur && inlineAudio) cur.textContent = fmtTime(inlineAudio.currentTime || 0);
-        if (dur && inlineAudio) dur.textContent = fmtTime(inlineAudio.duration || 0);
+        if (pcur && inlineAudio) pcur.textContent = fmtTime(inlineAudio.currentTime || 0);
+        if (pdur && inlineAudio) pdur.textContent = fmtTime(inlineAudio.duration || 0);
         updateBarFill();
     }
 
@@ -1230,14 +2276,16 @@
         inlineAudio.__bound = true;
         inlineAudio.addEventListener('timeupdate', function () {
             if (!songMode) return;
-            var cur = $('bgmBarCur');
+            var cur = $('bgmBarCur'), pcur = $('bgmPbarCur');
             if (cur) cur.textContent = fmtTime(inlineAudio.currentTime || 0);
+            if (pcur) pcur.textContent = fmtTime(inlineAudio.currentTime || 0);
             updateBarFill();
+            try { syncEpTimelineCurrent(); } catch (e) {}
         });
         inlineAudio.addEventListener('loadedmetadata', function () {
             if (!songMode) return;
-            var dur = $('bgmBarDur');
-            if (dur) dur.textContent = fmtTime(inlineAudio.duration || 0);
+            var pdur = $('bgmPbarDur');
+            if (pdur) pdur.textContent = fmtTime(inlineAudio.duration || 0);
         });
         inlineAudio.addEventListener('play', function () { if (songMode) syncSongBar(); });
         inlineAudio.addEventListener('pause', function () { if (songMode) syncSongBar(); });
@@ -1292,17 +2340,66 @@
         v.addEventListener('timeupdate', function () {
             var cur = $('bgmBarCur');
             if (cur && !songMode) cur.textContent = fmtTime(v.currentTime || 0);
+            // 进度条时间标签
+            var pcur = $('bgmPbarCur');
+            if (pcur && !songMode) pcur.textContent = fmtTime(v.currentTime || 0);
             if (!songMode) updateBarFill();
             tickOverlay();
+            // 同步视频上 BGM 时间轴的「当前高亮」
+            if (!songMode) syncEpTimelineCurrent();
+            // 记住播放位置（内存里每帧更新；写盘节流到每 3 秒一次）
+            if (!songMode) {
+                lastPlayPos = v.currentTime || 0;
+                var now = Date.now();
+                if (now - lastPosSaveAt > 3000) {
+                    lastPosSaveAt = now;
+                    saveUiState();
+                    // 同步刷新播放历史里的进度（节流，避免频繁写 localStorage）
+                    try { updatePlayHistPos(playEp, lastPlayPos, v.duration || 0); } catch (e) {}
+                    // 诊断（临时）：记录历史写入现场，便于排查"进度没生效"
+                    try {
+                        if (window.__vhLog && window.__vhLog.info) {
+                            var _h = loadPlayHist();
+                            var _hit = null;
+                            for (var _i = 0; _i < _h.length; _i++) {
+                                if (String(_h[_i].series_id) === String(curSeries && curSeries.series_id)) { _hit = _h[_i]; break; }
+                            }
+                            window.__vhLog.info('[bgm-hist] 写入 pos=' + Math.round(lastPlayPos) +
+                                ' ep=' + playEp + ' dur=' + Math.round(v.duration || 0) +
+                                ' songMode=' + songMode +
+                                ' 历史条数=' + _h.length +
+                                ' 命中=' + (_hit ? ('ep' + _hit.ep + '/pos' + Math.round(_hit.pos) + '/dur' + Math.round(_hit.dur)) : '未命中'));
+                        }
+                    } catch (e) {}
+                }
+            }
         });
         v.addEventListener('loadedmetadata', function () {
-            var dur = $('bgmBarDur');
-            if (dur) dur.textContent = fmtTime(v.duration || 0);
+            var pdur = $('bgmPbarDur');
+            if (pdur) pdur.textContent = fmtTime(v.duration || 0);
+            // 时长已知 → 进度条可见
+            var pw = $('bgmProgWrap');
+            if (pw) pw.style.display = '';
             // 该集若已扒过，进度条色块按真实时长重画
             drawMarkers(playEp);
+            drawEpTimeline(playEp);   // 视频上也按真实时长重画
+        });
+        // 就绪：遮罩收起后再画一次（此时时长已准确）
+        v.addEventListener('canplay', function () {
+            drawEpTimeline(playEp);
         });
         v.addEventListener('play', syncBar);
-        v.addEventListener('pause', syncBar);
+        v.addEventListener('pause', function () {
+            syncBar();
+            // 暂停是“告一段落”的可靠时机：立即把进度写入播放历史，
+            // 不依赖 3 秒节流（否则刚看几秒就暂停会没记录）
+            try {
+                if (!songMode && playEp) {
+                    lastPlayPos = v.currentTime || 0;
+                    updatePlayHistPos(playEp, lastPlayPos, v.duration || 0);
+                }
+            } catch (e) {}
+        });
         ['seeked', 'volumechange'].forEach(function (ev) { v.addEventListener(ev, syncBar); });
     }
 
@@ -1693,6 +2790,14 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             var elapsed = d.elapsed || 0;
             setProg(d.percent || 0, d.msg || '', '已用 ' + elapsed + 's' +
                 (d.percent > 3 ? '，预计剩余 ' + Math.max(0, Math.round(elapsed * (100 - d.percent) / d.percent)) + 's' : ''));
+            // 下载中的集若正是用户点播等待的那一集，画面区同步显示遮罩进度
+            if (pendingAutoPlay && bufEp !== 0) {
+                bufShow('正在下载第 ' + pendingAutoPlay + ' 集', {
+                    pct: d.percent || 0,
+                    sub: '下载完成后将自动播放' + (d.msg ? ' · ' + d.msg : ''),
+                    cancellable: true
+                });
+            }
             if (d.state === 'running') {
                 pollTimer = setTimeout(poll, 1200);
             } else {
@@ -1711,6 +2816,13 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             var d = r.data || {};
             if (r.code !== 0) { delete transcodePending[ep]; flash('转码任务丢失'); hideProgress(); return; }
             setProg(d.percent || 0, d.msg || '转码中', '转码为 H.264（播放器兼容格式）');
+            // 同步推进画面区遮罩的进度
+            bufShow('正在转码（HEVC → H.264）', {
+                pct: d.percent || 0,
+                sub: '第 ' + ep + ' 集' + (d.percent > 3
+                    ? ' · 约剩 ' + Math.max(0, Math.round((d.elapsed || 0) * (100 - d.percent) / d.percent)) + 's'
+                    : '')
+            });
             if (d.state === 'running') {
                 pollTimer = setTimeout(function () { pollTranscode(jobId, ep, onDone); }, 1200);
             } else {
@@ -1803,18 +2915,29 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             var info = $('bgmPlayerInfo');
             if (info) info.textContent = '\u5df2\u4fdd\u5b58\u5230\uff1a' + res.file;
             refreshLocal().then(function () {
-                if (curSeries) renderSeries();
+                // 刷新集的「已下载」状态，但不聚焦列表
+                // （聚焦会把正在看播放器的视线拽回去）
+                if (curSeries) renderSeries({ noFocus: true });
                 if (pendingAutoPlay) {
                     var ep = pendingAutoPlay;
                     pendingAutoPlay = 0;
-                    if (localMap[ep]) playLocal(ep);
+                    if (localMap[ep]) {
+                        // 下载完成 → 直接接播放（playLocal 会先查编码，必要时转码）
+                        bufShow('下载完成，正在准备播放…', { pct: null, sub: '第 ' + ep + ' 集' });
+                        playLocal(ep);
+                    } else {
+                        bufShow('下载完成，但没找到文件', { error: true });
+                    }
+                } else {
+                    // 非点播触发的下载（如批量/后台），完成后收起遮罩
+                    bufHide();
                 }
             });
             return;
         }
 
         if (jobKind === 'batch') {
-            refreshLocal().then(function () { if (curSeries) renderSeries(); });
+            refreshLocal().then(function () { if (curSeries) renderSeries({ noFocus: true }); });
         }
         renderResult(res);
         // 统一在此写缓存：批量结果带 perEp（逐集），单集结果带 ep
@@ -2008,6 +3131,156 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
     }
 
     // 歌曲下载后的操作菜单（对齐网易云板块）
+    // ---------- 剧集卡片右键菜单 ----------
+    // 收藏 / 下载该剧（自动跳过已下载的集）/ 打开详情 / 复制剧名
+    function showSeriesMenu(it, ev) {
+        if (!it || !it.series_id) return;
+        var old = document.getElementById('bgmSeriesMenu');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var menu = document.createElement('div');
+        menu.id = 'bgmSeriesMenu';
+        menu.style.cssText = 'position:fixed;z-index:9999;min-width:190px;background:#2b2b2b;' +
+            'border:1px solid #444;border-radius:6px;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,.45);font-size:12px;';
+        function mi(text, fn, danger) {
+            var el = document.createElement('div');
+            el.style.cssText = 'padding:7px 12px;cursor:pointer;border-radius:4px;white-space:nowrap;' +
+                (danger ? 'color:#f2879a;' : 'color:var(--text);');
+            el.textContent = text;
+            el.addEventListener('mouseenter', function () { el.style.background = 'rgba(255,255,255,.08)'; });
+            el.addEventListener('mouseleave', function () { el.style.background = ''; });
+            el.addEventListener('click', function () { menu.remove(); try { fn(); } catch (e) { flash('操作出错：' + e.message); } });
+            menu.appendChild(el);
+        }
+
+        var faved = isFavSeries(it.series_id);
+        mi(faved ? '★ 取消收藏' : '☆ 收藏该剧', function () {
+            var on = toggleFavSeries(it);
+            flash(on ? ('已收藏：' + (it.name || '')) : '已取消收藏');
+        });
+
+        mi('⬇ 下载该剧', function () { downloadWholeSeries(it); });
+
+        mi('ℹ 打开详情', function () { openSeries(it); });
+
+        mi('📋 复制剧名', function () {
+            var nm = it.name || '';
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(nm);
+                else if (window.__copyFlash) window.__copyFlash(nm);
+                flash('已复制：' + nm);
+            } catch (e) { flash('复制失败'); }
+        });
+
+        document.body.appendChild(menu);
+        var x = ev.clientX, y = ev.clientY;
+        var mw = 200, mh = menu.offsetHeight || 150;
+        if (x + mw > window.innerWidth) x = window.innerWidth - mw - 4;
+        if (y + mh > window.innerHeight) y = window.innerHeight - mh - 4;
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+        setTimeout(function () {
+            var kill = function (e2) {
+                if (!menu.contains(e2.target)) { menu.remove(); document.removeEventListener('click', kill); document.removeEventListener('contextmenu', kill); }
+            };
+            document.addEventListener('click', kill);
+            document.addEventListener('contextmenu', kill);
+        }, 10);
+    }
+
+    // 下载整部剧：拉剧集信息 → 跳过已下载的集 → 对缺口逐集下载
+    function downloadWholeSeries(it) {
+        if (!it || !it.series_id) return;
+        flash('正在获取剧集信息…');
+        ensureServer().then(function () {
+            return api('/series?series_id=' + encodeURIComponent(it.series_id), { timeout: 40000 });
+        }).then(function (r) {
+            if (!r || r.code !== 0 || !r.data) { flash('获取剧集失败'); return; }
+            var info = r.data;
+            var vids = info.vid_list || [];
+            if (!vids.length) { flash('这部剧没有可下载的集'); return; }
+            // 刷新本地列表，算出缺口
+            return refreshLocal().then(function () {
+                var have = dlEpsOf(info.name || it.name || '');
+                var miss = [];
+                for (var i = 1; i <= vids.length; i++) {
+                    if (have.indexOf(i) < 0) miss.push(i);
+                }
+                if (!miss.length) {
+                    flash('该剧 ' + vids.length + ' 集已全部下载完成');
+                    return;
+                }
+                bgmDialog.confirm({
+                    title: '下载该剧',
+                    body: '《' + (info.name || it.name || '') + '》共 ' + vids.length + ' 集。\n' +
+                          '已下载 ' + have.length + ' 集，还需下载 ' + miss.length + ' 集。\n\n开始下载？',
+                    okText: '开始下载',
+                    cancelText: '取消'
+                }).then(function (yes) {
+                if (!yes) return;
+                // 逐集触发下载（服务端串行处理，这里按顺序发，避免并发）
+                curSeries = info;
+                var idx = 0;
+                dlJobStart(info.series_id, info.name || it.name, miss.length);
+                // 若用户正停在「已下载」页，切回去让他看到新卡片
+                if (hotKind === 'downloaded') renderDlGrid();
+                function next() {
+                    if (idx >= miss.length) {
+                        flash('该剧下载完成');
+                        dlJobFinish(info.series_id);
+                        refreshLocal();
+                        return;
+                    }
+                    var ep = miss[idx++];
+                    var vid = vids[ep - 1];
+                    post('/download', { series_id: info.series_id, vid: vid, name: info.name, ep: ep }, 60000)
+                        .then(function (rr) {
+                            if (!rr || rr.code !== 0) {
+                                flash('第 ' + ep + ' 集启动失败，跳过');
+                                setTimeout(next, 300);
+                                return;
+                            }
+                            pollDownloadJob(rr.data.jobId, ep, function () {
+                                idxDone++;
+                                setTimeout(next, 200);
+                            }, { sid: info.series_id, name: info.name || it.name, total: miss.length, done: idxDone });
+                        })
+                        .catch(function () { setTimeout(next, 500); });
+                }
+                var idxDone = 0;
+                showProgress('下载该剧');
+                next();
+                });
+            });
+        }).catch(function (e) { flash('下载失败：' + (e && e.message || e)); });
+    }
+
+    // 轮询单个下载任务，完成后回调
+    // 轮询单个下载任务。ctx: { sid, name, total, done }（批量下载时用于汇总进度）
+    function pollDownloadJob(jobId, ep, done, ctx) {
+        api('/status?jobId=' + encodeURIComponent(jobId), { timeout: 15000 }).then(function (r) {
+            var d = (r && r.data) || {};
+            var pct = d.percent || 0;
+            if (ctx) {
+                // 汇总：已完成 done 集 + 当前集进度 / 总集数
+                var overall = ctx.total
+                    ? Math.round(((ctx.done + pct / 100) / ctx.total) * 100)
+                    : pct;
+                setProg(overall,
+                    '第 ' + ep + ' / 共 ' + ctx.total + ' 集 · ' +
+                    (d.msg || '下载中') + '（本集 ' + pct + '%）',
+                    '已完成 ' + ctx.done + ' / ' + ctx.total + ' 集');
+                dlJobProgress(ctx.sid, ctx.done, ep, overall);
+            } else {
+                setProg(pct, d.msg || ('第 ' + ep + ' 集下载中'), '');
+            }
+            if (d.state === 'running') {
+                setTimeout(function () { pollDownloadJob(jobId, ep, done, ctx); }, 1200);
+            } else {
+                done && done();
+            }
+        }).catch(function () { setTimeout(function () { pollDownloadJob(jobId, ep, done, ctx); }, 2000); });
+    }
+
     function showSongMenu(dest, anchor, ev) {
         ev.stopPropagation();
         var old = document.getElementById('bgmSongMenu');
@@ -2167,11 +3440,27 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
 
     // ---------- 切 tab 时刷新 ----------
     var uiRestored = false;
+
+    // 面板被关闭/卸载（关插件、重载扩展）时，把当前进度落盘。
+    // timeupdate 每 3 秒存一次，这一下是兼容“刚好在两次之间关掉”。
+    window.addEventListener('beforeunload', function () {
+        try {
+            var v = $('bgmV');
+            if (v && !songMode && v.currentTime > 1) {
+                lastPlayPos = v.currentTime;
+                // 关面板/重载扩展的最后一刻：把进度写进播放历史
+                if (playEp) updatePlayHistPos(playEp, lastPlayPos, v.duration || 0);
+            }
+            saveUiState();
+        } catch (e) {}
+    });
+
     function onShow() {
         try { ensureServer().catch(function () {}); } catch (e) {}
         try { watchTranscodeQueue(); } catch (e) {}
         try { refreshLocal().then(function () { try { saveUiState(); } catch (e) {} }); } catch (e) {}
         try { renderHist(); } catch (e) {}
+        try { renderPlayHist(); } catch (e) {}   // 首页的「接着看」
         // 首次进入本会话：尝试恢复上次页面；已有内容则不动
         if (!uiRestored) {
             uiRestored = true;
@@ -2208,6 +3497,10 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         on('bgmHistClear', function () {
             try { localStorage.removeItem(HIST_KEY); } catch (e) {}
             renderHist();
+        });
+        // 播放历史清空（首页「接着看」）
+        on('bgmPlayHistClear', function () {
+            clearPlayHist();
         });
         bindHotTabs();
         on('btnBgmSearch', doSearch, 'click');
@@ -2259,9 +3552,16 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             if (!curSeries) { flash('先选一部剧'); return; }
             var total = (curSeries.vid_list || []).length;
             if (!total) { flash('没有可下载的集'); return; }
-            if (!window.confirm('下载全集（' + total + ' 集）？文件较多、耗时较长，可随时停止。')) return;
-            startBgm('/batch', { series_id: curSeries.series_id, name: curSeries.name, from: 1, count: total },
-                '下载全集（' + total + ' 集）');
+            bgmDialog.confirm({
+                title: '下载全集',
+                body: '共 ' + total + ' 集，文件较多、耗时较长。\n\n过程中可随时点「停止」中断。开始下载？',
+                okText: '开始下载',
+                cancelText: '取消'
+            }).then(function (yes) {
+                if (!yes) return;
+                startBgm('/batch', { series_id: curSeries.series_id, name: curSeries.name, from: 1, count: total },
+                    '下载全集（' + total + ' 集）');
+            });
         });
         var vv = $('bgmV');
         if (vv) vv.addEventListener('ended', function () {
@@ -2290,21 +3590,11 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             if (v.paused) v.play().catch(function () {}); else v.pause();
             syncBar();
         });
-        var bs = $('btnBgmBarStop');
-        if (bs) bs.addEventListener('click', function () {
-            if (songMode && inlineAudio) {
-                try { inlineAudio.pause(); inlineAudio.currentTime = 0; } catch (e) {}
-                syncSongBar();
-                return;
-            }
-            var v = $('bgmV'); if (v) { try { v.pause(); v.currentTime = 0; } catch (e) {} }
-            syncBar();
-        });
         var bprev = $('btnBgmBarPrev');
         if (bprev) bprev.addEventListener('click', function () { playNav(-1); });
         // 进度条：点击/拖动跳转
         (function () {
-            var sk = $('bgmBarSeek');
+            var sk = $('bgmPbarHit');
             if (!sk) return;
             var seekTo = function (ev) {
                 var m = curMedia();
@@ -2329,6 +3619,56 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         }, 'input');
         var bnext = $('btnBgmBarNext');
         if (bnext) bnext.addEventListener('click', function () { playNav(1); });
+        // 全屏（原生 controls 已移除，这里补上）
+        var bfull = $('btnBgmBarFull');
+        if (bfull) bfull.addEventListener('click', function () {
+            var v = $('bgmV');
+            if (!v) return;
+            try {
+                if (v.requestFullscreen) v.requestFullscreen();
+                else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen();
+                else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();   // CEF 下备选
+            } catch (e) { flash('全屏失败：' + (e && e.message || e)); }
+        });
+        // 遮罩上的取消：下载/转码中途放弃
+        var bcancel = $('bgmBufCancel');
+        if (bcancel) bcancel.addEventListener('click', function () {
+            pendingAutoPlay = 0;
+            stopJob();
+            bufShow('已取消', { error: false, sub: '' });
+            setTimeout(bufHide, 900);
+        });
+        // 选集浮层
+        var bpick = $('btnBgmBarPick');        if (bpick) bpick.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            toggleEpPicker();
+        });
+        var bpickClose = $('btnBgmEpPickerClose');
+        if (bpickClose) bpickClose.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            var pk = $('bgmEpPicker');
+            if (pk) pk.style.display = 'none';
+        });
+        // 点击画面切换播放/暂停（视频居中区域，排除叠加控件）
+        (function () {
+            var stage = $('bgmV');
+            if (!stage) return;
+            // 用事件委托到 video 自身；遮罩、识曲按钮、BGM 叠加层都在 video 之上，
+            // 它们的点击不会冒泡到 video，所以不必额外排除。
+            stage.addEventListener('click', function (ev) {
+                if (bufEp !== 0 && $('bgmBuf') && $('bgmBuf').style.display !== 'none') return; // 遮罩期间不切
+                if (ev.target !== stage) return;
+                var m = curMedia();
+                if (!m || !m.src) return;
+                if (songMode && inlineAudio) {
+                    if (inlineAudio.paused) inlineAudio.play().catch(function () {}); else inlineAudio.pause();
+                    syncSongBar();
+                    return;
+                }
+                if (m.paused) m.play().catch(function () {}); else m.pause();
+                syncBar();
+            });
+        })();
       } catch (e) { try { flash('\u754c\u9762\u521d\u59cb\u5316\u5f02\u5e38: ' + (e && e.message || e)); } catch (e2) {} }
     }
 

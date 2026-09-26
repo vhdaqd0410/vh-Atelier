@@ -146,6 +146,35 @@
         err: function (msg, e) { write('ERR', msg, e); },
         warn: function (msg, e) { write('WARN', msg, e); },
         info: function (msg, e) { write('INFO', msg, e); },
+        // 把板块自己的 UI 日志函数接到落盘日志上。
+        //
+        // 背景：各板块普遍用 setLog/setStatus 把失败原因只写到界面，关掉面板就查不到。
+        // 关键链路（导出/下载/导入/识别）出问题时排障只能靠现象反推。
+        // 用法（在板块定义完 setLog 之后调用一次）：
+        //   window.__vhLog.bindUI(setLog, { tag: 'export', errorLevels: ['error', true] });
+        // 之后 setLog('导出失败：xxx', 'error') 会同时在 error.log 里留下
+        //   [ERR][export] 导出失败：xxx
+        // 只对错误/警告级别落盘，info 级别不写，避免日志被正常流程刷满。
+        bindUI: function (fn, opt) {
+            if (typeof fn !== 'function') return fn;
+            opt = opt || {};
+            var tag = opt.tag || '';
+            var errLevels = opt.errorLevels || ['error', 'err', true];
+            var warnLevels = opt.warnLevels || ['warn', 'warning'];
+            var wrapped = function (msg, level) {
+                var r = fn.apply(null, arguments);
+                try {
+                    var m = String(msg == null ? '' : msg);
+                    var prefix = tag ? '[' + tag + '] ' : '';
+                    if (errLevels.indexOf(level) >= 0) write('ERR', prefix + m);
+                    else if (warnLevels.indexOf(level) >= 0) write('WARN', prefix + m);
+                } catch (e) {}
+                return r;
+            };
+            // 保留原函数引用，便于需要时拿到未包装版本
+            try { wrapped.__raw = fn; } catch (e) {}
+            return wrapped;
+        },
         // 未读错误数 + 变更订阅（面板红点用）
         unread: function () { return unread; },
         onUnreadChange: function (fn) { if (typeof fn === 'function') listeners.push(fn); },

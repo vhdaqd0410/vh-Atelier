@@ -3919,3 +3919,1280 @@ button.primary:hover { background: var(--btn-primary-hover); }
 #bgmPlayerWrap.bgm-mini .bgm-rip-btn { padding: 6px 10px; font-size: 12px; }
 
 
+/* ===== 以下为与主插件同步的短剧扒歌新增样式 ===== */
+/* ---- 就绪前遮罩（下载/转码/准备/失败）---- */
+.bgm-buf {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8, 10, 14, .82);
+    backdrop-filter: blur(2px);
+}
+
+.bgm-buf-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    width: 78%;
+    max-width: 300px;
+    text-align: center;
+}
+
+/* 旋转动画 */
+.bgm-buf-spin {
+    width: 26px;
+    height: 26px;
+    border: 2.5px solid rgba(255,255,255,.14);
+    border-top-color: var(--accent, #8b7cf6);
+    border-radius: 50%;
+    animation: bgm-buf-rotate .85s linear infinite;
+}
+@keyframes bgm-buf-rotate {
+    to { transform: rotate(360deg); }
+}
+
+.bgm-buf-msg {
+    font-size: 12.5px;
+    color: #e8e8ea;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.bgm-buf-bar {
+    width: 100%;
+    height: 5px;
+    background: rgba(255,255,255,.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.bgm-buf-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 3px;
+    transition: width .25s ease;
+}
+
+.bgm-buf-sub {
+    font-size: 10.5px;
+    color: var(--fg-dim, #9aa3b2);
+    line-height: 1.5;
+    min-height: 14px;
+}
+
+.bgm-buf-cancel {
+    margin-top: 2px;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.16);
+    color: #dcdcdc;
+    border-radius: 6px;
+    padding: 3px 14px;
+    font-size: 11px;
+    cursor: pointer;
+}
+.bgm-buf-cancel:hover { background: rgba(255,255,255,.14); }
+/* 失败态：换掉旋转图标为叹号，颜色转警示 */
+.bgm-buf.is-error .bgm-buf-spin {
+    border-color: rgba(240, 120, 120, .5);
+    border-top-color: #f2879a;
+    animation: none;
+}
+.bgm-buf.is-error .bgm-buf-msg { color: #f6a3b1; }
+
+
+/* ---- 播放进度条 + BGM 色块（合一）---- */
+/* 整条即进度条：轨道底色 + 已播高亮 + BGM 区间色块，点击/拖动可跳转。
+   色块高亮效果与原来的视频叠加层一致（放大 + 白边 + 发光）。 */
+
+/* ---- 当前 BGM 气泡：从进度条位置滑出，播完收回 ---- */
+/* 不再常驻画面上（那样挡观看），而是在进度条上方临时浮出。 */
+.bgm-nsbub {
+    position: absolute;
+    bottom: 100%;           /* 贴在进度条上方 */
+    left: 0;
+    margin-bottom: 6px;
+    max-width: 92%;
+    padding: 5px 10px;
+    border-radius: 7px;
+    border: 1px solid rgba(255,255,255,.14);
+    border-left-width: 3px;  /* 左侧色条：用歌曲主色 */
+    background: rgba(14, 16, 20, .94);
+    box-shadow: 0 4px 16px rgba(0,0,0,.55);
+    font-size: 11.5px;
+    color: #e8e8ea;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    z-index: 20;
+    /* 默认：收起状态（向下滑出视野 + 淡出 + 微缩） */
+    opacity: 0;
+    transform: translateY(6px) scale(.92);
+    transform-origin: left bottom;
+    pointer-events: none;
+    transition: opacity .22s ease, transform .26s cubic-bezier(.22, 1.2, .36, 1);
+}
+/* 展开：滑入 + 淡入 + 回弹到正常大小 */
+.bgm-nsbub.is-in {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+/* 气泡下方小尖角，指向进度条 */
+.bgm-nsbub::after {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 100%;
+    width: 0;
+    height: 0;
+    border: 5px solid transparent;
+    border-top-color: rgba(14, 16, 20, .94);
+}
+.bgm-nsbub b { color: #fff; font-weight: 700; }
+.bgm-nsbub .bgm-nsbub-art { color: var(--fg-dim, #9aa3b2); }
+
+.bgm-pbar {
+    position: relative;
+    padding: 7px 0 5px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.bgm-pbar-time {
+    flex: 0 0 auto;
+    font-family: Consolas, monospace;
+    font-size: 10.5px;
+    color: var(--fg-num, #9aa3b2);
+    min-width: 30px;
+}
+
+/* 控制条里的弹性空位（把右侧按钮推到右边）*/
+.bgm-pbar-spacer { flex: 1 1 auto; }
+
+.bgm-pbar-hit {
+    position: relative;
+    flex: 1 1 auto;
+    height: 9px;
+    background: #151515;
+    border-radius: 5px;
+    cursor: pointer;
+    /* 让放大后的色块能溢出显示（不裁切）*/
+    overflow: visible;
+}
+/* 内层用伪元素做轨道裁切，保证已播填充也被裁进圆角 */
+.bgm-pbar-hit::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 5px;
+    background: #151515;
+    overflow: hidden;
+}
+
+/* 已播部分 */
+.bgm-pbar-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 5px;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* 播放头小圆点 */
+.bgm-pbar-knob {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 11px;
+    height: 11px;
+    margin-left: -5.5px;
+    margin-top: -5.5px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(139, 124, 246, .55), 0 1px 4px rgba(0,0,0,.5);
+    z-index: 4;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.bgm-pbar-hit:hover .bgm-pbar-knob { opacity: 1; }
+
+/* BGM 色块层：在填充之上，随时间轴定位 */
+#bgmMarkerBar {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: 5px;
+    overflow: visible;
+}
+
+/* 单个 BGM 区间色块 */
+.bgm-mark {
+    position: absolute;
+    height: 100%;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+    transform-origin: center;
+}
+
+/* 当前正在播放的那首：与视频叠加层一致的放大 + 白边 + 发光 */
+.bgm-mark.is-current {
+    transform: scaleY(2.1);
+    box-shadow: 0 0 0 2px #fff, 0 0 10px rgba(255,255,255,.7), 0 2px 8px rgba(0,0,0,.6);
+    z-index: 5;
+}
+
+
+/* ---- 播放历史（首页「接着看」）---- */
+
+/* ---- 已下载剧集（按剧分组管理）---- */
+.bgm-dl-series {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    overflow: hidden;
+    background: rgba(255,255,255,.02);
+}
+
+.bgm-dl-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 10px;
+    cursor: pointer;
+    user-select: none;
+}
+.bgm-dl-head:hover { background: rgba(255,255,255,.05); }
+
+.bgm-dl-arrow {
+    flex: 0 0 auto;
+    width: 12px;
+    font-size: 11px;
+    color: var(--fg-dim, #9aa3b2);
+}
+
+.bgm-dl-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-title, #dcdcdc);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bgm-dl-meta {
+    flex: 0 0 auto;
+    font-size: 10.5px;
+    color: var(--fg-dim, #9aa3b2);
+}
+
+.bgm-dl-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 4px;
+}
+.bgm-dl-actions .tbtn { padding: 2px 7px; font-size: 10.5px; }
+
+/* 展开后的集列表 */
+.bgm-dl-eps {
+    border-top: 1px solid rgba(255,255,255,.06);
+    background: rgba(0,0,0,.15);
+}
+
+.bgm-dl-ep {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px 6px 28px;
+    font-size: 11.5px;
+}
+.bgm-dl-ep:hover { background: rgba(255,255,255,.04); }
+
+.bgm-dl-epno { flex: 0 0 auto; color: var(--fg-title, #dcdcdc); min-width: 52px; }
+.bgm-dl-epsize { flex: 1; color: var(--fg-dim, #9aa3b2); font-size: 10.5px; }
+.bgm-dl-epactions { flex: 0 0 auto; display: flex; gap: 4px; }
+.bgm-dl-epactions .tbtn { padding: 2px 8px; font-size: 10.5px; }
+
+
+/* ---- 剧集卡片上的收藏星标 ---- */
+/* 盖在封面右上角；未收藏半透明，收藏后金色高亮 */
+.bgm-card-fav {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    z-index: 3;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
+    font-size: 14px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .45);
+    color: rgba(255, 255, 255, .72);
+    cursor: pointer;
+    user-select: none;
+    transition: transform .14s ease, color .14s ease, background .14s ease;
+}
+.bgm-card-fav:hover {
+    background: rgba(0, 0, 0, .7);
+    transform: scale(1.15);
+}
+/* 已收藏：金色 + 微光 */
+.bgm-card-fav.is-on {
+    color: #ffd45e;
+    background: rgba(0, 0, 0, .55);
+    text-shadow: 0 0 6px rgba(255, 212, 94, .8);
+}
+
+/* ---- 播放历史（首页「接着看」）---- */
+.bgm-ph-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 4px;
+}
+
+.bgm-ph-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: rgba(255,255,255,.02);
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.bgm-ph-item:hover {
+    background: rgba(255,255,255,.07);
+    border-color: var(--accent, #8b7cf6);
+}
+
+/* 封面：有图用图，无图用色块占位 */
+.bgm-ph-cover {
+    width: 34px;
+    height: 46px;
+    flex: 0 0 auto;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #3a3a44, #26262e);
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: rgba(255,255,255,.35);
+}
+
+.bgm-ph-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.bgm-ph-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-title, #dcdcdc);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bgm-ph-meta {
+    font-size: 10.5px;
+    color: var(--fg-dim, #9aa3b2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 进度条（看到多少）*/
+.bgm-ph-prog {
+    height: 3px;
+    background: rgba(255,255,255,.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 2px;
+}
+.bgm-ph-prog > i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 2px;
+}
+
+.bgm-ph-go {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--accent, #8b7cf6);
+    white-space: nowrap;
+}
+
+/* 单条上的删除小叉 */
+.bgm-ph-del {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: var(--fg-dim, #6b7280);
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+}
+.bgm-ph-del:hover { color: #f2879a; }
+
+
+/* ---- 选集浮层 ---- */
+.bgm-eppick {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    z-index: 70;
+    width: 78%;
+    max-width: 300px;
+    max-height: 62%;
+    display: flex;
+    flex-direction: column;
+    background: rgba(14, 16, 20, .95);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.5);
+    overflow: hidden;
+}
+
+.bgm-eppick-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    font-size: 11.5px;
+    color: #dcdcdc;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+}
+
+.bgm-eppick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+    gap: 4px;
+    padding: 7px;
+    overflow-y: auto;
+}
+
+.bgm-eppick-item {
+    text-align: center;
+    padding: 4px 2px;
+    font-size: 11px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(255,255,255,.04);
+    color: #cfd3da;
+    cursor: pointer;
+    user-select: none;
+}
+.bgm-eppick-item:hover { background: rgba(255,255,255,.12); }
+
+/* 已下载的集：绿色左边框，一眼可辨 */
+.bgm-eppick-item.is-local {
+    border-color: rgba(120, 217, 138, .45);
+    color: #bfe8c8;
+}
+
+/* 当前正在播的集 */
+.bgm-eppick-item.is-cur {
+    background: var(--accent, #8b7cf6);
+    border-color: var(--accent, #8b7cf6);
+    color: #fff;
+    font-weight: 700;
+}
+#bgmBar .bgm-bar-time { font-family: Consolas, monospace; color: var(--muted); min-width: 34px; }
+#bgmBar .bgm-bar-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+
+/* ===== 短剧扒歌 · 首页瀑布流 ===== */
+.bgm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+}
+.bgm-grid-card {
+    position: relative;
+    cursor: pointer;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--panel2);
+    transition: transform .12s ease;
+}
+.bgm-grid-card:hover { transform: translateY(-2px); }
+.bgm-grid-cover {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    display: block;
+    background: #222;
+}
+.bgm-grid-name {
+    font-size: 11px;
+    line-height: 1.35;
+    padding: 4px 5px 0;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.bgm-grid-sub {
+    font-size: 9.5px;
+    color: var(--muted);
+    padding: 1px 5px 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-hot-tab.active {
+    background: var(--accent) !important;
+    color: #fff !important;
+    border-color: var(--accent) !important;
+}
+/* 播放时不闪烁：给视频容器独立合成层，避免与列表重排相互触发重绘 */
+#bgmV {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: paint;
+}
+#bgmPlayerWrap.bgm-mini video { contain: paint; }
+
+
+/* ===== 短剧扒歌 · 播放器（优化版）===== */
+.bgm-player {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #232323, #1c1c1c);
+    box-shadow: 0 4px 18px rgba(0,0,0,.35);
+}
+.bgm-player-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: rgba(255,255,255,.02);
+}
+.bgm-player-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bgm-player-spacer { flex: 1; }
+.bgm-player-chk {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    user-select: none;
+}
+.bgm-pbtn {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--panel2);
+    color: var(--muted);
+    cursor: pointer;
+    font-family: inherit;
+}
+.bgm-pbtn:hover { background: var(--panel); color: var(--text); border-color: var(--accent); }
+.bgm-player-stage {
+    position: relative;
+    background: #000;
+    display: flex;
+    justify-content: center;
+}
+#bgmV {
+    width: 100%;
+    max-height: 400px;
+    display: block;
+    background: #000;
+    outline: none;
+}
+.bgm-player-foot { padding: 8px 10px 0; }
+.bgm-player-tip { font-size: 10.5px; color: var(--muted); padding: 4px 0 6px; }
+.bgm-player-info {
+    font-size: 10.5px;
+    color: var(--muted);
+    padding: 0 10px 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* 进度条上的 BGM 色块（换成更精致的高度） */
+
+
+/* ===== 底部播放条（对齐网易云板块）===== */
+.bgm-bar-seek {
+    flex: 1 1 auto;
+    min-width: 60px;
+    height: 6px;
+    background: #141414;
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+}
+.bgm-bar-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent), #a78bfa);
+    border-radius: 3px;
+    transition: width .12s linear;
+}
+.bgm-bar-seek:hover { height: 8px; }
+
+/* ===== 短剧扒歌 · 首页加载骨架屏 ===== */
+.bgm-sk { pointer-events: none; }
+.bgm-sk-cover {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    background: #262626;
+    border-radius: 6px;
+    animation: bgmSkPulse 1.3s ease-in-out infinite;
+}
+.bgm-sk-line {
+    height: 9px;
+    margin-top: 6px;
+    border-radius: 4px;
+    background: #262626;
+    animation: bgmSkPulse 1.3s ease-in-out infinite;
+}
+.bgm-sk-line.short { width: 60%; }
+.bgm-sk-cover, .bgm-sk-line { animation-delay: var(--d, 0s); }
+@keyframes bgmSkPulse {
+    0%, 100% { opacity: .45; }
+    50%      { opacity: .9; }
+}
+/* 错开相位，看起来更像在"流动" */
+.bgm-grid-card:nth-child(1)  .bgm-sk-cover, .bgm-grid-card:nth-child(1)  .bgm-sk-line { --d: 0s; }
+.bgm-grid-card:nth-child(2)  .bgm-sk-cover, .bgm-grid-card:nth-child(2)  .bgm-sk-line { --d: .1s; }
+.bgm-grid-card:nth-child(3)  .bgm-sk-cover, .bgm-grid-card:nth-child(3)  .bgm-sk-line { --d: .2s; }
+.bgm-grid-card:nth-child(4)  .bgm-sk-cover, .bgm-grid-card:nth-child(4)  .bgm-sk-line { --d: .3s; }
+.bgm-grid-card:nth-child(5)  .bgm-sk-cover, .bgm-grid-card:nth-child(5)  .bgm-sk-line { --d: .4s; }
+.bgm-grid-card:nth-child(6)  .bgm-sk-cover, .bgm-grid-card:nth-child(6)  .bgm-sk-line { --d: .5s; }
+.bgm-grid-card:nth-child(7)  .bgm-sk-cover, .bgm-grid-card:nth-child(7)  .bgm-sk-line { --d: .6s; }
+.bgm-grid-card:nth-child(8)  .bgm-sk-cover, .bgm-grid-card:nth-child(8)  .bgm-sk-line { --d: .7s; }
+
+/* 状态提示（等待服务/失败重试）*/
+.bgm-hot-status {
+    grid-column: 1 / -1;
+    padding: 26px 14px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.bgm-hot-status.err { color: var(--fg-warn-soft); }
+.bgm-hot-status::before {
+    content: '';
+    width: 22px;
+    height: 22px;
+    margin-bottom: 10px;
+    border: 2px solid rgba(255,255,255,.15);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: bgmSpin .8s linear infinite;
+}
+.bgm-hot-status.err::before { display: none; }
+@keyframes bgmSpin { to { transform: rotate(360deg); } }
+/* 服务启动中的状态文字加个小脉冲 */
+.music-server:not(.ok):not(.err)::after {
+    content: '';
+    display: inline-block;
+    width: 4px; height: 4px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: bgmSkPulse 1s ease-in-out infinite;
+}
+
+/* ===== 导航常驻（向下滚动时保持可见）===== */
+/* 说明：面板滚动发生在 body/window，用 sticky 让三层导航吸顶 */
+body { padding-top: 0; }
+
+/* 第一层：顶栏（logo + 官网/历史/更新/反馈/日志） */
+.top-head {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    background: var(--bg);
+    padding: 14px 14px 8px;
+    margin: -14px -14px 0;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+}
+/* 第二层：工作台分组栏（素材/剧本/进度…） */
+.ws-groups {
+    position: sticky;
+    top: var(--sticky-top-head, 52px);
+    z-index: 55;
+    background: var(--bg);
+    padding: 8px 14px 6px;
+    margin: 0 -14px;
+    border-bottom: 1px solid rgba(255,255,255,.05);
+}
+/* 第三层：子标签栏（每个板块内的导航） */
+.tabs.ws-subtabs {
+    position: sticky;
+    top: var(--sticky-top-groups, 104px);
+    z-index: 50;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 12px -6px rgba(0,0,0,.5);
+}
+/* 滚动时三层之间不留缝 */
+.sub { margin-top: 6px; }
+
+/* ===== 配色分层：区分「主操作 / 次级 / 危险 / 成功 / 特殊」===== */
+:root {
+    --btn-primary-bg: #3d6ef5;      /* 主操作：蓝 */
+    --btn-primary-hover: #5580ff;
+    --btn-alt-bg: #2f3b4d;          /* 次级：冷灰蓝 */
+    --btn-alt-fg: #a9c3e0;
+    --btn-ok-bg: #2f6b46;           /* 确认/下载完成：绿 */
+    --btn-warn-bg: #7a5a1e;         /* 警示/重来：琥珀 */
+    --btn-danger-bg: #8a3a3a;       /* 危险/停止：红 */
+    --btn-violet-bg: #6d4bc4;       /* 特殊/品牌：紫（保留但少用） */
+}
+
+/* 默认按钮改为中性冷灰蓝，不再是满屏紫 */
+button {
+    background: var(--btn-alt-bg);
+    color: var(--btn-alt-fg);
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s;
+    flex: 1;
+    font-family: inherit;
+}
+button:hover { background: #3a4859; color: #d6e3f2; }
+
+/* 主按钮（搜索/解析/主要动作）*/
+button.primary, .tbtn.primary {
+    background: var(--btn-primary-bg); color: #fff; border-color: transparent;
+}
+button.primary:hover { background: var(--btn-primary-hover); }
+
+/* 绿色的确认类（下载、导入）*/
+.tbtn.ok, button.ok { background: var(--btn-ok-bg); color: #d9f5e2; border-color: transparent; }
+.tbtn.ok:hover { background: #3a8055; }
+
+/* 琥珀色（重扒、重试）*/
+.tbtn.warn { background: var(--btn-warn-bg); color: #ffe9b8; border-color: transparent; }
+.tbtn.warn:hover { background: #8f6a24; }
+
+/* 危险（停止、删除）*/
+.tbtn.danger, button.danger { background: var(--btn-danger-bg); color: #ffd9d9; border-color: transparent; }
+.tbtn.danger:hover { background: #a04444; }
+
+/* 工具/小按钮：更轻，描边风 */
+.tbtn {
+    background: rgba(255,255,255,.05);
+    color: #b8c6d6;
+    border: 1px solid rgba(255,255,255,.10);
+    font-size: 11.5px;
+    padding: 4px 10px;
+    flex: 0 0 auto;
+}
+.tbtn:hover { background: rgba(255,255,255,.12); color: #e6eef7; border-color: rgba(255,255,255,.2); }
+.tbtn.active { background: var(--btn-primary-bg); color: #fff; border-color: transparent; }
+
+/* 子标签激活态（原为满紫，改蓝）*/
+.tab.active { background: var(--btn-primary-bg); color: #fff; }
+/* 工作台分组激活态：描边 + 淡底，不用满色块 */
+.ws-group.active {
+    background: rgba(61,110,245,.14);
+    border-color: var(--btn-primary-bg);
+    color: #8fb4ff;
+    font-weight: 600;
+}
+/* 底部播放条按钮保持紧凑 */
+#bgmBar .tbtn { padding: 3px 9px; }
+
+/* ===== 短剧扒歌 · 排版优化 ===== */
+/* 1) 面板整体留白与节奏 */
+#panel-bgm { padding-bottom: 14px; }
+.bgm-wrap > .card {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+/* 2) 区块标题更清晰 */
+.bgm-sec-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .4px;
+    margin: 10px 0 6px;
+    padding-left: 2px;
+}
+.bgm-sec-title::before {
+    content: '';
+    width: 3px;
+    height: 11px;
+    border-radius: 2px;
+    background: var(--btn-primary-bg, #3d6ef5);
+    flex: 0 0 auto;
+}
+/* 3) 顶部搜索卡片：输入框更高更醒目 */
+#panel-bgm input[type="text"],
+#panel-bgm input[type="number"] {
+    background: #1b1b1b;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 7px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .15s, background .15s;
+}
+#panel-bgm input[type="text"]:focus,
+#panel-bgm input[type="number"]:focus {
+    border-color: var(--btn-primary-bg, #3d6ef5);
+    background: #202020;
+}
+#panel-bgm input::placeholder { color: #6f6f6f; }
+/* 4) 首页热榜 grid 更紧凑好看 */
+.bgm-grid { gap: 9px; }
+.bgm-grid-card {
+    border: 1px solid rgba(255,255,255,.05);
+    transition: transform .12s ease, border-color .12s ease;
+}
+.bgm-grid-card:hover {
+    border-color: var(--btn-primary-bg, #3d6ef5);
+}
+/* 5) 剧集列表行：hover 更明显，操作按钮与内容有分隔 */
+#bgmEpList .bgm-item,
+#bgmResultList .bgm-item {
+    gap: 7px;
+    padding: 8px 10px;
+}
+#bgmEpList .bgm-item:hover,
+#bgmResultList .bgm-item:hover {
+    background: rgba(61,110,245,.07);
+}
+#bgmEpList .bgm-item-act,
+#bgmResultList .bgm-item-act { flex: 0 0 auto; }
+/* 6) 工具条（全选/下载选中那行）更清楚 */
+#bgmEpList .bgm-item[style*="background:var(--panel)"] {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 10px;
+}
+/* 7) 骨架/状态留白 */
+.bgm-hot-status { padding: 30px 14px; }
+/* 8) 进度条更醒目 */
+#bgmProgress { border-radius: 8px; }
+
+/* ===== 短剧扒歌 · 播放器悬浮识曲按钮 ===== */
+.bgm-player-stage { position: relative; }
+.bgm-fab {
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+    background: rgba(20,20,20,.72);
+    border: 1px solid rgba(255,255,255,.22);
+    color: #fff;
+    cursor: pointer;
+    padding: 0;
+    flex: 0 0 auto;
+    backdrop-filter: blur(6px);
+    transition: transform .15s, background .15s, border-color .15s;
+    z-index: 5;
+}
+.bgm-fab:hover {
+    background: rgba(61,110,245,.85);
+    border-color: transparent;
+    transform: scale(1.08);
+}
+.bgm-fab:disabled { opacity: .6; cursor: default; }
+.bgm-fab-panel {
+    position: absolute;
+    right: 12px; top: 58px;
+    width: 300px; max-width: calc(100% - 24px);
+    background: rgba(24,24,24,.96);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 8px 26px rgba(0,0,0,.6);
+    z-index: 6;
+    backdrop-filter: blur(8px);
+}
+.bgm-fab-prog { font-size: 11.5px; line-height: 1.7; margin-top: 6px; color: var(--fg-info); }
+.bgm-fab-res { font-size: 11.5px; margin-top: 6px; }
+
+/* ===== ④ 字体颜色分层（按功能语义区分，不花）===== */
+:root {
+    --fg-title:   #f1f3f7;   /* 标题/主要信息：最亮 */
+    --fg-body:    #d3d8e0;   /* 正文 */
+    --fg-info:    #7fa8f5;   /* 信息/提示（蓝） */
+    --fg-link:    #6db3ff;   /* 可点击链接（亮蓝） */
+    --fg-ok:      #7fd68b;   /* 成功/已完成（绿） */
+    --fg-warn:    #ffb84d;   /* 警示/待处理（琥珀） */
+    --fg-err:     #ff8f8f;   /* 错误/失败（红） */
+    --fg-key:     #c9a6ff;   /* 关键词/高亮（紫） */
+    --fg-dim:     #8b93a1;   /* 次要/说明（灰） */
+    --fg-num:     #8fd0d0;   /* 数字/时间（青） */
+}
+
+/* 扒歌面板内按语义上色 */
+.bgm-sec-title { color: var(--fg-dim); }
+.bgm-item-name { color: var(--fg-title); }
+.bgm-item-sub  { color: var(--fg-dim); }
+.bgm-item-tag  { color: var(--fg-info); }          /* ×N 计数 */
+.bgm-item-ep   { color: var(--fg-ok); }            /* 集数标签 */
+.bgm-grid-name { color: var(--fg-title); }
+.bgm-grid-sub  { color: var(--fg-warn); }          /* 热度/评分：暖色更醒目 */
+.bgm-card-title { color: var(--fg-title); }
+.bgm-card-intro { color: var(--fg-dim); }
+.bgm-card-actor { color: var(--fg-link); }
+.bgm-player-title { color: var(--fg-title); }
+.bgm-player-info { color: var(--fg-dim); }
+.bgm-player-tip  { color: var(--fg-dim); }
+.bgm-hot-tab.active { color: #fff; }
+.bgm-bar-time { color: var(--fg-num); }            /* 时间数字：青色等宽更清晰 */
+.bgm-bar-title { color: var(--fg-title); }
+#bgmSongSelInfo, #bgmEpMeta, #bgmSongInfo, #bgmMusicDirLabel { color: var(--fg-dim); }
+#bgmProgMsg { color: var(--fg-info); }
+#bgmProgPct { color: var(--fg-num); font-weight: 600; }
+/* 已完成按钮的绿字 */
+.bgm-item-act.done { color: var(--fg-ok); border-color: rgba(127,214,139,.4); }
+/* 已选中的“选用” */
+.bgm-item-act.on { background: rgba(61,110,245,.2); color: var(--fg-link); border-color: var(--btn-primary-bg); }
+
+/* ===== ① 首页分类按钮：放大、舒展 ===== */
+.bgm-home { margin-top: 10px; }
+.bgm-tab-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.bgm-tab-label {
+    font-size: 11px;
+    color: var(--fg-dim);
+    padding-right: 2px;
+    flex: 0 0 auto;
+}
+/* 榜单与题材按钮统一放大 */
+.bgm-hot-tab {
+    font-size: 12.5px !important;
+    padding: 7px 15px !important;
+    border-radius: 8px !important;
+    background: rgba(255,255,255,.055) !important;
+    color: var(--fg-body) !important;
+    border: 1px solid rgba(255,255,255,.11) !important;
+    flex: 0 0 auto !important;
+    min-width: 0;
+    white-space: nowrap;
+    transition: background .14s, border-color .14s, color .14s, transform .1s;
+}
+.bgm-hot-tab:hover {
+    background: rgba(255,255,255,.12) !important;
+    color: var(--fg-title) !important;
+    border-color: rgba(255,255,255,.22) !important;
+    transform: translateY(-1px);
+}
+.bgm-hot-tab.active {
+    background: var(--btn-primary-bg, #3d6ef5) !important;
+    color: #fff !important;
+    border-color: transparent !important;
+    font-weight: 600;
+    box-shadow: 0 3px 12px -4px rgba(61,110,245,.8);
+}
+/* 小链接（刷新等）*/
+.bgm-mini-link {
+    cursor: pointer;
+    font-size: 11.5px;
+    color: var(--fg-link);
+}
+.bgm-mini-link:hover { color: #9ecbff; text-decoration: underline; }
+/* 热榜网格同步放大 */
+.bgm-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 11px; }
+
+/* ===== 短剧扒歌 · 剧集页分区与主按钮（排版优化）===== */
+/* 分区标题：扒歌 / 下载 两块清晰分隔 */
+.bgm-zone-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--fg-dim);
+    margin-top: 10px;
+    padding-left: 2px;
+    letter-spacing: .3px;
+}
+.bgm-zone-title::after {
+    content: '';
+    display: block;
+    height: 1px;
+    background: rgba(255,255,255,.06);
+    margin-top: 4px;
+}
+/* 主按钮：扒这集 / 看结果（核心动作，突出显示）*/
+#bgmEpList .bgm-item-act.primary {
+    background: var(--btn-primary-bg, #3d6ef5);
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+}
+#bgmEpList .bgm-item-act.primary:hover {
+    background: var(--accent-hover, #4d7dff);
+}
+/* 「⋯」按钮：低频操作入口，弱化 */
+.bgm-item-act.bgm-more {
+    padding: 2px 8px;
+    color: var(--fg-dim);
+    letter-spacing: 1px;
+}
+.bgm-item-act.bgm-more:hover {
+    color: var(--fg-title);
+    background: rgba(255,255,255,.08);
+}
+/* 「⋯」弹出小菜单 */
+.bgm-ep-more {
+    position: absolute;
+    z-index: 9500;
+    min-width: 150px;
+    background: var(--panel, #1e1e1e);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    padding: 4px;
+}
+.bgm-more-item {
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--fg-body);
+    white-space: nowrap;
+}
+.bgm-more-item:hover {
+    background: rgba(61,110,245,.18);
+    color: var(--fg-title);
+}
+
+/* ===== 播放器内「扒此集」大按钮 ===== */
+.bgm-player-rip {
+    padding: 0 10px 6px;
+}
+.bgm-rip-btn {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--btn-primary-bg, #3d6ef5);
+    border: 1px solid transparent;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background .14s;
+}
+.bgm-rip-btn:hover {
+    background: var(--accent-hover, #4d7dff);
+}
+.bgm-rip-btn.done {
+    background: var(--sel-green-bg, #2a4d3a);
+    color: var(--fg-ok, #7fd68b);
+    border-color: rgba(127,214,139,.4);
+}
+/* 小窗模式下也保留（紧贴画面）*/
+#bgmPlayerWrap.bgm-mini .bgm-player-rip { padding: 4px 8px 6px; }
+#bgmPlayerWrap.bgm-mini .bgm-rip-btn { padding: 6px 10px; font-size: 12px; }
+
+/* ===== 与主插件同步：弹窗 UI + 下载进度样式 ===== */
+/* ---- 统一弹窗（替代原生 confirm/alert）---- */
+.bgm-dlg-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    background: rgba(0, 0, 0, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: bgm-dlg-fade .16s ease;
+}
+@keyframes bgm-dlg-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.bgm-dlg {
+    width: min(340px, 88vw);
+    background: var(--panel, #242424);
+    border: 1px solid var(--border, #444);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.55);
+    overflow: hidden;
+    animation: bgm-dlg-pop .2s cubic-bezier(.22, 1.2, .36, 1);
+}
+@keyframes bgm-dlg-pop {
+    from { opacity: 0; transform: translateY(8px) scale(.96); }
+    to { opacity: 1; transform: none; }
+}
+
+.bgm-dlg-head {
+    padding: 12px 16px 0;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--fg-title, #dcdcdc);
+}
+.bgm-dlg.is-danger .bgm-dlg-head { color: #f2879a; }
+
+.bgm-dlg-body {
+    padding: 8px 16px 4px;
+    font-size: 12px;
+    line-height: 1.75;
+    color: var(--fg-body, #c8cdd6);
+    white-space: pre-line;   /* 支持 \n 换行 */
+}
+
+.bgm-dlg-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 16px 14px;
+}
+
+.bgm-dlg-btn {
+    min-width: 76px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border, #444);
+    background: var(--btn-alt-bg, rgba(255,255,255,.06));
+    color: var(--fg-title, #dcdcdc);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+.bgm-dlg-btn:hover { background: rgba(255,255,255,.12); }
+
+.bgm-dlg-btn.is-primary {
+    background: var(--btn-primary-bg, #3d6ef5);
+    border-color: var(--btn-primary-bg, #3d6ef5);
+    color: #fff;
+    font-weight: 600;
+}
+.bgm-dlg-btn.is-primary:hover { background: var(--btn-primary-hover, #4f7cf7); }
+
+.bgm-dlg-btn.is-danger {
+    background: #b8443f;
+    border-color: #b8443f;
+}
+.bgm-dlg-btn.is-danger:hover { background: #cc4f4a; }
+
+/* ---- 轻提示胶囊（顶部滑入，多条堆叠）---- */
+.bgm-toast-host {
+    position: fixed;
+    top: 54px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10060;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.bgm-toast {
+    max-width: 78vw;
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: rgba(20, 24, 20, .95);
+    border: 1px solid rgba(127, 214, 139, .35);
+    color: #9fe0ab;
+    font-size: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    opacity: 0;
+    transform: translateY(-8px) scale(.96);
+    transition: opacity .22s ease, transform .26s cubic-bezier(.22, 1.2, .36, 1);
+}
+.bgm-toast.is-in {
+    opacity: 1;
+    transform: none;
+}
+/* 类型变体 */
+.bgm-toast.is-warn {
+    background: rgba(30, 26, 16, .95);
+    border-color: rgba(230, 196, 105, .4);
+    color: #e6c469;
+}
+.bgm-toast.is-err {
+    background: rgba(30, 18, 20, .95);
+    border-color: rgba(242, 135, 154, .4);
+    color: #f6a3b1;
+}
+
+/* ---- 已下载页：下载中卡片 + 进度条 + 缺口标记 ---- */
+.bgm-dl-series.is-downloading {
+    border-color: rgba(139, 124, 246, .45);
+    background: rgba(139, 124, 246, .06);
+}
+.bgm-dl-series.is-downloading .bgm-dl-arrow {
+    color: var(--accent, #8b7cf6);
+    animation: bgm-dl-bounce .9s ease-in-out infinite;
+}
+@keyframes bgm-dl-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(2px); }
+}
+
+.bgm-dl-prog {
+    height: 3px;
+    margin: 0 10px 8px;
+    background: rgba(255,255,255,.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.bgm-dl-prog > i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 2px;
+    transition: width .3s ease;
+}
+
+.bgm-dl-gap {
+    color: var(--fg-warn-soft, #e6c469);
+    margin-left: 6px;
+}
+
