@@ -3071,6 +3071,7 @@ body.cx-resizing *{cursor:col-resize !important;}
     overflow-y: auto;
     background: var(--panel2);
     border-radius: 6px;
+    position: relative;
 }
 .bgm-list:empty::after {
     content: "（空）";
@@ -3827,3 +3828,65 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .bgm-mini-link:hover { color: #9ecbff; text-decoration: underline; }
 /* 热榜网格同步放大 */
 .bgm-grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 11px; }
+
+/* ===== 短剧扒歌 · 剧集页分区与主按钮（排版优化）===== */
+/* 分区标题：扒歌 / 下载 两块清晰分隔 */
+.bgm-zone-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--fg-dim);
+    margin-top: 10px;
+    padding-left: 2px;
+    letter-spacing: .3px;
+}
+.bgm-zone-title::after {
+    content: '';
+    display: block;
+    height: 1px;
+    background: rgba(255,255,255,.06);
+    margin-top: 4px;
+}
+/* 主按钮：扒这集 / 看结果（核心动作，突出显示）*/
+#bgmEpList .bgm-item-act.primary {
+    background: var(--btn-primary-bg, #3d6ef5);
+    color: #fff;
+    border-color: transparent;
+    font-weight: 600;
+}
+#bgmEpList .bgm-item-act.primary:hover {
+    background: var(--accent-hover, #4d7dff);
+}
+/* 「⋯」按钮：低频操作入口，弱化 */
+.bgm-item-act.bgm-more {
+    padding: 2px 8px;
+    color: var(--fg-dim);
+    letter-spacing: 1px;
+}
+.bgm-item-act.bgm-more:hover {
+    color: var(--fg-title);
+    background: rgba(255,255,255,.08);
+}
+/* 「⋯」弹出小菜单 */
+.bgm-ep-more {
+    position: absolute;
+    z-index: 9500;
+    min-width: 150px;
+    background: var(--panel, #1e1e1e);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    padding: 4px;
+}
+.bgm-more-item {
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--fg-body);
+    white-space: nowrap;
+}
+.bgm-more-item:hover {
+    background: rgba(61,110,245,.18);
+    color: var(--fg-title);
+}
+

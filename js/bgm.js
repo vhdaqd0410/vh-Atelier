@@ -599,39 +599,39 @@
             var el = document.createElement('div');
             el.className = 'bgm-item';
             el.dataset.ep = String(ep);
+            var cached = !!getCached(ep);
+            // 主按钮：扒这集/看结果（核心动作，primary 色）；重扒（有缓存时）
+            var pickLabel = cached ? '看结果' : '扒这集';
             el.innerHTML =
                 '<input type="checkbox" class="bgm-ep-cb" data-ep="' + ep + '" style="flex:0 0 auto;">' +
                 '<span class="bgm-item-idx">' + ep + '</span>' +
                 '<div class="bgm-item-main"><div class="bgm-item-name">第 ' + ep + ' 集</div>' +
                 '<div class="bgm-item-sub">' + (local ? '✔ 已下载 ' + local.sizeMB + 'MB' : '未下载') + '</div></div>' +
-                (local ? '<span class="bgm-item-act on bgm-playnow">播放</span>' : '') +
-                (local ? '<span class="bgm-item-act bgm-imp" title="导入 PR 项目面板素材库">导入PR</span>' : '') +
-                (local ? '<span class="bgm-item-act bgm-ins" title="插入到当前时间线播放头位置">插入时间线</span>' : '') +
+                (local ? '<span class="bgm-item-act bgm-playnow">播放</span>' : '') +
                 '<span class="bgm-item-act bgm-watch">' + (local ? '重下' : '下载') + '</span>' +
-                '<span class="bgm-item-act bgm-pick">' + (getCached(ep) ? '看结果' : '扒这集') + '</span>' +
-                (getCached(ep) ? '<span class="bgm-item-act bgm-repick">重扒</span>' : '');
+                (cached ? '<span class="bgm-item-act bgm-repick">重扒</span>' : '') +
+                '<span class="bgm-item-act bgm-pick primary">' + pickLabel + '</span>' +
+                (local ? '<span class="bgm-item-act bgm-more" title="更多操作">⋯</span>' : '');
             var pn = el.querySelector('.bgm-playnow');
             if (pn) pn.addEventListener('click', function (ev) { ev.stopPropagation(); playEpisode(ep, v); });
-            var imp = el.querySelector('.bgm-imp');
-            if (imp) imp.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                importFilesToPR([local.path], curSeries ? curSeries.name : '短剧');
-            });
-            var ins = el.querySelector('.bgm-ins');
-            if (ins) ins.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                insertToTimeline(local.path);
-            });
             el.querySelector('.bgm-watch').addEventListener('click', function (ev) {
                 ev.stopPropagation(); downloadEpisode(v, ep);
-            });
-            el.querySelector('.bgm-pick').addEventListener('click', function (ev) {
-                ev.stopPropagation(); pickEpisode(v, ep);
             });
             var rp = el.querySelector('.bgm-repick');
             if (rp) rp.addEventListener('click', function (ev) {
                 ev.stopPropagation(); rePickEpisode(v, ep);
             });
+            el.querySelector('.bgm-pick').addEventListener('click', function (ev) {
+                ev.stopPropagation(); pickEpisode(v, ep);
+            });
+            // 「⋯」：低频操作（导入PR / 插入时间线）收进小菜单
+            var more = el.querySelector('.bgm-more');
+            if (more) {
+                more.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    toggleEpMore(ev, el, ep, local);
+                });
+            }
             // 双击 = 下载（未下）/ 播放（已下）
             el.addEventListener('dblclick', function () {
                 // 已下载 → 直接播；未下载 → 下载完自动播（autoPlay=ep）
@@ -655,12 +655,12 @@
         if ((d.vid_list || []).length > 60) {
             var more = document.createElement('div');
             more.className = 'bgm-item';
-            more.innerHTML = '<div class="bgm-item-main"><div class="bgm-item-sub">… 其余 ' + (d.vid_list.length - 60) + ' 集请用「扒整剧」批量处理</div></div>';
+            more.innerHTML = '<div class="bgm-item-main"><div class="bgm-item-sub">… 其余 ' + (d.vid_list.length - 60) + ' 集请用「在线批量扒」处理</div></div>';
             box.appendChild(more);
         }
         var hint = $('bgmSeriesHint');
         if (hint) {
-            hint.innerHTML = '双击 = 下载/播放；勾选多集可「下载选中」；已下载的可「拖进PR」';
+            hint.innerHTML = '勾选多集可「下载选中」；已下载的可拖进 PR；⋯ 里有导入 PR / 插入时间线';
         }
     }
 
@@ -1305,6 +1305,42 @@
             if (cb.checked) out.push(parseInt(cb.getAttribute('data-ep'), 10));
         });
         return out;
+    }
+
+    // 「⋯」小菜单：收起低频操作（导入PR / 插入时间线），点外部自动关闭
+    function toggleEpMore(ev, rowEl, ep, loc) {
+        var old = document.querySelector('#bgmEpMoreMenu');
+        if (old) old.remove();
+        var menu = document.createElement('div');
+        menu.id = 'bgmEpMoreMenu';
+        menu.className = 'bgm-ep-more';
+        menu.innerHTML =
+            '<div class="bgm-more-item" data-act="pr">导入 PR 素材库</div>' +
+            '<div class="bgm-more-item" data-act="tl">插入到时间线播放头</div>';
+        var rect = rowEl.getBoundingClientRect();
+        var host = rowEl.closest('.bgm-list') || rowEl.parentElement;
+        // 挂在列表容器内，绝对定位到当前行右侧
+        host.appendChild(menu);
+        menu.style.top = (rowEl.offsetTop) + 'px';
+        menu.style.right = '8px';
+        menu.addEventListener('click', function (e2) {
+            var act = (e2.target && e2.target.getAttribute && e2.target.getAttribute('data-act'));
+            menu.remove();
+            if (!act) return;
+            if (act === 'pr') {
+                importFilesToPR([loc.path], (curSeries && curSeries.name) || '短剧');
+            } else if (act === 'tl') {
+                insertToTimeline(loc.path);
+            }
+        });
+        // 点别处关闭
+        setTimeout(function () {
+            var closer = function (e3) {
+                var m = $('bgmEpMoreMenu');
+                if (m && !m.contains(e3.target)) { m.remove(); document.removeEventListener('click', closer); }
+            };
+            document.addEventListener('click', closer);
+        }, 0);
     }
 
     function updateSelInfo() {
@@ -2155,7 +2191,6 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         saveUiState();
         on('btnBgmPickFile', startSingleByFile, 'click');
         on('btnBgmPickDir', startBatchByDir, 'click');
-        on('btnBgmBatch', startBatchByDir, 'click');
         var ob = $('btnBgmOnlineBatch');
         if (ob) ob.addEventListener('click', startOnlineBatch);
         on('btnBgmCancel', stopJob, 'click');

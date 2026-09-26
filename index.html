@@ -677,30 +677,34 @@
                         <span id="bgmSeriesCount" style="font-size:11px;color:var(--muted);"></span>
                     </div>
                     <div id="bgmSeriesHead" class="bgm-card" style="border-bottom:none;padding:8px 0;"></div>
-                    <div class="tr" style="display:flex;gap:6px;margin-top:8px;align-items:center;">
-                        <span style="font-size:11px;color:var(--muted);">在线批量：从第</span>
-                        <input type="number" id="bgmFromEp" placeholder="起始" style="width:60px;" min="1" value="1">
-                        <span style="font-size:11px;color:var(--muted);">集起，扒</span>
-                        <input type="number" id="bgmCount" placeholder="集数" style="width:60px;" min="1" value="10">
+
+                    <!-- 分区一：扒歌（识 BGM） -->
+                    <div class="bgm-zone-title">🎵 扒歌 · 识 BGM</div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                        <span style="font-size:11px;color:var(--muted);">在线从第</span>
+                        <input type="number" id="bgmFromEp" placeholder="起始" style="width:52px;" min="1" value="1">
+                        <span style="font-size:11px;color:var(--muted);">集起扒</span>
+                        <input type="number" id="bgmCount" placeholder="集数" style="width:52px;" min="1" value="10">
                         <span style="font-size:11px;color:var(--muted);">集</span>
-                        <button id="btnBgmOnlineBatch" class="tbtn primary">自动下载并扒</button>
+                        <button id="btnBgmOnlineBatch" class="tbtn primary">在线批量扒</button>
                     </div>
                     <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
-                        <button id="btnBgmPickFile" class="tbtn">选择本地文件…</button>
-                        <button id="btnBgmPickDir" class="tbtn">选本地目录批量…</button>
-                        <input type="number" id="bgmLimit" placeholder="上限" style="width:60px;" min="1" title="本地目录批量时最多处理多少集，留空=全部">
-                        <button id="btnBgmBatch" class="tbtn">扒本地目录</button>
-                    </div>
-                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
-                        <span id="bgmSeriesHint" style="font-size:11px;color:var(--muted);flex:1;"></span>
-                        <button id="btnBgmOpenDir" class="tbtn" style="padding:3px 8px;font-size:11px;">打开下载目录</button>
-                        <button id="btnBgmDownloadAll" class="tbtn" style="padding:3px 8px;font-size:11px;">下载全集</button>
-                    </div>
-                    <div id="bgmEpMeta" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
-                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                        <button id="btnBgmPickFile" class="tbtn">导入本地文件…</button>
+                        <button id="btnBgmPickDir" class="tbtn">导入本地目录…</button>
+                        <input type="number" id="bgmLimit" placeholder="上限" style="width:52px;" min="1" title="本地目录批量时最多处理多少集，留空=全部">
+                        <span style="font-size:11px;color:var(--muted);">目录上限集数</span>
                         <span style="flex:1;"></span>
+                    </div>
+
+                    <!-- 分区二：下载（拿视频文件） -->
+                    <div class="bgm-zone-title" style="margin-top:12px;">📥 下载 · 拿视频</div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                        <button id="btnBgmDownloadAll" class="tbtn" title="下载全集">下载全集</button>
+                        <button id="btnBgmOpenDir" class="tbtn" style="padding:3px 8px;font-size:11px;">打开下载目录</button>
+                        <span id="bgmSeriesHint" style="font-size:11px;color:var(--muted);flex:1;"></span>
                         <button id="btnBgmCancel" class="tbtn danger" style="display:none;">⏹ 停止</button>
                     </div>
+                    <div id="bgmEpMeta" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
                 </div>
                 <div id="bgmEpList" class="bgm-list" style="margin-top:6px;"></div>
             </div>
