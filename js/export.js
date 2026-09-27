@@ -53,7 +53,8 @@
   // 渲染通道：'pr' = PR 直渲（前台占用）；'ame' = 交给 Media Encoder 后台渲染
   var CH_KEY = 'vh_export_channel';
   function getChannel() {
-    try { return localStorage.getItem(CH_KEY) === 'ame' ? 'ame' : 'pr'; } catch (e) { return 'pr'; }
+    // 默认走 AME（不占用 PR）；用户显式选过 PR 才用 PR
+    try { return localStorage.getItem(CH_KEY) === 'pr' ? 'pr' : 'ame'; } catch (e) { return 'ame'; }
   }
   function setChannel(ch) {
     try { localStorage.setItem(CH_KEY, ch === 'ame' ? 'ame' : 'pr'); } catch (e) {}
@@ -124,14 +125,35 @@
     if (h > 0) return h + ':' + pad(m) + ':' + pad(s);
     return pad(m) + ':' + pad(s);
   }
+  // 进度时间显示：单独抽出来，供 1 秒心跳复用
+  function renderProgTime(elapsedSec, remainSec) {
+    var t = '已用 ' + fmtTime(elapsedSec || 0);
+    if (remainSec !== undefined && remainSec !== null) t += ' · 预计剩余 ' + fmtTime(remainSec);
+    progressTime.textContent = t;
+  }
+  // 进度心跳：原来「已用时间」只在收到进度事件时才刷新，
+  // 渲染阶段若回调稀疏，这个数字会长时间冻住，看起来像卡死。
+  // 现在每秒自己走一遍，已用时间始终准确。
+  var progTick = null;
+  var progStartedAt = 0;
+  var progLastRemain = null;
+  function startProgTicker(startedAt) {
+    stopProgTicker();
+    progStartedAt = startedAt || Date.now();
+    progTick = setInterval(function () {
+      renderProgTime((Date.now() - progStartedAt) / 1000, progLastRemain);
+    }, 1000);
+  }
+  function stopProgTicker() {
+    if (progTick) { clearInterval(progTick); progTick = null; }
+  }
   function setProgress(pct, stateText, elapsedSec, remainSec) {
     pct = Math.max(0, Math.min(100, pct));
     progressFill.style.width = pct + '%';
     progressPct.textContent = Math.round(pct) + '%';
     if (stateText) progressState.textContent = stateText;
-    var t = '已用 ' + fmtTime(elapsedSec || 0);
-    if (remainSec !== undefined && remainSec !== null) t += ' · 预计剩余 ' + fmtTime(remainSec);
-    progressTime.textContent = t;
+    progLastRemain = (remainSec === undefined) ? null : remainSec;
+    renderProgTime(elapsedSec, remainSec);
   }
 
   // ── 交付清单 ────────────────────────────────
@@ -1123,6 +1145,29 @@
     var totalSeq = seqs.length;
     var totalJobs = 0;
 
+    // ── 进度模型 ──
+    // 入队是「读序列状态 + 递交给 ME」，几秒就完事；渲染才是耗时主体。
+    // 旧模型让入队占了 0~40%，进度条几秒冲到 40% 后长时间不动，
+    // 按百分比线性外推的剩余时间因此严重失真（显示十几秒，实际好几分钟）。
+    var ENQ_END = 5;     // 入队阶段：0 ~ 5%
+    var RND_END = 99;    // 渲染阶段：5 ~ 99%
+    var renderStartedAt = 0;
+
+    // 剩余时间估算：同序列各版本体量接近，用「已完成任务的均速 × 剩余任务数」
+    // 比按总百分比外推准得多。
+    function estRemain(jobsDone, total, renderElapsedSec, withinPct) {
+      if (jobsDone > 0) {
+        var per = renderElapsedSec / jobsDone;      // 平均每个任务耗时
+        return Math.max(0, per * (total - jobsDone) - (withinPct / 100) * per);
+      }
+      // 第一个任务还没完成：用当前任务内部进度粗估单任务耗时
+      if (withinPct > 3 && renderElapsedSec > 5) {
+        var thisJob = renderElapsedSec / (withinPct / 100);
+        return Math.max(0, thisJob * total - renderElapsedSec);
+      }
+      return null;   // 数据不足，先不显示剩余
+    }
+
     try {
       // 阶段 1：逐序列、逐版本入队
       for (var k = 0; k < seqs.length; k++) {
@@ -1131,9 +1176,8 @@
         setLog('── 入队 [' + seqName + '] (' + (k + 1) + '/' + totalSeq + ') ──');
         var res = await exportOneSequence(seqName, function (p, t) {
           if (stopRequested) return;
-          // 入队阶段占整体 0~40%
-          var overall = (k / totalSeq) * 40 + (p / 100) * (40 / totalSeq);
-          onProgress(overall, t);
+          var overall = (k / totalSeq) * ENQ_END + (p / 100) * (ENQ_END / totalSeq);
+          onProgress(overall, t, null);   // 入队很快，不给剩余估算
         });
         if (res.stopped) return { stopped: true };
         if (!res.ok) { setLog('✗ [' + seqName + '] 入队失败：' + res.err, 'error'); return { ok: false, err: res.err }; }
@@ -1143,8 +1187,9 @@
       if (!totalJobs) return { ok: false, err: '没有任务入队' };
 
       // 阶段 2：统一开渲
+      renderStartedAt = Date.now();
       setLog('════ 已入队 ' + totalJobs + ' 个任务，开始渲染（ME 后台）════');
-      onProgress(42, 'ME 开始渲染 ' + totalJobs + ' 个任务');
+      onProgress(ENQ_END + 1, 'ME 开始渲染 ' + totalJobs + ' 个任务', null);
       var sb = await evalHost('meStartBatch()');
       if (sb.indexOf('OK:') !== 0) { setLog('⚠ 启动渲染失败：' + sb, 'warn'); }
 
@@ -1156,8 +1201,19 @@
         if (stopRequested) return { stopped: true };
         var job = ameJobs[j];
         var sub = function (pct) {
-          var per = (done + Math.max(0, Math.min(100, pct)) / 100) / ameJobs.length;
-          onProgress(42 + per * 56, '渲染中 ' + (done + 1) + '/' + ameJobs.length + '：' + job.version);
+          // 量纲自适应：AME 进度回调可能是 0~1（官方 AME API 文档写 float 0~1），
+          // 也可能是 0~100。当 0~1 当 0~100 用会让进度条几乎不动，所以自动归一。
+          var raw = Number(pct);
+          if (!isFinite(raw)) raw = 0;
+          var within = (raw > 0 && raw <= 1) ? raw * 100 : raw;
+          within = Math.max(0, Math.min(100, within));
+          var per = (done + within / 100) / ameJobs.length;
+          var renderElapsed = (Date.now() - renderStartedAt) / 1000;
+          onProgress(
+            ENQ_END + per * (RND_END - ENQ_END),
+            '渲染中 ' + (done + 1) + '/' + ameJobs.length + '：' + job.version,
+            estRemain(done, ameJobs.length, renderElapsed, within)
+          );
         };
         setLog('⏳ 渲染「' + job.version + '」…');
         var rr = await waitAmeJob(job.jobId, job.file, 60 * 60 * 1000, function () { return stopRequested; }, sub);
@@ -1192,7 +1248,7 @@
         }
       }
 
-      onProgress(100, '全部完成');
+      onProgress(100, '全部完成', 0);
       if (stopRequested) return { stopped: true };
       return { ok: true, done: done, total: totalJobs };
     } catch (e) {
@@ -1223,6 +1279,7 @@
     progressArea.style.display = 'block';
     var totalSeq = seqs.length;
     var startTime = Date.now();
+    startProgTicker(startTime);   // 已用时间每秒自走，不依赖进度事件
     var doneSeq = 0;
 
     function overallPercent(seqIdx, inSeqPercent) {
@@ -1234,11 +1291,10 @@
     try {
       if (getChannel() === 'ame') {
         // AME 通道：全部入队 → 统一开渲 → PR 不参与渲染
-        var resA = await exportSequencesViaAme(seqs, function (p, t) {
+        var resA = await exportSequencesViaAme(seqs, function (p, t, remain) {
           if (stopRequested) return;
           var elapsed = (Date.now() - startTime) / 1000;
-          var remain = p > 0 ? elapsed * (100 - p) / p : 0;
-          setProgress(p, t, elapsed, remain);
+          setProgress(p, t, elapsed, remain === undefined ? null : remain);
         });
         if (resA.stopped) {
           setLog('⏹ 已停止（用户中止）', 'warn');
@@ -1302,6 +1358,7 @@
       setLog('流程中断：' + e.message, 'error');
       try { await evalHost('meUnmuteAll()'); } catch (_) {}
     } finally {
+      stopProgTicker();
       setBusy(false);
     }
   }

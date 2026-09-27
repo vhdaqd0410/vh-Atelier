@@ -583,6 +583,13 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('通道选择持久化', /vh_export_channel/.test(expjs));
     ok('PR 直渲仍保留', /meExport\(/.test(expjs) && /exportAsMediaDirect/.test(hostjsx));
     ok('CSS 有通道选择器', /\.rnd-opt\s*\{/.test(css));
+    ok('默认走 AME', /localStorage\.getItem\(CH_KEY\) === 'pr' \? 'pr' : 'ame'/.test(expjs));
+    ok('默认勾选 ame 单选', /id="rnd-ame"[^>]*checked/.test(idx));
+    ok('ME 完成后保留历史', /REMOVE_AFTER = 0/.test(hostjsx) && /wa, REMOVE_AFTER, false/.test(hostjsx));
+    ok('进度有心跳（已用时间自走）', /startProgTicker/.test(expjs) && /stopProgTicker/.test(expjs));
+    ok('入队阶段不虚占进度', /var ENQ_END = 5;/.test(expjs) && /var RND_END = 99;/.test(expjs));
+    ok('剩余时间按任务均速估算', /function estRemain/.test(expjs));
+    ok('进度量纲自适应', /raw > 0 && raw <= 1\) \? raw \* 100 : raw/.test(expjs));
 }
 
 // ============================================================

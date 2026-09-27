@@ -1207,10 +1207,12 @@ function meEnqueueAME(outputPath, presetPath, workAreaType) {
         var parent = output.parent;
         if (parent && !parent.exists) parent.create();
         var wa = (workAreaType === undefined || workAreaType === null) ? 0 : workAreaType;
-        // 第 5 参：渲染完成后从队列移除（1 = 移除）
+        // 第 5 参 removeUponCompletion：0 = 渲染完成后保留在 ME 队列里
+        //   （保留历史，便于回查/重渲；传 1 会在完成瞬间消失）
         // 第 6 参：是否立即开始渲染（false = 只入队，等 meStartBatch）
         //   注：官方文档只列 5 个参数，第 6 个在官方示例 PProPanel 中使用。
-        var jobId = app.encoder.encodeSequence(s, output.fsName, preset.fsName, wa, 1, false);
+        var REMOVE_AFTER = 0;
+        var jobId = app.encoder.encodeSequence(s, output.fsName, preset.fsName, wa, REMOVE_AFTER, false);
         if (jobId === 0 || jobId === "0" || jobId === null || jobId === undefined) {
             return "ERR:入队失败（返回 " + jobId + "）";
         }
