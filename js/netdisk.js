@@ -130,7 +130,7 @@
             items = (r.data && r.data.items) || [];
             selected = {};
             try { localStorage.setItem(NAV_KEY, curPath); } catch (e) {}
-            setState('已连接　共 ' + items.length + ' 项', 'ok');
+            setState('已连接　共 ' + items.length + ' 项　（双击文件预览，拖到 PR 需先下载）', 'ok');
             renderCrumbs();
             renderList();
             updateSelInfo();
@@ -223,8 +223,14 @@
                 cb.className = 'nd-cb' + (selected[it.path] ? ' on' : '');
                 updateSelInfo();
             });
-            // 文件：右键菜单（下载 / 导入 / 插入 / 复制路径）
+            // 文件：双击预览、可拖拽、右键菜单
             if (!it.dir) {
+                row.addEventListener('dblclick', function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    openPreview(it);
+                });
+                enableDrag(row, it);
                 row.addEventListener('contextmenu', function (ev) {
                     ev.preventDefault();
                     ev.stopPropagation();
@@ -321,6 +327,7 @@
                     );
                 }).then(function (dest) {
                     out.push({ path: dest, name: it.name });
+                    dragCache[it.path] = dest;   // 记入拖拽缓存，之后可直接拖
                     next();
                 }).catch(function (e) {
                     flash('下载失败：' + it.name + '（' + (e && e.message || e) + '）');
@@ -383,6 +390,136 @@
         downloadBatch(sel, null);
     }
 
+    // ---------- 预览 ----------
+    // 网盘文件用中转服务的流地址播放（支持 Range，能边下边播、拖进度）
+    var previewOverlay = null;
+    function closePreview () {
+        if (previewOverlay && previewOverlay.parentNode) previewOverlay.parentNode.removeChild(previewOverlay);
+        previewOverlay = null;
+    }
+    function openPreview (item) {
+        closePreview();
+        var ext = String(item.name || '').toLowerCase().split('.').pop();
+        var k = kindOf(item.name);
+        var streamUrl = getRelay() + '/stream?path=' + encodeURIComponent(item.path);
+
+        var ov = document.createElement('div');
+        ov.className = 'nd-prev-mask';
+        var box = document.createElement('div');
+        box.className = 'nd-prev-box';
+
+        var ttl = document.createElement('div');
+        ttl.className = 'nd-prev-title';
+        ttl.textContent = item.name + '　' + fmtSize(item.size);
+        box.appendChild(ttl);
+
+        var media = null;
+        if (k === 'image') {
+            media = document.createElement('img');
+            media.src = streamUrl;
+            media.className = 'nd-prev-img';
+        } else if (k === 'video') {
+            media = document.createElement('video');
+            media.controls = true;
+            media.autoplay = true;
+            media.preload = 'metadata';
+            media.src = streamUrl;
+            media.className = 'nd-prev-video';
+        } else if (k === 'audio') {
+            media = document.createElement('audio');
+            media.controls = true;
+            media.autoplay = true;
+            media.src = streamUrl;
+            media.className = 'nd-prev-audio';
+        }
+        if (media) {
+            // 播放出错时给出可读提示（而不是黑屏）
+            media.addEventListener('error', function () {
+                var tip = document.createElement('div');
+                tip.className = 'nd-prev-err';
+                tip.textContent = '无法预览（可能是编码不支持，或中转服务暂时不可用）。可点「外部打开」用系统播放器。';
+                box.appendChild(tip);
+            });
+            box.appendChild(media);
+        } else {
+            var tx = document.createElement('div');
+            tx.className = 'nd-prev-text';
+            tx.textContent = '此类型不支持内置预览：' + item.path;
+            box.appendChild(tx);
+        }
+
+        // 底部按钮
+        var row = document.createElement('div');
+        row.className = 'nd-prev-actions';
+        function btn (text, fn) {
+            var b = document.createElement('button');
+            b.className = 'tbtn';
+            b.textContent = text;
+            b.addEventListener('click', fn);
+            row.appendChild(b);
+        }
+        if (k !== 'other') {
+            btn('📥 导入 PR', function () {
+                downloadBatch([item], '为导入下载').then(function (got) {
+                    if (!got.length) return;
+                    var kk = kindOf(got[0].name);
+                    importToPR([got[0].path], kk === 'video' ? '视频' : kk === 'audio' ? '音乐' : '图片', '导入');
+                });
+            });
+        }
+        btn('⬇ 下载到本地', function () { downloadBatch([item], '下载 ' + item.name); });
+        btn('🌐 外部打开', function () {
+            try { childProcess.exec('start "" "' + streamUrl + '"'); } catch (e) {}
+        });
+        btn('✕ 关闭', closePreview);
+        box.appendChild(row);
+
+        ov.appendChild(box);
+        // 点遮罩空白处关闭
+        ov.addEventListener('click', function (e) { if (e.target === ov) closePreview(); });
+        document.body.appendChild(ov);
+        previewOverlay = ov;
+    }
+
+    // ---------- 拖拽到 PR ----------
+    // 关键：CEP 拖拽只认本地文件路径（com.adobe.cep.dnd.file.0）。
+    // 网盘文件不在本地，所以拖之前必须先下到本地缓存；已缓存的可以秒拖。
+    var dragCache = {};   // path -> 本地绝对路径
+    function localPathOf (item) {
+        if (dragCache[item.path]) return dragCache[item.path];
+        // 与下载逻辑一致的重名处理
+        var dir = getDlDir();
+        var safe = String(item.name || 'file').replace(/[\\/:*?"<>|]/g, '_');
+        var dest = path.join(dir, safe);
+        if (fs.existsSync(dest)) return dest;   // 本地已有同名，直接用
+        return null;
+    }
+    // 给行挂上拖拽（本地已有就直接可拖；没有则拖时先下载）
+    function enableDrag (row, item) {
+        row.draggable = true;
+        row.addEventListener('dragstart', function (ev) {
+            var local = localPathOf(item);
+            if (local) {
+                try {
+                    ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', local);
+                    ev.dataTransfer.setData('text/plain', local);
+                    ev.dataTransfer.effectAllowed = 'copy';
+                    flash('拖入：' + item.name);
+                } catch (e) {}
+                return;
+            }
+            // 未缓存：阻止本次拖拽，先下载，下完提示再拖
+            ev.preventDefault();
+            flash('首次拖拽需先下载：' + item.name);
+            downloadBatch([item], '为拖拽准备 ' + item.name).then(function (got) {
+                if (got.length) {
+                    dragCache[item.path] = got[0].path;
+                    flash('已就绪，现在可以拖到 PR 了：' + item.name);
+                }
+            });
+        });
+    }
+
     // ---------- 右键菜单 ----------
     function showFileMenu (it, ev) {
         var old = document.getElementById('ndMenu');
@@ -398,7 +535,17 @@
             menu.appendChild(el);
         }
         var isMedia = kindOf(it.name) !== 'other';
+        if (isMedia) mi('👁 预览', function () { openPreview(it); });
         mi('⬇ 下载到本地', function () { downloadBatch([it], '下载 ' + it.name); });
+        if (isMedia) {
+            mi('🖱 拖到 PR（首次需下载）', function () {
+                var local = localPathOf(it);
+                if (local) { flash('已就绪，直接把文件行拖进 PR：' + it.name); return; }
+                downloadBatch([it], '为拖拽准备 ' + it.name).then(function (got) {
+                    if (got.length) { dragCache[it.path] = got[0].path; flash('已就绪，现在可拖拽：' + it.name); }
+                });
+            });
+        }
         if (isMedia) {
             mi('📥 导入 PR 素材箱', function () {
                 downloadBatch([it], '为导入下载').then(function (got) {
@@ -450,6 +597,11 @@
             });
             b = $('ndSelNone'); if (b) b.addEventListener('click', function () {
                 selected = {}; renderList(); updateSelInfo();
+            });
+            b = $('ndPreview'); if (b) b.addEventListener('click', function () {
+                var sel = Object.keys(selected).map(function (k) { return selected[k]; });
+                if (sel.length !== 1) { flash('预览请选中 1 个文件（也可直接双击文件行）'); return; }
+                openPreview(sel[0]);
             });
             b = $('ndDownload'); if (b) b.addEventListener('click', doDownload);
             b = $('ndImport');   if (b) b.addEventListener('click', doImport);

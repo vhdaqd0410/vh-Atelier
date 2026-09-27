@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.38.0",
-  "buildTime": "2026-09-27 10:17:37",
+  "version": "1.39.0",
+  "buildTime": "2026-09-27 10:41:08",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "新增「网盘」板块：通过服务器中转接入 CloudDrive2，浏览百度网盘等并下载导入 PR/插入时间线"
+  "notes": "网盘板块支持预览（双击/按钮，走中转流边下边播）与拖拽到 PR（首次自动下载后可直接拖）"
 }

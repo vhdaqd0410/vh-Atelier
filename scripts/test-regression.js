@@ -391,6 +391,15 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('复用素材的目录选择器', /__mediaPickFolder/.test(nd));
     ok('CSS 有 .nd-wrap', /\.nd-wrap\s*\{/.test(css));
     ok('CSS 有 .nd-item', /\.nd-item\s*\{/.test(css));
+    ok('网盘可预览', /function openPreview/.test(nd));
+    ok('预览用中转流地址', /\/stream\?path=/.test(nd));
+    ok('预览按类型选元素', /nd-prev-video/.test(nd) && /nd-prev-img/.test(nd) && /nd-prev-audio/.test(nd));
+    ok('双击预览', /dblclick/.test(nd));
+    ok('网盘可拖拽', /enableDrag/.test(nd) && /com\.adobe\.cep\.dnd\.file\.0/.test(nd));
+    ok('未缓存时先下载再拖', /dragCache/.test(nd) && /首次拖拽需先下载/.test(nd));
+    ok('CSS 有预览遮罩', /\.nd-prev-mask\s*\{/.test(css));
+    ok('工具栏有预览按钮', /id="ndPreview"/.test(idx));
+
     // 9) 恢复播放进度（关面板后重开回到原位置）
     ok('saveUiState 存 playerOpen', /st\.playerOpen = /.test(bgm));
     ok('saveUiState 存 pos', /st\.pos = /.test(bgm));
