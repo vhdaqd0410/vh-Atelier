@@ -416,6 +416,13 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('网盘管理界面走 iframe-nav', /ndManageWrap/.test(idx) && /id="ndFrame"/.test(idx));
     ok('网盘展开状态持久化', /vh_netdisk_expanded/.test(nd));
 
+    // 8d) 歌曲色点必须在通用作用域（曾误锁进 .bgm-mini 导致正常模式不可见）
+    ok('列表色点通用样式', /\.bgm-dot\s*\{/.test(css));
+    ok('色点未被锁进小窗作用域', !/^\s*#bgmPlayerWrap\.bgm-mini \.bgm-dot\s*\{[\s\S]{0,60}width/s.test(css.replace(/^[^\n]*\n/m, '')));
+    ok('色点有尺寸与圆形', /\.bgm-dot\s*\{[\s\S]{0,120}width:\s*8px[\s\S]{0,120}border-radius:\s*50%/.test(css));
+    ok('列表色点用 songColor', /bgm-dot[\s\S]{0,80}songColor\(/.test(bgm));
+    ok('进度条色块用 songColor', /bgm-mark[\s\S]{0,200}songColor\(|songColor\([^)]*\)[\s\S]{0,160}bgm-mark/.test(bgm) || /background[^\n]*songColor\(/.test(bgm));
+
     // 8c) 试听条独立（不再借视频播放器的进度条）
     ok('试听条独立于视频播放器', /id="bgmSongBar"/.test(idx));
     ok('试听条有进度与时间', /bgmSongFill/.test(idx) && /bgmSongCur/.test(idx) && /bgmSongDur/.test(idx));

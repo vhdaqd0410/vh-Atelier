@@ -3230,6 +3230,15 @@ body.cx-resizing *{cursor:col-resize !important;}
 #bgmPlayerWrap.bgm-mini .bgm-player-head { padding: 5px 7px; }
 #bgmPlayerWrap.bgm-mini .bgm-player-foot,
 #bgmPlayerWrap.bgm-mini .bgm-player-info { display: none; }
+.bgm-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+    flex: 0 0 auto;
+}
+/* 小窗下色点略小 */
 #bgmPlayerWrap.bgm-mini .bgm-dot {
     display: inline-block;
     width: 8px; height: 8px;

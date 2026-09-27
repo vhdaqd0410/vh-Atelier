@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.42.0",
-  "buildTime": "2026-09-27 11:30:24",
+  "version": "1.42.1",
+  "buildTime": "2026-09-27 11:56:58",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "短剧扒歌：歌曲试听改为独立试听条，与视频播放器进度条彻底解耦"
+  "notes": "修复识别列表歌曲色点不可见：.bgm-dot 曾被误锁进 .bgm-mini 作用域"
 }
