@@ -573,7 +573,7 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('全部入队后才开渲', /await exportOneSequence[\s\S]{0,1400}meStartBatch/.test(expjs));
     ok('AME 流程不调用 meExport', !/exportSequencesViaAme[\s\S]{0,2000}meExport\(/.test(expjs));
     ok('入队后恢复音轨', /meEnqueueAME[\s\S]{0,400}await unmute\(\)/.test(expjs));
-    ok('宿主 encodeSequence 只入队', /encodeSequence\([^;]*,\s*1,\s*false\)/.test(hostjsx));
+    ok('宿主 encodeSequence 只入队', /encodeSequence\([^;]*(,\s*1|REMOVE_AFTER)\s*,\s*false\)/.test(hostjsx));
     ok('宿主有 meStartBatch', /function meStartBatch/.test(hostjsx));
     ok('宿主有 meLaunchEncoder', /function meLaunchEncoder/.test(hostjsx));
     ok('AME 事件经 CSXSEvent 派发', /new CSXSEvent\(\)/.test(hostjsx) && /com\.vh\.ameJob/.test(hostjsx));
