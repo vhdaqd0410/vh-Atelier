@@ -4988,3 +4988,52 @@ button.primary:hover { background: var(--btn-primary-hover); }
 /* 树区/文件区在窄面板下的最小宽度保护 */
 #panel-netdisk .md-tree { min-width: 90px; }
 #panel-netdisk .md-files { min-width: 140px; }
+
+/* ===== 短剧扒歌 · 试听条（独立，与视频播放器解耦）===== */
+.bgm-songbar {
+    margin: 6px 0 8px; padding: 7px 10px 8px;
+    background: rgba(127,214,139,.07);
+    border: 1px solid rgba(127,214,139,.28);
+    border-radius: 8px;
+}
+.bgm-songbar-row { display: flex; align-items: center; gap: 7px; }
+.bgm-songbar-ico { flex: 0 0 auto; font-size: 13px; }
+.bgm-songbar-name {
+    font-size: 11.5px; color: var(--text); font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 46%;
+}
+.bgm-songbar-spacer { flex: 1 1 auto; }
+.bgm-songbar-time {
+    flex: 0 0 auto; font-family: Consolas, monospace; font-size: 10.5px; color: var(--fg-num, #9aa3b2);
+}
+.bgm-songbar-prog {
+    position: relative; height: 7px; margin-top: 6px;
+    background: #151515; border-radius: 4px; cursor: pointer;
+}
+.bgm-songbar-prog::before {
+    content: ''; position: absolute; inset: 0; border-radius: 4px;
+    background: #151515; overflow: hidden;
+}
+.bgm-songbar-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+    background: linear-gradient(90deg, #56b26f, #7fd68b);
+    border-radius: 4px; z-index: 1; pointer-events: none;
+}
+.bgm-songbar-knob {
+    position: absolute; top: 50%; left: 0; width: 10px; height: 10px;
+    margin-left: -5px; margin-top: -5px; border-radius: 50%;
+    background: #fff; box-shadow: 0 0 0 2px rgba(127,214,139,.6);
+    opacity: 0; transition: opacity .15s; z-index: 2; pointer-events: none;
+}
+.bgm-songbar-prog:hover .bgm-songbar-knob { opacity: 1; }
+.bgm-songbar-sub {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 4px; font-size: 10px; color: var(--fg-dim, #9aa3b2);
+}
+.bgm-songbar-loc {
+    background: transparent; border: 1px solid rgba(127,214,139,.4);
+    color: #7fd68b; border-radius: 4px; font-size: 10px;
+    padding: 1px 7px; cursor: pointer;
+}
+.bgm-songbar-loc:hover { background: rgba(127,214,139,.12); }

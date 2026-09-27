@@ -2282,7 +2282,6 @@
         $('bgmPlayerTitle').textContent = (curSeries && curSeries.name ? curSeries.name + ' ' : '') + '第 ' + ep + ' 集';
         var v = $('bgmV');
         if (!v) return;
-        songMode = false;
         if (inlineAudio) { try { inlineAudio.pause(); } catch (e) {} }
         v.dataset.ep = String(ep);
         // 播放前先确保有 H.264 版：HEVC 原文件在 CEP 里会直接报错/黑屏。
@@ -2671,9 +2670,8 @@
         var m = Math.floor(s / 60), ss = s % 60;
         return m + ':' + (ss < 10 ? '0' : '') + ss;
     }
-    // 当前活跃媒体元素（视频优先；歌曲模式用 audio）
+    // 进度条与控件只服务视频（歌曲试听有自己的一条，见 syncSongBar）
     function curMedia() {
-        if (songMode && inlineAudio) return inlineAudio;
         return $('bgmV');
     }
     function updateBarFill() {
@@ -2687,41 +2685,62 @@
         if (pk) pk.style.left = pct + '%';
     }
 
-    // 歌曲模式的底部条
+    // ---------- 试听条（独立，完全不碰视频播放器）----------
+    // 原来试听是借视频播放器的 #bgmBar / #bgmProgWrap，用 songMode 切换归属，
+    // 导致「试听歌时视频进度条被占用」。现在试听有自己的条。
+    function songBarEls() {
+        return {
+            bar:   $('bgmSongBar'),
+            name:  $('bgmSongName'),
+            cur:   $('bgmSongCur'),
+            dur:   $('bgmSongDur'),
+            fill:  $('bgmSongFill'),
+            knob:  $('bgmSongKnob'),
+            play:  $('btnBgmSongPlay'),
+            hit:   $('bgmSongProgHit'),
+            loc:   $('btnBgmSongLoc')
+        };
+    }
     function syncSongBar() {
-        var bar = $('bgmBar');
-        if (!bar) return;
-        bar.style.display = '';
-        var pb = $('btnBgmBarPlay');
-        if (pb && inlineAudio) pb.textContent = inlineAudio.paused ? '\u25b6' : '\u23f8';
-        var cur = $('bgmBarCur'), pcur = $('bgmPbarCur'), pdur = $('bgmPbarDur');
-        if (cur && inlineAudio) cur.textContent = fmtTime(inlineAudio.currentTime || 0);
-        if (pcur && inlineAudio) pcur.textContent = fmtTime(inlineAudio.currentTime || 0);
-        if (pdur && inlineAudio) pdur.textContent = fmtTime(inlineAudio.duration || 0);
-        updateBarFill();
+        var e = songBarEls();
+        if (!e.bar) return;
+        if (!inlineAudio || !curSong) { e.bar.style.display = 'none'; return; }
+        e.bar.style.display = '';
+        if (e.play) e.play.textContent = inlineAudio.paused ? '\u25b6' : '\u23f8';
+        if (e.name) {
+            e.name.textContent = curSong.name + (curSong.artist ? ' — ' + curSong.artist : '');
+            e.name.title = e.name.textContent;
+        }
+        var t = inlineAudio.currentTime || 0;
+        if (e.cur) e.cur.textContent = fmtTime(t);
+        if (e.dur) e.dur.textContent = fmtTime(inlineAudio.duration || 0);
+        var pct = inlineAudio.duration ? Math.min(100, (t / inlineAudio.duration) * 100) : 0;
+        if (e.fill) e.fill.style.width = pct + '%';
+        if (e.knob) e.knob.style.left = pct + '%';
+        // 这首歌在本集视频里有命中位置 → 给出定位按钮
+        if (e.loc) {
+            var has = false;
+            try {
+                var marks = bgmMarks[ckey(playEp)] || [];
+                for (var i = 0; i < marks.length; i++) {
+                    if (String(marks[i].id) === String(curSong.id)) { has = true; break; }
+                }
+            } catch (err) {}
+            e.loc.style.display = has ? '' : 'none';
+        }
     }
 
     function bindSongBar() {
-        if (!inlineAudio) return;
-        if (inlineAudio.__bound) return;
+        if (!inlineAudio || inlineAudio.__bound) return;
         inlineAudio.__bound = true;
-        inlineAudio.addEventListener('timeupdate', function () {
-            if (!songMode) return;
-            var cur = $('bgmBarCur'), pcur = $('bgmPbarCur');
-            if (cur) cur.textContent = fmtTime(inlineAudio.currentTime || 0);
-            if (pcur) pcur.textContent = fmtTime(inlineAudio.currentTime || 0);
-            updateBarFill();
-            try { syncEpTimelineCurrent(); } catch (e) {}
-        });
-        inlineAudio.addEventListener('loadedmetadata', function () {
-            if (!songMode) return;
-            var pdur = $('bgmPbarDur');
-            if (pdur) pdur.textContent = fmtTime(inlineAudio.duration || 0);
-        });
-        inlineAudio.addEventListener('play', function () { if (songMode) syncSongBar(); });
-        inlineAudio.addEventListener('pause', function () { if (songMode) syncSongBar(); });
-        inlineAudio.addEventListener('ended', function () { if (songMode) syncSongBar(); });
+        inlineAudio.addEventListener('timeupdate', function () { if (songBarOn()) syncSongBar(); });
+        inlineAudio.addEventListener('loadedmetadata', function () { if (songBarOn()) syncSongBar(); });
+        inlineAudio.addEventListener('play', function () { if (songBarOn()) syncSongBar(); });
+        inlineAudio.addEventListener('pause', function () { if (songBarOn()) syncSongBar(); });
+        inlineAudio.addEventListener('ended', function () { if (songBarOn()) syncSongBar(); });
     }
+    // 试听条是否处于可用状态（有歌在试听条上）
+    function songBarOn() { return !!(inlineAudio && curSong); }
 
     // ⑦ 双向定位：从音乐列表定位到视频对应位置
     function locateInVideo(s) {
@@ -2765,21 +2784,79 @@
     }
 
 
+    // ---------- 试听条交互 ----------
+    function bindSongBarUI() {
+        var e = songBarEls();
+        function seekTo(ev) {
+            if (!inlineAudio || !inlineAudio.duration || !e.hit) return;
+            var r = e.hit.getBoundingClientRect();
+            var pct = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+            try { inlineAudio.currentTime = pct * inlineAudio.duration; } catch (err) {}
+            syncSongBar();
+        }
+        if (e.hit) {
+            var dragging = false;
+            e.hit.addEventListener('mousedown', function (ev) { dragging = true; seekTo(ev); ev.preventDefault(); });
+            document.addEventListener('mousemove', function (ev) { if (dragging) seekTo(ev); });
+            document.addEventListener('mouseup', function () { dragging = false; });
+        }
+        if (e.play) e.play.addEventListener('click', function () {
+            if (!inlineAudio) return;
+            if (inlineAudio.paused) inlineAudio.play().catch(function () {}); else inlineAudio.pause();
+            syncSongBar();
+        });
+        var bprev = $('btnBgmSongPrev');
+        if (bprev) bprev.addEventListener('click', function () { songStep(-1); });
+        var bnext = $('btnBgmSongNext');
+        if (bnext) bnext.addEventListener('click', function () { songStep(1); });
+        on('bgmSongVol', function (ev) {
+            if (inlineAudio) inlineAudio.volume = +ev.target.value;
+        }, 'input');
+        var bclose = $('btnBgmSongClose');
+        if (bclose) bclose.addEventListener('click', function () {
+            if (inlineAudio) { try { inlineAudio.pause(); } catch (err) {} }
+            curSong = null;
+            syncSongBar();
+        });
+        var bloc = $('btnBgmSongLoc');
+        if (bloc) bloc.addEventListener('click', function () {
+            if (curSong) locateInVideo(curSong);
+        });
+    }
+
+    // 试听列表内上一首/下一首：按结果列表顺序走
+    function songStep(dir) {
+        if (!curSong) { flash('\u5f53\u524d\u6ca1\u5728\u8bd5\u542c'); return; }
+        var songs = (lastResult && lastResult.songs) || [];
+        if (!songs.length) { flash('\u6ca1\u6709\u53ef\u5207\u6362\u7684\u6b4c\u66f2\u5217\u8868'); return; }
+        var idx = -1;
+        for (var i = 0; i < songs.length; i++) {
+            if (String(songs[i].id) === String(curSong.id)) { idx = i; break; }
+        }
+        if (idx < 0) { flash('\u672a\u627e\u5230\u5217\u8868\u4f4d\u7f6e'); return; }
+        var n = idx + dir;
+        if (n < 0) n = songs.length - 1;
+        if (n >= songs.length) n = 0;
+        var sobj = songs[n];
+        var row = document.querySelector('#bgmResultList .bgm-item[data-song-id="' + sobj.id + '"]');
+        playSongInline(sobj, row);
+    }
+
     function bindBar() {
         var v = $('bgmV');
         if (!v) return;
         v.addEventListener('timeupdate', function () {
             var cur = $('bgmBarCur');
-            if (cur && !songMode) cur.textContent = fmtTime(v.currentTime || 0);
+            if (cur) cur.textContent = fmtTime(v.currentTime || 0);
             // 进度条时间标签
             var pcur = $('bgmPbarCur');
-            if (pcur && !songMode) pcur.textContent = fmtTime(v.currentTime || 0);
-            if (!songMode) updateBarFill();
+            if (pcur) pcur.textContent = fmtTime(v.currentTime || 0);
+            updateBarFill();
             tickOverlay();
             // 同步视频上 BGM 时间轴的「当前高亮」
-            if (!songMode) syncEpTimelineCurrent();
+            syncEpTimelineCurrent();
             // 记住播放位置（内存里每帧更新；写盘节流到每 3 秒一次）
-            if (!songMode) {
+            {
                 lastPlayPos = v.currentTime || 0;
                 var now = Date.now();
                 if (now - lastPosSaveAt > 3000) {
@@ -2797,7 +2874,6 @@
                             }
                             window.__vhLog.info('[bgm-hist] 写入 pos=' + Math.round(lastPlayPos) +
                                 ' ep=' + playEp + ' dur=' + Math.round(v.duration || 0) +
-                                ' songMode=' + songMode +
                                 ' 历史条数=' + _h.length +
                                 ' 命中=' + (_hit ? ('ep' + _hit.ep + '/pos' + Math.round(_hit.pos) + '/dur' + Math.round(_hit.dur)) : '未命中'));
                         }
@@ -2825,7 +2901,7 @@
             // 暂停是“告一段落”的可靠时机：立即把进度写入播放历史，
             // 不依赖 3 秒节流（否则刚看几秒就暂停会没记录）
             try {
-                if (!songMode && playEp) {
+                if (playEp) {
                     lastPlayPos = v.currentTime || 0;
                     updatePlayHistPos(playEp, lastPlayPos, v.duration || 0);
                 }
@@ -3501,7 +3577,6 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
     // 内嵌试听一首（不离开面板）
     var inlineAudio = null;
     var curSong = null;       // 当前试听的歌
-    var songMode = false;     // 底部条是歌还是视频
     function playSongInline(s, row) {
         api('/song-url?id=' + encodeURIComponent(s.id), { timeout: 30000 }).then(function (r) {
             var url = (r.data || {}).url;
@@ -3511,9 +3586,10 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
                 inlineAudio.id = 'bgmSongAudio';
                 document.body.appendChild(inlineAudio);
             }
-            // 记录当前歌曲，供底部条使用
+            // 记录当前歌曲，供试听条使用
             curSong = s;
             inlineAudio.src = url;
+            try { inlineAudio.volume = +($('bgmSongVol') || {}).value || 0.8; } catch (e) {}
             inlineAudio.play().catch(function () {});
             var old = document.querySelector('#bgmResultList .bgm-now');
             if (old) old.classList.remove('bgm-now');
@@ -3521,10 +3597,8 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
                 row.classList.add('bgm-now');
                 row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
-            songMode = true;
             bindSongBar();
             syncSongBar();
-            flash('\u8bd5\u542c\u4e2d\uff1a' + s.name);
         }).catch(function (e) { flash(e.message); });
     }
 
@@ -3898,7 +3972,7 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
     window.addEventListener('beforeunload', function () {
         try {
             var v = $('bgmV');
-            if (v && !songMode && v.currentTime > 1) {
+            if (v && v.currentTime > 1) {
                 lastPlayPos = v.currentTime;
                 // 关面板/重载扩展的最后一刻：把进度写进播放历史
                 if (playEp) updatePlayHistPos(playEp, lastPlayPos, v.duration || 0);
@@ -4039,6 +4113,7 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         });
         wireHevcFallback();
         bindBar();
+        bindSongBarUI();
         // 小窗切换
         var mb = $('btnBgmMini');
         if (mb) mb.addEventListener('click', toggleMini);
@@ -4050,11 +4125,6 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         // 底部播放条
         var bp = $('btnBgmBarPlay');
         if (bp) bp.addEventListener('click', function () {
-            if (songMode && inlineAudio) {
-                if (inlineAudio.paused) inlineAudio.play().catch(function () {}); else inlineAudio.pause();
-                syncSongBar();
-                return;
-            }
             var v = $('bgmV'); if (!v || !v.src) { flash('\u5148\u9009\u4e00\u96c6\u64ad\u653e'); return; }
             if (v.paused) v.play().catch(function () {}); else v.pause();
             syncBar();
@@ -4084,7 +4154,6 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
             var m = curMedia();
             if (m) m.volume = v;
             var vv2 = $('bgmV'); if (vv2) vv2.volume = v;
-            if (inlineAudio) inlineAudio.volume = v;
         }, 'input');
         var bnext = $('btnBgmBarNext');
         if (bnext) bnext.addEventListener('click', function () { playNav(1); });
@@ -4129,11 +4198,6 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
                 if (ev.target !== stage) return;
                 var m = curMedia();
                 if (!m || !m.src) return;
-                if (songMode && inlineAudio) {
-                    if (inlineAudio.paused) inlineAudio.play().catch(function () {}); else inlineAudio.pause();
-                    syncSongBar();
-                    return;
-                }
                 if (m.paused) m.play().catch(function () {}); else m.pause();
                 syncBar();
             });

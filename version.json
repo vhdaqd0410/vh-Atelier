@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.41.0",
-  "buildTime": "2026-09-27 11:05:37",
+  "version": "1.42.0",
+  "buildTime": "2026-09-27 11:30:24",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修复网盘面板排版：.md-* 布局规则与素材面板共享，工具条换行保护"
+  "notes": "短剧扒歌：歌曲试听改为独立试听条，与视频播放器进度条彻底解耦"
 }

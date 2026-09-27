@@ -416,6 +416,18 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('网盘管理界面走 iframe-nav', /ndManageWrap/.test(idx) && /id="ndFrame"/.test(idx));
     ok('网盘展开状态持久化', /vh_netdisk_expanded/.test(nd));
 
+    // 8c) 试听条独立（不再借视频播放器的进度条）
+    ok('试听条独立于视频播放器', /id="bgmSongBar"/.test(idx));
+    ok('试听条有进度与时间', /bgmSongFill/.test(idx) && /bgmSongCur/.test(idx) && /bgmSongDur/.test(idx));
+    ok('试听条有播放/上下首/音量/收起', /btnBgmSongPlay/.test(idx) && /btnBgmSongNext/.test(idx) && /bgmSongVol/.test(idx) && /btnBgmSongClose/.test(idx));
+    ok('syncSongBar 只驱动试听条', /function syncSongBar/.test(bgm) && /e\.fill\.style\.width/.test(bgm));
+    ok('curMedia 只返回视频', /function curMedia\(\) \{\s*return \$\(.bgmV.\);/.test(bgm));
+    ok('已无 songMode 双归属', !/songMode\s*=\s*(true|false)\s*;/.test(bgm));
+    ok('试听条拖拽绑定', /function bindSongBarUI/.test(bgm) && /bgmSongProgHit/.test(bgm));
+    ok('试听条上下首切换', /function songStep/.test(bgm));
+    ok('试听条定位到视频', /btnBgmSongLoc/.test(idx) && /locateInVideo/.test(bgm));
+    ok('CSS 有试听条样式', /\.bgm-songbar\s*\{/.test(css));
+
     // 9) 恢复播放进度（关面板后重开回到原位置）
     ok('saveUiState 存 playerOpen', /st\.playerOpen = /.test(bgm));
     ok('saveUiState 存 pos', /st\.pos = /.test(bgm));
