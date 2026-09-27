@@ -564,6 +564,25 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     // 6) 无 BGM 时仍显示纯进度（不是整条隐藏）
     const det = bgm.slice(bgm.indexOf('function drawEpTimeline'));
     ok('无标记时仍显示进度条', /if \(!marks\.length\)[\s\S]{0,200}wrap\.style\.display = ''/.test(det));
+
+    console.log('\n=== 坑 8：导出 AME 队列通道（不占用 PR 渲染）===');
+    var expjs = read('js/export.js');
+    var hostjsx = read('jsx/host.jsx');
+    ok('AME 队列通道存在', /exportSequencesViaAme/.test(expjs));
+    ok('逐版本「静音→入队」', /meMuteExcept[\s\S]{0,900}meEnqueueAME/.test(expjs));
+    ok('全部入队后才开渲', /await exportOneSequence[\s\S]{0,1400}meStartBatch/.test(expjs));
+    ok('AME 流程不调用 meExport', !/exportSequencesViaAme[\s\S]{0,2000}meExport\(/.test(expjs));
+    ok('入队后恢复音轨', /meEnqueueAME[\s\S]{0,400}await unmute\(\)/.test(expjs));
+    ok('宿主 encodeSequence 只入队', /encodeSequence\([^;]*,\s*1,\s*false\)/.test(hostjsx));
+    ok('宿主有 meStartBatch', /function meStartBatch/.test(hostjsx));
+    ok('宿主有 meLaunchEncoder', /function meLaunchEncoder/.test(hostjsx));
+    ok('AME 事件经 CSXSEvent 派发', /new CSXSEvent\(\)/.test(hostjsx) && /com\.vh\.ameJob/.test(hostjsx));
+    ok('面板监听 AME 事件', /addEventListener\('com\.vh\.ameJob'/.test(expjs));
+    ok('AME 完成有文件兜底', /waitAmeJob/.test(expjs) && /'file'/.test(expjs));
+    ok('渲染通道可切换', /id="rnd-ame"/.test(idx) && /id="rnd-pr"/.test(idx));
+    ok('通道选择持久化', /vh_export_channel/.test(expjs));
+    ok('PR 直渲仍保留', /meExport\(/.test(expjs) && /exportAsMediaDirect/.test(hostjsx));
+    ok('CSS 有通道选择器', /\.rnd-opt\s*\{/.test(css));
 }
 
 // ============================================================
