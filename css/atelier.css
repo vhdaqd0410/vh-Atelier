@@ -4782,4 +4782,158 @@ button.primary:hover { background: var(--btn-primary-hover); }
 #bgmPlayerWrap.bgm-mini .bgm-player-rip { padding: 4px 8px 6px; }
 #bgmPlayerWrap.bgm-mini .bgm-rip-btn { padding: 6px 10px; font-size: 12px; }
 
+/* ==================== 网盘板块 ==================== */
+.nd-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
 
+/* 顶栏：状态 + 按钮 */
+.nd-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 2px 0;
+}
+.nd-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #555; flex: 0 0 auto;
+}
+.nd-dot.ok { background: #78d98a; box-shadow: 0 0 6px rgba(120,217,138,.6); }
+.nd-dot.err { background: #f2879a; box-shadow: 0 0 6px rgba(242,135,154,.6); }
+.nd-state {
+    font-size: 11.5px;
+    color: var(--fg-dim, #9aa3b2);
+}
+.nd-top .tbtn { padding: 3px 9px; font-size: 11px; }
+
+/* 面包屑 */
+.nd-crumbs {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-wrap: wrap;
+    padding: 5px 8px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11.5px;
+    min-height: 28px;
+}
+.nd-crumb {
+    color: var(--fg-link, #8ec4e0);
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+.nd-crumb:hover { background: rgba(255,255,255,.09); }
+.nd-crumb-sep { color: var(--fg-dim, #6b7280); }
+
+/* 工具栏 */
+.nd-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.nd-tools .tbtn { padding: 3px 9px; font-size: 11px; }
+.nd-selinfo { font-size: 11px; color: var(--fg-dim, #9aa3b2); }
+
+/* 进度 */
+.nd-progress {
+    position: relative;
+    padding: 7px 10px 9px;
+    background: rgba(139,124,246,.08);
+    border: 1px solid rgba(139,124,246,.3);
+    border-radius: 7px;
+}
+.nd-prog-msg { font-size: 11.5px; color: #dcdcdc; margin-bottom: 5px; }
+.nd-prog-bar {
+    height: 5px; background: rgba(255,255,255,.1);
+    border-radius: 3px; overflow: hidden;
+}
+.nd-prog-bar > i {
+    display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--accent, #8b7cf6), #a78bfa);
+    border-radius: 3px; transition: width .25s ease;
+}
+.nd-prog-sub { font-size: 10.5px; color: var(--fg-dim, #9aa3b2); margin-top: 4px; }
+.nd-progress .tbtn {
+    position: absolute; right: 8px; top: 7px;
+    padding: 2px 8px; font-size: 10.5px;
+}
+
+/* 文件列表 */
+.nd-list {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-y: auto;
+    max-height: calc(100vh - 380px);
+    min-height: 160px;
+    background: rgba(0,0,0,.12);
+}
+.nd-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.nd-item:last-child { border-bottom: none; }
+.nd-item:hover { background: rgba(255,255,255,.06); }
+.nd-item.is-dir .nd-name { color: #bfe8c8; font-weight: 600; }
+
+.nd-cb {
+    flex: 0 0 auto; width: 14px; text-align: center;
+    color: var(--fg-dim, #6b7280); font-size: 12px;
+}
+.nd-cb.on { color: var(--accent, #8b7cf6); }
+.nd-icon { flex: 0 0 auto; width: 16px; text-align: center; }
+.nd-name {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--fg-title, #dcdcdc);
+}
+.nd-size {
+    flex: 0 0 auto;
+    font-size: 10.5px;
+    color: var(--fg-dim, #9aa3b2);
+    font-family: Consolas, monospace;
+}
+.nd-empty {
+    padding: 20px 12px;
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--fg-dim, #9aa3b2);
+}
+.nd-empty.nd-err { color: #f6a3b1; }
+
+/* 底部：下载目录 */
+.nd-foot {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; padding: 2px 0;
+}
+.nd-foot-label { color: var(--fg-dim, #9aa3b2); }
+.nd-dir {
+    color: var(--fg-num, #9aa3b2);
+    font-family: Consolas, monospace;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 52%;
+}
+.nd-foot .tbtn { padding: 2px 8px; font-size: 10.5px; }
+
+/* 右键菜单 */
+.nd-menu {
+    position: fixed; z-index: 9999; min-width: 180px;
+    background: #2b2b2b; border: 1px solid #444; border-radius: 6px;
+    padding: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.45); font-size: 12px;
+}
+.nd-menu-item {
+    padding: 7px 12px; cursor: pointer; border-radius: 4px;
+    color: var(--text, #dcdcdc); white-space: nowrap;
+}
+.nd-menu-item:hover { background: rgba(255,255,255,.08); }

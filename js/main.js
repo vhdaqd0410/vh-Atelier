@@ -3,6 +3,7 @@
 (function () {
     var panels = {
         media: document.getElementById('panel-media'),
+        netdisk: document.getElementById('panel-netdisk'),
         subtitle: document.getElementById('panel-subtitle'),
         check: document.getElementById('panel-check'),
         separate: document.getElementById('panel-sep'),
@@ -26,7 +27,7 @@
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
-        media: { members: ['media'], default: 'media' },
+        media: { members: ['media', 'netdisk'], default: 'media' },
         progress: { members: ['progress'], default: 'progress' },
         todo: { members: ['todo'], default: 'todo' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
@@ -113,6 +114,10 @@
         // 素材库：切到时自动刷新（保持目录状态）
         if (name === 'media' && window.__mediaOnShow) {
             try { window.__mediaOnShow(); } catch (e) {}
+        }
+        // 网盘：切到时加载列表（并保留 iframe 管理界面入口）
+        if (name === 'netdisk' && window.__netdiskOnShow) {
+            try { window.__netdiskOnShow(); } catch (e) {}
         }
         // 超分：切到时自动加载去字幕/超分站
         if (name === 'upscale' && window.__upscaleAutoLoad) {
