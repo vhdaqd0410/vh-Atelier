@@ -379,7 +379,7 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('有网盘标签', /data-tab="netdisk"/.test(idx));
     ok('有网盘面板', /id="panel-netdisk"/.test(idx));
     ok('引入 netdisk.js', /js\/netdisk\.js/.test(idx));
-    ok('main.js 接懒加载', /__netdiskOnShow/.test(mainjs || '') || /__netdiskOnShow/.test(read('js/main.js')));
+    ok('main.js 接懒加载', /__netdiskOnShow/.test(read('js/main.js')));
     var nd = read('js/netdisk.js');
     ok('网盘走中转服务', /17896/.test(nd));
     ok('网盘有列目录', /\/list\?path=/.test(nd));
@@ -391,13 +391,6 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('复用素材的目录选择器', /__mediaPickFolder/.test(nd));
     ok('CSS 有 .nd-wrap', /\.nd-wrap\s*\{/.test(css));
     ok('CSS 有 .nd-item', /\.nd-item\s*\{/.test(css));
-    // 中转服务源码
-    var relay = '';
-    try { relay = read('../projects/netdisk-relay/netdisk-server.js'); } catch (e) { relay = ''; }
-    if (!relay) {
-        try { relay = read('scripts/../../projects/netdisk-relay/netdisk-server.js'); } catch (e2) { relay = ''; }
-    }
-
     // 9) 恢复播放进度（关面板后重开回到原位置）
     ok('saveUiState 存 playerOpen', /st\.playerOpen = /.test(bgm));
     ok('saveUiState 存 pos', /st\.pos = /.test(bgm));
