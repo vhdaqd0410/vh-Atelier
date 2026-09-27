@@ -550,7 +550,7 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('色块高亮用白边发光', /\.bgm-mark\.is-current[\s\S]{0,300}box-shadow/.test(css));
 
     // 5) 高亮同步挂在 timeupdate
-    ok('timeupdate 调 syncEpTimelineCurrent', /if \(!songMode\) syncEpTimelineCurrent\(\);/.test(bgm));
+    ok('timeupdate 调 syncEpTimelineCurrent', /timeupdate[\s\S]{0,900}syncEpTimelineCurrent\(\);/.test(bgm) && !/!songMode\) syncEpTimelineCurrent/.test(bgm));
     // 高亮目标从旧 chip 改为 bgmMarkerBar 的子节点
     ok('高亮作用于 bgmMarkerBar 子节点', /var box = \$\('bgmMarkerBar'\)/.test(bgm));
 
