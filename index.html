@@ -1382,65 +1382,63 @@
         </div>
     </div>
     <div class="tab-panel" id="panel-netdisk" style="display:none;">
-        <div class="nd-wrap">
-            <!-- 顶栏：服务状态 + 刷新 -->
-            <div class="nd-top">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
+            <!-- 顶栏：状态 + 网盘选择 -->
+            <div class="md-bar">
                 <span class="nd-dot" id="ndDot"></span>
                 <span class="nd-state" id="ndState">正在连接网盘服务…</span>
-                <span style="flex:1;"></span>
-                <button class="tbtn" id="ndHome">🏠 根目录</button>
-                <button class="tbtn" id="ndUp">↑ 上一级</button>
-                <button class="tbtn" id="ndRefresh">↻ 刷新</button>
-                <button class="tbtn" id="ndManage" title="打开 CloudDrive2 管理界面（上传/改设置用）">⚙ 管理界面</button>
+                <span style="flex:1"></span>
+                <button class="secondary mini" id="ndRefresh" title="重新加载目录树">↻ 刷新</button>
+                <button class="secondary mini" id="ndManage" title="打开 CloudDrive2 管理界面（上传/改设置用）">⚙ 管理界面</button>
             </div>
-            <!-- 面包屑 -->
-            <div class="nd-crumbs" id="ndCrumbs"></div>
-            <!-- 工具栏：选择 + 下载 + 导入 -->
-            <div class="nd-tools">
-                <button class="tbtn" id="ndSelAll">全选</button>
-                <button class="tbtn" id="ndSelNone">取消全选</button>
-                <span class="nd-selinfo" id="ndSelInfo">已选 0 项</span>
-                <span style="flex:1;"></span>
-                <button class="tbtn" id="ndPreview" title="预览选中文件（双击文件行也可）">👁 预览</button>
-                <button class="tbtn" id="ndDownload" title="下载选中文件到本地">⬇ 下载选中</button>
-                <button class="tbtn primary" id="ndImport" title="下载并导入 PR 素材箱">📥 导入 PR</button>
-                <button class="tbtn" id="ndInsert" title="下载并插入当前时间线">⏩ 插入时间线</button>
+            <!-- 下载目录行 -->
+            <div class="md-bar">
+                <span style="font-size:10px;color:var(--muted);">下载目录：</span>
+                <span class="nd-dir" id="ndDir" style="flex:1;min-width:0;"></span>
+                <button class="secondary mini" id="ndPickDir">更改…</button>
+                <button class="secondary mini" id="ndOpenDir">📂 打开</button>
             </div>
-            <!-- 进度 -->
+            <!-- 主体：左目录树 / 右文件列表 -->
+            <div style="flex:1;display:flex;gap:6px;min-height:0;">
+                <div class="md-tree" id="ndTree"><div class="hint" style="padding:8px;">浏览网盘</div></div>
+                <div class="md-files" id="ndDetail">
+                    <div class="md-fhead" id="ndFHead"><span class="hint">← 选择左侧文件夹查看内容</span></div>
+                    <div class="md-flist" id="ndFList"></div>
+                </div>
+            </div>
+            <!-- 底部工具条 -->
+            <div class="md-bar">
+                <button class="secondary mini" id="ndPreview" style="color:#9fd0ff;">👁 预览</button>
+                <button class="secondary mini" id="ndDownload">⬇ 下载选中(0)</button>
+                <button class="secondary mini" id="ndImport" style="color:#7fd68b;border-color:#2a5a3a;">📥 导入 PR</button>
+                <button class="secondary mini" id="ndInsert">⏩ 插入时间线</button>
+                <span style="font-size:10px;color:var(--muted);flex:1;">双击预览 · 拖拽到 PR（首次自动下载）</span>
+            </div>
+            <!-- 进度区 -->
             <div class="nd-progress" id="ndProgress" style="display:none;">
                 <div class="nd-prog-msg" id="ndProgMsg"></div>
                 <div class="nd-prog-bar"><i id="ndProgFill"></i></div>
                 <div class="nd-prog-sub" id="ndProgSub"></div>
                 <button class="tbtn danger" id="ndProgCancel">停止</button>
             </div>
-            <!-- 文件列表 -->
-            <div class="nd-list" id="ndList"></div>
-            <!-- 底部：下载目录 -->
-            <div class="nd-foot">
-                <span class="nd-foot-label">下载目录：</span>
-                <span class="nd-dir" id="ndDir"></span>
-                <span style="flex:1;"></span>
-                <button class="tbtn" id="ndPickDir" title="更改下载目录">更改…</button>
-                <button class="tbtn" id="ndOpenDir" title="打开下载目录">📂 打开</button>
-            </div>
         </div>
-        <!-- 管理界面（iframe，按需展开） -->
-        <div id="ndManageWrap" style="display:none;margin-top:8px;">
+        <!-- 管理界面（iframe 全屏浮层，由 iframe-nav.js 装配导航） -->
+        <div id="ndManageWrap" style="display:none;position:fixed;inset:0;z-index:9998;background:var(--bg);padding:8px;flex-direction:column;gap:6px;">
             <div class="wb-nav">
                 <button class="wb-nav-btn" id="ndBack" title="后退">←</button>
                 <button class="wb-nav-btn" id="ndFwd" title="前进">→</button>
                 <button class="wb-nav-btn" id="ndReload" title="刷新">↻</button>
-                <button class="wb-nav-btn" id="ndMgrHome" title="回到首页">🏠</button>
+                <button class="wb-nav-btn" id="ndHome" title="回到首页">🏠</button>
                 <button class="wb-nav-btn wb-nav-ext" id="ndExternal" title="外部浏览器打开">↗</button>
                 <input type="text" class="wb-nav-url" id="ndUrl" placeholder="CloudDrive2 地址">
                 <button class="tbtn" id="ndSave" style="padding:3px 9px;font-size:11px;">存为默认</button>
                 <button class="tbtn" id="ndManageClose" style="padding:3px 9px;font-size:11px;">✕ 收起</button>
             </div>
-            <iframe id="ndFrame" style="width:100%;height:calc(100vh - 300px);border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+            <iframe id="ndFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
         </div>
     </div>
 
-    <div class="tab-panel" id="panel-shenpian" style="display:none;">
+<div class="tab-panel" id="panel-shenpian" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
             <div class="wb-nav">
                 <button class="wb-nav-btn" id="spBack" title="后退（站内跳转后回到上一个地址）">←</button>

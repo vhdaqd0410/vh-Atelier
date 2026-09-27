@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.39.0",
-  "buildTime": "2026-09-27 10:41:08",
+  "version": "1.40.0",
+  "buildTime": "2026-09-27 10:51:02",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "网盘板块支持预览（双击/按钮，走中转流边下边播）与拖拽到 PR（首次自动下载后可直接拖）"
+  "notes": "网盘板块改为文件树形态（左树右列表），操作对齐素材浏览：懒加载展开、单击选中/Ctrl 多选、双击预览、拖拽、批量导入"
 }

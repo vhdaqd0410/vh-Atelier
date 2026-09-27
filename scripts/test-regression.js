@@ -389,16 +389,26 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('网盘按类型分素材箱', /kindOf/.test(nd) && /视频/.test(nd) && /音乐/.test(nd));
     ok('网盘有右键菜单', /showFileMenu/.test(nd));
     ok('复用素材的目录选择器', /__mediaPickFolder/.test(nd));
-    ok('CSS 有 .nd-wrap', /\.nd-wrap\s*\{/.test(css));
-    ok('CSS 有 .nd-item', /\.nd-item\s*\{/.test(css));
     ok('网盘可预览', /function openPreview/.test(nd));
     ok('预览用中转流地址', /\/stream\?path=/.test(nd));
     ok('预览按类型选元素', /nd-prev-video/.test(nd) && /nd-prev-img/.test(nd) && /nd-prev-audio/.test(nd));
     ok('双击预览', /dblclick/.test(nd));
-    ok('网盘可拖拽', /enableDrag/.test(nd) && /com\.adobe\.cep\.dnd\.file\.0/.test(nd));
+    ok('网盘可拖拽', /dragstart/.test(nd) && /com\.adobe\.cep\.dnd\.file\.0/.test(nd));
     ok('未缓存时先下载再拖', /dragCache/.test(nd) && /首次拖拽需先下载/.test(nd));
     ok('CSS 有预览遮罩', /\.nd-prev-mask\s*\{/.test(css));
     ok('工具栏有预览按钮', /id="ndPreview"/.test(idx));
+
+    // 8b) 网盘 = 树形（对齐素材浏览）
+    ok('网盘为树形结构', /id="ndTree"/.test(idx) && /id="ndFList"/.test(idx));
+    ok('网盘面板有左树右文件布局', /ndTree/.test(idx) && /ndFHead/.test(idx) && /ndDetail/.test(idx));
+    ok('网盘树懒加载子节点', /function renderChildren/.test(nd) && /childrenCache/.test(nd));
+    ok('网盘树可展开收起', /expanded\[/.test(nd) && /caret/.test(nd));
+    ok('网盘单击选中/Ctrl多选', /ctrlKey/.test(nd) && /selFiles/.test(nd));
+    ok('网盘点文件夹进列表', /selectDir\(it\.path/.test(nd));
+    ok('网盘按类型分素材箱', /'视频'/.test(nd) && /'音乐'/.test(nd) && /'图片'/.test(nd));
+    ok('网盘复用素材导入接口', /__mediaImportList/.test(nd) && /__mediaInsertToTimeline/.test(nd));
+    ok('网盘管理界面走 iframe-nav', /ndManageWrap/.test(idx) && /id="ndFrame"/.test(idx));
+    ok('网盘展开状态持久化', /vh_netdisk_expanded/.test(nd));
 
     // 9) 恢复播放进度（关面板后重开回到原位置）
     ok('saveUiState 存 playerOpen', /st\.playerOpen = /.test(bgm));

@@ -4966,3 +4966,12 @@ button.primary:hover { background: var(--btn-primary-hover); }
 /* 列表行：提示可拖拽/双击 */
 .nd-item:not(.is-dir) { cursor: grab; }
 .nd-item:not(.is-dir):active { cursor: grabbing; }
+
+/* ---- 网盘树形版：补 md-sz / md-root / md-dirleaf ---- */
+.md-file .md-sz {
+    flex: 0 0 auto; font-size: 10px; color: var(--muted);
+    font-family: Consolas, monospace; margin-left: 8px;
+}
+.md-file.md-dirleaf .md-fn { color: #e8d9a0; }
+.md-tree-item.md-root { font-weight: 600; }
+.nd-prev-actions .tbtn { cursor: pointer; }
