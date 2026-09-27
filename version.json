@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.42.1",
-  "buildTime": "2026-09-27 11:56:58",
+  "version": "1.43.0",
+  "buildTime": "2026-09-27 19:30:38",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修复识别列表歌曲色点不可见：.bgm-dot 曾被误锁进 .bgm-mini 作用域"
+  "notes": "多版本导出新增 AME 队列通道：导出交给 Media Encoder 后台渲染，不再占用 PR"
 }
