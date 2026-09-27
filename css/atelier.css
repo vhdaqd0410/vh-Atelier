@@ -2339,51 +2339,51 @@
         }
         #panel-progress .prg-open-row .prg-fm-btn:hover { background: var(--purple-upscale); color: var(--white); }
         /* ===== 素材库面板 ===== */
-        #panel-media .md-bar { display: flex; gap: 6px; align-items: center; }
-        #panel-media .md-bar select, #panel-media .md-bar input { padding: 4px 6px; }
-        #panel-media .md-tree {
+        :is(#panel-media,#panel-netdisk) .md-bar { display: flex; gap: 6px; align-items: center; }
+        :is(#panel-media,#panel-netdisk) .md-bar select, :is(#panel-media,#panel-netdisk) .md-bar input { padding: 4px 6px; }
+        :is(#panel-media,#panel-netdisk) .md-tree {
             flex: 0 0 45%; min-width: 0; overflow-y: auto;
             background: var(--panel2); border: 1px solid var(--border);
             border-radius: 6px; padding: 4px;
         }
-        #panel-media .md-files {
+        :is(#panel-media,#panel-netdisk) .md-files {
             flex: 1; min-width: 0; display: flex; flex-direction: column;
             background: var(--panel2); border: 1px solid var(--border);
             border-radius: 6px; padding: 4px;
         }
-        #panel-media .md-crumb { font-size: 11px; color: var(--accent); padding: 3px 4px; word-break: break-all; line-height: 1.5; }
-        #panel-media .md-crumb-item { cursor: pointer; }
-        #panel-media .md-crumb-item:hover { text-decoration: underline; }
-        #panel-media .md-crumb-item.cur { color: var(--muted); cursor: default; }
-        #panel-media .md-tree-item { font-size: 12px; padding: 4px 6px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 2px; }
-        #panel-media .md-tree-item .caret:hover { background: #3d3d3d; }
-        #panel-media .md-tree-item .caret { user-select: none; -webkit-user-select: none; }
-        #panel-media .md-tree-item:hover { background: var(--gray-card); }
-        #panel-media .md-tree-item.md-up { color: var(--accent); }
-        #panel-media .md-fcap { font-size: 10px; color: var(--muted); padding: 2px 4px 6px; }
-        #panel-media .md-file { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 12px; cursor: pointer; border-bottom: 1px dashed #2e2e2e; border-radius: 3px; }
-        #panel-media .md-file:hover { background: #333; }
-        #panel-media .md-file.sel { background: #23415e; box-shadow: inset 2px 0 0 var(--fg-link); }
-        #panel-media .md-file .md-ic { flex: 0 0 auto; }
-        #panel-media .md-file .md-fn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-        #panel-media .md-file .md-check { flex: 0 0 14px; text-align: center; color: var(--fg-link); font-size: 11px; }
-        #panel-media .md-file.sel .md-check::after { content: '✓'; }
+        :is(#panel-media,#panel-netdisk) .md-crumb { font-size: 11px; color: var(--accent); padding: 3px 4px; word-break: break-all; line-height: 1.5; }
+        :is(#panel-media,#panel-netdisk) .md-crumb-item { cursor: pointer; }
+        :is(#panel-media,#panel-netdisk) .md-crumb-item:hover { text-decoration: underline; }
+        :is(#panel-media,#panel-netdisk) .md-crumb-item.cur { color: var(--muted); cursor: default; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item { font-size: 12px; padding: 4px 6px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 2px; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item .caret:hover { background: #3d3d3d; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item .caret { user-select: none; -webkit-user-select: none; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item:hover { background: var(--gray-card); }
+        :is(#panel-media,#panel-netdisk) .md-tree-item.md-up { color: var(--accent); }
+        :is(#panel-media,#panel-netdisk) .md-fcap { font-size: 10px; color: var(--muted); padding: 2px 4px 6px; }
+        :is(#panel-media,#panel-netdisk) .md-file { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 12px; cursor: pointer; border-bottom: 1px dashed #2e2e2e; border-radius: 3px; }
+        :is(#panel-media,#panel-netdisk) .md-file:hover { background: #333; }
+        :is(#panel-media,#panel-netdisk) .md-file.sel { background: #23415e; box-shadow: inset 2px 0 0 var(--fg-link); }
+        :is(#panel-media,#panel-netdisk) .md-file .md-ic { flex: 0 0 auto; }
+        :is(#panel-media,#panel-netdisk) .md-file .md-fn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+        :is(#panel-media,#panel-netdisk) .md-file .md-check { flex: 0 0 14px; text-align: center; color: var(--fg-link); font-size: 11px; }
+        :is(#panel-media,#panel-netdisk) .md-file.sel .md-check::after { content: '✓'; }
         /* 素材库 v3：左目录树（纯文件夹）+ 右文件列表 */
-        #panel-media .md-tree { flex: 0 0 38%; min-width: 100px; max-width: 55%; overflow: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; user-select: none; -webkit-user-select: none; }
-        #panel-media .md-files { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; }
-        #panel-media .md-fhead { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 4px 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-        #panel-media .md-fhead .md-fcap { flex: 0 1 auto; font-size: 12px; font-weight: 600; color: var(--text); padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
-        #panel-media .md-fhead .md-finfo { flex: 0 0 auto; font-size: 10px; color: var(--muted); }
-        #panel-media .md-flist { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
-        #panel-media .md-flist .md-file { border-bottom: 1px dashed #2e2e2e; }
-        #panel-media .md-tree-item.sel { background: #23415e; box-shadow: inset 2px 0 0 var(--fg-link); }
-        #panel-media .md-tree-body { padding-top: 2px; }
-        #panel-media .md-detail { flex: 0 0 30%; min-width: 120px; max-width: 40%; overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 6px; user-select: text !important; -webkit-user-select: text !important; cursor: text; }
-        #panel-media .md-detail .md-file { user-select: none; -webkit-user-select: none; }
-        #panel-media .md-detail *, #panel-media .md-detail div, #panel-media .md-detail span, #panel-media .md-detail button { user-select: text !important; -webkit-user-select: text !important; }
-        #panel-media .md-leaf { padding: 3px 6px; }
-        #panel-media .md-leaf .md-fn { font-size: 11.5px; }
-        #panel-media .md-tree-item.md-up, #panel-media .md-subdir { padding: 4px 6px; }
+        :is(#panel-media,#panel-netdisk) .md-tree { flex: 0 0 38%; min-width: 100px; max-width: 55%; overflow: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; user-select: none; -webkit-user-select: none; }
+        :is(#panel-media,#panel-netdisk) .md-files { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; }
+        :is(#panel-media,#panel-netdisk) .md-fhead { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 4px 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+        :is(#panel-media,#panel-netdisk) .md-fhead .md-fcap { flex: 0 1 auto; font-size: 12px; font-weight: 600; color: var(--text); padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+        :is(#panel-media,#panel-netdisk) .md-fhead .md-finfo { flex: 0 0 auto; font-size: 10px; color: var(--muted); }
+        :is(#panel-media,#panel-netdisk) .md-flist { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+        :is(#panel-media,#panel-netdisk) .md-flist .md-file { border-bottom: 1px dashed #2e2e2e; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item.sel { background: #23415e; box-shadow: inset 2px 0 0 var(--fg-link); }
+        :is(#panel-media,#panel-netdisk) .md-tree-body { padding-top: 2px; }
+        :is(#panel-media,#panel-netdisk) .md-detail { flex: 0 0 30%; min-width: 120px; max-width: 40%; overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 6px; user-select: text !important; -webkit-user-select: text !important; cursor: text; }
+        :is(#panel-media,#panel-netdisk) .md-detail .md-file { user-select: none; -webkit-user-select: none; }
+        :is(#panel-media,#panel-netdisk) .md-detail *, :is(#panel-media,#panel-netdisk) .md-detail div, :is(#panel-media,#panel-netdisk) .md-detail span, :is(#panel-media,#panel-netdisk) .md-detail button { user-select: text !important; -webkit-user-select: text !important; }
+        :is(#panel-media,#panel-netdisk) .md-leaf { padding: 3px 6px; }
+        :is(#panel-media,#panel-netdisk) .md-leaf .md-fn { font-size: 11.5px; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item.md-up, :is(#panel-media,#panel-netdisk) .md-subdir { padding: 4px 6px; }
 
         /* ===== 待办板块 ===== */
         #panel-todo .td-wrap {
@@ -4975,3 +4975,16 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .md-file.md-dirleaf .md-fn { color: #e8d9a0; }
 .md-tree-item.md-root { font-weight: 600; }
 .nd-prev-actions .tbtn { cursor: pointer; }
+
+/* ===== 网盘面板：工具条排版 ===== */
+/* md-bar 是 flex 无换行，按钮多了会互相挤压；这里给网盘面板的 bar 允许换行 */
+#panel-netdisk .md-bar { flex-wrap: wrap; row-gap: 4px; }
+#panel-netdisk .md-bar > button { flex: 0 0 auto; white-space: nowrap; }
+/* 底部工具条的提示文字：占剩余宽度但可换行收缩，不挤按钮 */
+#panel-netdisk .nd-hint {
+    flex: 1 1 120px; min-width: 0;
+    font-size: 10px; color: var(--muted); line-height: 1.35;
+}
+/* 树区/文件区在窄面板下的最小宽度保护 */
+#panel-netdisk .md-tree { min-width: 90px; }
+#panel-netdisk .md-files { min-width: 140px; }

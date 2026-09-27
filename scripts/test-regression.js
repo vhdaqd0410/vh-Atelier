@@ -398,6 +398,12 @@ console.log('\n=== 坑 5：短剧扒歌播放器（反馈与控件）===');
     ok('CSS 有预览遮罩', /\.nd-prev-mask\s*\{/.test(css));
     ok('工具栏有预览按钮', /id="ndPreview"/.test(idx));
 
+    // 8a) 网盘面板的 .md-* 布局规则必须与素材面板共享（否则树/文件区塌陷）
+    ok('md- 规则对网盘生效', /:is\(#panel-media,#panel-netdisk\)/.test(css));
+    ok('网盘工具条允许换行', /#panel-netdisk \.md-bar \{ flex-wrap: wrap/.test(css));
+    ok('网盘树有最小宽度保护', /#panel-netdisk \.md-tree \{ min-width/.test(css));
+    ok('网盘工具条提示不挤压按钮', /#panel-netdisk \.nd-hint/.test(css) && /nd-hint/.test(idx));
+
     // 8b) 网盘 = 树形（对齐素材浏览）
     ok('网盘为树形结构', /id="ndTree"/.test(idx) && /id="ndFList"/.test(idx));
     ok('网盘面板有左树右文件布局', /ndTree/.test(idx) && /ndFHead/.test(idx) && /ndDetail/.test(idx));

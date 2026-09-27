@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.40.0",
-  "buildTime": "2026-09-27 10:51:02",
+  "version": "1.41.0",
+  "buildTime": "2026-09-27 11:05:37",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "网盘板块改为文件树形态（左树右列表），操作对齐素材浏览：懒加载展开、单击选中/Ctrl 多选、双击预览、拖拽、批量导入"
+  "notes": "修复网盘面板排版：.md-* 布局规则与素材面板共享，工具条换行保护"
 }
