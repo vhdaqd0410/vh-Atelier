@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.46.0",
-  "buildTime": "2026-09-28 13:33:42",
+  "version": "1.47.0",
+  "buildTime": "2026-09-28 14:07:36",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "新增影视板块：聚合 6 个采集源搜索在线影视，内置 hls.js 播放（含 m3u8 代理改写、AES 解密、选集、自动连播）"
+  "notes": "影视板块：加首页推荐（最新电影）+ 播放直连优先（源站带 CORS 时绕开服务器带宽，缓解卡顿）"
 }

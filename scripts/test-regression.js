@@ -655,6 +655,13 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('播完自动下一集', /nextEp/.test(mvjs) && /'ended'/.test(mvjs));
     ok('CSS 有影视样式', /\.mv-card\s*\{/.test(css) && /\.mv-player\s*\{/.test(css));
     ok('hls.js 已本地打包', fs.existsSync(path.join(ROOT, 'js/hls.light.min.js')));
+    ok('有首页推荐', /function loadRecommend/.test(mvjs) && /renderRecommend/.test(mvjs));
+    ok('推荐用无wd接口', /RECOMMEND_PATH|ac=detail&t=6/.test(mvjs));
+    ok('推荐卡片可点击搜索', /mv-reco/.test(mvjs) && /mvQuery/.test(mvjs));
+    ok('直连优先（绕开服务器带宽）', /function probeDirect/.test(mvjs) && /function playUrlFor/.test(mvjs));
+    ok('按域名缓存直连能力', /directOk\[host\]/.test(mvjs));
+    ok('直连失败回退代理', /directOk\[host\] = false/.test(mvjs));
+    ok('CSS 有推荐网格', /\.mv-reco-grid\s*\{/.test(css));
 }
 
 // ============================================================

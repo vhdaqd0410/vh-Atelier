@@ -22,6 +22,13 @@
     ];
 
     var SEARCH_PATH = '/api.php/provide/vod/?ac=detail&wd=';
+    // 首页推荐：无 wd 参数即返回最新/热播列表
+    var RECOMMEND_PATH = '/api.php/provide/vod/?ac=detail&pg=1';
+
+    // 是否走代理直连源站：部分源站自带 CORS（如暴风/魔都），
+    // 直连可绕开服务器出口带宽瓶颈（实测服务器出口仅 ~3Mbps）。
+    // 策略：先直连试一次，失败再回退到代理。检测结果缓存在内存里。
+    var directOk = {};   // host -> true/false
 
     function proxy() {
         try { return localStorage.getItem(PROXY_KEY) || PROXY; } catch (e) { return PROXY; }
@@ -68,6 +75,77 @@
         });
     }
 
+    // 直连优先：先试源站（部分源自带 CORS），失败再走代理。
+    // 目的：把流量从服务器那 3Mbps 出口引开，缓解播放卡顿。
+    function xhrGet(url, timeoutMs) {
+        return new Promise(function (resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.timeout = timeoutMs || 15000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                if (xhr.status === 0) { reject(new Error('CORS/网络拦截')); return; }
+                if (xhr.status !== 200) { reject(new Error('HTTP ' + xhr.status)); return; }
+                resolve(xhr.responseText);
+            };
+            xhr.onerror = function () { reject(new Error('直连失败')); };
+            xhr.ontimeout = function () { reject(new Error('直连超时')); };
+            xhr.send();
+        });
+    }
+
+    // 取 JSON：直连可行就直连，否则走代理；结果按 host 缓存避免重复试错
+    function fetchJson(url, timeoutMs) {
+        var host = '';
+        try { host = new URL(url).host; } catch (e) {}
+        if (host && directOk[host] === true) {
+            return xhrGet(url, timeoutMs).then(function (t) { return JSON.parse(t); });
+        }
+        if (host && directOk[host] === false) {
+            return apiGet(url, timeoutMs);
+        }
+        // 未知：先直连，失败则记下并回退代理
+        return xhrGet(url, Math.min(timeoutMs || 15000, 8000)).then(function (t) {
+            if (host) directOk[host] = true;
+            return JSON.parse(t);
+        }).catch(function () {
+            if (host) directOk[host] = false;
+            return apiGet(url, timeoutMs);
+        });
+    }
+
+    // 播放地址取用：直连优先（但必须针对「视频站域名」单独探，
+    // 不能复用搜索时的判断——搜索走采集站域名，与视频流域名不同）。
+    function playUrlFor(rawUrl) {
+        var host = '';
+        try { host = new URL(rawUrl).host; } catch (e) {}
+        if (host && directOk[host] === true) return rawUrl;
+        return proxy() + 'proxy?url=' + encodeURIComponent(rawUrl);
+    }
+
+    // 探测视频站是否可直接拉流（带 CORS）：能直连就不绕服务器。
+    // 服务器出口带宽实测仅 ~3Mbps，绕一圈容易卡；直连可显著缓解。
+    function probeDirect(rawUrl, cb) {
+        var host = '';
+        try { host = new URL(rawUrl).host; } catch (e) { return cb(false); }
+        if (directOk[host] === true) return cb(true);
+        if (directOk[host] === false) return cb(false);
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', rawUrl, true);
+        xhr.timeout = 6000;
+        xhr.onreadystatechange = function () {
+            // 只关心能否拿到响应（分片/清单开头即可），拿到就断开
+            if (xhr.readyState >= 2) {
+                try { xhr.abort(); } catch (e) {}
+                if (xhr.status === 200 || xhr.status === 206) { directOk[host] = true; cb(true); }
+                else { directOk[host] = false; cb(false); }
+            }
+        };
+        xhr.onerror = function () { directOk[host] = false; cb(false); };
+        xhr.ontimeout = function () { directOk[host] = false; cb(false); };
+        try { xhr.send(); } catch (e) { directOk[host] = false; cb(false); }
+    }
+
     // ---------- 搜索 ----------
     var lastResults = [];
 
@@ -82,7 +160,7 @@
         var total = SITES.length;
         SITES.forEach(function (site) {
             var u = site.api + SEARCH_PATH + encodeURIComponent(q);
-            apiGet(u, 20000).then(function (j) {
+            fetchJson(u, 20000).then(function (j) {
                 var list = (j && j.list) || [];
                 list.forEach(function (it) {
                     all.push({
@@ -268,10 +346,19 @@
         $('mvPlayerInfo').textContent = item.siteName + '　' + (item.remarks || '');
         bufShow('正在解析播放地址…');
 
-        // 直接把原始 m3u8 地址交给 hls.js 并不行（跨域），所以给代理地址；
-        // 代理会把清单里的子清单/分片/AES 密钥地址全部改写成「经代理」的绝对地址，
-        // 因此 hls.js 不需要任何 xhrSetup 技巧，拿到什么就请求什么。
-        var playUrl = proxy() + 'proxy?url=' + encodeURIComponent(ep.url);
+        // 先探视频站能否直连；能直连就把原始地址交给 hls.js，
+        // 不绕服务器（服务器出口带宽仅 ~3Mbps，绕一圈容易卡）。
+        // 直连时 hls.js 自己按原始地址解析相对路径，无需代理改写。
+        probeDirect(ep.url, function (direct) {
+            var playUrl = direct ? ep.url : playUrlFor(ep.url);
+            startPlay(playUrl, direct);
+        });
+        return;
+    }
+
+    function startPlay(playUrl, direct) {
+        var v = $('mvVideo');
+        bufShow(direct ? '正在加载（直连）…' : '正在加载（经代理）…');
 
         try {
             if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
@@ -356,13 +443,69 @@
     }
 
     // 切到本板块时
+    var recommendLoaded = false;
     window.__movieOnShow = function () {
-        if (!window.Hls) {
-            setState('未加载 hls.js（无法播 HLS）', 'err');
-        } else {
-            setState('就绪 · 6 个源', 'ok');
-        }
+        if (!window.Hls) setState('未加载 hls.js（无法播 HLS）', 'err');
+        if (!recommendLoaded) loadRecommend();
     };
+
+    // ---------- 首页推荐（无 wd 参数即最新/热播） ----------
+    function loadRecommend() {
+        var box = $('mvResults');
+        if (!box) return;
+        recommendLoaded = true;
+        box.innerHTML = '<div class="hint mv-empty">正在加载推荐…</div>';
+        setState('加载推荐中…');
+        // 用 360 源的电影分类（数据稳定）做首页；失败退回无参数最新
+        var site = SITES[1];   // zy360
+        var u = site.api + '/api.php/provide/vod/?ac=detail&t=6&pg=1';
+        fetchJson(u, 20000).then(function (j) {
+            var list = (j && j.list) || [];
+            renderRecommend(list, '🎬 最新电影');
+        }).catch(function () {
+            // 退回无分类的最新
+            return fetchJson(site.api + RECOMMEND_PATH, 20000).then(function (j) {
+                renderRecommend((j && j.list) || [], '🔥 最新上架');
+            });
+        }).catch(function (e) {
+            box.innerHTML = '<div class="hint mv-empty">推荐加载失败：' + esc(e.message)
+                + '<br>可直接在上方输入片名搜索</div>';
+            setState('推荐失败', 'err');
+        });
+    }
+
+    function renderRecommend(list, title) {
+        var box = $('mvResults');
+        if (!box) return;
+        if (!list.length) { box.innerHTML = '<div class="hint mv-empty">暂无推荐</div>'; return; }
+        box.innerHTML = '';
+        var cap = document.createElement('div');
+        cap.className = 'mv-sec';
+        cap.textContent = title + '（点卡片搜索同名资源）';
+        box.appendChild(cap);
+        var grid = document.createElement('div');
+        grid.className = 'mv-reco-grid';
+        list.forEach(function (it) {
+            var name = it.vod_name || '';
+            if (!name) return;
+            var card = document.createElement('div');
+            card.className = 'mv-reco';
+            var pic = it.vod_pic
+                ? ('<img src="' + esc(it.vod_pic) + '" onerror="this.style.visibility=\'hidden\'">')
+                : '<div class="mv-nopic">🎬</div>';
+            card.innerHTML = '<div class="mv-reco-cover">' + pic + '</div>'
+                + '<div class="mv-reco-name" title="' + esc(name) + '">' + esc(name) + '</div>'
+                + '<div class="mv-reco-sub">' + esc(it.vod_remarks || it.vod_year || '') + '</div>';
+            // 点推荐 → 用片名去搜索（跨源聚合，才能拿到可播地址）
+            card.addEventListener('click', function () {
+                if ($('mvQuery')) $('mvQuery').value = name;
+                search();
+            });
+            grid.appendChild(card);
+        });
+        box.appendChild(grid);
+        setState('推荐 ' + list.length + ' 部 · 6 个源', 'ok');
+    }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
     else bind();
