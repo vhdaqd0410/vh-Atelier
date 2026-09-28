@@ -590,6 +590,16 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('入队阶段不虚占进度', /var ENQ_END = 5;/.test(expjs) && /var RND_END = 99;/.test(expjs));
     ok('剩余时间按任务均速估算', /function estRemain/.test(expjs));
     ok('进度量纲自适应', /raw > 0 && raw <= 1\) \? raw \* 100 : raw/.test(expjs));
+
+    console.log('\n=== 坑 9：素材浏览「我的电脑」盘符可展开 ===');
+    var mjs = read('js/media.js');
+    ok('盘符支持展开子目录', /ensureChildren\(node\)\.forEach\(walk\)/.test(mjs));
+    ok('盘符树按 expandedSet 展开', /if \(expandedSet\[abs\]\)/.test(mjs));
+    ok('盘符点击展开并刷右栏', /expandedSet\[abs\] = true;[\s\S]{0,240}renderFilePanel\(abs\)/.test(mjs));
+    ok('盘符卷标有缓存', /_driveLabelsCache/.test(mjs));
+    ok('卷标缓存命中不重跑', /if \(_driveLabelsCache\) \{ applyDriveLabels\(rows\); return; \}/.test(mjs));
+    ok('卷标并发去重', /_driveLabelsPending/.test(mjs));
+    ok('ensureChildren 支持 COMPUTER', /node\.abs === 'COMPUTER'/.test(mjs));
 }
 
 // ============================================================
