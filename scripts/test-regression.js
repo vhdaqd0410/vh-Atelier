@@ -639,7 +639,7 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('引入 hls.js', /hls\.light\.min\.js/.test(idx));
     ok('引入 movie.js', /js\/movie\.js/.test(idx));
     ok('main.js 注册面板', /movie: document\.getElementById\('panel-movie'\)/.test(mj));
-    ok('main.js 注册分组', /movie: \{ members: \['movie'\]/.test(mj));
+    ok('main.js 注册分组', /movie: \{ members: \['movie', 'mvlive'\]/.test(mj));
     ok('切到影视有钩子', /__movieOnShow/.test(mj) && /__movieOnShow/.test(mvjs));
     ok('走自建 CORS 代理', /17897/.test(mvjs));
     ok('搜索用苹果CMS接口', /api\.php\/provide\/vod/.test(mvjs));
