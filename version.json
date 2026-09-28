@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.50.1",
-  "buildTime": "2026-09-28 15:44:31",
+  "version": "1.50.2",
+  "buildTime": "2026-09-28 16:26:44",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修首页全部分类为空 + 清理历史内置源 + 首页多源切换"
+  "notes": "内置 6 个实测可用影视源 + 单层源适配 + 导入报告说清原因"
 }

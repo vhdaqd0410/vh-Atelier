@@ -645,10 +645,17 @@
             line('✅', '点播源：共解析 ' + r.stats.vodTotal + ' 个，可用 ' + r.stats.vodUsable
                 + ' 个，新增 ' + m.added + ' 个（现共 ' + m.total + ' 个）');
             if (r.stats.vodSpider) {
-                line('⏭', '跳过 ' + r.stats.vodSpider + ' 个（依赖 Android spider，本环境无法运行）', 'warn');
+                line('⏭', '跳过 ' + r.stats.vodSpider + ' 个 spider 源（csp_XXX，依赖 Android 运行环境，插件里跑不了）', 'warn');
             }
             if (r.stats.vodOther) {
                 line('❔', '其他不可用 ' + r.stats.vodOther + ' 个', 'warn');
+            }
+            // 关键提醒：全被跳过时要说清为什么、怎么办
+            if (r.stats.vodUsable === 0) {
+                line('⚠', '这份配置里没有可用的点播源', 'warn');
+                line('ℹ', 'spider 源（csp_XXX）的代码是加密的 Android 包，浏览器和 Node 都运行不了，不是插件能修的', 'warn');
+                line('ℹ', '插件能用的只有「普通采集站」源（type=1）。已内置 6 个实测可用的，可直接搜索点播；', 'warn');
+                line('ℹ', '要加自己的，用「⚙ 源管理」填采集站接口地址（形如 https://xxx.com/api.php/provide/vod）', 'warn');
             }
             line('✅', '直播源：共 ' + r.stats.liveTotal + ' 个，可用 ' + r.stats.liveUsable + ' 个，新增 ' + lv + ' 个');
             if (r.vod.length) {
@@ -790,6 +797,28 @@
                 curRoot = catModel.roots[0].id;
             }
             var r = findRoot(curRoot);
+            // 单层源（没有任何子分类）：它的 type_id 常是占位值，t= 查不出东西。
+            // 探测一下首个分类是否真有内容：没有则只保留「全部」（不传 t）。
+            var flat = catModel.roots.every(function (x) { return !x.children.length; });
+            if (flat) {
+                var probe = site.api + '/api.php/provide/vod/?ac=detail&t=' + encodeURIComponent(curRoot) + '&pg=1';
+                fetchJson(probe, 15000).then(function (pj) {
+                    if (((pj && pj.list) || []).length) {
+                        curSub = (r && r.children.length) ? r.children[0].id : '__all__';
+                    } else {
+                        catModel.flat = true;   // 分类无效 → 隐藏分类条，只走「全部」
+                        curSub = '__all__';
+                    }
+                    curPage = 1;
+                    renderHome();
+                }).catch(function () {
+                    catModel.flat = true;
+                    curSub = '__all__';
+                    curPage = 1;
+                    renderHome();
+                });
+                return;
+            }
             curSub = (r && r.children.length) ? r.children[0].id : '__all__';
             curPage = 1;
             renderHome();
@@ -805,6 +834,9 @@
     }
 
     // class 数组 → 两级分类模型
+    // 注意：有些源（如百度/索尼采集）给的是单层“占位分类”，type_id 与真实内容
+    // 对不上（t=1 查不出东西）。这类源只有「全部」（不带 t）能用，
+    // 故子分类为空时不硬塞分类条，直接落到「全部」。
     function buildCatModel(cls) {
         var roots = [], byId = {};
         cls.forEach(function (c) {
@@ -817,12 +849,12 @@
             else byId[n.pid].children.push(n);
         });
         // 过滤不该出现在工作插件里的分类
-        var BAD = /伦理|情色|成人|里番|福利|丝袜|自拍/;
+        var BAD = /伦理|情色|成人|里番|福利|丝袜|自拍|无码|有码|麻豆|三级|主播|偷拍|三级/;
         roots = roots.filter(function (r) { return !BAD.test(r.name); });
         roots.forEach(function (r) {
             r.children = r.children.filter(function (c) { return !BAD.test(c.name); });
         });
-        var ORDER = ['电影', '连续剧', '电视剧', '综艺', '动漫', '动画', '纪录片', '体育'];
+        var ORDER = ['电影', '电影片', '连续剧', '电视剧', '综艺', '综艺片', '动漫', '动漫片', '动画', '纪录片', '记录片', '体育'];
         roots.sort(function (a, b) {
             var ia = ORDER.indexOf(a.name), ib = ORDER.indexOf(b.name);
             if (ia < 0) ia = 99;
@@ -871,7 +903,8 @@
             box.appendChild(srcBar);
         }
 
-        // 大分类
+        // 大分类（单层源分类无效时隐藏）
+        if (!catModel.flat) {
         var rootBar = document.createElement('div');
         rootBar.className = 'mv-catbar';
         catModel.roots.forEach(function (r) {
@@ -880,17 +913,18 @@
             b.textContent = r.name;
             b.addEventListener('click', function () {
                 curRoot = r.id;
-                curSub = r.children.length ? r.children[0].id : r.id;
+                curSub = r.children.length ? r.children[0].id : '__all__';
                 curPage = 1;
                 renderHome();
             });
             rootBar.appendChild(b);
         });
         box.appendChild(rootBar);
+        }
 
-        // 子分类
+        // 子分类（单层源无子分类，自动略过）
         var r0 = findRoot(curRoot);
-        if (r0 && r0.children.length) {
+        if (!catModel.flat && r0 && r0.children.length) {
             var subBar = document.createElement('div');
             subBar.className = 'mv-subbar';
             // 「全部」不传 t：苹果CMS 的大分类（type_pid=0）本身不挂内容，

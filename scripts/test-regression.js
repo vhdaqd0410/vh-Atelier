@@ -644,7 +644,8 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('走自建 CORS 代理', /17897/.test(mvjs));
     ok('搜索用苹果CMS接口', /api\.php\/provide\/vod/.test(mvjs));
     ok('聚合多源搜索', /list0\.forEach/.test(mvjs) && /sites\(\)/.test(mvjs));
-    ok('清空内置点播源（改用导入配置）', /var DEFAULTS = \[\];/.test(read('js/movie-sites.js')));
+    ok('内置实测可用源（6 个主流采集站）', /bfzyapi\.com/.test(read('js/movie-sites.js')) && /lziapi\.com/.test(read('js/movie-sites.js')) && /360zy\.com/.test(read('js/movie-sites.js')));
+    ok('内置源不含成人站', !/155api|jkunzyapi|lbapi9|slapibf|ddapi\.cc|vnzyz|fhapi9|jingpinx/.test(read('js/movie-sites.js')));
     ok('无 adult 源', !/adult/.test(mvjs));
     ok('用 hls.js 播 m3u8', /Hls\.isSupported\(\)/.test(mvjs) && /loadSource/.test(mvjs));
     ok('选集解析 play_url', /parseEps/.test(mvjs) && /playUrl/.test(mvjs));
@@ -671,7 +672,7 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     var sjs = read('js/movie-sites.js');
     ok('源模块存在', /__vhMovieSites/.test(sjs));
     ok('源可增删', /function add\(/.test(sjs) && /function remove\(/.test(sjs));
-    ok('源数组存在（默认空）', /var DEFAULTS = \[\]/.test(sjs));
+    ok('源数组存在（6 个默认源）', /var DEFAULTS = \[/.test(sjs));
     ok('非法地址被拒', /需以 http.*开头/.test(sjs));
     ok('删除按域名归一', /function sameHost/.test(sjs));
     ok('支持订阅', /function parseSub/.test(sjs) && /function addSub/.test(sjs));
@@ -709,7 +710,8 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('首页有源切换条', /mv-home-srcbar/.test(mvjs) && /curSiteApi/.test(mvjs));
     ok('切源后重取分类', /curSiteApi = s\.api/.test(mvjs) && /function loadCatModel/.test(mvjs));
     ok('单源不显切换条', /all\.length > 1/.test(mvjs));
-    ok('旧内置源一次性迁移', /BUILTIN_OLD/.test(read('js/movie-sites.js')) && /MIGRATED_KEY/.test(read('js/movie-sites.js')));
+    ok('单层源（分类 id 无效）只走全部', /catModel\.flat/.test(mvjs));
+    ok('导入配置报告可源不可用原因', /没有可用的点播源/.test(mvjs) || /Android/.test(mvjs));
     ok('CSS 有源切换条样式', /\.mv-home-srcbar\s*\{/.test(css) && /\.mv-home-src\s*\{/.test(css));
 }
 

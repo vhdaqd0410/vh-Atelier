@@ -8,9 +8,18 @@
     var SUB_KEY = 'vh_movie_subs';
 
     // 内置默认源（2026-09-28 实测可用；已剔除 adult 源）
-    // 内置源留空：点播源改为「用户导入的 TVBox 配置」或手动添加。
-    // （之前内置的 6 个实测源已移除，避免与用户自己的配置混在一起）
-    var DEFAULTS = [];
+    // 内置实测可用源（2026-09-28 逐个验证：分类有内容且能取到 m3u8 播放地址）。
+    // 均为 type=1 标准苹果CMS接口，浏览器/CEP 可直接请求，无需 Android spider。
+    // 说明：TVBox 配置里的 type=3 spider 源（csp_XXX）依赖 Android dex + ARM .so，
+    //      插件环境跑不了，故不收录；这里只放真正能搜索点播的采集站。
+    var DEFAULTS = [
+        { key: 'bfzy',  name: '暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod' },
+        { key: 'lziapi', name: '量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod' },
+        { key: 'ffzy',  name: '非凡资源', api: 'http://cj.ffzyapi.com/api.php/provide/vod' },
+        { key: 'zy360', name: '360资源',  api: 'https://360zy.com/api.php/provide/vod' },
+        { key: 'jisu',  name: '极速资源', api: 'https://jszyapi.com/api.php/provide/vod' },
+        { key: 'mdzy',  name: '魔都资源', api: 'https://www.mdzyapi.com/api.php/provide/vod' }
+    ];
 
     function normSite(s) {
         if (!s || typeof s !== 'object') return null;
@@ -29,23 +38,10 @@
         return f(a) === f(b);
     }
 
-    // 历史内置源：v1.48.0~v1.49.0 曾内置这 6 个源，会残留在用户的 localStorage 里。
-    // 用户已改用「导入自己的配置」，这些旧源应在首次读取时清掉，否则会出现
-    // 「源列表里还是旧的、清不掉」的困惑。
-    var BUILTIN_OLD = ['ffzy5.tv', '360zy.com', 'jszyapi.com', 'bfzyapi.com', 'mdzyapi.com', 'cj.rycjapi.com'];
-    var MIGRATED_KEY = 'vh_movie_sites_mig1';
-
-    function purgeBuiltinOld(list) {
-        if (list.length && list.every(function (x) { return x.api.indexOf('http') === 0; })) {
-            var keep = list.filter(function (x) {
-                var host = String(x.api).replace(/^https?:\/\//i, '').split('/')[0];
-                return !BUILTIN_OLD.some(function (h) { return host.indexOf(h) >= 0; });
-            });
-            if (keep.length !== list.length) return keep;
-        }
-        return list;
-    }
-
+    // 一次性迁移（v1.50.1 做过、且现在已不再需要）：v1.48~v1.49 曾内置 6 个源，
+    // v1.50.0 清空默认值，v1.50.1 加迁移把它们从用户 localStorage 里清掉。
+    // 但 v1.50.2 起这 6 个源经实测重新作为默认源提供（它们确实可用），
+    // 所以迁移逻辑已废除；只保留旧的迁移标记兼容（不再删任何东西）。
     function load() {
         var list = [];
         var raw = null;
@@ -54,17 +50,6 @@
             if (raw) {
                 var arr = JSON.parse(raw);
                 if (Array.isArray(arr)) list = arr.map(normSite).filter(Boolean);
-            }
-        } catch (e) {}
-        // 一次性迁移：清掉历史内置源，并把结果写回（只做一次，之后用户手动加的旧源不会被误删）
-        try {
-            if (!localStorage.getItem(MIGRATED_KEY)) {
-                var purged = purgeBuiltinOld(list);
-                if (purged.length !== list.length) {
-                    localStorage.setItem(KEY, JSON.stringify(purged));
-                    list = purged;
-                }
-                localStorage.setItem(MIGRATED_KEY, '1');
             }
         } catch (e) {}
         if (!list.length) list = DEFAULTS.slice();
