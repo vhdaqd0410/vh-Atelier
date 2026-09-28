@@ -705,6 +705,12 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('停播会销毁点播 hls', /__mvStopAll = function[\s\S]{0,700}hls\.destroy\(\)/.test(mvjs));
     ok('停播会调 __mvLive.stop', /__mvStopAll = function[\s\S]{0,900}__mvLive[\s\S]{0,60}\.stop\(\)/.test(mvjs));
     ok('直播导出 stop 并销毁 hls', /stop:\s*stop/.test(ljs) && /function stop\(\)[\s\S]{0,200}hls\.destroy\(\)/.test(ljs));
+    ok('「全部」不传 t（大分类本身无内容）', /__all__/.test(mvjs) && /catId !== '__all__'/.test(mvjs));
+    ok('首页有源切换条', /mv-home-srcbar/.test(mvjs) && /curSiteApi/.test(mvjs));
+    ok('切源后重取分类', /curSiteApi = s\.api/.test(mvjs) && /function loadCatModel/.test(mvjs));
+    ok('单源不显切换条', /all\.length > 1/.test(mvjs));
+    ok('旧内置源一次性迁移', /BUILTIN_OLD/.test(read('js/movie-sites.js')) && /MIGRATED_KEY/.test(read('js/movie-sites.js')));
+    ok('CSS 有源切换条样式', /\.mv-home-srcbar\s*\{/.test(css) && /\.mv-home-src\s*\{/.test(css));
 }
 
 // ============================================================

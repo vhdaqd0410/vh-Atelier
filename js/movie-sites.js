@@ -29,13 +29,42 @@
         return f(a) === f(b);
     }
 
+    // 历史内置源：v1.48.0~v1.49.0 曾内置这 6 个源，会残留在用户的 localStorage 里。
+    // 用户已改用「导入自己的配置」，这些旧源应在首次读取时清掉，否则会出现
+    // 「源列表里还是旧的、清不掉」的困惑。
+    var BUILTIN_OLD = ['ffzy5.tv', '360zy.com', 'jszyapi.com', 'bfzyapi.com', 'mdzyapi.com', 'cj.rycjapi.com'];
+    var MIGRATED_KEY = 'vh_movie_sites_mig1';
+
+    function purgeBuiltinOld(list) {
+        if (list.length && list.every(function (x) { return x.api.indexOf('http') === 0; })) {
+            var keep = list.filter(function (x) {
+                var host = String(x.api).replace(/^https?:\/\//i, '').split('/')[0];
+                return !BUILTIN_OLD.some(function (h) { return host.indexOf(h) >= 0; });
+            });
+            if (keep.length !== list.length) return keep;
+        }
+        return list;
+    }
+
     function load() {
         var list = [];
+        var raw = null;
+        try { raw = localStorage.getItem(KEY); } catch (e) {}
         try {
-            var raw = localStorage.getItem(KEY);
             if (raw) {
                 var arr = JSON.parse(raw);
                 if (Array.isArray(arr)) list = arr.map(normSite).filter(Boolean);
+            }
+        } catch (e) {}
+        // 一次性迁移：清掉历史内置源，并把结果写回（只做一次，之后用户手动加的旧源不会被误删）
+        try {
+            if (!localStorage.getItem(MIGRATED_KEY)) {
+                var purged = purgeBuiltinOld(list);
+                if (purged.length !== list.length) {
+                    localStorage.setItem(KEY, JSON.stringify(purged));
+                    list = purged;
+                }
+                localStorage.setItem(MIGRATED_KEY, '1');
             }
         } catch (e) {}
         if (!list.length) list = DEFAULTS.slice();

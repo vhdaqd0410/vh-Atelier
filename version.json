@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.50.0",
-  "buildTime": "2026-09-28 15:25:28",
+  "version": "1.50.1",
+  "buildTime": "2026-09-28 15:44:31",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "影视首页重做分类导航 + 修关闭播放后声音不止"
+  "notes": "修首页全部分类为空 + 清理历史内置源 + 首页多源切换"
 }

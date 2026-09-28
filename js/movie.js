@@ -746,10 +746,21 @@
     var curRoot = '';
     var curSub = '';
     var curPage = 1;
+    var curSiteApi = '';    // 首页当前选中的源（多源时可切换）
 
     function firstSite() {
         var l = sites();
         return l.length ? l[0] : null;
+    }
+    function sameApi(a, b) {
+        var f = function (u) { return String(u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, ''); };
+        return f(a) === f(b);
+    }
+    function siteByApi(api) {
+        if (!api) return null;
+        var l = sites();
+        for (var i = 0; i < l.length; i++) { if (sameApi(l[i].api, api)) return l[i]; }
+        return null;
     }
 
     function loadRecommend() {
@@ -761,23 +772,30 @@
             setState('无点播源', 'err');
             return;
         }
+        if (!curSiteApi) curSiteApi = site.api;
         box.innerHTML = '<div class="hint mv-empty">正在加载分类…</div>';
         setState('加载中…');
+        loadCatModel(siteByApi(curSiteApi) || site);
+    }
+
+    // 取某源的分类表并渲染首页
+    function loadCatModel(site) {
+        var box = $('mvResults');
         fetchJson(site.api + '/api.php/provide/vod/?ac=list', 20000).then(function (j) {
             var cls = (j && j.class) || [];
             if (!cls.length) throw new Error('该源没返回分类');
             catModel = buildCatModel(cls);
+            if (!catModel.roots.length) throw new Error('该源没有可用分类');
             if (!curRoot || !catModel.roots.some(function (r) { return r.id === curRoot; })) {
-                curRoot = catModel.roots.length ? catModel.roots[0].id : '';
+                curRoot = catModel.roots[0].id;
             }
             var r = findRoot(curRoot);
-            curSub = (r && r.children.length) ? r.children[0].id : curRoot;
+            curSub = (r && r.children.length) ? r.children[0].id : '__all__';
             curPage = 1;
             renderHome();
         }).catch(function (e) {
             catModel = null;
-            var sc = firstSite();
-            fetchJson(sc.api + RECOMMEND_PATH, 20000).then(function (j) {
+            fetchJson(site.api + RECOMMEND_PATH, 20000).then(function (j) {
                 renderRecommend((j && j.list) || [], '🔥 最新上架（分类不可用：' + e.message + '）');
             }).catch(function (e2) {
                 box.innerHTML = '<div class="hint mv-empty">加载失败：' + esc(e2.message) + '</div>';
@@ -826,6 +844,33 @@
         if (!box || !catModel) return;
         box.innerHTML = '';
 
+        // 源切换条：订阅里有多个可用源时，可切源看各自的首页
+        var all = sites();
+        if (all.length > 1) {
+            var srcBar = document.createElement('div');
+            srcBar.className = 'mv-home-srcbar';
+            var lb = document.createElement('span');
+            lb.className = 'mv-home-srcbar-label';
+            lb.textContent = '源';
+            srcBar.appendChild(lb);
+            all.forEach(function (s) {
+                var b = document.createElement('button');
+                b.className = 'mv-home-src' + (sameApi(s.api, curSiteApi) ? ' on' : '');
+                b.textContent = s.name;
+                b.title = s.api;
+                b.addEventListener('click', function () {
+                    if (sameApi(s.api, curSiteApi)) return;
+                    curSiteApi = s.api;
+                    catModel = null;
+                    setState('切换源：' + s.name);
+                    box.innerHTML = '<div class="hint mv-empty">正在加载分类…</div>';
+                    loadCatModel(s);
+                });
+                srcBar.appendChild(b);
+            });
+            box.appendChild(srcBar);
+        }
+
         // 大分类
         var rootBar = document.createElement('div');
         rootBar.className = 'mv-catbar';
@@ -848,10 +893,13 @@
         if (r0 && r0.children.length) {
             var subBar = document.createElement('div');
             subBar.className = 'mv-subbar';
+            // 「全部」不传 t：苹果CMS 的大分类（type_pid=0）本身不挂内容，
+            // 内容全在子分类，所以查大分类 id 会是空的。不带 t 才是真正的「全站最新」。
             var allBtn = document.createElement('button');
-            allBtn.className = 'mv-sub' + (curSub === r0.id ? ' on' : '');
+            allBtn.className = 'mv-sub' + (curSub === '__all__' ? ' on' : '');
             allBtn.textContent = '全部';
-            allBtn.addEventListener('click', function () { curSub = r0.id; curPage = 1; renderHome(); });
+            allBtn.title = '全站最新（不限分类）';
+            allBtn.addEventListener('click', function () { curSub = '__all__'; curPage = 1; renderHome(); });
             subBar.appendChild(allBtn);
             r0.children.forEach(function (c) {
                 var b = document.createElement('button');
@@ -867,14 +915,18 @@
         host.className = 'mv-grid-wrap';
         host.innerHTML = '<div class="hint" style="padding:14px;">加载中…</div>';
         box.appendChild(host);
-        setState('源：' + (firstSite() || {}).name);
+        var cur = siteByApi(curSiteApi) || firstSite();
+        setState('源：' + ((cur || {}).name || '-'));
         loadCatList(curSub || curRoot, host);
     }
 
     function loadCatList(catId, host) {
-        var site = firstSite();
-        if (!site || !catId) { host.innerHTML = '<div class="hint" style="padding:14px;">没有可用源</div>'; return; }
-        var u = site.api + '/api.php/provide/vod/?ac=detail&t=' + encodeURIComponent(catId) + '&pg=' + curPage;
+        var site = siteByApi(curSiteApi) || firstSite();
+        if (!site) { host.innerHTML = '<div class="hint" style="padding:14px;">没有可用源</div>'; return; }
+        // 「全部」= 不带 t（全站最新）
+        var base = site.api + '/api.php/provide/vod/?ac=detail';
+        if (catId && catId !== '__all__') base += '&t=' + encodeURIComponent(catId);
+        var u = base + '&pg=' + curPage;
         fetchJson(u, 20000).then(function (j) {
             renderGrid((j && j.list) || [], host, j);
         }).catch(function (e) {

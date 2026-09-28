@@ -5271,3 +5271,15 @@ button.primary:hover { background: var(--btn-primary-hover); }
 }
 .mv-pagebar .tbtn:disabled { opacity: .4; cursor: not-allowed; }
 .mv-pageinfo { font-size: 11.5px; color: var(--muted); }
+
+/* 首页：源切换条（订阅里有多个可用源时出现；类名与搜索结果的 .mv-src 徽章区分开） */
+.mv-home-srcbar { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.mv-home-srcbar-label { font-size: 11px; color: var(--muted); margin-right: 2px; }
+.mv-home-src {
+    padding: 3px 10px; font-size: 11.5px; cursor: pointer;
+    background: var(--panel2); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 12px; max-width: 150px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mv-home-src:hover { border-color: var(--accent); color: var(--accent); }
+.mv-home-src.on { background: var(--accent); color: #fff; border-color: var(--accent); }
