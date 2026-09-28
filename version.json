@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.43.1",
-  "buildTime": "2026-09-27 19:49:20",
+  "version": "1.43.2",
+  "buildTime": "2026-09-28 09:31:47",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "导出默认走 AME；修正进度时间估算（心跳+均速估剩余+量纲自适应）；渲染完成保留 ME 队列历史"
+  "notes": "修素材浏览「我的电脑」盘符进不去：盘符支持展开子目录，卷标读取加缓存"
 }

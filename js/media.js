@@ -429,6 +429,8 @@
   }
   function renderComputerNav() {
     if (!el.tree) return;
+    // 统一走树模型：把「我的电脑」当作根节点，盘符是一级子节点。
+    // 旧实现只画盘符那一层，expandedSet 设了也不渲染子级，所以永远"进不去"。
     el.tree.innerHTML = '';
     var crumb = document.createElement('div');
     crumb.className = 'md-crumb';
@@ -437,54 +439,85 @@
     sp.textContent = '💻 我的电脑';
     crumb.appendChild(sp);
     el.tree.appendChild(crumb);
-    var drives = listDrives();
+
+    // 树根 = COMPUTER；盘符由 ensureChildren 提供（见该函数）
+    treeModel = makeNode('COMPUTER', '我的电脑', 0);
+    expandedSet['COMPUTER'] = true;
     var wrap = document.createElement('div');
     wrap.className = 'md-subwrap md-tree-body';
-    if (!drives.length) wrap.innerHTML = '<div style="padding:6px;font-size:11px;color:var(--muted);">未检测到磁盘</div>';
+
+    // 盘符行（自己实现，因为要显示卷标与 💽 图标）
     var driveRows = [];
-    drives.forEach(function (d) {
-      var node = makeNode(d, d, 0);
+    (function walk(node) {
+      var abs = node.abs;
+      if (abs === 'COMPUTER') {
+        // 根节点不显示行，直接展开它的孩子
+        ensureChildren(node).forEach(walk);
+        return;
+      }
       var row = document.createElement('div');
-      row.className = 'md-tree-item md-subdir' + (d === curDirPath ? ' sel' : '');
-      row.dataset.drive = d;
-      row.style.cursor = 'pointer';
+      var isDrive = /^[A-Za-z]:[\\/]?$/.test(abs);
+      row.className = 'md-tree-item md-subdir' + (abs === curDirPath ? ' sel' : '');
+      row.style.paddingLeft = (6 + node.depth * 12) + 'px';
+      row.dataset.drive = isDrive ? abs : '';
+      row.dataset.path = abs;
+      var kids = subCount(node);
       var caret = document.createElement('span');
       caret.className = 'caret';
-      var kc = 0;
-      try { kc = listDirs(d).length; } catch (e) {}
-      caret.textContent = kc ? (expandedSet[d] ? '▾' : '▸') : '';
+      caret.textContent = (kids || !node.children) ? (expandedSet[abs] ? '▾' : '▸') : '';
       caret.style.cssText = 'display:inline-block;width:22px;height:20px;line-height:18px;text-align:center;color:var(--accent);cursor:pointer;border-radius:4px;font-size:13px;flex:0 0 auto;';
       var ico = document.createElement('span');
-      ico.textContent = '💽 ';
+      ico.textContent = isDrive ? '💽 ' : '📁 ';
       var lbl = document.createElement('span');
-      lbl.className = 'dlbl';
-      lbl.textContent = d + '（读取卷标…）';
-      lbl.title = d;
+      lbl.className = isDrive ? 'dlbl' : '';
+      lbl.textContent = isDrive ? (abs + '（读取卷标…）') : node.name;
+      lbl.title = abs;
       row.appendChild(caret); row.appendChild(ico); row.appendChild(lbl);
       row.__node = node;
+
       row.addEventListener('click', function (ev) {
         if (ev.target === caret) {
-          if (expandedSet[d]) delete expandedSet[d]; else expandedSet[d] = true;
+          if (expandedSet[abs]) delete expandedSet[abs];
+          else expandedSet[abs] = true;
           renderComputerNav();
           return;
         }
-        curDirPath = d;
-        expandedSet[d] = true;
-        try { localStorage.setItem('mdCurDir', d); } catch (e) {}
+        // 行身：选中 + 展开下一层 + 更新右侧
+        curDirPath = abs;
+        expandedSet[abs] = true;
+        try { localStorage.setItem('mdCurDir', abs); } catch (e) {}
         renderComputerNav();
-        renderFilePanel(d);
+        renderFilePanel(abs);
       });
       wrap.appendChild(row);
-      driveRows.push(row);
-    });
+      if (isDrive) driveRows.push(row);
+
+      if (expandedSet[abs]) {
+        ensureChildren(node).forEach(walk);
+      }
+    })(treeModel);
+
     el.tree.appendChild(wrap);
-    if (el.fhead && el.flist) renderFilePanel(curDirPath || 'COMPUTER');
-    // 异步读卷标：VolumeName（资源管理器式盘符显示）
+    // 卷标只读一次（缓存），不再每次点击都等 PowerShell
     loadDriveLabels(driveRows);
   }
+  // 盘符卷标缓存（避免每次点击盘符都重启 PowerShell 等 1 秒）
+  var _driveLabelsCache = null;      // { 'C:': '系统', ... }  null = 尚未读取
+  var _driveLabelsPending = false;
+  var _driveLabelWaiters = [];       // 等待卷标结果的渲染批次
+
   // 用 PowerShell 临时脚本一次拿全部盘符卷标（内联引号易碎，写 ps1 文件最稳）；拿不到就保留盘符
   function loadDriveLabels(rows) {
     try {
+      // 已缓存 → 直接套用，不再跑 PowerShell
+      if (_driveLabelsCache) { applyDriveLabels(rows); return; }
+      // 正在读取 → 先挂上，读完会统一重绘（避免并发起一堆 PowerShell）
+      if (_driveLabelsPending) {
+        _driveLabelWaiters.push(rows);
+        return;
+      }
+      _driveLabelsPending = true;
+      _driveLabelWaiters.push(rows);
       var os = require('os');
       var stamp = Date.now();
       var tmpPs = path.join(os.tmpdir(), 'vh_drivelabel_' + stamp + '.ps1');
@@ -513,20 +546,33 @@
           });
         } catch (e) {}
         try { fs.unlinkSync(tmpOut); } catch (e) {}
-        rows.forEach(function (row) {
-          var d = (row.dataset.drive || '').toUpperCase();
-          var lbl = row.querySelector('.dlbl');
-          if (!lbl) return;
-          var vol = map[d];
-          if (vol) {
-            lbl.textContent = d + ' [' + vol + ']';
-            row.title = d + '  (' + vol + ')';
-          } else if (d) {
-            lbl.textContent = d;
-          }
+        _driveLabelsCache = map;
+        _driveLabelsPending = false;
+        var waiters = _driveLabelWaiters.slice();
+        _driveLabelWaiters.length = 0;
+        waiters.forEach(function (rs) {
+          try { applyDriveLabels(rs); } catch (e) {}
         });
       });
-    } catch (e) {}
+    } catch (e) {
+      _driveLabelsPending = false;
+    }
+  }
+  // 把缓存里的卷标套到盘符行上
+  function applyDriveLabels(rows) {
+    var map = _driveLabelsCache || {};
+    rows.forEach(function (row) {
+      var d = (row.dataset.drive || '').toUpperCase();
+      var lbl = row.querySelector('.dlbl');
+      if (!lbl) return;
+      var vol = map[d];
+      if (vol) {
+        lbl.textContent = d + ' [' + vol + ']';
+        row.title = d + '  (' + vol + ')';
+      } else if (d) {
+        lbl.textContent = d;
+      }
+    });
   }
 
   // ===== 右侧文件列表（支持多选）=====
