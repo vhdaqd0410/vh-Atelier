@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.44.0",
-  "buildTime": "2026-09-28 09:58:28",
+  "version": "1.45.0",
+  "buildTime": "2026-09-28 12:00:53",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "扒歌：点下载先询问保存目录（弹窗与音乐库一致，默认起始为音乐库目录），支持新建子目录"
+  "notes": "修审片/超分/反馈/管理台面板切走再切回黑屏：含 iframe 的面板改用保留尺寸的隐藏"
 }

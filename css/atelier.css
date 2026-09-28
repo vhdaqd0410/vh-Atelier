@@ -5068,3 +5068,25 @@ button.primary:hover { background: var(--btn-primary-hover); }
     background: rgba(255,255,255,.02); border-radius: 5px;
 }
 .rnd-tip.is-ame { color: #9fe0ab; background: rgba(127,214,139,.08); }
+
+/* ===== 含 iframe 面板的隐藏态（避免 iframe 被 Chromium 丢弃合成层） =====
+   这些面板切走时不设 display:none，而是移出可视区 + visibility:hidden。
+   面板内有 position:fixed 的后代（弹窗/右键菜单），隐藏时需一并收起，
+   否则会浮在屏幕上。 */
+.tab-panel.at-pane-hidden {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+.tab-panel.at-pane-hidden > * {
+    visibility: hidden !important;
+}
+/* 后代里的固定定位元素（弹窗遮罩、右键菜单、小窗播放器等）也要收起 */
+.tab-panel.at-pane-hidden .bgm-dlg-mask,
+.tab-panel.at-pane-hidden .bgm-toast-host,
+.tab-panel.at-pane-hidden .nd-menu,
+.tab-panel.at-pane-hidden .nd-prev-mask,
+.tab-panel.at-pane-hidden .log-overlay,
+.tab-panel.at-pane-hidden #sfxContextMenu,
+.tab-panel.at-pane-hidden #mllibContextMenu {
+    display: none !important;
+}
