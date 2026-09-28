@@ -275,9 +275,17 @@
         });
     }
 
+    // 对外：彻底停掉直播（销毁自己的 hls；video 元素由 movie.js 统一处理）
+    function stop() {
+        try { if (hls) { hls.destroy(); hls = null; } } catch (e) {}
+        curCh = null;
+        try { render(); } catch (e) {}
+    }
+
     window.__mvLive = {
         loadAll: loadAll,
         bind: bindLiveSrcMgr,
-        renderSrcList: renderLiveSrcList
+        renderSrcList: renderLiveSrcList,
+        stop: stop
     };
 })();

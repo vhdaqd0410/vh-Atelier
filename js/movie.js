@@ -684,6 +684,24 @@
         });
     }
 
+    // 统一的“彻底停播”：不管当前是点播还是直播，都要停掉。
+    // 两个模块各自持有 hls 实例（点播用 movie.js 的 hls，直播用 movie-live.js 的 hls），
+    // 关闭时只销毁自己的那个 -> 另一个的音频流还在拉，听起来就是「画面没了但声音还在」。
+    window.__mvStopAll = function () {
+        // 1) 停 video 元素本身
+        var v = $('mvVideo');
+        if (v) {
+            try { v.pause(); } catch (e) {}
+            try { v.muted = true; } catch (e) {}
+            try { v.removeAttribute('src'); } catch (e) {}
+            try { v.load(); } catch (e) {}
+        }
+        // 2) 销毁本模块（点播）的 hls
+        try { if (hls) { hls.destroy(); hls = null; } } catch (e) {}
+        // 3) 让直播模块也销毁它的 hls
+        try { if (window.__mvLive && window.__mvLive.stop) window.__mvLive.stop(); } catch (e) {}
+    };
+
     // ---------- 绑定 ----------
     function bind() {
         var b;
@@ -698,9 +716,7 @@
         b = $('mvPickClose'); if (b) b.addEventListener('click', function () { $('mvPick').style.display = 'none'; });
         b = $('mvPlayerClose'); if (b) b.addEventListener('click', function () {
             $('mvPlayer').style.display = 'none';
-            var v = $('mvVideo');
-            if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); try { v.load(); } catch (e) {} }
-            if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
+            if (window.__mvStopAll) window.__mvStopAll();
             curPlay = null;
         });
         b = $('mvPlayerReload'); if (b) b.addEventListener('click', function () {
@@ -723,41 +739,152 @@
         if (!recommendLoaded) loadRecommend();
     };
 
-    // ---------- 首页推荐（无 wd 参数即最新/热播） ----------
+    // ---------- 首页：分类导航 ----------
+    // 结构对齐 TVBox 配置：大分类（电影/连续剧/综艺/动漫）→ 子分类 → 影片网格 + 分页。
+    // 分类来自采集站 ac=list 返回的 class（含 type_id / type_pid 层级）。
+    var catModel = null;    // { roots: [{id,name,children:[{id,name}]}] }
+    var curRoot = '';
+    var curSub = '';
+    var curPage = 1;
+
+    function firstSite() {
+        var l = sites();
+        return l.length ? l[0] : null;
+    }
+
     function loadRecommend() {
         var box = $('mvResults');
         if (!box) return;
-        recommendLoaded = true;
-        box.innerHTML = '<div class="hint mv-empty">正在加载推荐…</div>';
-        setState('加载推荐中…');
-        var list0 = sites();
-        if (!list0.length) { box.innerHTML = '<div class="hint mv-empty">没有可用源，请到「源管理」添加</div>'; return; }
-        var site = list0[0];   // 用首个可用源出推荐
-        var u = site.api + '/api.php/provide/vod/?ac=detail&t=6&pg=1';
-        fetchJson(u, 20000).then(function (j) {
-            var list = (j && j.list) || [];
-            renderRecommend(list, '🎬 最新电影');
-        }).catch(function () {
-            // 退回无分类的最新
-            return fetchJson(site.api + RECOMMEND_PATH, 20000).then(function (j) {
-                renderRecommend((j && j.list) || [], '🔥 最新上架');
-            });
+        var site = firstSite();
+        if (!site) {
+            box.innerHTML = '<div class="hint mv-empty">还没有可用的点播源<br>点上方「📥 导入配置」导入 TVBox 配置，或「⚙ 源管理」手动添加</div>';
+            setState('无点播源', 'err');
+            return;
+        }
+        box.innerHTML = '<div class="hint mv-empty">正在加载分类…</div>';
+        setState('加载中…');
+        fetchJson(site.api + '/api.php/provide/vod/?ac=list', 20000).then(function (j) {
+            var cls = (j && j.class) || [];
+            if (!cls.length) throw new Error('该源没返回分类');
+            catModel = buildCatModel(cls);
+            if (!curRoot || !catModel.roots.some(function (r) { return r.id === curRoot; })) {
+                curRoot = catModel.roots.length ? catModel.roots[0].id : '';
+            }
+            var r = findRoot(curRoot);
+            curSub = (r && r.children.length) ? r.children[0].id : curRoot;
+            curPage = 1;
+            renderHome();
         }).catch(function (e) {
-            box.innerHTML = '<div class="hint mv-empty">推荐加载失败：' + esc(e.message)
-                + '<br>可直接在上方输入片名搜索</div>';
-            setState('推荐失败', 'err');
+            catModel = null;
+            var sc = firstSite();
+            fetchJson(sc.api + RECOMMEND_PATH, 20000).then(function (j) {
+                renderRecommend((j && j.list) || [], '🔥 最新上架（分类不可用：' + e.message + '）');
+            }).catch(function (e2) {
+                box.innerHTML = '<div class="hint mv-empty">加载失败：' + esc(e2.message) + '</div>';
+                setState('加载失败', 'err');
+            });
         });
     }
 
-    function renderRecommend(list, title) {
+    // class 数组 → 两级分类模型
+    function buildCatModel(cls) {
+        var roots = [], byId = {};
+        cls.forEach(function (c) {
+            var id = String(c.type_id);
+            byId[id] = { id: id, name: String(c.type_name || ''), pid: String(c.type_pid || '0'), children: [] };
+        });
+        Object.keys(byId).forEach(function (id) {
+            var n = byId[id];
+            if (n.pid === '0' || !byId[n.pid]) roots.push(n);
+            else byId[n.pid].children.push(n);
+        });
+        // 过滤不该出现在工作插件里的分类
+        var BAD = /伦理|情色|成人|里番|福利|丝袜|自拍/;
+        roots = roots.filter(function (r) { return !BAD.test(r.name); });
+        roots.forEach(function (r) {
+            r.children = r.children.filter(function (c) { return !BAD.test(c.name); });
+        });
+        var ORDER = ['电影', '连续剧', '电视剧', '综艺', '动漫', '动画', '纪录片', '体育'];
+        roots.sort(function (a, b) {
+            var ia = ORDER.indexOf(a.name), ib = ORDER.indexOf(b.name);
+            if (ia < 0) ia = 99;
+            if (ib < 0) ib = 99;
+            return ia - ib;
+        });
+        return { roots: roots };
+    }
+    function findRoot(id) {
+        if (!catModel) return null;
+        for (var i = 0; i < catModel.roots.length; i++) {
+            if (catModel.roots[i].id === id) return catModel.roots[i];
+        }
+        return null;
+    }
+
+    function renderHome() {
         var box = $('mvResults');
-        if (!box) return;
-        if (!list.length) { box.innerHTML = '<div class="hint mv-empty">暂无推荐</div>'; return; }
+        if (!box || !catModel) return;
         box.innerHTML = '';
-        var cap = document.createElement('div');
-        cap.className = 'mv-sec';
-        cap.textContent = title + '（点卡片搜索同名资源）';
-        box.appendChild(cap);
+
+        // 大分类
+        var rootBar = document.createElement('div');
+        rootBar.className = 'mv-catbar';
+        catModel.roots.forEach(function (r) {
+            var b = document.createElement('button');
+            b.className = 'mv-cat' + (r.id === curRoot ? ' on' : '');
+            b.textContent = r.name;
+            b.addEventListener('click', function () {
+                curRoot = r.id;
+                curSub = r.children.length ? r.children[0].id : r.id;
+                curPage = 1;
+                renderHome();
+            });
+            rootBar.appendChild(b);
+        });
+        box.appendChild(rootBar);
+
+        // 子分类
+        var r0 = findRoot(curRoot);
+        if (r0 && r0.children.length) {
+            var subBar = document.createElement('div');
+            subBar.className = 'mv-subbar';
+            var allBtn = document.createElement('button');
+            allBtn.className = 'mv-sub' + (curSub === r0.id ? ' on' : '');
+            allBtn.textContent = '全部';
+            allBtn.addEventListener('click', function () { curSub = r0.id; curPage = 1; renderHome(); });
+            subBar.appendChild(allBtn);
+            r0.children.forEach(function (c) {
+                var b = document.createElement('button');
+                b.className = 'mv-sub' + (c.id === curSub ? ' on' : '');
+                b.textContent = c.name;
+                b.addEventListener('click', function () { curSub = c.id; curPage = 1; renderHome(); });
+                subBar.appendChild(b);
+            });
+            box.appendChild(subBar);
+        }
+
+        var host = document.createElement('div');
+        host.className = 'mv-grid-wrap';
+        host.innerHTML = '<div class="hint" style="padding:14px;">加载中…</div>';
+        box.appendChild(host);
+        setState('源：' + (firstSite() || {}).name);
+        loadCatList(curSub || curRoot, host);
+    }
+
+    function loadCatList(catId, host) {
+        var site = firstSite();
+        if (!site || !catId) { host.innerHTML = '<div class="hint" style="padding:14px;">没有可用源</div>'; return; }
+        var u = site.api + '/api.php/provide/vod/?ac=detail&t=' + encodeURIComponent(catId) + '&pg=' + curPage;
+        fetchJson(u, 20000).then(function (j) {
+            renderGrid((j && j.list) || [], host, j);
+        }).catch(function (e) {
+            host.innerHTML = '<div class="hint" style="padding:14px;">加载失败：' + esc(e.message) + '</div>';
+        });
+    }
+
+    function renderGrid(list, host, meta) {
+        host.innerHTML = '';
+        if (!list.length) { host.innerHTML = '<div class="hint" style="padding:14px;">该分类暂无内容</div>'; return; }
         var grid = document.createElement('div');
         grid.className = 'mv-reco-grid';
         list.forEach(function (it) {
@@ -771,15 +898,51 @@
             card.innerHTML = '<div class="mv-reco-cover">' + pic + '</div>'
                 + '<div class="mv-reco-name" title="' + esc(name) + '">' + esc(name) + '</div>'
                 + '<div class="mv-reco-sub">' + esc(it.vod_remarks || it.vod_year || '') + '</div>';
-            // 点推荐 → 用片名去搜索（跨源聚合，才能拿到可播地址）
             card.addEventListener('click', function () {
                 if ($('mvQuery')) $('mvQuery').value = name;
                 search();
             });
             grid.appendChild(card);
         });
-        box.appendChild(grid);
-        setState('推荐 ' + list.length + ' 部 · 6 个源', 'ok');
+        host.appendChild(grid);
+
+        var foot = document.createElement('div');
+        foot.className = 'mv-pagebar';
+        var total = (meta && meta.total) ? meta.total : 0;
+        var pages = (meta && meta.pagecount) ? Number(meta.pagecount) : 0;
+        function pbtn(t, dis, fn) {
+            var b = document.createElement('button');
+            b.className = 'tbtn';
+            b.textContent = t;
+            b.disabled = !!dis;
+            if (!dis) b.addEventListener('click', fn);
+            foot.appendChild(b);
+        }
+        pbtn('‹ 上一页', curPage <= 1, function () { curPage--; loadCatList(curSub || curRoot, host); });
+        var info = document.createElement('span');
+        info.className = 'mv-pageinfo';
+        info.textContent = '第 ' + curPage + ' 页' + (pages ? (' / 共 ' + pages + ' 页') : '')
+            + (total ? ('　共 ' + total + ' 部') : '');
+        foot.appendChild(info);
+        pbtn('下一页 ›', pages ? (curPage >= pages) : (list.length < 20), function () { curPage++; loadCatList(curSub || curRoot, host); });
+        host.appendChild(foot);
+    }
+
+    // 分类不可用时的兜底（保留原「推荐网格」形态）
+    function renderRecommend(list, title) {
+        var box = $('mvResults');
+        if (!box) return;
+        if (!list.length) { box.innerHTML = '<div class="hint mv-empty">暂无内容</div>'; return; }
+        box.innerHTML = '';
+        var cap = document.createElement('div');
+        cap.className = 'mv-sec';
+        cap.textContent = title;
+        box.appendChild(cap);
+        var host = document.createElement('div');
+        host.className = 'mv-grid-wrap';
+        box.appendChild(host);
+        renderGrid(list, host, null);
+        setState('共 ' + list.length + ' 部', 'ok');
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);

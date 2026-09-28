@@ -644,7 +644,7 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('走自建 CORS 代理', /17897/.test(mvjs));
     ok('搜索用苹果CMS接口', /api\.php\/provide\/vod/.test(mvjs));
     ok('聚合多源搜索', /list0\.forEach/.test(mvjs) && /sites\(\)/.test(mvjs));
-    ok('内置实测可用源（在 movie-sites.js）', /zy360/.test(read('js/movie-sites.js')) && /jisu/.test(read('js/movie-sites.js')) && /bfzy/.test(read('js/movie-sites.js')));
+    ok('清空内置点播源（改用导入配置）', /var DEFAULTS = \[\];/.test(read('js/movie-sites.js')));
     ok('无 adult 源', !/adult/.test(mvjs));
     ok('用 hls.js 播 m3u8', /Hls\.isSupported\(\)/.test(mvjs) && /loadSource/.test(mvjs));
     ok('选集解析 play_url', /parseEps/.test(mvjs) && /playUrl/.test(mvjs));
@@ -655,17 +655,23 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('播完自动下一集', /nextEp/.test(mvjs) && /'ended'/.test(mvjs));
     ok('CSS 有影视样式', /\.mv-card\s*\{/.test(css) && /\.mv-player\s*\{/.test(css));
     ok('hls.js 已本地打包', fs.existsSync(path.join(ROOT, 'js/hls.light.min.js')));
-    ok('有首页推荐', /function loadRecommend/.test(mvjs) && /renderRecommend/.test(mvjs));
-    ok('推荐用无wd接口', /RECOMMEND_PATH|ac=detail&t=6/.test(mvjs));
-    ok('推荐卡片可点击搜索', /mv-reco/.test(mvjs) && /mvQuery/.test(mvjs));
+    ok('有首页分类导航', /function buildCatModel/.test(mvjs) && /function renderHome/.test(mvjs));
+    ok('首页按 ac=list 取分类', /ac=list/.test(mvjs));
+    ok('分类有大/子两级', /mv-catbar/.test(mvjs) && /mv-subbar/.test(mvjs));
+    ok('分类过滤成人向', /伦理\|情色\|成人/.test(mvjs));
+    ok('分类页有分页', /mv-pagebar/.test(mvjs) && /mv-pageinfo/.test(mvjs));
+    ok('分类不可用退回推荐', /renderRecommend/.test(mvjs) && /RECOMMEND_PATH/.test(mvjs));
+    ok('内置源为空（启动引导导入）', /还没有可用的点播源/.test(mvjs));
+    ok('CSS 有分类导航样式', /\.mv-catbar\s*\{/.test(css) && /\.mv-subbar\s*\{/.test(css));
+    ok('CSS 有分页样式', /\.mv-pagebar\s*\{/.test(css) && /\.mv-pageinfo\s*\{/.test(css));
     ok('直连优先（绕开服务器带宽）', /function probeDirect/.test(mvjs) && /function playUrlFor/.test(mvjs));
     ok('按域名缓存直连能力', /directOk\[host\]/.test(mvjs));
     ok('直连失败回退代理', /directOk\[host\] = false/.test(mvjs));
     ok('CSS 有推荐网格', /\.mv-reco-grid\s*\{/.test(css));
     var sjs = read('js/movie-sites.js');
-    ok('有源配置模块', /__vhMovieSites/.test(sjs));
+    ok('源模块存在', /__vhMovieSites/.test(sjs));
     ok('源可增删', /function add\(/.test(sjs) && /function remove\(/.test(sjs));
-    ok('源有内置默认', /var DEFAULTS = \[/.test(sjs));
+    ok('源数组存在（默认空）', /var DEFAULTS = \[\]/.test(sjs));
     ok('非法地址被拒', /需以 http.*开头/.test(sjs));
     ok('删除按域名归一', /function sameHost/.test(sjs));
     ok('支持订阅', /function parseSub/.test(sjs) && /function addSub/.test(sjs));
@@ -693,6 +699,12 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('有直播源管理', /mvLiveSrcMgr/.test(idx) && /__vhTvbox\.loadLives/.test(ljs));
     ok('有配置导入入口', /mvTvboxImp/.test(idx) && /importTvbox/.test(mvjs));
     ok('CSS 有直播样式', /\.mv-live-item\s*\{/.test(css) && /\.mv-grp\s*\{/.test(css));
+    ok('统一停播 __mvStopAll', /window\.__mvStopAll = function/.test(mvjs));
+    ok('关闭按钮调 __mvStopAll', /mvPlayerClose'\)[\s\S]{0,220}__mvStopAll/.test(mvjs));
+    ok('停播放会 pause+静音+清 src', /__mvStopAll = function[\s\S]{0,400}v\.pause\(\)/.test(mvjs) && /v\.muted = true/.test(mvjs));
+    ok('停播会销毁点播 hls', /__mvStopAll = function[\s\S]{0,700}hls\.destroy\(\)/.test(mvjs));
+    ok('停播会调 __mvLive.stop', /__mvStopAll = function[\s\S]{0,900}__mvLive[\s\S]{0,60}\.stop\(\)/.test(mvjs));
+    ok('直播导出 stop 并销毁 hls', /stop:\s*stop/.test(ljs) && /function stop\(\)[\s\S]{0,200}hls\.destroy\(\)/.test(ljs));
 }
 
 // ============================================================

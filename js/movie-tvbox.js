@@ -85,17 +85,8 @@
         var added = 0;
         var list;
         try { list = JSON.parse(localStorage.getItem(SITES_KEY) || '[]'); } catch (e) { list = []; }
-        if (!Array.isArray(list) || !list.length) {
-            // 没配置过就用内置默认（与 movie-sites.js 保持一致的前 6 个）
-            list = [
-                { key: 'ffzy', name: '非凡影视', api: 'http://ffzy5.tv' },
-                { key: 'zy360', name: '360资源', api: 'https://360zy.com' },
-                { key: 'jisu', name: '极速资源', api: 'https://jszyapi.com' },
-                { key: 'bfzy', name: '暴风资源', api: 'https://bfzyapi.com' },
-                { key: 'mdzy', name: '魔都资源', api: 'https://www.mdzyapi.com' },
-                { key: 'ruyi', name: '如意资源', api: 'https://cj.rycjapi.com' }
-            ];
-        }
+        if (!Array.isArray(list)) list = [];
+        // 初始为空是正常的：点播源来自用户导入的配置
         function host(u) {
             return String(u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '').split('/')[0];
         }

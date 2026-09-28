@@ -8,14 +8,9 @@
     var SUB_KEY = 'vh_movie_subs';
 
     // 内置默认源（2026-09-28 实测可用；已剔除 adult 源）
-    var DEFAULTS = [
-        { key: 'ffzy',  name: '非凡影视', api: 'http://ffzy5.tv' },
-        { key: 'zy360', name: '360资源',  api: 'https://360zy.com' },
-        { key: 'jisu',  name: '极速资源', api: 'https://jszyapi.com' },
-        { key: 'bfzy',  name: '暴风资源', api: 'https://bfzyapi.com' },
-        { key: 'mdzy',  name: '魔都资源', api: 'https://www.mdzyapi.com' },
-        { key: 'ruyi',  name: '如意资源', api: 'https://cj.rycjapi.com' }
-    ];
+    // 内置源留空：点播源改为「用户导入的 TVBox 配置」或手动添加。
+    // （之前内置的 6 个实测源已移除，避免与用户自己的配置混在一起）
+    var DEFAULTS = [];
 
     function normSite(s) {
         if (!s || typeof s !== 'object') return null;

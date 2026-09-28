@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.49.0",
-  "buildTime": "2026-09-28 14:57:16",
+  "version": "1.50.0",
+  "buildTime": "2026-09-28 15:25:28",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "影视新增电视直播板块（M3U/TXT 直播源、频道分组、EPG）+ TVBox/OK影视 配置导入（自动收可用点播源与直播源）"
+  "notes": "影视首页重做分类导航 + 修关闭播放后声音不止"
 }
