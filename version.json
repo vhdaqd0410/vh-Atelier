@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.43.2",
-  "buildTime": "2026-09-28 09:31:47",
+  "version": "1.44.0",
+  "buildTime": "2026-09-28 09:58:28",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修素材浏览「我的电脑」盘符进不去：盘符支持展开子目录，卷标读取加缓存"
+  "notes": "扒歌：点下载先询问保存目录（弹窗与音乐库一致，默认起始为音乐库目录），支持新建子目录"
 }

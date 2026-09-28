@@ -600,6 +600,22 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('卷标缓存命中不重跑', /if \(_driveLabelsCache\) \{ applyDriveLabels\(rows\); return; \}/.test(mjs));
     ok('卷标并发去重', /_driveLabelsPending/.test(mjs));
     ok('ensureChildren 支持 COMPUTER', /node\.abs === 'COMPUTER'/.test(mjs));
+
+    console.log('\n=== 坑 10：扒歌下载可选保存目录（与音乐库同一弹窗）===');
+    var bgmSel = read('js/bgm.js');
+    var musSel = read('js/music.js');
+    var srvSel = read('bgm/server.js');
+    ok('有 pickSongDir', /function pickSongDir/.test(bgmSel));
+    ok('起始目录取音乐库', /localStorage\.getItem\('mllibDir'\)/.test(bgmSel));
+    ok('复用音乐库选择器', /window\.__vhPickDir/.test(bgmSel));
+    ok('选择器已抽出公用', /function pickDirDialog/.test(musSel) && /window\.__vhPickDir = pickDirDialog/.test(musSel));
+    ok('音乐库原行为保留', /function chooseDlDir\(cb\) \{\s*pickDirDialog/.test(musSel));
+    ok('单个下载先选目录', /pickSongDir\(function \(dir\)/.test(bgmSel) && /doDownloadOneSong/.test(bgmSel));
+    ok('批量下载先选目录', /downloadSelectedSongs[\s\S]{0,500}pickSongDir/.test(bgmSel));
+    ok('下载请求带 dir', /body\.dir = dir/.test(bgmSel));
+    ok('用户取消则中止', /if \(dir === null\) return;/.test(bgmSel));
+    ok('服务端支持 dir', /paramDir \|\| musicDir\(\)/.test(srvSel));
+    ok('服务端返回实际目录', /wantDir \|\| musicDir\(\)/.test(srvSel));
 }
 
 // ============================================================

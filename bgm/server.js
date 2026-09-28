@@ -478,7 +478,7 @@ function httpGetJson(url, cookie) {
   })
 }
 
-async function downloadSongFile(songId, name, artist, cookie) {
+async function downloadSongFile(songId, name, artist, cookie, paramDir) {
   // 1) 拿直链（走本地 ncm 服务）
   const j = await httpGetJson('http://127.0.0.1:17890/song/url?id=' + encodeURIComponent(songId) + '&br=320000')
   const d = (j.data || [])[0]
@@ -494,7 +494,7 @@ async function downloadSongFile(songId, name, artist, cookie) {
       const j2 = await httpGetJson('http://127.0.0.1:17890/song/url?id=' + encodeURIComponent(songId) + '&br=128000')
       const d2 = (j2.data || [])[0]
       if (d2 && d2.url) {
-        const dir0 = musicDir()
+        const dir0 = paramDir || musicDir()
         const fn0 = safeName((name || 'song') + (artist ? ' - ' + artist : '')) + '.mp3'
         const out0 = path.join(dir0, fn0)
         if (!(fs.existsSync(out0) && fs.statSync(out0).size > 10000)) {
@@ -505,7 +505,7 @@ async function downloadSongFile(songId, name, artist, cookie) {
     } catch (e) {}
     throw new Error(why)
   }
-  const dir = musicDir()
+  const dir = paramDir || musicDir()
   const fn = safeName((name || 'song') + (artist ? ' - ' + artist : '')) + '.mp3'
   const out = path.join(dir, fn)
   if (fs.existsSync(out) && fs.statSync(out).size > 10000) return { file: out, size: fs.statSync(out).size, reused: true }
@@ -1441,22 +1441,31 @@ const server = http.createServer(async (req, res) => {
     if (p === '/song/download' && req.method === 'POST') {
       const b = await readBody(req)
       if (!b.id) return send(res, 200, { code: -1, msg: '缺少歌曲 id' })
+      // 目标目录：优先用面板传入的 dir（用户当场选的），否则退回默认音乐目录
+      let wantDir = ''
+      if (b.dir) {
+        try { fs.mkdirSync(b.dir, { recursive: true }); wantDir = b.dir; } catch (e) {}
+      }
       const job = newJob('songdl')
       job.msg = '获取歌曲直链'
       ;(async () => {
         try {
-          const r = await downloadSongFile(b.id, b.name || '', b.artist || '', getCookie())
+          const r = await downloadSongFile(b.id, b.name || '', b.artist || '', getCookie(), wantDir)
           job.result = { file: r.file, size: r.size, reused: !!r.reused }
           job.state = 'done'; job.percent = 100; job.msg = '已下载 ' + (r.size / 1048576).toFixed(1) + 'MB'
         } catch (e) { job.state = 'error'; job.msg = e.message }
       })()
-      return send(res, 200, { code: 0, data: { jobId: job.id, dir: musicDir() } })
+      return send(res, 200, { code: 0, data: { jobId: job.id, dir: wantDir || musicDir() } })
     }
 
     if (p === '/song/download-multi' && req.method === 'POST') {
       const b = await readBody(req)
       const list = b.songs || []
       if (!list.length) return send(res, 200, { code: -1, msg: '没有要下载的歌' })
+      let wantDir2 = ''
+      if (b.dir) {
+        try { fs.mkdirSync(b.dir, { recursive: true }); wantDir2 = b.dir; } catch (e) {}
+      }
       const job = newJob('songdl')
       ;(async () => {
         const ok = [], fail = []
@@ -1465,18 +1474,18 @@ const server = http.createServer(async (req, res) => {
           job.msg = `[${i + 1}/${list.length}] ${s.name || s.id}`
           job.percent = Math.round(i / list.length * 100)
           try {
-            const r = await downloadSongFile(s.id, s.name, s.artist, getCookie())
+            const r = await downloadSongFile(s.id, s.name, s.artist, getCookie(), wantDir2)
             ok.push({ file: r.file, name: s.name })
           } catch (e) { fail.push({ name: s.name, msg: e.message }) }
         }
-        job.result = { count: ok.length, files: ok, failed: fail, dir: musicDir() }
+        job.result = { count: ok.length, files: ok, failed: fail, dir: wantDir2 || musicDir() }
         job.state = 'done'; job.percent = 100
         var reasons = {}
         fail.forEach(function (f) { reasons[f.msg] = (reasons[f.msg] || 0) + 1 })
         var reasonTxt = Object.keys(reasons).map(function (k) { return k + '×' + reasons[k] }).join('；')
         job.msg = `完成：成功 ${ok.length} 首` + (fail.length ? `，失败 ${fail.length} 首（${reasonTxt}）` : '')
       })()
-      return send(res, 200, { code: 0, data: { jobId: job.id, dir: musicDir() } })
+      return send(res, 200, { code: 0, data: { jobId: job.id, dir: wantDir2 || musicDir() } })
     }
 
     if (p === '/song/move' && req.method === 'POST') {
