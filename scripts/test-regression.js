@@ -643,13 +643,13 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('切到影视有钩子', /__movieOnShow/.test(mj) && /__movieOnShow/.test(mvjs));
     ok('走自建 CORS 代理', /17897/.test(mvjs));
     ok('搜索用苹果CMS接口', /api\.php\/provide\/vod/.test(mvjs));
-    ok('聚合多源搜索', /SITES\.forEach/.test(mvjs));
-    ok('只保留实测可用源', /zy360/.test(mvjs) && /jisu/.test(mvjs) && /bfzy/.test(mvjs));
+    ok('聚合多源搜索', /list0\.forEach/.test(mvjs) && /sites\(\)/.test(mvjs));
+    ok('内置实测可用源（在 movie-sites.js）', /zy360/.test(read('js/movie-sites.js')) && /jisu/.test(read('js/movie-sites.js')) && /bfzy/.test(read('js/movie-sites.js')));
     ok('无 adult 源', !/adult/.test(mvjs));
     ok('用 hls.js 播 m3u8', /Hls\.isSupported\(\)/.test(mvjs) && /loadSource/.test(mvjs));
     ok('选集解析 play_url', /parseEps/.test(mvjs) && /playUrl/.test(mvjs));
     ok('过滤非直链源', /playableEps/.test(mvjs) && /isDirectSrc/.test(mvjs));
-    ok('多源默认选可播源', /firstDirect/.test(mvjs));
+    ok('多源自动选最快可播源', /var best = results\[0\]/.test(mvjs));
     ok('选集弹层', /renderEps/.test(mvjs) && /mv-eps-grid/.test(mvjs));
     ok('播放器有缓冲遮罩', /bufShow/.test(mvjs) && /mvBuf/.test(idx));
     ok('播完自动下一集', /nextEp/.test(mvjs) && /'ended'/.test(mvjs));
