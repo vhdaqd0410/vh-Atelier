@@ -727,6 +727,30 @@
                 </div>
                 <div id="bgmMusicDirLabel" style="font-size:10.5px;color:var(--muted);"></div>
                 <div id="bgmSongInfo" style="font-size:10.5px;color:var(--muted);"></div>
+                <!-- 试听条：只服务歌曲试听，与视频播放器互不干扰 -->
+                <div id="bgmSongBar" class="bgm-songbar" style="display:none;">
+                    <div class="bgm-songbar-row">
+                        <span class="bgm-songbar-ico">🎵</span>
+                        <span class="bgm-songbar-name" id="bgmSongName">未在试听</span>
+                        <span class="bgm-songbar-spacer"></span>
+                        <button class="bgm-pbtn" id="btnBgmSongPrev" title="上一首">◀</button>
+                        <button class="bgm-pbtn" id="btnBgmSongPlay" title="播放/暂停">▶</button>
+                        <button class="bgm-pbtn" id="btnBgmSongNext" title="下一首">▶</button>
+                        <span class="bgm-songbar-time" id="bgmSongCur">0:00</span>
+                        <input type="range" id="bgmSongVol" min="0" max="1" step="0.01" value="0.8"
+                            style="width:52px;flex:0 0 auto;" title="试听音量">
+                        <button class="bgm-pbtn" id="btnBgmSongClose" title="收起试听条">✕</button>
+                    </div>
+                    <div class="bgm-songbar-prog" id="bgmSongProgHit" title="点击/拖动跳转">
+                        <div class="bgm-songbar-fill" id="bgmSongFill"></div>
+                        <div class="bgm-songbar-knob" id="bgmSongKnob"></div>
+                    </div>
+                    <div class="bgm-songbar-sub">
+                        <span id="bgmSongDur">0:00</span>
+                        <span style="flex:1;"></span>
+                        <button class="bgm-songbar-loc" id="btnBgmSongLoc" title="定位到视频对应位置" style="display:none;">定位到视频</button>
+                    </div>
+                </div>
                 <div id="bgmResultList" class="bgm-list"></div>
             </div>
 

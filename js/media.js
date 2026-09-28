@@ -975,4 +975,17 @@
   };
   renderRootSel();
   refreshProjInfo();
+
+    // ---------- 对外暴露（供网盘板块复用导入能力）----------
+    // 说明：PR 的导入 API 只认本地文件路径，所以网盘板块先把文件下到本地，
+    //       再调这里导入/插入。避免重复实现分批、进度、素材箱逻辑。
+    window.__mediaImportList = function (filePaths, binName, label) {
+        try { importList(filePaths, binName, label); } catch (e) { flash('导入失败：' + e.message); }
+    };
+    window.__mediaInsertToTimeline = function (full) {
+        try { insertToTimeline(full, (full || '').split(/[\\/]/).pop()); } catch (e) { flash('插入失败：' + e.message); }
+    };
+    window.__mediaPickFolder = function (initial, title, cb) {
+        try { pickFolder(initial, title, cb); } catch (e) { flash('选目录失败：' + e.message); }
+    };
 })();

@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.31.0",
-  "buildTime": "2026-09-28 09:59:50",
+  "version": "1.32.0",
+  "buildTime": "2026-09-28 10:08:50",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "扒歌：点下载先询问保存目录（弹窗与音乐库一致，默认起始为音乐库目录）"
+  "notes": "同步主插件：歌曲试听条独立（不再与视频共用进度条）；补 media 对外接口"
 }
