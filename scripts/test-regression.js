@@ -616,6 +616,19 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('用户取消则中止', /if \(dir === null\) return;/.test(bgmSel));
     ok('服务端支持 dir', /paramDir \|\| musicDir\(\)/.test(srvSel));
     ok('服务端返回实际目录', /wantDir \|\| musicDir\(\)/.test(srvSel));
+
+    console.log('\n=== 坑 11：含 iframe 面板切走不黑屏 ===');
+    var mjs2 = read('js/main.js');
+    ok('有 IFRAME_PANELS 名单', /IFRAME_PANELS/.test(mjs2));
+    ok('名单含审片/超分/反馈/管理台', /shenpian: 1[\s\S]{0,90}upscale: 1[\s\S]{0,90}feedback: 1[\s\S]{0,90}admin: 1/.test(mjs2));
+    ok('bgm 不在名单（小窗要常驻）', !/IFRAME_PANELS = \{[^}]*bgm/.test(mjs2));
+    ok('iframe 面板切走保留布局', /IFRAME_PANELS\[key\][\s\S]{0,320}visibility = 'hidden'/.test(mjs2));
+    ok('iframe 面板切走移出可视区', /left = '-99999px'/.test(mjs2));
+    ok('普通面板仍 display:none', /display = 'none';/.test(mjs2) && /at-pane-hidden/.test(mjs2));
+    ok('普通面板分支存在（无 iframe）', /el\.style\.display = 'none';/.test(mjs2));
+    ok('切回时清隐藏态', /classList\.remove\('at-pane-hidden'\)/.test(mjs2));
+    ok('切回后触发重排', /at-pane-hidden[\s\S]{0,900}dispatchEvent\(new Event\('resize'\)\)/.test(mjs2));
+    ok('CSS 有 at-pane-hidden', /\.tab-panel\.at-pane-hidden/.test(css));
 }
 
 // ============================================================
