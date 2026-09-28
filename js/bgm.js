@@ -3529,10 +3529,64 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
     }
 
 
+    // ---------- 歌曲下载目录选择（复用音乐库那套弹窗）----------
+    // 用户要求：点下载时询问保存到哪，弹窗样式与音乐库一致，
+    // 起始目录默认就是音乐库目录。
+    var SONG_DL_DIR_KEY = 'vh_bgm_song_dl_dir';
+    function musicLibStartDir() {
+        // 优先：上次为歌曲选的目录 → 音乐库根（mllibDir）→ bgm 服务端音乐目录 → 空
+        try {
+            var last = localStorage.getItem(SONG_DL_DIR_KEY);
+            if (last) return last;
+        } catch (e) {}
+        try {
+            var ml = localStorage.getItem('mllibDir');
+            if (ml) return ml;
+        } catch (e) {}
+        return '';
+    }
+    function pickSongDir(cb) {
+        var start = musicLibStartDir();
+        var picked = false;
+        // 复用音乐库的树形目录选择器（window.__vhPickDir）
+        if (typeof window.__vhPickDir === 'function') {
+            window.__vhPickDir({
+                title: '选择歌曲保存目录',
+                tip: start ? ('音乐库目录: ' + start) : '选择保存位置',
+                startDir: start || undefined,
+                root: start || undefined
+            }, function (dir) {
+                if (!dir) { cb(null); return; }
+                try { localStorage.setItem(SONG_DL_DIR_KEY, dir); } catch (e) {}
+                cb(dir);
+            });
+            return;
+        }
+        // 兜底：目录选择器还没加载 → 用系统目录选择（素材板块的）
+        if (typeof window.__mediaPickFolder === 'function') {
+            window.__mediaPickFolder(start, '选择歌曲保存目录', function (p) {
+                if (p) { try { localStorage.setItem(SONG_DL_DIR_KEY, p); } catch (e) {} }
+                cb(p || null);
+            });
+            return;
+        }
+        // 最后兜底：不问，用默认
+        cb(null);
+    }
+
     // 下载一首歌到本地（存档后可拖入时间线）
     var pendingSongRow = null;
     function downloadOneSong(s, row) {
-        post('/song/download', { id: s.id, name: s.name, artist: s.artist }, 60000).then(function (r) {
+        // 先问保存到哪（弹窗与音乐库一致，默认音乐库目录）
+        pickSongDir(function (dir) {
+            if (dir === null) return;   // 用户取消
+            doDownloadOneSong(s, row, dir);
+        });
+    }
+    function doDownloadOneSong(s, row, dir) {
+        var body = { id: s.id, name: s.name, artist: s.artist };
+        if (dir) body.dir = dir;
+        post('/song/download', body, 60000).then(function (r) {
             if (!r || r.code !== 0) { flash((r && r.msg) || '\u4e0b\u8f7d\u5931\u8d25'); return; }
             curJobId = r.data.jobId;
             showProgress('\u4e0b\u8f7d\u300a' + s.name + '\u300b');
@@ -3834,12 +3888,17 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         var ids = Object.keys(selected);
         if (!ids.length) { flash('\u5148\u70b9\u300c\u9009\u7528\u300d\u52fe\u51fa\u8981\u4e0b\u8f7d\u7684\u6b4c'); return; }
         var songs = ids.map(function (k) { return selected[k]; });
-        post('/song/download-multi', { songs: songs }, 60000).then(function (r) {
+        pickSongDir(function (dir) {
+            if (dir === null) return;
+            var body = { songs: songs };
+            if (dir) body.dir = dir;
+            post('/song/download-multi', body, 60000).then(function (r) {
             if (!r || r.code !== 0) { flash((r && r.msg) || '\u4e0b\u8f7d\u5931\u8d25'); return; }
             curJobId = r.data.jobId;
             showProgress('\u6279\u91cf\u4e0b\u8f7d ' + songs.length + ' \u9996');
-            poll();
-        }).catch(function (e) { flash(e.message); });
+                poll();
+            }).catch(function (e) { flash(e.message); });
+        });
     }
 
     function toPlaylist() {
