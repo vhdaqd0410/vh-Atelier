@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.29.0",
-  "buildTime": "2026-09-26 18:03:46",
+  "version": "1.30.0",
+  "buildTime": "2026-09-28 09:37:54",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "已下载详情页的集列表改为紧凑数字网格（原一集一行太占空间），已下载/未下载分色，点击勾选、右键更多操作"
+  "notes": "同步主插件：导出新增 AME 队列通道（不占用 PR）、默认走 AME、进度时间修正、渲染完成保留 ME 历史；修素材浏览盘符进不去"
 }

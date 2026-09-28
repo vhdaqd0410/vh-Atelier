@@ -5418,3 +5418,24 @@ button.primary:hover { background: var(--btn-primary-hover); }
 
 /* 旧的行式列表样式保留（不改动其他引用），但详情页不再用 */
 
+/* ===== 多版本导出 · 渲染通道选择 ===== */
+.rnd-row { display: flex; gap: 8px; margin-top: 4px; }
+.rnd-opt {
+    flex: 1 1 0; min-width: 0;
+    display: flex; align-items: flex-start; gap: 6px;
+    padding: 7px 9px; cursor: pointer;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 7px; font-size: 11.5px; line-height: 1.35;
+    transition: border-color .15s, background .15s;
+}
+.rnd-opt:hover { background: rgba(255,255,255,.03); }
+.rnd-opt:has(input:checked) { border-color: var(--accent); background: rgba(139,124,246,.1); }
+.rnd-opt input { flex: 0 0 auto; margin-top: 2px; }
+.rnd-opt b { color: var(--text); font-weight: 600; }
+.rnd-opt em { color: var(--muted); font-style: normal; font-size: 10.5px; }
+.rnd-tip {
+    margin-top: 6px; font-size: 10.5px; color: var(--muted);
+    line-height: 1.45; padding: 5px 8px;
+    background: rgba(255,255,255,.02); border-radius: 5px;
+}
+.rnd-tip.is-ame { color: #9fe0ab; background: rgba(127,214,139,.08); }

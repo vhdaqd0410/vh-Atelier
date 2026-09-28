@@ -1147,6 +1147,99 @@ function meUnmuteAll() {
     } catch (e) { return "ERR:" + e; }
 }
 
+// ==================== AME 队列渲染（不占用 PR） ====================
+// 与 meExport 的区别：
+//   meExport  → exportAsMediaDirect，PR 前台渲染，导出期间 PR 被占用；
+//   下面这几个 → app.encoder，任务交给 Adobe Media Encoder 后台渲染。
+//
+// 关键机制：AME 在「任务入队那一刻」捕获序列状态（含音轨静音），
+// 所以能「版本A入队 → 改轨道 → 版本B入队」，各版本互不影响。
+// 这样可以先把一批任务全排进 ME 队列，最后统一开渲，PR 全程不参与渲染。
+
+// 把活动序列加入 AME 队列（只入队，不立即渲染）
+// 参数与 meExport 对齐：outputPath / presetPath / workAreaType
+function meEnqueueAME(outputPath, presetPath, workAreaType) {
+    try {
+        if (!app.encoder) return "ERR:当前 Premiere 不支持 app.encoder";
+        var s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+        var preset = new File(presetPath);
+        if (!preset.exists) return "ERR:找不到预设 " + presetPath;
+        var output = new File(outputPath);
+        var parent = output.parent;
+        if (parent && !parent.exists) parent.create();
+        var wa = (workAreaType === undefined || workAreaType === null) ? 0 : workAreaType;
+        // 第 5 参 removeUponCompletion：0 = 渲染完成后保留在 ME 队列里
+        //   （保留历史，便于回查/重渲；传 1 会在完成瞬间消失）
+        // 第 6 参：是否立即开始渲染（false = 只入队，等 meStartBatch）
+        //   注：官方文档只列 5 个参数，第 6 个在官方示例 PProPanel 中使用。
+        var REMOVE_AFTER = 0;
+        var jobId = app.encoder.encodeSequence(s, output.fsName, preset.fsName, wa, REMOVE_AFTER, false);
+        if (jobId === 0 || jobId === "0" || jobId === null || jobId === undefined) {
+            return "ERR:入队失败（返回 " + jobId + "）";
+        }
+        return "OK:" + jobId;
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 拉起 Adobe Media Encoder（首次启动较慢，建议提前调用）
+function meLaunchEncoder() {
+    try {
+        if (!app.encoder) return "ERR:当前 Premiere 不支持 app.encoder";
+        app.encoder.launchEncoder();
+        return "OK:";
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 开始渲染 AME 队列中已入队的全部任务
+function meStartBatch() {
+    try {
+        if (!app.encoder) return "ERR:当前 Premiere 不支持 app.encoder";
+        app.encoder.startBatch();
+        return "OK:";
+    } catch (e) { return "ERR:" + e; }
+}
+
+// 绑定 AME 任务事件 → 转发给 CEP 面板（供面板等待渲染完成）
+// CEP 侧在 window.__vhAmeHooks 里放好回调，这里把它们接到 AME 事件上。
+// 探测 app.encoder 是否可用（面板选择通道时提示用）
+function meEncoderAvailable() {
+    try {
+        if (!app.encoder) return "OK:" + JSON.stringify({ available: false, reason: "app.encoder 不可用" });
+        return "OK:" + JSON.stringify({ available: true });
+    } catch (e) {
+        return "OK:" + JSON.stringify({ available: false, reason: String(e) });
+    }
+}
+
+var _ameHooksBound = false;
+function meBindAmeCallbacks() {
+    try {
+        if (!app.encoder) return "ERR:app.encoder 不可用";
+        if (_ameHooksBound) return "OK:";
+        // ExtendScript 拿不到面板的 window，必须通过 CSXS 事件派发；
+        // 面板侧用 CSInterface.addEventListener('com.vh.ameJob', fn) 接收。
+        var _plugplug = null;
+        try { _plugplug = new ExternalObject("lib:PlugPlugExternalObject"); } catch (e) {}
+        function call(kind, a, b) {
+            try {
+                if (!_plugplug) return;
+                var ev = new CSXSEvent();
+                ev.type = "com.vh.ameJob";
+                ev.data = JSON.stringify({ kind: kind, jobId: String(a == null ? "" : a), payload: b == null ? "" : String(b) });
+                ev.dispatch();
+            } catch (e) {}
+        }
+        app.encoder.bind("onEncoderJobComplete", function (jobId, outPath) { call("complete", jobId, outPath); });
+        app.encoder.bind("onEncoderJobError", function (jobId, msg) { call("error", jobId, msg); });
+        app.encoder.bind("onEncoderJobCanceled", function (jobId) { call("canceled", jobId); });
+        app.encoder.bind("onEncoderJobProgress", function (jobId, pct) { call("progress", jobId, pct); });
+        _ameHooksBound = true;
+        return "OK:";
+    } catch (e) { return "ERR:" + e; }
+}
+
+
 // 用指定预设导出活动序列
 // exportType: 0 = 整个序列, 1 = 入点到出点
 function meExport(outputPath, presetPath, exportType) {
