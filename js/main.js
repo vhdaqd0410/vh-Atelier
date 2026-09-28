@@ -46,9 +46,54 @@
     Object.keys(groups).forEach(function (g) { currentInGroup[g] = groups[g].default; });
 
     // 真正显示某个 panel
+    // 含 iframe 的面板：切走时不能 display:none
+    // 原因：display:none 会把 iframe 压成 0×0，CEP 的 Chromium 会丢弃跨域
+    //       iframe 的合成层，切回来就是黑屏（只能手动刷新）。
+    //       改用「保留尺寸的隐藏」：绝对定位 + visibility:hidden + 移出可视区。
+    var IFRAME_PANELS = { shenpian: 1, upscale: 1, feedback: 1 };
+
     function showPanel(name) {
         Object.keys(panels).forEach(function (key) {
-            panels[key].style.display = (key === name) ? '' : 'none';
+            var el = panels[key];
+            if (!el) return;
+            if (key === name) {
+                var wasHidden = el.classList.contains('at-pane-hidden');
+                el.classList.remove('at-pane-hidden');
+                el.style.display = '';
+                el.style.position = '';
+                el.style.visibility = '';
+                el.style.left = '';
+                el.style.top = '';
+                el.style.width = '';
+                // 保险：从「保留尺寸隐藏」恢复时触发一次重排 + resize，
+                // 让 CEF 重算合成层，避免个别版本下 iframe 仍空白。
+                if (wasHidden && IFRAME_PANELS[key]) {
+                    setTimeout(function () {
+                        try {
+                            void el.offsetHeight;
+                            var fr = el.querySelector('iframe');
+                            if (fr) { void fr.offsetHeight; }
+                            window.dispatchEvent(new Event('resize'));
+                        } catch (e) {}
+                    }, 40);
+                }
+            } else if (IFRAME_PANELS[key]) {
+                el.classList.add('at-pane-hidden');
+                el.style.display = '';
+                el.style.position = 'absolute';
+                el.style.visibility = 'hidden';
+                el.style.left = '-99999px';
+                el.style.top = '0';
+                el.style.width = '100%';
+            } else {
+                el.classList.remove('at-pane-hidden');
+                el.style.position = '';
+                el.style.visibility = '';
+                el.style.left = '';
+                el.style.top = '';
+                el.style.width = '';
+                el.style.display = 'none';
+            }
         });
     }
 

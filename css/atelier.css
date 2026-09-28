@@ -5510,3 +5510,21 @@ button.primary:hover { background: var(--btn-primary-hover); }
     background: rgba(255,255,255,.02); border-radius: 5px;
 }
 .rnd-tip.is-ame { color: #9fe0ab; background: rgba(127,214,139,.08); }
+
+/* ===== 含 iframe 面板的隐藏态（避免 iframe 被 Chromium 丢弃合成层） ===== */
+.tab-panel.at-pane-hidden {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+.tab-panel.at-pane-hidden > * {
+    visibility: hidden !important;
+}
+.tab-panel.at-pane-hidden .bgm-dlg-mask,
+.tab-panel.at-pane-hidden .bgm-toast-host,
+.tab-panel.at-pane-hidden .nd-menu,
+.tab-panel.at-pane-hidden .nd-prev-mask,
+.tab-panel.at-pane-hidden .log-overlay,
+.tab-panel.at-pane-hidden #sfxContextMenu,
+.tab-panel.at-pane-hidden #mllibContextMenu {
+    display: none !important;
+}

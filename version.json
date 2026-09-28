@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.32.1",
-  "buildTime": "2026-09-28 10:12:28",
+  "version": "1.33.0",
+  "buildTime": "2026-09-28 12:47:44",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修 changelog 缺版本号：11 条条目的 version 回填（按 git 提交记录），跨版本文更不再漏"
+  "notes": "同步主插件：修审片/超分/反馈面板切走再切回黑屏（含 iframe 面板改用保留尺寸的隐藏）"
 }
