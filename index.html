@@ -85,6 +85,7 @@
     </div>
     <div class="tabs ws-subtabs" data-group="movie" style="display:none;">
         <button class="tab active" data-tab="movie">在线影视</button>
+        <button class="tab" data-tab="mvlive">电视直播</button>
     </div>
     <div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
         <button class="tab active" data-tab="upscale">去字幕 / 超分</button>
@@ -1488,6 +1489,7 @@
                 <input type="text" id="mvQuery" class="mv-input" placeholder="输入片名搜索（如：庆余年）">
                 <button class="tbtn primary" id="mvSearch">搜索</button>
                 <button class="tbtn" id="mvSiteMgr" title="添加/删除采集源、配置订阅">⚙ 源管理</button>
+                <button class="tbtn" id="mvTvboxImp" title="粘贴 TVBox / OK影视 配置地址，自动导入可用的点播与直播源">📥 导入配置</button>
                 <span class="mv-state" id="mvState"></span>
             </div>
             <!-- 源筛选 -->
@@ -1497,6 +1499,24 @@
             <div class="mv-body">
                 <div class="mv-results" id="mvResults">
                     <div class="hint mv-empty">输入片名搜索，或从下方热播榜挑一个</div>
+                </div>
+            </div>
+
+            <!-- TVBox 配置导入弹层 -->
+            <div class="mv-pick" id="mvTvboxBox" style="display:none;">
+                <div class="mv-pick-box" style="width:620px;">
+                    <div class="mv-pick-head">
+                        <span>📥 导入 TVBox / OK影视 配置</span>
+                        <span style="flex:1;"></span>
+                        <button class="tbtn" id="mvTvboxClose">✕</button>
+                    </div>
+                    <div class="mv-mgr-add">
+                        <input type="text" id="mvTvboxUrl" class="mv-input" placeholder="配置地址，如 https://xxx.com/tvbox.json" style="flex:1;">
+                        <button class="tbtn primary" id="mvTvboxGo">解析并导入</button>
+                    </div>
+                    <div class="mv-tvbox-note">说明：只导入「网页可直接请求」的点播源；<br>依赖 Android spider 的源（csp_ 开头）在本环境无法运行，会自动跳过。</div>
+                    <div class="mv-mgr-list" id="mvTvboxResult" style="max-height:220px;"></div>
+                    <div class="mv-mgr-hint" id="mvTvboxHint"></div>
                 </div>
             </div>
 
@@ -1558,6 +1578,41 @@
                     </div>
                 </div>
                 <div class="mv-player-info" id="mvPlayerInfo"></div>
+            </div>
+        </div>
+    </div>
+
+<div class="tab-panel" id="panel-mvlive" style="display:none;">
+        <div class="mv-wrap">
+            <div class="mv-bar">
+                <span class="mv-live-title">📺 电视直播</span>
+                <button class="tbtn" id="mvLiveSrcMgr" title="添加/删除直播源（M3U/TXT）">📺 直播源</button>
+                <button class="tbtn" id="mvLiveReload" title="重新加载所有直播源">↻ 重载</button>
+                <span class="mv-state" id="mvLiveState"></span>
+            </div>
+            <div class="mv-srcbar" id="mvLiveGroups"></div>
+            <div class="mv-body">
+                <div class="mv-results mv-live-list" id="mvLiveList">
+                    <div class="hint mv-empty">正在读取直播源…</div>
+                </div>
+            </div>
+
+            <!-- 直播源管理弹层 -->
+            <div class="mv-pick" id="mvLiveSrcBox" style="display:none;">
+                <div class="mv-pick-box" style="width:600px;">
+                    <div class="mv-pick-head">
+                        <span>📺 直播源</span>
+                        <span style="flex:1;"></span>
+                        <button class="tbtn" id="mvLiveSrcClose">✕</button>
+                    </div>
+                    <div class="mv-mgr-add">
+                        <input type="text" id="mvLiveSrcName" class="mv-input" placeholder="名称" style="flex:0 0 120px;">
+                        <input type="text" id="mvLiveSrcUrl" class="mv-input" placeholder="M3U 或 TXT 播放列表地址" style="flex:1;">
+                        <button class="tbtn primary" id="mvLiveSrcAdd">添加</button>
+                    </div>
+                    <div class="mv-mgr-list" id="mvLiveSrcList"></div>
+                    <div class="mv-mgr-hint" id="mvLiveSrcHint">支持标准 M3U（#EXTM3U）与 TXT（频道名,地址）两种格式</div>
+                </div>
             </div>
         </div>
     </div>
@@ -1775,6 +1830,8 @@
     <script src="js/netdisk.js"></script>
     <script src="js/hls.light.min.js"></script>
     <script src="js/movie-sites.js"></script>
+    <script src="js/movie-tvbox.js"></script>
+    <script src="js/movie-live.js"></script>
     <script src="js/movie.js"></script>
     <script src="js/feedback.js"></script>
     <script src="js/feedback-ui.js"></script>

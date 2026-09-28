@@ -17,6 +17,7 @@
         progress: document.getElementById('panel-progress'),
         script: document.getElementById('panel-script'),
         movie: document.getElementById('panel-movie'),
+        mvlive: document.getElementById('panel-mvlive'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
         prconv: document.getElementById('panel-prconv'),
@@ -35,7 +36,7 @@
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
-        movie: { members: ['movie'], default: 'movie' },
+        movie: { members: ['movie', 'mvlive'], default: 'movie' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' },
         prconv: { members: ['prconv', 'colorxml'], default: 'prconv' },
@@ -163,6 +164,10 @@
         // 影视：切到时初始化（首次拉源列表）
         if (name === 'movie' && window.__movieOnShow) {
             try { window.__movieOnShow(); } catch (e) {}
+        }
+        // 电视直播：切到时加载频道列表
+        if (name === 'mvlive' && window.__mvLive && window.__mvLive.loadAll) {
+            try { window.__mvLive.loadAll(); } catch (e) {}
         }
         if (name === 'shenpian' && window.__spAutoLoad) {
             try { window.__spAutoLoad(); } catch (e) {}

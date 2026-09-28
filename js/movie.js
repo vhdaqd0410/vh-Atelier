@@ -612,10 +612,84 @@
         if (b) b.addEventListener('click', pullSubs);
     }
 
+    // ---------- TVBox 配置导入 ----------
+    function tvboxHint(t, isErr) {
+        var el = $('mvTvboxHint');
+        if (el) { el.textContent = t || ''; el.style.color = isErr ? '#f6a1b1' : '#7fd68b'; }
+    }
+
+    function importTvbox() {
+        var url = ($('mvTvboxUrl').value || '').trim();
+        if (!/^https?:\/\//i.test(url)) { tvboxHint('配置地址需以 http(s):// 开头', true); return; }
+        var box = $('mvTvboxResult');
+        box.innerHTML = '<div class="hint" style="padding:6px;">正在拉取配置…</div>';
+        tvboxHint('');
+        apiGet(url, 25000).then(function (j) {
+            var r = window.__vhTvbox.parseConfig(j, url);
+            // 点播源并入现有列表
+            var m = window.__vhTvbox.mergeVod(r.vod);
+            // 直播源自动加入
+            var lv = 0;
+            r.live.forEach(function (s) {
+                var a = window.__vhTvbox.addLive(s);
+                if (a.ok) lv++;
+            });
+            // 展示结果
+            box.innerHTML = '';
+            function line(tag, txt, cls) {
+                var d = document.createElement('div');
+                d.className = 'mv-tvbox-line' + (cls ? ' ' + cls : '');
+                d.textContent = tag + ' ' + txt;
+                box.appendChild(d);
+            }
+            line('✅', '点播源：共解析 ' + r.stats.vodTotal + ' 个，可用 ' + r.stats.vodUsable
+                + ' 个，新增 ' + m.added + ' 个（现共 ' + m.total + ' 个）');
+            if (r.stats.vodSpider) {
+                line('⏭', '跳过 ' + r.stats.vodSpider + ' 个（依赖 Android spider，本环境无法运行）', 'warn');
+            }
+            if (r.stats.vodOther) {
+                line('❔', '其他不可用 ' + r.stats.vodOther + ' 个', 'warn');
+            }
+            line('✅', '直播源：共 ' + r.stats.liveTotal + ' 个，可用 ' + r.stats.liveUsable + ' 个，新增 ' + lv + ' 个');
+            if (r.vod.length) {
+                line('📋', '可用点播源：' + r.vod.slice(0, 6).map(function (v) { return v.name; }).join('、')
+                    + (r.vod.length > 6 ? ' 等' : ''));
+            }
+            if (r.live.length) {
+                line('📋', '可用直播源：' + r.live.map(function (v) { return v.name; }).join('、'));
+            }
+            tvboxHint('导入完成。点播源已生效，直播源到「📺 电视直播」页查看');
+            // 刷新源管理列表（如果开着）
+            try { renderSiteList(); } catch (e) {}
+        }).catch(function (e) {
+            box.innerHTML = '';
+            tvboxHint('拉取或解析失败：' + (e && e.message || e), true);
+        });
+    }
+
+    function bindTvbox() {
+        var b = $('mvTvboxImp');
+        if (b) b.addEventListener('click', function () {
+            $('mvTvboxBox').style.display = '';
+            tvboxHint('');
+            $('mvTvboxResult').innerHTML = '';
+        });
+        b = $('mvTvboxClose');
+        if (b) b.addEventListener('click', function () { $('mvTvboxBox').style.display = 'none'; });
+        b = $('mvTvboxGo');
+        if (b) b.addEventListener('click', importTvbox);
+        b = $('mvTvboxUrl');
+        if (b) b.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.keyCode === 13) { e.stopPropagation(); importTvbox(); }
+        });
+    }
+
     // ---------- 绑定 ----------
     function bind() {
         var b;
         bindSiteMgr();
+        bindTvbox();
+        if (window.__mvLive && window.__mvLive.bind) { try { window.__mvLive.bind(); } catch (e) {} }
         b = $('mvSearch'); if (b) b.addEventListener('click', search);
         b = $('mvQuery');
         if (b) b.addEventListener('keydown', function (e) {

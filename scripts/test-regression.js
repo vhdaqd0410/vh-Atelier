@@ -676,6 +676,23 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('自动选最快源', /var best = results\[0\]/.test(mvjs));
     ok('movie.js 用配置源', /function sites\(\)/.test(mvjs) && /__vhMovieSites\.load/.test(mvjs));
     ok('CSS 有源管理样式', /\.mv-mgr-row\s*\{/.test(css));
+    var tjs = read('js/movie-tvbox.js');
+    var ljs = read('js/movie-live.js');
+    ok('有 TVBox 配置解析', /parseConfig/.test(tjs));
+    ok('只收可用点播源', /function usableVod/.test(tjs));
+    ok('跳过 spider 源', /vodSpider/.test(tjs) && /type.*3/.test(tjs));
+    ok('解析直播源', /liveTotal/.test(tjs) && /lives/.test(tjs));
+    ok('M3U 播放列表解析', /function parsePlaylist/.test(tjs) && /EXTINF/.test(tjs));
+    ok('TXT 播放列表解析', /#genre#/.test(tjs));
+    ok('点播源可并入', /function mergeVod/.test(tjs));
+    ok('有直播面板', /id="panel-mvlive"/.test(idx));
+    ok('直播子tab', /data-tab="mvlive"/.test(idx));
+    ok('main.js 注册直播', /mvlive: document\.getElementById\('panel-mvlive'\)/.test(mj));
+    ok('直播并入影视组', /members: \['movie', 'mvlive'\]/.test(mj));
+    ok('切到直播自动加载', /__mvLive\.loadAll/.test(mj));
+    ok('有直播源管理', /mvLiveSrcMgr/.test(idx) && /__vhTvbox\.loadLives/.test(ljs));
+    ok('有配置导入入口', /mvTvboxImp/.test(idx) && /importTvbox/.test(mvjs));
+    ok('CSS 有直播样式', /\.mv-live-item\s*\{/.test(css) && /\.mv-grp\s*\{/.test(css));
 }
 
 // ============================================================
