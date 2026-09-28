@@ -5203,3 +5203,13 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .mv-reco-cover img { width: 100%; height: 100%; object-fit: cover; }
 .mv-reco-name { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mv-reco-sub { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 影视：源管理 */
+.mv-mgr-sec { font-size: 11.5px; color: var(--muted); margin: 8px 0 6px; }
+.mv-mgr-add { display: flex; gap: 6px; align-items: center; }
+.mv-mgr-list { margin-top: 6px; max-height: 170px; overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; }
+.mv-mgr-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; font-size: 11.5px; }
+.mv-mgr-row:hover { background: rgba(255,255,255,.04); }
+.mv-mgr-name { flex: 0 0 auto; color: var(--text); min-width: 76px; }
+.mv-mgr-api { flex: 1 1 auto; min-width: 0; color: var(--muted); font-family: Consolas, monospace; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-mgr-hint { margin-top: 8px; font-size: 11px; min-height: 14px; }

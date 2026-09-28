@@ -662,6 +662,20 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('按域名缓存直连能力', /directOk\[host\]/.test(mvjs));
     ok('直连失败回退代理', /directOk\[host\] = false/.test(mvjs));
     ok('CSS 有推荐网格', /\.mv-reco-grid\s*\{/.test(css));
+    var sjs = read('js/movie-sites.js');
+    ok('有源配置模块', /__vhMovieSites/.test(sjs));
+    ok('源可增删', /function add\(/.test(sjs) && /function remove\(/.test(sjs));
+    ok('源有内置默认', /var DEFAULTS = \[/.test(sjs));
+    ok('非法地址被拒', /需以 http.*开头/.test(sjs));
+    ok('删除按域名归一', /function sameHost/.test(sjs));
+    ok('支持订阅', /function parseSub/.test(sjs) && /function addSub/.test(sjs));
+    ok('订阅兼容多格式', /json\.sites/.test(sjs) && /json\.list/.test(sjs));
+    ok('有源管理 UI', /mvSiteMgr/.test(idx) && /mvSiteList/.test(idx));
+    ok('有测速选源', /function speedOf/.test(mvjs) && /KB\/s/.test(mvjs));
+    ok('测速后按速度排序', /sort\(function \(a, b\) \{ return \(b\.speed/.test(mvjs));
+    ok('自动选最快源', /var best = results\[0\]/.test(mvjs));
+    ok('movie.js 用配置源', /function sites\(\)/.test(mvjs) && /__vhMovieSites\.load/.test(mvjs));
+    ok('CSS 有源管理样式', /\.mv-mgr-row\s*\{/.test(css));
 }
 
 // ============================================================

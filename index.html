@@ -1487,6 +1487,7 @@
             <div class="mv-bar">
                 <input type="text" id="mvQuery" class="mv-input" placeholder="输入片名搜索（如：庆余年）">
                 <button class="tbtn primary" id="mvSearch">搜索</button>
+                <button class="tbtn" id="mvSiteMgr" title="添加/删除采集源、配置订阅">⚙ 源管理</button>
                 <span class="mv-state" id="mvState"></span>
             </div>
             <!-- 源筛选 -->
@@ -1496,6 +1497,33 @@
             <div class="mv-body">
                 <div class="mv-results" id="mvResults">
                     <div class="hint mv-empty">输入片名搜索，或从下方热播榜挑一个</div>
+                </div>
+            </div>
+
+            <!-- 源管理弹层 -->
+            <div class="mv-pick" id="mvSiteMgrBox" style="display:none;">
+                <div class="mv-pick-box" style="width:620px;">
+                    <div class="mv-pick-head">
+                        <span>⚙ 源管理</span>
+                        <span style="flex:1;"></span>
+                        <button class="tbtn" id="mvSiteMgrClose">✕</button>
+                    </div>
+                    <div class="mv-mgr-sec">采集源（苹果CMS 接口）</div>
+                    <div class="mv-mgr-add">
+                        <input type="text" id="mvSiteName" class="mv-input" placeholder="名称（如：某某资源）" style="flex:0 0 130px;">
+                        <input type="text" id="mvSiteApi" class="mv-input" placeholder="接口地址，如 https://xxx.com" style="flex:1;">
+                        <button class="tbtn primary" id="mvSiteAdd">添加</button>
+                        <button class="tbtn" id="mvSiteReset" title="恢复内置默认源">恢复默认</button>
+                    </div>
+                    <div class="mv-mgr-list" id="mvSiteList"></div>
+                    <div class="mv-mgr-sec" style="margin-top:10px;">订阅（粘贴 JSON 源列表地址，自动合并）</div>
+                    <div class="mv-mgr-add">
+                        <input type="text" id="mvSubUrl" class="mv-input" placeholder="https://.../sources.json" style="flex:1;">
+                        <button class="tbtn primary" id="mvSubAdd">订阅</button>
+                        <button class="tbtn" id="mvSubPull" title="拉取所有订阅并合并">拉取更新</button>
+                    </div>
+                    <div class="mv-mgr-list" id="mvSubList"></div>
+                    <div class="mv-mgr-hint" id="mvMgrHint"></div>
                 </div>
             </div>
 
@@ -1746,6 +1774,7 @@
     <script src="js/iframe-nav.js"></script>
     <script src="js/netdisk.js"></script>
     <script src="js/hls.light.min.js"></script>
+    <script src="js/movie-sites.js"></script>
     <script src="js/movie.js"></script>
     <script src="js/feedback.js"></script>
     <script src="js/feedback-ui.js"></script>

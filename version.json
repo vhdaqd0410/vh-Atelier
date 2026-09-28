@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.47.0",
-  "buildTime": "2026-09-28 14:07:36",
+  "version": "1.48.0",
+  "buildTime": "2026-09-28 14:25:28",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "影视板块：加首页推荐（最新电影）+ 播放直连优先（源站带 CORS 时绕开服务器带宽，缓解卡顿）"
+  "notes": "影视：源可配置（增删/恢复默认/订阅更新）+ 播放前多源测速自动选最快源"
 }

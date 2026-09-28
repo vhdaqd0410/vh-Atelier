@@ -11,15 +11,13 @@
     var PROXY = 'http://47.122.108.231:17897/';   // 自建 CORS 代理
     var PROXY_KEY = 'vh_movie_proxy';
 
-    // 采集源（实测可用 + 已剔除成人源）
-    var SITES = [
-        { key: 'ffzy',  name: '非凡影视', api: 'http://ffzy5.tv' },
-        { key: 'zy360', name: '360资源',  api: 'https://360zy.com' },
-        { key: 'jisu',  name: '极速资源', api: 'https://jszyapi.com' },
-        { key: 'bfzy',  name: '暴风资源', api: 'https://bfzyapi.com' },
-        { key: 'mdzy',  name: '魔都资源', api: 'https://www.mdzyapi.com' },
-        { key: 'ruyi',  name: '如意资源', api: 'https://cj.rycjapi.com' }
-    ];
+    // 采集源：优先用可配置的源（js/movie-sites.js），没有则用内置默认
+    function sites() {
+        try {
+            if (window.__vhMovieSites) return window.__vhMovieSites.load();
+        } catch (e) {}
+        return [];
+    }
 
     var SEARCH_PATH = '/api.php/provide/vod/?ac=detail&wd=';
     // 首页推荐：无 wd 参数即返回最新/热播列表
@@ -157,8 +155,10 @@
         setState('搜索中…');
 
         var done = 0, all = [];
-        var total = SITES.length;
-        SITES.forEach(function (site) {
+        var list0 = sites();
+        var total = list0.length;
+        if (!total) { box.innerHTML = '<div class="hint mv-empty">没有可用源，请到「源管理」添加</div>'; return; }
+        list0.forEach(function (site) {
             var u = site.api + SEARCH_PATH + encodeURIComponent(q);
             fetchJson(u, 20000).then(function (j) {
                 var list = (j && j.list) || [];
@@ -234,36 +234,108 @@
     var pickState = null;
 
     function openPickMulti(g) {
-        // 多源同片：先列出源供选，并默认选中第一个源直接渲染集数
-        // （否则用户点开只看到空白，以为没数据）
+        // 多源同片：列出源供选，并异步测速，默认选最快的可播源。
         var ov = $('mvPick'), tt = $('mvPickTitle'), srcBox = $('mvPickSrc'), epsBox = $('mvPickEps');
         $('mvPick').style.display = '';
-        tt.textContent = g.name + ' · 选择来源';
+        tt.textContent = g.name + ' · 选择来源（自动测速）';
         srcBox.innerHTML = '';
-        epsBox.innerHTML = '';
-        var firstBtn = null, firstDirect = null;
+        epsBox.innerHTML = '<div class="hint" style="padding:8px;">正在测速…</div>';
+
+        // 只为「有直链」的源建按钮，并记录按钮引用
+        var entries = [];
         g.items.forEach(function (it) {
-            var b = document.createElement('button');
             var ok2 = isDirectSrc(it);
+            var b = document.createElement('button');
             b.className = 'tbtn mv-pickbtn' + (ok2 ? '' : ' mv-nodirect');
-            b.textContent = it.siteName + (ok2 ? '' : '（非直链）');
-            b.title = ok2 ? '可直接播放' : '该源返回的是网页播放页，插件里播不了';
+            b.textContent = it.siteName + (ok2 ? ' …' : '（非直链）');
+            b.title = ok2 ? '等待测速' : '该源返回的是网页播放页，插件里播不了';
+            b.disabled = !ok2;
             b.addEventListener('click', function () {
                 Array.prototype.forEach.call(srcBox.children, function (c) { c.classList.remove('on'); });
                 b.classList.add('on');
                 renderEps(it);
             });
             srcBox.appendChild(b);
-            if (!firstBtn) firstBtn = b;
-            if (!firstDirect && ok2) firstDirect = { btn: b, item: it };
+            if (ok2) entries.push({ item: it, btn: b });
         });
-        // 默认选中「第一个可直接播放的源」（没有则退到第一个）并直接渲染集数，
-        // 避免用户点开只看到空白。
-        var pickOne = firstDirect || (firstBtn ? { btn: firstBtn, item: g.items[0] } : null);
-        if (pickOne) {
-            pickOne.btn.classList.add('on');
-            try { renderEps(pickOne.item); } catch (e) {}
+
+        if (!entries.length) {
+            epsBox.innerHTML = '<div class="hint" style="padding:8px;">该片暂无可直接播放的源</div>';
+            return;
         }
+
+        // 并发测速：取第一个分片的字节数/耗时 算 KB/s
+        var results = [];
+        var pending = entries.length;
+        entries.forEach(function (e2) {
+            speedOf(e2.item, function (kbps) {
+                e2.speed = kbps;
+                e2.btn.textContent = e2.item.siteName + (kbps > 0 ? (' ' + kbps + ' KB/s') : ' 测速失败');
+                e2.btn.title = kbps > 0 ? ('实测 ' + kbps + ' KB/s') : '测速失败，仍可尝试播放';
+                results.push(e2);
+                pending--;
+                if (pending === 0) done();
+            });
+        });
+
+        function done() {
+            // 按时速降序排按钮，选最快的并直接渲染集数
+            results.sort(function (a, b) { return (b.speed || 0) - (a.speed || 0); });
+            srcBox.innerHTML = '';
+            results.forEach(function (e3) { srcBox.appendChild(e3.btn); });
+            // 非直链的排在后面（不可点）
+            g.items.forEach(function (it) {
+                if (isDirectSrc(it)) return;
+                var b2 = document.createElement('button');
+                b2.className = 'tbtn mv-pickbtn mv-nodirect';
+                b2.textContent = it.siteName + '（非直链）';
+                b2.disabled = true;
+                srcBox.appendChild(b2);
+            });
+            var best = results[0];
+            if (best) {
+                best.btn.classList.add('on');
+                best.btn.textContent = best.item.siteName + (best.speed > 0 ? (' ' + best.speed + ' KB/s ★') : ' ★');
+                try { renderEps(best.item); } catch (e) {}
+            }
+        }
+    }
+
+    // 测一个源的播放速度：取第一集 m3u8，量下载耗时与字节数。
+    // 返回约整的 KB/s（拿不到算 0）。
+    function speedOf(item, cb) {
+        var eps = playableEps(item);
+        if (!eps.length) return cb(0);
+        var raw = eps[0].url;
+        var host = '';
+        try { host = new URL(raw).host; } catch (e) {}
+        var testUrl = (host && directOk[host] === true) ? raw
+            : proxy() + 'proxy?url=' + encodeURIComponent(raw);
+        var t0 = Date.now();
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', testUrl, true);
+        xhr.timeout = 8000;
+        xhr.onreadystatechange = function () {
+            // 收够 200KB 或结束时算速度
+            if (xhr.readyState === 4) { finish(); }
+        };
+        xhr.onprogress = function (e) {
+            if (e.loaded >= 200000) { try { xhr.abort(); } catch (er) {} finish(); }
+        };
+        xhr.onerror = function () { cb(0); };
+        xhr.ontimeout = function () { finish(); };
+        var finished = false;
+        function finish() {
+            if (finished) return;
+            finished = true;
+            var dt = (Date.now() - t0) / 1000;
+            var len = 0;
+            try { len = (xhr.responseText || '').length; } catch (e) {}
+            if (!len) { try { len = xhr.response ? (xhr.response.byteLength || xhr.response.length || 0) : 0; } catch (e) {} }
+            if (dt <= 0 || !len) return cb(0);
+            cb(Math.round(len / 1024 / dt));
+        }
+        try { xhr.send(); } catch (e) { cb(0); }
     }
 
     function openPick(it) {
@@ -413,9 +485,137 @@
         play(curPlay.item, curPlay.eps[i], curPlay.eps, i);
     }
 
+    // ---------- 源管理 ----------
+    function mgrHint(t, isErr) {
+        var el = $('mvMgrHint');
+        if (el) { el.textContent = t || ''; el.style.color = isErr ? '#f6a1b1' : '#7fd68b'; }
+    }
+
+    function renderSiteList() {
+        var box = $('mvSiteList');
+        if (!box || !window.__vhMovieSites) return;
+        var list = window.__vhMovieSites.load();
+        box.innerHTML = '';
+        if (!list.length) { box.innerHTML = '<div class="hint" style="padding:6px;">暂无源</div>'; return; }
+        list.forEach(function (s) {
+            var row = document.createElement('div');
+            row.className = 'mv-mgr-row';
+            row.innerHTML = '<span class="mv-mgr-name"></span><span class="mv-mgr-api"></span>';
+            row.querySelector('.mv-mgr-name').textContent = s.name;
+            row.querySelector('.mv-mgr-api').textContent = s.api;
+            row.querySelector('.mv-mgr-api').title = s.api;
+            var del = document.createElement('button');
+            del.className = 'tbtn';
+            del.textContent = '删除';
+            del.style.cssText = 'padding:2px 8px;font-size:11px;color:#f6a1b1;';
+            del.addEventListener('click', function () {
+                window.__vhMovieSites.remove(s.key);
+                renderSiteList();
+                mgrHint('已删除：' + s.name);
+            });
+            row.appendChild(del);
+            box.appendChild(row);
+        });
+    }
+
+    function renderSubList() {
+        var box = $('mvSubList');
+        if (!box || !window.__vhMovieSites) return;
+        var subs = window.__vhMovieSites.loadSubs();
+        box.innerHTML = '';
+        if (!subs.length) { box.innerHTML = '<div class="hint" style="padding:6px;">暂无订阅</div>'; return; }
+        subs.forEach(function (u) {
+            var row = document.createElement('div');
+            row.className = 'mv-mgr-row';
+            var sp = document.createElement('span');
+            sp.className = 'mv-mgr-api';
+            sp.textContent = u;
+            sp.title = u;
+            row.appendChild(sp);
+            var del = document.createElement('button');
+            del.className = 'tbtn';
+            del.textContent = '删除';
+            del.style.cssText = 'padding:2px 8px;font-size:11px;color:#f6a1b1;';
+            del.addEventListener('click', function () {
+                window.__vhMovieSites.removeSub(u);
+                renderSubList();
+            });
+            row.appendChild(del);
+            box.appendChild(row);
+        });
+    }
+
+    // 拉取所有订阅，合并新源
+    function pullSubs() {
+        if (!window.__vhMovieSites) return;
+        var subs = window.__vhMovieSites.loadSubs();
+        if (!subs.length) { mgrHint('没有订阅可拉取', true); return; }
+        mgrHint('正在拉取 ' + subs.length + ' 个订阅…');
+        var n = 0, added = 0;
+        subs.forEach(function (url) {
+            apiGet(url, 15000).then(function (j) {
+                var list = window.__vhMovieSites.parseSub(j);
+                list.forEach(function (s) {
+                    var r = window.__vhMovieSites.add(s);
+                    if (r.ok) added++;
+                });
+            }).catch(function () {}).then(function () {
+                n++;
+                if (n === subs.length) {
+                    renderSiteList();
+                    mgrHint(added ? ('订阅拉取完成，新增 ' + added + ' 个源') : '订阅拉取完成，无新增源');
+                }
+            });
+        });
+    }
+
+    function bindSiteMgr() {
+        var b;
+        b = $('mvSiteMgr');
+        if (b) b.addEventListener('click', function () {
+            $('mvSiteMgrBox').style.display = '';
+            renderSiteList();
+            renderSubList();
+            mgrHint('');
+        });
+        b = $('mvSiteMgrClose');
+        if (b) b.addEventListener('click', function () { $('mvSiteMgrBox').style.display = 'none'; });
+        b = $('mvSiteAdd');
+        if (b) b.addEventListener('click', function () {
+            var name = ($('mvSiteName').value || '').trim();
+            var api = ($('mvSiteApi').value || '').trim();
+            if (!api) { mgrHint('请填接口地址', true); return; }
+            if (!/^https?:\/\//i.test(api)) { mgrHint('接口地址需以 http(s):// 开头', true); return; }
+            var r = window.__vhMovieSites.add({ name: name, api: api });
+            if (!r.ok) { mgrHint(r.msg, true); return; }
+            $('mvSiteName').value = '';
+            $('mvSiteApi').value = '';
+            renderSiteList();
+            mgrHint('已添加：' + r.site.name);
+        });
+        b = $('mvSiteReset');
+        if (b) b.addEventListener('click', function () {
+            window.__vhMovieSites.reset();
+            renderSiteList();
+            mgrHint('已恢复内置默认源');
+        });
+        b = $('mvSubAdd');
+        if (b) b.addEventListener('click', function () {
+            var u = ($('mvSubUrl').value || '').trim();
+            var r = window.__vhMovieSites.addSub(u);
+            if (!r.ok) { mgrHint(r.msg, true); return; }
+            $('mvSubUrl').value = '';
+            renderSubList();
+            mgrHint('已订阅，点「拉取更新」合入源');
+        });
+        b = $('mvSubPull');
+        if (b) b.addEventListener('click', pullSubs);
+    }
+
     // ---------- 绑定 ----------
     function bind() {
         var b;
+        bindSiteMgr();
         b = $('mvSearch'); if (b) b.addEventListener('click', search);
         b = $('mvQuery');
         if (b) b.addEventListener('keydown', function (e) {
@@ -456,8 +656,9 @@
         recommendLoaded = true;
         box.innerHTML = '<div class="hint mv-empty">正在加载推荐…</div>';
         setState('加载推荐中…');
-        // 用 360 源的电影分类（数据稳定）做首页；失败退回无参数最新
-        var site = SITES[1];   // zy360
+        var list0 = sites();
+        if (!list0.length) { box.innerHTML = '<div class="hint mv-empty">没有可用源，请到「源管理」添加</div>'; return; }
+        var site = list0[0];   // 用首个可用源出推荐
         var u = site.api + '/api.php/provide/vod/?ac=detail&t=6&pg=1';
         fetchJson(u, 20000).then(function (j) {
             var list = (j && j.list) || [];
