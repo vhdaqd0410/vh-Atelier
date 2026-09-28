@@ -46,6 +46,7 @@
         <button class="ws-group" data-group="upscale">✨ 超分</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
+        <button class="ws-group" data-group="movie">🍿 影视</button>
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
@@ -81,6 +82,9 @@
     <div class="tabs ws-subtabs" data-group="media" style="display:none;">
         <button class="tab active" data-tab="media">素材浏览</button>
         <button class="tab" data-tab="netdisk">☁ 网盘</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="movie" style="display:none;">
+        <button class="tab active" data-tab="movie">在线影视</button>
     </div>
     <div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
         <button class="tab active" data-tab="upscale">去字幕 / 超分</button>
@@ -1477,6 +1481,59 @@
         </div>
     </div>
 
+<div class="tab-panel" id="panel-movie" style="display:none;">
+        <div class="mv-wrap">
+            <!-- 顶栏：搜索 + 状态 -->
+            <div class="mv-bar">
+                <input type="text" id="mvQuery" class="mv-input" placeholder="输入片名搜索（如：庆余年）">
+                <button class="tbtn primary" id="mvSearch">搜索</button>
+                <span class="mv-state" id="mvState"></span>
+            </div>
+            <!-- 源筛选 -->
+            <div class="mv-srcbar" id="mvSrcBar"></div>
+
+            <!-- 结果区 -->
+            <div class="mv-body">
+                <div class="mv-results" id="mvResults">
+                    <div class="hint mv-empty">输入片名搜索，或从下方热播榜挑一个</div>
+                </div>
+            </div>
+
+            <!-- 剧集/线路选择弹层 -->
+            <div class="mv-pick" id="mvPick" style="display:none;">
+                <div class="mv-pick-box">
+                    <div class="mv-pick-head">
+                        <span id="mvPickTitle">选集</span>
+                        <span style="flex:1;"></span>
+                        <button class="tbtn" id="mvPickClose">✕</button>
+                    </div>
+                    <div class="mv-pick-src" id="mvPickSrc"></div>
+                    <div class="mv-pick-eps" id="mvPickEps"></div>
+                </div>
+            </div>
+
+            <!-- 播放器 -->
+            <div class="mv-player" id="mvPlayer" style="display:none;">
+                <div class="mv-player-head">
+                    <span id="mvPlayerTitle">未在播放</span>
+                    <span style="flex:1;"></span>
+                    <button class="tbtn" id="mvPlayerPick">☰ 选集</button>
+                    <button class="tbtn" id="mvPlayerReload">↻ 重载</button>
+                    <button class="tbtn" id="mvPlayerClose">✕</button>
+                </div>
+                <div class="mv-player-stage">
+                    <video id="mvVideo" playsinline controls></video>
+                    <div class="mv-buf" id="mvBuf" style="display:none;">
+                        <div class="mv-buf-spin"></div>
+                        <div class="mv-buf-msg" id="mvBufMsg">正在解析播放地址…</div>
+                        <div class="mv-buf-sub" id="mvBufSub"></div>
+                    </div>
+                </div>
+                <div class="mv-player-info" id="mvPlayerInfo"></div>
+            </div>
+        </div>
+    </div>
+
 <div class="tab-panel" id="panel-shenpian" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
             <div class="wb-nav">
@@ -1688,6 +1745,8 @@
     <script src="js/todo.js"></script>
     <script src="js/iframe-nav.js"></script>
     <script src="js/netdisk.js"></script>
+    <script src="js/hls.light.min.js"></script>
+    <script src="js/movie.js"></script>
     <script src="js/feedback.js"></script>
     <script src="js/feedback-ui.js"></script>
     <script src="js/feedback-panel.js"></script>

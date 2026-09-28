@@ -16,6 +16,7 @@
         video: document.getElementById('panel-video'),
         progress: document.getElementById('panel-progress'),
         script: document.getElementById('panel-script'),
+        movie: document.getElementById('panel-movie'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
         prconv: document.getElementById('panel-prconv'),
@@ -34,6 +35,7 @@
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
+        movie: { members: ['movie'], default: 'movie' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' },
         prconv: { members: ['prconv', 'colorxml'], default: 'prconv' },
@@ -158,6 +160,10 @@
             try { window.__atShowScriptHome(); } catch (e) {}
         }
         // 审片：切到时 iframe 若未加载则自动加载分秒帧
+        // 影视：切到时初始化（首次拉源列表）
+        if (name === 'movie' && window.__movieOnShow) {
+            try { window.__movieOnShow(); } catch (e) {}
+        }
         if (name === 'shenpian' && window.__spAutoLoad) {
             try { window.__spAutoLoad(); } catch (e) {}
         }

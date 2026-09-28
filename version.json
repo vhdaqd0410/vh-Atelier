@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.45.0",
-  "buildTime": "2026-09-28 12:00:53",
+  "version": "1.46.0",
+  "buildTime": "2026-09-28 13:33:42",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修审片/超分/反馈/管理台面板切走再切回黑屏：含 iframe 的面板改用保留尺寸的隐藏"
+  "notes": "新增影视板块：聚合 6 个采集源搜索在线影视，内置 hls.js 播放（含 m3u8 代理改写、AES 解密、选集、自动连播）"
 }

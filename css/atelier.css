@@ -5090,3 +5090,102 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .tab-panel.at-pane-hidden #mllibContextMenu {
     display: none !important;
 }
+
+/* ===== 影视板块：在线影视搜索与播放 ===== */
+.mv-wrap { display: flex; flex-direction: column; height: calc(100vh - 130px); gap: 8px; }
+.mv-bar { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.mv-input {
+    flex: 1; min-width: 0; padding: 8px 11px; font-size: 13px;
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; outline: none;
+}
+.mv-input:focus { border-color: var(--accent); }
+.mv-state { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+.mv-state.ok { color: #7fd68b; }
+.mv-state.err { color: #f6a1b1; }
+.mv-srcbar { flex: 0 0 auto; display: flex; gap: 5px; flex-wrap: wrap; }
+
+.mv-body { flex: 1 1 auto; min-height: 0; display: flex; gap: 8px; }
+.mv-results {
+    flex: 1 1 auto; min-width: 0; overflow-y: auto;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px;
+    display: flex; flex-direction: column; gap: 8px;
+}
+.mv-empty { padding: 24px 12px; text-align: center; line-height: 1.8; }
+
+.mv-card {
+    display: flex; gap: 10px; padding: 8px; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+}
+.mv-card:hover { border-color: var(--accent); background: rgba(139,92,246,.06); }
+.mv-cover {
+    flex: 0 0 auto; width: 68px; height: 96px; border-radius: 6px; overflow: hidden;
+    background: var(--gray-deep, #222); display: flex; align-items: center; justify-content: center;
+}
+.mv-cover img { width: 100%; height: 100%; object-fit: cover; }
+.mv-nopic { font-size: 26px; opacity: .5; }
+.mv-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mv-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.mv-sub { font-size: 11px; color: var(--muted); }
+.mv-srcs { display: flex; gap: 4px; flex-wrap: wrap; margin-top: auto; }
+.mv-src {
+    font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    background: var(--sel-blue2-bg, #23415e); color: var(--fg-link, #6db3ff);
+}
+
+/* 选集弹层 */
+.mv-pick {
+    position: fixed; inset: 0; z-index: 10040;
+    background: rgba(0,0,0,.62); display: flex; align-items: center; justify-content: center;
+}
+.mv-pick-box {
+    background: #1e1e1e; border: 1px solid #444; border-radius: 10px;
+    width: 560px; max-width: 92vw; max-height: 76vh;
+    display: flex; flex-direction: column; padding: 12px;
+}
+.mv-pick-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #eee; }
+.mv-pick-src { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.mv-pickbtn.on { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
+.mv-pick-eps { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin-top: 8px; }
+.mv-eps-head { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.mv-eps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 5px; }
+.mv-ep {
+    padding: 5px 2px; font-size: 11.5px; cursor: pointer;
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 5px;
+}
+.mv-ep:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 播放器 */
+.mv-player {
+    position: fixed; right: 14px; bottom: 14px; z-index: 10045;
+    width: 560px; max-width: calc(100vw - 28px);
+    background: #171717; border: 1px solid #3a3a3a; border-radius: 10px;
+    box-shadow: 0 10px 34px rgba(0,0,0,.6); overflow: hidden;
+    display: flex; flex-direction: column;
+}
+.mv-player-head {
+    display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+    border-bottom: 1px solid rgba(255,255,255,.06); font-size: 12px; color: var(--text);
+}
+.mv-player-stage { position: relative; background: #000; display: flex; justify-content: center; }
+.mv-player-stage video { width: 100%; max-height: 60vh; display: block; }
+.mv-buf {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px;
+    background: rgba(0,0,0,.72); color: #ddd; font-size: 12px;
+}
+.mv-buf-spin {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.16); border-top-color: var(--accent);
+    animation: mv-spin .8s linear infinite;
+}
+@keyframes mv-spin { to { transform: rotate(360deg); } }
+.mv-buf-sub { font-size: 10.5px; color: var(--muted); }
+.mv-player-info { padding: 6px 10px; font-size: 10.5px; color: var(--muted); }
+
+/* 影视：不可直接播放的源/条目标记 */
+.mv-pickbtn.mv-nodirect { opacity: .6; border-style: dashed; }
+.mv-src.mv-src-no { background: rgba(255,120,120,.14); color: #f6a1b1; }
+.mv-card.mv-cantplay .mv-name::after { content: ' · 暂不可播'; font-size: 10px; color: #f6a1b1; font-weight: 400; }
