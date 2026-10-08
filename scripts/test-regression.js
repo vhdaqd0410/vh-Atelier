@@ -683,6 +683,37 @@ console.log('\n=== 坑 14：语音克隆三模式 + 音色库 ==='); {
 }
 
 // ============================================================
+console.log('\n=== 坑 15：语音克隆结果行（波形/试听/拖拽/导入/插入）==='); {
+    var rjs = read('js/clone.js');
+    var ridx = read('index.html');
+    var rcss = read('css/atelier.css');
+    ok('有结果列表容器', /id="vcResultList"/.test(ridx));
+    ok('结果列表复用 sep-res 外观', /class="sep-res-list"/.test(ridx));
+    ok('行可拖拽', /row\.setAttribute\('draggable', 'true'\)/.test(rjs));
+    ok('拖拽用 CEP DnD 协议', /com\.adobe\.cep\.dnd\.file\.0/.test(rjs));
+    ok('试听按钮存在', /sep-res-play/.test(rjs) && /toggleVcPlay/.test(rjs));
+    ok('波形用 wavesurfer', /WaveSurfer\.create/.test(rjs));
+    ok('试听走 Blob 不用 file://', /vcReadAsBlob/.test(rjs) && /loadBlob/.test(rjs));
+    ok('波形容器 sep-res-wave', /sep-res-wave/.test(rjs));
+    ok('双击导入素材箱', /addEventListener\('dblclick'/.test(rjs));
+    ok('生成后入列', /vcResults\.unshift/.test(rjs));
+    ok('结果上限 30 条', /vcResults\.length > 30/.test(rjs));
+    // 重构：不再有旧播放器元素
+    ok('已移除旧试听按钮', !/id="btnPlay"/.test(ridx));
+    ok('已移除旧 seekBar', !/id="seekBar"/.test(ridx));
+    ok('无旧的 playerPanel 可见面板', /id="playerPanel" style="display:none;"/.test(ridx));
+    ok('无 bindPlayerEvents', !/bindPlayerEvents/.test(rjs));
+    ok('无 el.btnPlay 死引用', !/el\.btnPlay/.test(rjs));
+    ok('无 el.btnImport 死引用', !/el\.btnImport\b/.test(rjs));
+    // 重构：折叠区降低噪声
+    ok('有折叠区 vc-fold', /class="vc-fold"/.test(ridx));
+    ok('有分隔线 vc-sep', /class="vc-sep"/.test(ridx));
+    ok('CSS 有 vc-fold 样式', /\.vc-fold/.test(rcss));
+    ok('CSS 有 vc-sep 样式', /\.vc-sep/.test(rcss));
+    ok('CSS 结果行兼容克隆面板', /:is\(#panel-sep, #panel-clone\) \.sep-res-/.test(rcss));
+}
+
+// ============================================================
 console.log('\n=== 附加：改动文件语法自检 ===');{
     const files = ['js/localsvc.js', 'js/errorlog.js', 'js/export.js', 'js/video.js',
                    'js/music.js', 'js/bgm.js', 'js/enhance.js', 'js/media.js', 'js/updater.js',

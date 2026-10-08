@@ -2704,28 +2704,28 @@
         .prg-todo-li.urgent { color: var(--fg-err-soft); font-weight: 600; }
 
         /* ===== 人声分离：结果列表（试听 / 拖拽 / 导入）===== */
-        #panel-sep .sep-res-head {
+        :is(#panel-sep, #panel-clone) .sep-res-head {
             display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
         }
-        #panel-sep .sep-res-head h2 {
+        :is(#panel-sep, #panel-clone) .sep-res-head h2 {
             font-size: 12px; font-weight: 600; color: var(--muted);
             text-transform: uppercase; letter-spacing: .5px;
         }
-        #panel-sep .sep-res-list { display: flex; flex-direction: column; }
-        #panel-sep .sep-res-empty {
+        :is(#panel-sep, #panel-clone) .sep-res-list { display: flex; flex-direction: column; }
+        :is(#panel-sep, #panel-clone) .sep-res-empty {
             padding: 16px 8px; text-align: center;
             color: var(--muted); font-size: 11.5px;
         }
-        #panel-sep .sep-res-item {
+        :is(#panel-sep, #panel-clone) .sep-res-item {
             display: flex; align-items: center; gap: 8px;
             padding: 6px 7px; border-radius: 6px;
             border-bottom: 1px dashed var(--border);
             cursor: grab;
         }
-        #panel-sep .sep-res-item:last-child { border-bottom: none; }
-        #panel-sep .sep-res-item:hover { background: var(--panel2); }
-        #panel-sep .sep-res-item:active { cursor: grabbing; }
-        #panel-sep .sep-res-play {
+        :is(#panel-sep, #panel-clone) .sep-res-item:last-child { border-bottom: none; }
+        :is(#panel-sep, #panel-clone) .sep-res-item:hover { background: var(--panel2); }
+        :is(#panel-sep, #panel-clone) .sep-res-item:active { cursor: grabbing; }
+        :is(#panel-sep, #panel-clone) .sep-res-play {
             flex: 0 0 auto; width: 24px; height: 24px;
             background: var(--gray-input); color: var(--accent);
             border: 1px solid var(--border); border-radius: 50%;
@@ -2733,38 +2733,38 @@
             display: flex; align-items: center; justify-content: center;
             padding: 0;
         }
-        #panel-sep .sep-res-play:hover { border-color: var(--accent); color: var(--accent-hover); }
-        #panel-sep .sep-res-tag {
+        :is(#panel-sep, #panel-clone) .sep-res-play:hover { border-color: var(--accent); color: var(--accent-hover); }
+        :is(#panel-sep, #panel-clone) .sep-res-tag {
             flex: 0 0 auto; font-size: 10px; line-height: 1.6;
             padding: 0 6px; border-radius: 3px; white-space: nowrap;
         }
-        #panel-sep .sep-res-vocals {
+        :is(#panel-sep, #panel-clone) .sep-res-vocals {
             background: var(--sel-green-bg); color: var(--sel-green-fg);
             border: 1px solid rgba(159,224,168,.3);
         }
-        #panel-sep .sep-res-accomp {
+        :is(#panel-sep, #panel-clone) .sep-res-accomp {
             background: var(--sel-blue2-bg); color: var(--fg-link);
             border: 1px solid rgba(109,179,255,.3);
         }
-        #panel-sep .sep-res-info { flex: 1 1 auto; min-width: 0; }
-        #panel-sep .sep-res-name {
+        :is(#panel-sep, #panel-clone) .sep-res-info { flex: 1 1 auto; min-width: 0; }
+        :is(#panel-sep, #panel-clone) .sep-res-name {
             font-size: 11.5px; color: var(--text);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        #panel-sep .sep-res-sub {
+        :is(#panel-sep, #panel-clone) .sep-res-sub {
             font-size: 10px; color: var(--muted);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        #panel-sep .sep-res-wave {
+        :is(#panel-sep, #panel-clone) .sep-res-wave {
             flex: 0 0 130px; height: 26px; overflow: hidden;
         }
-        #panel-sep .sep-res-btn {
+        :is(#panel-sep, #panel-clone) .sep-res-btn {
             flex: 0 0 auto; background: var(--gray-input); color: var(--muted);
             border: 1px solid var(--border); border-radius: 4px;
             padding: 2px 8px; cursor: pointer; font-size: 10.5px;
         }
-        #panel-sep .sep-res-btn:hover { color: var(--accent); border-color: var(--accent); }
-        #panel-sep .sep-res-del:hover { color: var(--fg-err-soft); border-color: var(--fg-err-soft); }
+        :is(#panel-sep, #panel-clone) .sep-res-btn:hover { color: var(--accent); border-color: var(--accent); }
+        :is(#panel-sep, #panel-clone) .sep-res-del:hover { color: var(--fg-err-soft); border-color: var(--fg-err-soft); }
 
         /* ===== 超分面板：任务卡 / 日志卡 展开态 + 批量下载勾选 ===== */
         #panel-upscale .en-card-head { display: flex; align-items: center; gap: 6px; }
@@ -5101,3 +5101,15 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .vc-chip { font-size: 11px; padding: 2px 9px; cursor: pointer; border-radius: 10px;
     background: rgba(139,92,246,.14); color: #c9b6ff; border: 1px solid transparent; }
 .vc-chip:hover { border-color: var(--accent); color: #fff; }
+
+/* ===== 语音克隆：重构后的折叠区 / 分隔 / 选中态 ===== */
+.vc-lib { border: 1px solid var(--border); border-radius: 7px; padding: 9px 10px; background: var(--panel2); }
+.vc-sep { display: flex; align-items: center; gap: 8px; margin: 12px 0 2px; color: var(--muted); font-size: 11px; }
+.vc-sep::before, .vc-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.vc-fold { border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; margin-top: 8px; background: var(--panel2); }
+.vc-fold > summary { cursor: pointer; font-size: 12px; color: var(--text); list-style: none; user-select: none; }
+.vc-fold > summary::-webkit-details-marker { display: none; }
+.vc-fold > summary::before { content: '\25B8'; display: inline-block; width: 14px; color: var(--accent); transition: transform .15s; }
+.vc-fold[open] > summary::before { transform: rotate(90deg); }
+.vc-fold > summary:hover { color: var(--accent); }
+#panel-clone .sep-res-item.vc-sel { background: rgba(139,92,246,.12); box-shadow: inset 2px 0 0 var(--accent); }

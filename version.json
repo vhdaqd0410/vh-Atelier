@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.54.0",
-  "buildTime": "2026-10-08 13:59:29",
+  "version": "1.55.0",
+  "buildTime": "2026-10-08 14:23:35",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "语音克隆升级：音色库（命名保存复用）+ 情绪指令 + 跨语言"
+  "notes": "语音克隆面板重构：结果可直接拖进时间轴 + 波形试听；面板从4卡片压成3步"
 }

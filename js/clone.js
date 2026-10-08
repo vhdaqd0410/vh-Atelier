@@ -184,8 +184,6 @@
         mediaStart: document.getElementById('mediaStart'),
         mediaDur: document.getElementById('mediaDur'),
         btnClone: document.getElementById('btnClone'),
-        btnPlay: document.getElementById('btnPlay'),
-        btnImport: document.getElementById('btnImport'),
         btnRefreshTrack: document.getElementById('btnRefreshTrack'),
         btnInsertTimeline: document.getElementById('btnInsertTimeline'),
         trackSel: document.getElementById('trackSel'),
@@ -196,12 +194,7 @@
         progressText: document.getElementById('vcProgressText'),
         status: document.getElementById('vcStatus'),
         resultInfo: document.getElementById('resultInfo'),
-        player: document.getElementById('player'),
-        playerPanel: document.getElementById('playerPanel'),
-        seekBar: document.getElementById('seekBar'),
-        seekFill: document.getElementById('seekFill'),
-        playCur: document.getElementById('playCur'),
-        playDur: document.getElementById('playDur')
+        vcResultList: document.getElementById('vcResultList')
     };
 
     function setStatus(msg, type) {
@@ -213,9 +206,7 @@
         busy = b;
         el.btnGrab.disabled = b;
         el.btnClone.disabled = b || !refWavPath;
-        el.btnPlay.disabled = b || !lastOutWav;
-        el.btnImport.disabled = b || !lastOutWav;
-        el.btnInsertTimeline.disabled = b || !lastOutWav;
+        if (el.btnInsertTimeline) el.btnInsertTimeline.disabled = b;
         el.btnAutoRef.disabled = b || !refWavPath;
         el.btnRefreshTrack.disabled = b;
         el.btnRefreshMedia.disabled = b;
@@ -611,12 +602,20 @@
             lastOutWav = res.out;
             setProgress(100, '完成');
             setBusy(false);
-            el.playerPanel.classList.add('show');
-            el.seekFill.style.width = '0';
-            el.playCur.textContent = '0:00';
-            el.playDur.textContent = '0:00';
-            el.btnPlay.textContent = '▶ 试听';
-            el.resultInfo.classList.add('show');
+            // 入结果列表（同一路径去重，最多留 30 条）
+            vcResults = vcResults.filter(function (x) { return x.path !== res.out; });
+            vcResults.unshift({
+                path: res.out,
+                name: (res.mode === 'cross' ? '跨语言' : (res.mode === 'instruct' ? '情绪指令' : '克隆'))
+                    + '_' + new Date().toTimeString().slice(0, 5).replace(':', ''),
+                mode: res.mode || 'clone',
+                dur: res.duration,
+                at: Date.now(),
+            });
+            if (vcResults.length > 30) vcResults = vcResults.slice(0, 30);
+            vcSelected = res.out;
+            renderVcResults();
+            el.btnInsertTimeline.disabled = false;
             el.resultInfo.innerHTML =
                 '<span class="k">模式</span> ' + ({ clone: '零样本克隆', instruct: '情绪指令', cross: '跨语言' }[res.mode] || '克隆') + '<br>' +
                 '<span class="k">时长</span> ' + res.duration + ' 秒<br>' +
@@ -626,7 +625,7 @@
                 '<span class="k">生成耗时</span> ' + res.gen_sec + ' 秒<br>' +
                 '<span class="k">RTF</span> ' + res.rtf + '<br>' +
                 '<span class="k">产物</span> ' + res.out;
-            setStatus(modeName + '完成，可试听 / 导入素材箱 / 插入时间线', 'ok');
+            setStatus(modeName + '完成 —— 可点结果行的 ▶ 试听，或直接拖进时间轴', 'ok');
         });
 
         // 读取 stderr 里的 STAGE 标记，更新进度
@@ -651,98 +650,216 @@
         });
     }
 
-    // ---------- 3. 试听（带进度条 + 拖动 seek）----------
-    var playing = false;
-    var seeking = false;   // 拖动中，暂停 timeupdate 回写，避免拉扯
+    // ---------- 3. 结果列表（与人声分离一致：波形 + 试听 + 拖拽 + 导入 + 插入）----------
+    // 每次生成入列（最多保留 30 条），行内可直接拖进 PR 时间轴。
+    var vcResults = [];        // [{ path, name, mode, dur, at }]
+    var vcSelected = '';       // 当前选中的结果（供「插入选中的结果」用）
+    var vcWs = null;           // wavesurfer 实侧（单实例）
+    var vcWsPath = '';
+    var vcWsPlaying = false;
+    var vcWsTimer = null;      // 波形显示进度用的定时器（wavesurfer 会自动画，这里只同步按钮）
 
-    function fmtTime(sec) {
-        if (!isFinite(sec) || sec < 0) sec = 0;
-        sec = Math.floor(sec);
-        var m = Math.floor(sec / 60);
-        var s = sec % 60;
-        return m + ':' + (s < 10 ? '0' : '') + s;
-    }
+    var MODE_LABEL = { clone: '克隆', instruct: '情绪指令', cross: '跨语言' };
+    var MODE_CLS = { clone: 'sep-res-vocals', instruct: 'sep-res-accomp', cross: 'sep-res-accomp' };
 
-    function updateSeekFill() {
-        var d = el.player.duration;
-        var c = el.player.currentTime;
-        if (isFinite(d) && d > 0) {
-            el.seekFill.style.width = Math.min(100, c / d * 100) + '%';
-        }
-        el.playCur.textContent = fmtTime(c);
-        el.playDur.textContent = fmtTime(d);
-    }
-
-    function play() {
-        if (!lastOutWav || !fs.existsSync(lastOutWav)) { setStatus('产物文件不存在', 'err'); return; }
-        if (playing) {
-            el.player.pause();
+    function renderVcResults() {
+        var box = el.vcResultList;
+        if (!box) return;
+        if (!vcResults.length) {
+            box.innerHTML = '<div class="sep-res-empty">还没有生成结果</div>';
             return;
         }
-        var buf = fs.readFileSync(lastOutWav);
-        var base64 = buf.toString('base64');
-        el.player.src = 'data:audio/wav;base64,' + base64;
-        el.player.play();
+        box.innerHTML = '';
+        vcResults.slice().forEach(function (r) { box.appendChild(buildVcRow(r)); });
     }
 
-    function seekTo(ratio) {
-        if (!isFinite(el.player.duration)) return;
-        ratio = Math.max(0, Math.min(1, ratio));
-        el.player.currentTime = ratio * el.player.duration;
-        updateSeekFill();
+    function buildVcRow(r) {
+        var row = document.createElement('div');
+        row.className = 'sep-res-item' + (vcSelected === r.path ? ' vc-sel' : '');
+        row.setAttribute('data-path', r.path);
+        row.setAttribute('draggable', 'true');
+        row.title = r.path + '\n直接拖进时间轴即可';
+
+        // 试听
+        var playBtn = document.createElement('button');
+        playBtn.type = 'button';
+        playBtn.className = 'sep-res-play';
+        playBtn.textContent = (vcWsPath === r.path && vcWsPlaying) ? '⏸' : '▶';
+        playBtn.title = '试听';
+        playBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            toggleVcPlay(r.path, playBtn);
+        });
+        row.appendChild(playBtn);
+
+        // 模式标签
+        var tag = document.createElement('span');
+        tag.className = 'sep-res-tag ' + (MODE_CLS[r.mode] || 'sep-res-accomp');
+        tag.textContent = MODE_LABEL[r.mode] || '克隆';
+        row.appendChild(tag);
+
+        // 名字 + 时长
+        var info = document.createElement('div');
+        info.className = 'sep-res-info';
+        var nm = document.createElement('div');
+        nm.className = 'sep-res-name';
+        nm.textContent = r.name;
+        var sub = document.createElement('div');
+        sub.className = 'sep-res-sub';
+        sub.textContent = (r.dur ? r.dur + ' 秒' : '') + (r.at ? ' · ' + new Date(r.at).toLocaleTimeString() : '');
+        info.appendChild(nm);
+        info.appendChild(sub);
+        row.appendChild(info);
+
+        // 导入素材箱
+        var imp = document.createElement('button');
+        imp.type = 'button';
+        imp.className = 'sep-res-btn';
+        imp.textContent = '导入';
+        imp.title = '导入到「语音克隆」素材箱';
+        imp.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            importToBin(r.path);
+        });
+        row.appendChild(imp);
+
+        // 插入时间线
+        var ins = document.createElement('button');
+        ins.type = 'button';
+        ins.className = 'sep-res-btn';
+        ins.textContent = '插入';
+        ins.title = '插入到选中音轨（位置用下面的输入框 / 默认播放头）';
+        ins.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            vcSelected = r.path;
+            insertTimeline(r.path);
+        });
+        row.appendChild(ins);
+
+        // 移除（不删文件）
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'sep-res-btn sep-res-del';
+        rm.textContent = '✕';
+        rm.title = '从列表移除（不删文件）';
+        rm.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            if (vcWsPath === r.path) stopVcPlay();
+            vcResults = vcResults.filter(function (x) { return x.path !== r.path; });
+            renderVcResults();
+        });
+        row.appendChild(rm);
+
+        // 点行 = 选中（给「插入选中的结果」用）
+        row.addEventListener('click', function () {
+            vcSelected = r.path;
+            lastOutWav = r.path;
+            renderVcResults();
+        });
+        // 双击 = 导入素材箱
+        row.addEventListener('dblclick', function () { importToBin(r.path); });
+
+        // 拖拽进 PR 时间轴（CEP 官方 DnD，与音乐库/音效库/人声分离一致）
+        row.addEventListener('dragstart', function (ev) {
+            var t = ev.target;
+            if (t && t.tagName === 'BUTTON') { ev.preventDefault(); return; }
+            ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', r.path);
+            ev.dataTransfer.setData('text/plain', r.path);
+            ev.dataTransfer.effectAllowed = 'copy';
+        });
+        row.addEventListener('dragend', function () { stopVcPlay(); });
+        return row;
     }
 
-    function bindPlayerEvents() {
-        el.player.addEventListener('play', function () {
-            playing = true;
-            el.btnPlay.textContent = '⏸ 暂停';
-        });
-        el.player.addEventListener('pause', function () {
-            playing = false;
-            el.btnPlay.textContent = '▶ 试听';
-        });
-        el.player.addEventListener('ended', function () {
-            playing = false;
-            el.btnPlay.textContent = '▶ 试听';
-            updateSeekFill();
-        });
-        el.player.addEventListener('timeupdate', function () {
-            if (!seeking) updateSeekFill();
-        });
-        el.player.addEventListener('loadedmetadata', function () {
-            updateSeekFill();
-        });
-
-        // 拖动 seek：mousedown 进入拖动，mousemove 预览，mouseup 真正跳转
-        el.seekBar.addEventListener('mousedown', function (e) {
-            seeking = true;
-            var rect = el.seekBar.getBoundingClientRect();
-            var ratio = (e.clientX - rect.left) / rect.width;
-            el.seekFill.style.width = Math.max(0, Math.min(100, ratio * 100)) + '%';
-            var moveHandler = function (ev) {
-                var r2 = el.seekBar.getBoundingClientRect();
-                var ratio2 = (ev.clientX - r2.left) / r2.width;
-                el.seekFill.style.width = Math.max(0, Math.min(100, ratio2 * 100)) + '%';
+    // 波形试听：不能用 file:// 直接 load（CEP 里常被拦），走 XHR 读 Blob —— 与人声分离同源做法
+    function vcReadAsBlob(filePath, cb) {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', 'file:///' + String(filePath).replace(/\\/g, '/'), true);
+            xhr.responseType = 'blob';
+            xhr.onload = function () {
+                if (xhr.status === 0 || xhr.status === 200) cb(null, xhr.response);
+                else cb(new Error('读取失败 HTTP ' + xhr.status), null);
             };
-            var upHandler = function (ev) {
-                seeking = false;
-                document.removeEventListener('mousemove', moveHandler);
-                document.removeEventListener('mouseup', upHandler);
-                var r3 = el.seekBar.getBoundingClientRect();
-                var ratio3 = (ev.clientX - r3.left) / r3.width;
-                seekTo(ratio3);
-            };
-            document.addEventListener('mousemove', moveHandler);
-            document.addEventListener('mouseup', upHandler);
-        });
+            xhr.onerror = function () { cb(new Error('无法读取音频文件'), null); };
+            xhr.send();
+        } catch (e) { cb(e, null); }
     }
+
+    function toggleVcPlay(p, btn) {
+        if (vcWsPath === p && vcWs && vcWsPlaying) { pauseVcPlay(btn); return; }
+        stopVcPlay();
+        if (!p || !fs.existsSync(p)) { setStatus('文件不存在：' + p, 'err'); return; }
+        var row = document.querySelector('#vcResultList .sep-res-item[data-path="' + cssEsc(p) + '"]');
+        var holder = row ? row.querySelector('.sep-res-wave') : null;
+        if (!holder && row) {
+            holder = document.createElement('div');
+            holder.className = 'sep-res-wave';
+            var infoEl = row.querySelector('.sep-res-info');
+            if (infoEl) row.insertBefore(holder, infoEl); else row.appendChild(holder);
+        }
+        if (!holder) return;
+        try {
+            if (typeof WaveSurfer === 'undefined') throw new Error('wavesurfer 未加载');
+            vcWs = WaveSurfer.create({
+                container: holder,
+                waveColor: '#c9b6ff', progressColor: '#8b5cf6', cursorColor: '#ffffff',
+                height: 26, barWidth: 1, barGap: 1, barMinHeight: 1, cursorWidth: 1,
+                interact: true, hideScrollbar: true
+            });
+            vcWsPath = p;
+            setStatus('正在读取音频…', '');
+            vcReadAsBlob(p, function (err, blob) {
+                if (err || !blob) { vcWsPath = ''; setStatus('试听失败：' + (err ? err.message : '读取为空'), 'err'); return; }
+                try { vcWs.loadBlob(blob); } catch (e) { setStatus('试听失败：' + e.message, 'err'); return; }
+                vcWs.on('ready', function () {
+                    try { vcWs.play(); } catch (e) {}
+                    vcWsPlaying = true;
+                    if (btn) btn.textContent = '⏸';
+                    setStatus('试听中…', '');
+                });
+                vcWs.on('finish', function () { vcWsPlaying = false; if (btn) btn.textContent = '▶'; });
+                vcWs.on('error', function (e) {
+                    vcWsPlaying = false; if (btn) btn.textContent = '▶';
+                    setStatus('试听出错：' + (e && e.message ? e.message : '音频解码失败'), 'err');
+                });
+            });
+        } catch (e) { setStatus('试听失败：' + e.message, 'err'); }
+    }
+
+    function pauseVcPlay(btn) {
+        try { if (vcWs) vcWs.pause(); } catch (e) {}
+        vcWsPlaying = false;
+        if (btn) btn.textContent = '▶';
+        syncVcPlayButtons();
+    }
+
+    function stopVcPlay() {
+        try { if (vcWs) vcWs.stop(); } catch (e) {}
+        vcWs = null; vcWsPath = ''; vcWsPlaying = false;
+        syncVcPlayButtons();
+    }
+
+    function syncVcPlayButtons() {
+        var box = el.vcResultList;
+        if (!box) return;
+        var rows = box.querySelectorAll('.sep-res-item');
+        for (var i = 0; i < rows.length; i++) {
+            var p = rows[i].getAttribute('data-path');
+            var b = rows[i].querySelector('.sep-res-play');
+            if (b) b.textContent = (vcWsPath === p && vcWsPlaying) ? '⏸' : '▶';
+        }
+    }
+
+    function cssEsc(s) { return String(s).replace(/(["\\])/g, '\\$1'); }
 
     // ---------- 4. 导入素材箱 ----------
-    function importToBin() {
-        if (!lastOutWav) return;
-        if (!fs.existsSync(lastOutWav)) { setStatus('产物文件不存在: ' + lastOutWav, 'err'); return; }
+    function importToBin(filePath) {
+        var f = filePath || vcSelected || lastOutWav;
+        if (!f) { setStatus('请先生成或选一个结果', 'err'); return; }
+        if (!fs.existsSync(f)) { setStatus('产物文件不存在: ' + f, 'err'); return; }
         setStatus('正在导入素材箱...', '');
-        var payloadJson = JSON.stringify([lastOutWav]);
+        var payloadJson = JSON.stringify([f]);
         var setScript = 'vcImportToBinPayload = ' + payloadJson + ';';
         csInterface.evalScript(setScript, function () {
             csInterface.evalScript('vcImportToBinStr("语音克隆")', function (result) {
@@ -790,8 +907,9 @@
     }
 
     // ---------- 6. 导入到时间线 ----------
-    function insertTimeline() {
-        if (!lastOutWav || !fs.existsSync(lastOutWav)) { setStatus('产物文件不存在', 'err'); return; }
+    function insertTimeline(filePath) {
+        var f = filePath || vcSelected || lastOutWav;
+        if (!f || !fs.existsSync(f)) { setStatus('产物文件不存在', 'err'); return; }
         var trackIndex = parseInt(el.trackSel.value, 10);
         if (isNaN(trackIndex)) { setStatus('请先刷新并选择目标音轨', 'err'); return; }
         var colorLabel = parseInt(el.colorSel.value, 10) || 3;
@@ -808,16 +926,16 @@
                     var d = JSON.parse(result);
                     if (d.positionSec !== undefined) sec = d.positionSec;
                 } catch (e) {}
-                doInsertTimeline(trackIndex, colorLabel, sec);
+                doInsertTimeline(f, trackIndex, colorLabel, sec);
             });
             return;
         }
-        doInsertTimeline(trackIndex, colorLabel, positionSec);
+        doInsertTimeline(f, trackIndex, colorLabel, positionSec);
     }
 
-    function doInsertTimeline(trackIndex, colorLabel, positionSec) {
+    function doInsertTimeline(wavPath, trackIndex, colorLabel, positionSec) {
         var payload = {
-            wavPath: lastOutWav,
+            wavPath: wavPath,
             trackIndex: trackIndex,
             positionSec: positionSec,
             colorLabel: colorLabel
@@ -847,10 +965,8 @@
     el.btnRefreshMedia.addEventListener('click', refreshProjectMedia);
     el.btnGrabFromMedia.addEventListener('click', grabFromMedia);
     el.btnClone.addEventListener('click', clone);
-    el.btnPlay.addEventListener('click', play);
-    el.btnImport.addEventListener('click', importToBin);
     el.btnRefreshTrack.addEventListener('click', refreshTracks);
-    el.btnInsertTimeline.addEventListener('click', insertTimeline);
+    el.btnInsertTimeline.addEventListener('click', function () { insertTimeline(); });
 
     // 音色库
     if (el.btnSaveVoice) el.btnSaveVoice.addEventListener('click', saveCurrentVoice);
@@ -884,13 +1000,12 @@
         el.speedVal.textContent = v;
     });
 
-    bindPlayerEvents();
-
     // 初始化
     setMode('clone');
     renderVoiceLib();
+    renderVcResults();
     updateCloneEnabled();
-    setStatus('就绪。先在时间轴选中要克隆的人声片段，点「抓取」', '');
+    setStatus('就绪。选音色后填好要说的文字即可生成', '');
     refreshTracks();
     refreshProjectMedia();
 })();

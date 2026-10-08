@@ -199,52 +199,64 @@
 
 <!-- ==================== 板块二：语音克隆 ==================== -->
     <div class="tab-panel" id="panel-clone" style="display:none;">
+        <!-- 1 · 选音色 -->
         <div class="card">
-            <h2>1 · 参考音色</h2>
-            <div class="hint" style="margin-bottom:6px;">两种方式拿参考音频：① 时间轴选片段点「抓取」；② 从项目素材列表选一个并指定片段范围。</div>
-            <div class="row">
-                <button id="btnGrab">从时间轴抓取参考音色</button>
+            <h2>1 · 选音色</h2>
+
+            <!-- 音色库优先 -->
+            <div class="vc-lib">
+                <div class="row" style="align-items:center;gap:6px;">
+                    <label style="margin:0;flex:1;">音色库</label>
+                    <button id="btnSaveVoice" class="secondary mini" disabled>💾 保存当前音色</button>
+                </div>
+                <div class="row" style="margin-top:6px;">
+                    <select id="voiceLibSel" style="flex:1;"><option value="">（还没有保存的音色）</option></select>
+                    <button id="btnUseVoice" class="secondary mini" disabled>使用</button>
+                    <button id="btnDelVoice" class="secondary mini" disabled>删除</button>
+                </div>
+                <div class="hint" id="voiceLibHint">保存后下次直接选，不用重新抓参考音频。</div>
             </div>
-            <div class="ref-box" id="refInfo">尚未抓取参考音频</div>
+
+            <div class="vc-sep"><span>或新建音色</span></div>
+
+            <details class="vc-fold">
+                <summary>从时间轴抓取</summary>
+                <div class="row" style="margin-top:8px;">
+                    <button id="btnGrab">从时间轴选中片段抓取</button>
+                </div>
+                <div class="hint">先在时间轴选中一段人声（≤30 秒），再点上面按钮。</div>
+            </details>
+
+            <details class="vc-fold">
+                <summary>从项目素材截取</summary>
+                <div class="row" style="margin-top:8px;">
+                    <select id="projectMediaSel" style="flex:1;"><option value="">（点「刷新」加载项目素材）</option></select>
+                    <button id="btnRefreshMedia" class="secondary mini">刷新</button>
+                </div>
+                <div class="row" style="margin-top:6px;">
+                    <label style="margin:0;flex:0 0 auto;">起始秒</label>
+                    <input type="text" id="mediaStart" placeholder="0" style="flex:1;">
+                    <label style="margin:0;flex:0 0 auto;">时长秒</label>
+                    <input type="text" id="mediaDur" placeholder="5" style="flex:1;">
+                </div>
+                <div class="row" style="margin-top:8px;">
+                    <button id="btnGrabFromMedia" class="secondary">截取为参考音频</button>
+                </div>
+            </details>
+
+            <div class="ref-box" id="refInfo" style="margin-top:10px;">尚未选择参考音频</div>
+
             <label style="margin-top:10px;">参考音频对应文字（说什么就填什么）</label>
             <div class="row" style="margin-top:4px;">
                 <input type="text" id="refText" placeholder="例如：今天天气真不错" style="flex:1;">
                 <button id="btnAutoRef" class="secondary mini">自动识别</button>
             </div>
-            <div class="hint">自动识别会用 whisper 听一遍参考音频，识别结果自动填入，建议核对后使用。</div>
-
-            <div class="divider"></div>
-            <!-- 音色库：命名保存，下次直接复用 -->
-            <div class="row" style="align-items:center;gap:6px;">
-                <label style="margin:0;flex:1;">音色库（保存后可随时复用）</label>
-                <button id="btnSaveVoice" class="secondary mini" disabled>💾 保存当前音色</button>
-            </div>
-            <div class="row" style="margin-top:6px;">
-                <select id="voiceLibSel" style="flex:1;"><option value="">（还没有保存的音色）</option></select>
-                <button id="btnUseVoice" class="secondary mini" disabled>使用</button>
-                <button id="btnDelVoice" class="secondary mini" disabled>删除</button>
-            </div>
-            <div class="hint" id="voiceLibHint">音色 = 参考音频 + 参考文字，保存后下次直接选，不用重新抓。</div>
-
-            <div class="divider"></div>
-            <h2 style="margin-top:2px;">或从项目素材选择</h2>
-            <div class="row" style="margin-top:6px;">
-                <select id="projectMediaSel" style="flex:1;"><option value="">（点「刷新」加载项目素材）</option></select>
-                <button id="btnRefreshMedia" class="secondary mini">刷新</button>
-            </div>
-            <div class="row" style="margin-top:6px;">
-                <label style="margin:0;flex:0 0 auto;">起始秒</label>
-                <input type="text" id="mediaStart" placeholder="0" style="flex:1;">
-                <label style="margin:0;flex:0 0 auto;">时长秒</label>
-                <input type="text" id="mediaDur" placeholder="5" style="flex:1;">
-            </div>
-            <div class="row" style="margin-top:8px;">
-                <button id="btnGrabFromMedia" class="secondary">从项目素材截取参考音频</button>
-            </div>
+            <div class="hint">跨语言模式不需要填（音色由音频决定）。</div>
         </div>
 
+        <!-- 2 · 说什么 -->
         <div class="card">
-            <h2>2 · 合成模式与文本</h2>
+            <h2>2 · 说什么</h2>
             <div class="vc-modes" id="modeRow">
                 <button class="vc-mode active" data-mode="clone">克隆</button>
                 <button class="vc-mode" data-mode="instruct">情绪指令</button>
@@ -274,76 +286,79 @@
                 <div class="hint" style="color:var(--fg-info);">ℹ 参考音频说中文、文字写英文即可 —— 用中文音色说外语，无需英文参考音频。</div>
             </div>
 
-            <div class="grid2" style="margin-top:10px;">
-                <div>
-                    <label>语速 <span id="speedVal" style="color:var(--accent);font-weight:600;">1.0</span>×</label>
-                    <div class="speed-row">
-                        <input type="range" id="speedRange" min="0.5" max="2.0" step="0.05" value="1.0">
-                        <span class="val" id="speedLabel">1.0×</span>
+            <details class="vc-fold" style="margin-top:10px;">
+                <summary>高级：语速与模型</summary>
+                <div class="grid2" style="margin-top:8px;">
+                    <div>
+                        <label>语速 <span id="speedVal" style="color:var(--accent);font-weight:600;">1.0</span>×</label>
+                        <div class="speed-row">
+                            <input type="range" id="speedRange" min="0.5" max="2.0" step="0.05" value="1.0">
+                            <span class="val" id="speedLabel">1.0×</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label>模型</label>
+                        <select id="modelSel">
+                            <option value="base" selected>基础版（音色稳）</option>
+                            <option value="rl">RL 版（字准）</option>
+                        </select>
                     </div>
                 </div>
-                <div>
-                    <label>模型</label>
-                    <select id="modelSel">
-                        <option value="base" selected>基础版（llm.pt）</option>
-                        <option value="rl">RL 强化学习版（llm.rl.pt）</option>
-                    </select>
-                </div>
-            </div>
-            <div class="hint">模型：基础版音色稳定；RL 版内容准确度更高（官方 CER 0.81 vs 1.21），效果不满意可切换对比。</div>
-        </div>
+                <div class="hint">基础版音色稳定；RL 版内容准确度更高（官方 CER 0.81 vs 1.21）。</div>
+            </details>
 
-        <div class="card">
-            <h2>3 · 生成</h2>
-            <div class="row">
-                <button id="btnClone" disabled>克隆生成</button>
+            <div class="row" style="margin-top:12px;">
+                <button id="btnClone" disabled style="flex:1;">生成</button>
             </div>
             <div class="progress-wrap" id="vcProgressWrap">
                 <div class="progress-bar"><div class="fill indet" id="vcProgressFill"></div></div>
                 <div id="vcProgressText"></div>
             </div>
             <div id="vcStatus"></div>
-            <div class="result-info" id="resultInfo"></div>
-            <div class="row" style="margin-top:10px;">
-                <button id="btnPlay" class="secondary" disabled>▶ 试听</button>
-                <button id="btnImport" class="secondary" disabled>导入素材箱</button>
-            </div>
-            <div class="player-panel" id="playerPanel">
-                <span class="ptime" id="playCur">0:00</span>
-                <div class="seek" id="seekBar"><div class="seek-fill" id="seekFill"></div></div>
-                <span class="ptime" id="playDur">0:00</span>
-            </div>
         </div>
 
+        <!-- 3 · 结果 -->
         <div class="card">
-            <h2>4 · 导入到时间线</h2>
-            <div class="grid2">
-                <div>
-                    <label>目标音轨</label>
-                    <select id="trackSel"><option value="">（未加载）</option></select>
+            <h2>3 · 结果</h2>
+            <div id="vcResultList" class="sep-res-list"><div class="sep-res-empty">还没有生成结果</div></div>
+
+            <details class="vc-fold" style="margin-top:10px;">
+                <summary>插入到时间线（精确控制）</summary>
+                <div class="grid2" style="margin-top:8px;">
+                    <div>
+                        <label>目标音轨</label>
+                        <select id="trackSel"><option value="">（未加载）</option></select>
+                    </div>
+                    <div>
+                        <label>标签颜色</label>
+                        <select id="colorSel">
+                            <option value="0">蓝 Iris</option>
+                            <option value="1">绿 Forest</option>
+                            <option value="2">粉 Rose</option>
+                            <option value="3" selected>橙 Mango</option>
+                            <option value="4">紫 Violet</option>
+                            <option value="5">青 Caribbean</option>
+                            <option value="6">紫红 Lavender</option>
+                            <option value="7">灰 Slate</option>
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label>标签颜色</label>
-                    <select id="colorSel">
-                        <option value="0">蓝 Iris</option>
-                        <option value="1">绿 Forest</option>
-                        <option value="2">粉 Rose</option>
-                        <option value="3" selected>橙 Mango</option>
-                        <option value="4">紫 Violet</option>
-                        <option value="5">青 Caribbean</option>
-                        <option value="6">紫红 Lavender</option>
-                        <option value="7">灰 Slate</option>
-                    </select>
+                <label style="margin-top:8px;">插入位置（秒，默认播放头）</label>
+                <input type="text" id="insertPos" placeholder="留空 = 播放头位置">
+                <div class="row" style="margin-top:8px;">
+                    <button id="btnRefreshTrack" class="secondary mini">刷新音轨</button>
+                    <button id="btnInsertTimeline" class="secondary" disabled>插入选中的结果</button>
                 </div>
-            </div>
-            <label style="margin-top:8px;">插入位置（秒，默认播放头）</label>
-            <input type="text" id="insertPos" placeholder="留空 = 播放头位置">
-            <div class="row" style="margin-top:8px;">
-                <button id="btnRefreshTrack" class="secondary mini">刷新音轨</button>
-                <button id="btnInsertTimeline" class="secondary" disabled>插入到时间线</button>
-            </div>
-            <div class="hint">插入语义：新片段插到指定轨道，后续片段整体后移，不覆盖任何已有音频。</div>
+                <div class="hint">新片段插到指定轨道，后续片段整体后移，不覆盖任何已有音频。</div>
+            </details>
+
+            <div class="hint" style="margin-top:8px;">结果行可直接拖进 PR 时间轴；双击导入「语音克隆」素材箱。</div>
         </div>
+
+        <!-- 隐藏：兼容旧逻辑 -->
+        <div class="result-info" id="resultInfo" style="display:none;"></div>
+        <audio id="player" style="display:none;"></audio>
+        <div class="player-panel" id="playerPanel" style="display:none;"></div>
     </div>
 
     <!-- ==================== 板块三：音效库 ==================== -->
