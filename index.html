@@ -958,11 +958,23 @@
     <div class="tab-panel" id="panel-musicagg" style="display:none;">
         <div class="ma-wrap">
             <div class="ma-bar">
-                <span class="ma-dot"></span>
+                <span class="ma-dot" id="maDot"></span>
                 <span id="maStatus" class="ma-status">音乐聚合未启动</span>
                 <span style="flex:1"></span>
+                <label class="ma-sel-label">来源</label>
+                <select id="maTarget" class="ma-sel" title="选择用本机服务还是你自己的服务器">
+                    <option value="local">本地服务</option>
+                    <option value="server">服务器</option>
+                </select>
                 <button class="tbtn" id="btnMaReload" title="重新加载播放器">↻ 重载</button>
+                <button class="tbtn" id="btnMaTheme" title="把当前深浅色同步给播放器">◐ 主题</button>
                 <button class="tbtn" id="btnMaExternal" title="在系统浏览器打开（大屏用）">↗ 外部打开</button>
+            </div>
+            <!-- 仅在选“服务器”时显示 -->
+            <div class="ma-bar" id="maServerRow" style="display:none;">
+                <span class="ma-sel-label">服务器地址</span>
+                <input type="text" id="maServerUrl" class="ma-input" placeholder="http://你的服务器:17899">
+                <button class="tbtn" id="btnMaSaveServer">保存并连接</button>
             </div>
             <iframe id="maFrame" class="ma-frame" src="about:blank"></iframe>
             <!-- 失败时的提示与重试 -->

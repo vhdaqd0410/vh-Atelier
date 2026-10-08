@@ -737,11 +737,11 @@ console.log('\n=== 坑 16：音乐聚合（lxserver）集成 ==='); {
     ok('懒加载钩子', /__musicAggOnShow/.test(amj));
     // 服务管理要点
     ok('端口 17899（避开 ncm/扒歌/视频下载）', /17899/.test(ajs));
-    ok('用 node http 探活', /httpMod\.get/.test(ajs));
+    ok('用 node http/https 探活', /function probeUrl/.test(ajs) && /require\('https'\)/.test(ajs));
     ok('启动前清掉系统代理', /'HTTP_PROXY'/.test(ajs) && /delete env\[k\]/.test(ajs));
     ok('依赖缺失自动 npm install', /'install', '--omit=dev'/.test(ajs));
     ok('依赖判定用 module-alias/needle', /'module-alias'/.test(ajs) && /'needle'/.test(ajs));
-    ok('播放器地址为根路径', /playerUrl: function \(\) \{ return BASE/.test(ajs));
+    ok('播放器地址为根路径', /playerUrl: function \(\)/.test(ajs) && /return b \+ '\/'/.test(ajs));
     ok('暴露 __musicAgg', /window\.__musicAgg/.test(ajs));
     // 更新通道：node_modules/data/cache 不下发（防覆盖用户音源 + 防撑大更新包）
     ok('updater SKIP 含 node_modules', /'node_modules'/.test(aup));
@@ -754,6 +754,20 @@ console.log('\n=== 坑 16：音乐聚合（lxserver）集成 ==='); {
     ok('lxserver 入口存在', fs.existsSync(path.join(ROOT, 'lxserver/index.js')));
     ok('lxserver 播放器存在', fs.existsSync(path.join(ROOT, 'lxserver/public/music/index.html')));
     ok('lxserver 服务端存在', fs.existsSync(path.join(ROOT, 'lxserver/server/server/server.js')));
+    // 本地/服务器切换
+    ok('有来源切换下拉', /id="maTarget"/.test(aidx));
+    ok('有服务器地址输入', /id="maServerUrl"/.test(aidx));
+    ok('支持 localStorage 记目标', /vh_musicagg_target/.test(ajs));
+    ok('支持 localStorage 记服务器地址', /vh_musicagg_server/.test(ajs));
+    ok('server 模式下不本地拉起', /target === 'server'/.test(ajs) || /t === 'server'/.test(ajs));
+    // 状态小点：就绪变绿
+    ok('状态点有 id', /id="maDot"/.test(aidx));
+    ok('状态点 ok 变绿', /\.ma-dot\.ok/.test(read('css/atelier.css')));
+    ok('状态点 err 变红', /\.ma-dot\.err/.test(read('css/atelier.css')));
+    ok('JS 会切状态点样式', /dot\.className = 'ma-dot'/.test(aui));
+    // 深色模式
+    ok('有主题同步按钮', /id="btnMaTheme"/.test(aidx));
+    ok('有主题探测与注入', /function isDark/.test(aui) && /vh-set-theme/.test(aui));
 }
 
 // ============================================================

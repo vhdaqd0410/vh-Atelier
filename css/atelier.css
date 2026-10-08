@@ -5117,7 +5117,10 @@ button.primary:hover { background: var(--btn-primary-hover); }
 /* ===== 音乐聚合（lxserver）：iframe 容器 ===== */
 .ma-wrap { display: flex; flex-direction: column; height: calc(100vh - 130px); gap: 6px; }
 .ma-bar { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-.ma-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+.ma-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto;
+    transition: background .2s, box-shadow .2s; }
+.ma-dot.ok { background: #4ec26a; box-shadow: 0 0 6px rgba(78,194,106,.75); }
+.ma-dot.err { background: #e8637a; box-shadow: 0 0 6px rgba(232,99,122,.7); }
 .ma-status { font-size: 11.5px; color: var(--muted); }
 .ma-status.ok { color: #7fd68b; }
 .ma-status.err { color: #f6a1b1; }
@@ -5127,3 +5130,13 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .ma-hint-body { font-size: 11.5px; color: var(--muted); line-height: 1.8; }
 .ma-hint-body code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 3px; font-family: Consolas, monospace; }
 .ma-hint-box .tbtn { margin-top: 10px; }
+
+/* 音乐聚合：来源切换与服务器地址 */
+.ma-sel-label { font-size: 11px; color: var(--muted); }
+.ma-sel { padding: 3px 6px; font-size: 11.5px; background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 5px; outline: none; }
+.ma-sel:focus { border-color: var(--accent); }
+.ma-input { flex: 1 1 auto; min-width: 0; padding: 4px 8px; font-size: 11.5px;
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 5px; outline: none; }
+.ma-input:focus { border-color: var(--accent); }

@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.56.0",
-  "buildTime": "2026-10-08 16:54:53",
+  "version": "1.57.0",
+  "buildTime": "2026-10-08 17:38:50",
   "skipDirs": [
     "collect",
     "bin",
@@ -20,7 +20,8 @@
     "data",
     "cache",
     "music",
-    "backups"
+    "backups",
+    "cover_cache"
   ],
-  "notes": "新增音乐聚合工作台：五平台搜索与播放（内置 lxserver）"
+  "notes": "音乐聚合本地/服务器切换 + 就绪状态绿点 + 深色模式 + 方案文档"
 }

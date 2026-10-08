@@ -78,7 +78,7 @@
     //     否则会覆盖用户已配好的音源或撑大更新包。
     var SKIP = ['collect', 'bin', 'models', 'engine', 'ncm', 'runtime', 'stubs',
                 '.git', '_tmp', '_releases', 'node_modules',
-                'data', 'cache', 'music', 'backups'];
+                'data', 'cache', 'music', 'backups', 'cover_cache'];
 
     function readCfg() {
         try {

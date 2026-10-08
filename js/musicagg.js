@@ -1,10 +1,10 @@
-// vh-Atelier 音乐聚合（lxserver）· 本地服务管理
+// vh-Atelier 音乐聚合（lxserver）· 服务地址管理与探测
 //
-// lxserver = 多平台音乐聚合（网易云/QQ/酷我/酷狗/咪咕）的本地服务，
-// 内置完整 Web 播放器。本模块负责：找到 node → 确保服务在跑（未跑则拉起）→
-// 给面板一个可用的 base 地址。
+// 两种形态：
+//   本地 —— 插件目录自带的 lxserver，进程随面板拉起（端口 17899）
+//   服务器 —— 部署在你自己的服务器上的 lxserver，插件只做客户端
+// 面板可在两者之间切换，选择记在 localStorage。
 //
-// 端口 17899（ncm 用 17890、短剧扒歌 17891、视频下载 17892，避开）。
 // 依赖：lxserver/node_modules 不入仓（首次运行需 npm install，与 ncm 同模式）；
 //       服务目录与用户数据（data/音源、cache/试听缓存）都列在 updater 的 SKIP 里。
 (function () {
@@ -19,8 +19,11 @@
         httpMod = require('http');
     } catch (e) { return; }
 
-    var PORT = 17899;
-    var BASE = 'http://127.0.0.1:' + PORT;
+    var LOCAL_PORT = 17899;
+    var LOCAL_BASE = 'http://127.0.0.1:' + LOCAL_PORT;
+    var CFG_KEY = 'vh_musicagg_target';     // 'local' | 'server'
+    var SERVER_KEY = 'vh_musicagg_server';  // 服务器地址
+
     var csInterface = (typeof window.__adobe_cep__ !== 'undefined') ? new CSInterface() : null;
     var extRoot = '';
     try { if (csInterface) extRoot = csInterface.getSystemPath(SystemPath.EXTENSION); } catch (e) {}
@@ -40,6 +43,31 @@
         } catch (e) {}
     }
 
+    // ---------- 目标配置 ----------
+    function getTarget() {
+        try { return localStorage.getItem(CFG_KEY) || 'local'; } catch (e) { return 'local'; }
+    }
+    function setTarget(t) {
+        try { localStorage.setItem(CFG_KEY, (t === 'server') ? 'server' : 'local'); } catch (e) {}
+    }
+    function getServerUrl() {
+        try {
+            var v = localStorage.getItem(SERVER_KEY) || '';
+            return v.trim().replace(/\/+$/, '');
+        } catch (e) { return ''; }
+    }
+    function setServerUrl(u) {
+        try { localStorage.setItem(SERVER_KEY, String(u || '').trim().replace(/\/+$/, '')); } catch (e) {}
+    }
+    function base() {
+        if (getTarget() === 'server') {
+            var s = getServerUrl();
+            return s || '';
+        }
+        return LOCAL_BASE;
+    }
+
+    // ---------- 本地服务管理 ----------
     function findNode() {
         var cands = ['C:\\Program Files\\nodejs\\node.exe', 'C:\\Program Files (x86)\\nodejs\\node.exe'];
         for (var i = 0; i < cands.length; i++) { if (fs.existsSync(cands[i])) return cands[i]; }
@@ -53,8 +81,6 @@
         return null;
     }
 
-    // 依赖是否就位（node_modules 不入仓，首次要装）
-    // 用 module-alias 判定：它被 index.js 第一行 require，缺失就启动不了。
     function hasDeps() {
         try {
             return fs.existsSync(path.join(svcDir, 'node_modules')) &&
@@ -63,45 +89,23 @@
         } catch (e) { return false; }
     }
 
-    // 用 node 原生 http 探活（不依赖 XMLHttpRequest）
-    function probe(timeoutMs, cb) {
-        var done = false;
-        function finish(ok, err) {
-            if (done) return;
-            done = true;
-            cb(ok, err);
-        }
-        try {
-            var req = httpMod.get(BASE + '/api/music/config', function (res) {
-                res.resume();
-                finish(res.statusCode >= 200 && res.statusCode < 500, null);
-            });
-            req.on('error', function (e) { finish(false, e); });
-            req.setTimeout(timeoutMs || 2500, function () { req.abort(); finish(false, new Error('timeout')); });
-        } catch (e) {
-            finish(false, e);
-        }
-    }
-
     function spawnSvc() {
         try {
             if (!entry || !fs.existsSync(entry)) { log('entry missing: ' + entry); return false; }
             var node = findNode();
             if (!node) { log('node.exe not found'); return false; }
             if (child) { log('already spawned'); return true; }
-            // 确保运行时目录存在（data 不入仓，首次要在本机建）
             try {
                 var dd = path.join(svcDir, 'data');
                 if (!fs.existsSync(dd)) fs.mkdirSync(dd, { recursive: true });
             } catch (e) { log('mkdir data err: ' + (e && e.message)); }
-            // 首次没依赖：跑 npm install（与 ncm 同模式）
             if (!hasDeps()) {
                 var npm = node.replace(/node\.exe$/i, 'npm.cmd');
                 if (fs.existsSync(npm)) {
                     log('node_modules missing, running npm install...');
                     try {
                         childProcess.spawnSync(npm, ['install', '--omit=dev', '--no-audit', '--no-fund'],
-                            { cwd: svcDir, windowsHide: true, timeout: 600000, stdio: 'ignore' });
+                            { cwd: svcDir, windowsHide: true, timeout: 900000, stdio: 'ignore' });
                     } catch (e) { log('npm install err: ' + (e && e.message)); }
                 } else {
                     log('npm.cmd not found at ' + npm);
@@ -109,10 +113,9 @@
             }
             var env = {};
             Object.keys(process.env).forEach(function (k) { env[k] = process.env[k]; });
-            // 关键：清掉系统代理（实测这些平台直连可达，走代理反而 TLS 失败）
             ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
                 .forEach(function (k) { delete env[k]; });
-            env.PORT = String(PORT);
+            env.PORT = String(LOCAL_PORT);
             env.BIND_IP = '127.0.0.1';
             env.DATA_PATH = path.join(svcDir, 'data');
             env.LOG_PATH = path.join(svcDir, 'data', 'logs');
@@ -136,23 +139,68 @@
         }
     }
 
-    // 对外：确保服务在跑（探活 → 不在则拉起 → 轮询等就绪）
-    // cb(ok, info)  info={base,error,needDeps}
+    // 用 node 原生 http 探活（支持跨域地址）
+    function probeUrl(url, timeoutMs, cb) {
+        var done = false;
+        function finish(ok, err) {
+            if (done) return;
+            done = true;
+            cb(ok, err);
+        }
+        try {
+            var u = new URL(url);
+            var mod = (u.protocol === 'https:') ? require('https') : httpMod;
+            var req = mod.get(url + '/api/music/config', function (res) {
+                res.resume();
+                finish(res.statusCode >= 200 && res.statusCode < 500, null);
+            });
+            req.on('error', function (e) { finish(false, e); });
+            req.setTimeout(timeoutMs || 2500, function () { req.abort(); finish(false, new Error('timeout')); });
+        } catch (e) {
+            finish(false, e);
+        }
+    }
+
+    // 对外：确保目标可用
+    //   target=local  → 探活本地，不在则拉起
+    //   target=server → 只探活（远程服务由你在服务器上维护）
+    // cb(ok, info)  info = { base, target, error, needDeps }
     function ensure(cb, onProgress) {
-        probe(2500, function (ok) {
-            if (ok) { cb(true, { base: BASE }); return; }
-            // 依赖缺失时首次要 npm install（几分钟），等待时间放宽
+        var t = getTarget();
+        var b = base();
+        if (!b) { cb(false, { base: '', target: t, error: '未填写服务器地址' }); return; }
+
+        probeUrl(b, 2500, function (ok) {
+            if (ok) { cb(true, { base: b, target: t }); return; }
+
+            if (t === 'server') {
+                // 远程服务：不尝试拉起，直接轮询一会儿（服务器可能刚重启）
+                var n = 0;
+                (function poll() {
+                    n++;
+                    if (onProgress) onProgress(n, 20, false);
+                    probeUrl(b, 2500, function (ok2, err) {
+                        if (ok2) { cb(true, { base: b, target: t }); return; }
+                        lastErr = err ? (err.message || String(err)) : '';
+                        if (n >= 20) { cb(false, { base: b, target: t, error: lastErr }); return; }
+                        setTimeout(poll, 1000);
+                    });
+                })();
+                return;
+            }
+
+            // 本地服务：拉起
             var needInstall = !hasDeps();
             spawnSvc();
-            var maxTries = needInstall ? 300 : 45;   // 装依赖时最多等 ~5 分钟，否则 45 秒
+            var maxTries = needInstall ? 300 : 45;
             var tries = 0;
             (function poll() {
                 tries++;
                 if (onProgress) onProgress(tries, maxTries, needInstall);
-                probe(2000, function (ok2, err) {
-                    if (ok2) { cb(true, { base: BASE }); return; }
+                probeUrl(b, 2000, function (ok2, err) {
+                    if (ok2) { cb(true, { base: b, target: t }); return; }
                     lastErr = err ? (err.message || String(err)) : '';
-                    if (tries >= maxTries) { cb(false, { base: BASE, error: lastErr, needDeps: !hasDeps() }); return; }
+                    if (tries >= maxTries) { cb(false, { base: b, target: t, error: lastErr, needDeps: !hasDeps() }); return; }
                     setTimeout(poll, 1000);
                 });
             })();
@@ -160,20 +208,30 @@
     }
 
     window.__musicAgg = {
-        PORT: PORT,
-        base: function () { return BASE; },
+        LOCAL_PORT: LOCAL_PORT,
+        localBase: function () { return LOCAL_BASE; },
+        base: base,
+        getTarget: getTarget,
+        setTarget: setTarget,
+        getServerUrl: getServerUrl,
+        setServerUrl: setServerUrl,
         ensure: ensure,
         hasDeps: hasDeps,
         svcDir: function () { return svcDir; },
-        // 面板显示用：Web 播放器地址
-        // 实测：player.path 默认为空 → 播放器就在根路径（/music/ 是 404）
-        playerUrl: function () { return BASE + '/'; },
-        // 供高级用法：直接调它的 REST API
+        // 播放器地址（lxserver 的 player.path 默认为空 → 根路径）
+        playerUrl: function () {
+            var b = base();
+            if (!b) return '';
+            return b + '/';
+        },
+        // 直接调它的 REST API
         api: function (p, opt) {
             opt = opt || {};
+            var b = base();
             return new Promise(function (resolve, reject) {
+                if (!b) { reject(new Error('未配置服务地址')); return; }
                 var xhr = new XMLHttpRequest();
-                xhr.open(opt.method || 'GET', BASE + p, true);
+                xhr.open(opt.method || 'GET', b + p, true);
                 if (opt.body) xhr.setRequestHeader('Content-Type', 'application/json');
                 xhr.timeout = opt.timeout || 30000;
                 xhr.onreadystatechange = function () {

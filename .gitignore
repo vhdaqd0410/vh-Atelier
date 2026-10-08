@@ -43,6 +43,7 @@ lxserver/node_modules/
 lxserver/data/
 lxserver/cache/
 lxserver/music/
+lxserver/cover_cache/
 lxserver/*.log
 lxserver/debug.txt
 
