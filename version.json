@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.59.0",
-  "buildTime": "2026-10-08 18:35:16",
+  "version": "1.59.1",
+  "buildTime": "2026-10-08 18:57:31",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "音乐聚合新增简洁模式原生面板（搜索/试听/下载/插时间轴）+ 音源导入即启用"
+  "notes": "修音乐聚合试听跨域(改走音频代理) + 下载接口改GET + 状态显示 + 简洁面板重排"
 }

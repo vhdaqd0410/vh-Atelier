@@ -975,12 +975,15 @@
                 <button class="tbtn" id="btnMaTheme" title="把当前深浅色同步给播放器">◐ 主题</button>
                 <button class="tbtn" id="btnMaExternal" title="在系统浏览器打开（大屏用）">↗ 外部打开</button>
             </div>
-            <!-- 仅在选“服务器”时显示 -->
-            <div class="ma-bar" id="maServerRow" style="display:none;">
-                <span class="ma-sel-label">服务器地址</span>
-                <input type="text" id="maServerUrl" class="ma-input" placeholder="http://你的服务器:17899">
-                <button class="tbtn" id="btnMaSaveServer">保存并连接</button>
-            </div>
+            <!-- 服务器地址（可折叠：未设时默认展开提示，保存后收起） -->
+            <details id="maServerBox" class="ma-fold" open>
+                <summary id="maServerSummary">服务器设置</summary>
+                <div class="ma-bar" style="margin-top:6px;">
+                    <span class="ma-sel-label">地址</span>
+                    <input type="text" id="maServerUrl" class="ma-input" placeholder="http://你的服务器:17899">
+                    <button class="tbtn" id="btnMaSaveServer">保存并连接</button>
+                </div>
+            </details>
             <!-- 音源包（本地/服务器都可用：本地直读写文件，服务器走它的上传接口） -->
             <div class="ma-bar" id="maSrcRow">
                 <span class="ma-sel-label">音源包</span>
@@ -992,33 +995,49 @@
             <!-- 服务器模式下的管理员口令（导入/导出音源需要） -->
             <div class="ma-bar" id="maAdminRow" style="display:none;">
                 <span class="ma-sel-label">管理口令</span>
-                <input type="password" id="maAdminPwd" class="ma-input" placeholder="lxserver 的管理员密码（默认 123456）">
-                <span style="font-size:10.5px;color:var(--muted);">导入/导出音源需要</span>
+                <input type="password" id="maAdminPwd" class="ma-input" style="max-width:160px;" placeholder="默认 123456">
             </div>
             <!-- ========== 简洁模式：搜歌 / 试听 / 下载 / 插时间轴 ========== -->
             <div id="maNative" class="mv2-wrap">
-                <div class="ma-bar">
-                    <input type="text" id="mv2Query" class="ma-input" placeholder="搜歌名 / 歌手（回车搜索）">
-                    <button class="tbtn primary" id="btnMv2Search">搜索</button>
-                    <span id="mv2State" class="mv2-state"></span>
+                <!-- 搜索区 -->
+                <div class="mv2-search">
+                    <span class="mv2-search-ico">🔍</span>
+                    <input type="text" id="mv2Query" class="mv2-input" placeholder="搜歌名 / 歌手（回车搜索）">
+                    <button class="tbtn primary mv2-go" id="btnMv2Search">搜索</button>
                 </div>
+                <!-- 平台筛选 -->
                 <div class="mv2-pfs" id="mv2Platforms">
                     <button class="mv2-pf on" data-pf="wy">网易云</button>
                     <button class="mv2-pf" data-pf="tx">QQ</button>
                     <button class="mv2-pf" data-pf="kw">酷我</button>
                     <button class="mv2-pf" data-pf="kg">酷狗</button>
                     <button class="mv2-pf" data-pf="mg">味咕</button>
-                    <button class="mv2-pf" data-pf="">全部</button>
+                    <button class="mv2-pf mv2-pf-all" data-pf="">全部平台</button>
                 </div>
+                <!-- 结果头部 -->
+                <div class="mv2-head">
+                    <span id="mv2Count" class="mv2-count">输入关键词开始搜索</span>
+                    <span style="flex:1"></span>
+                    <span id="mv2State" class="mv2-state"></span>
+                </div>
+                <!-- 试听条 -->
                 <div id="mv2Player" class="mv2-player" style="display:none;">
                     <div class="mv2-player-head">
+                        <span class="mv2-player-dot"></span>
                         <span id="mv2PlayerTitle" class="mv2-player-title">未在播放</span>
                         <span style="flex:1"></span>
-                        <button class="tbtn" id="btnMv2PlayerClose" style="padding:1px 7px;font-size:11px;">✕</button>
+                        <button class="mv2-x" id="btnMv2PlayerClose" title="关闭">✕</button>
                     </div>
                     <div id="mv2Wave" class="mv2-wave"></div>
                 </div>
-                <div id="mv2List" class="sep-res-list mv2-list"><div class="sep-res-empty">输入歌名搜索，或点上方平台切换</div></div>
+                <!-- 结果列表 -->
+                <div id="mv2List" class="mv2-list">
+                    <div class="mv2-empty">
+                        <div class="mv2-empty-ico">🎵</div>
+                        <div>输入歌名或歌手开始搜索</div>
+                        <div class="mv2-empty-sub">支持网易云 / QQ / 酷我 / 酷狗 / 味咕</div>
+                    </div>
+                </div>
             </div>
             <div id="mv2Toast" class="mv2-toast" style="display:none;"></div>
             <!-- ========== 完整播放器（iframe） ========== -->

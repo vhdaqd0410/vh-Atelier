@@ -833,7 +833,7 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('下载默认音乐库目录', /mllibDir/.test(njs));
     ok('有视图切换（简洁/播放器）', /id="maView"/.test(nidx) && /function setView/.test(nui));
     ok('视图选择持久化', /vh_musicagg_view/.test(nui));
-    ok('切播放器才加载 iframe', /if \(!native\) loadPlayer/.test(nui));
+    ok('切播放器才加载 iframe', /else loadPlayer\(false\)/.test(nui));
     ok('CSS 有原生面板样式', /\.mv2-wrap/.test(ncss) && /\.mv2-pf/.test(ncss) && /\.mv2-wave/.test(ncss));
 }
 

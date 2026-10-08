@@ -67,6 +67,8 @@
         if (!curPlatform) {
             // 全部平台：并发搜索后合并
             var all = [], done = 0;
+            var cntEl = $('mv2Count');
+            if (cntEl) cntEl.textContent = '正在并发搜索 5 个平台…';
             PLATFORMS.forEach(function (pf) {
                 api('/api/music/search?source=' + pf.id + '&name=' + encodeURIComponent(kw) + '&type=song&limit=12')
                     .then(function (r) {
@@ -78,7 +80,7 @@
                         if (done === PLATFORMS.length) {
                             results = all;
                             renderList();
-                            setState('共 ' + all.length + ' 条（' + PLATFORMS.length + ' 个平台）', 'ok');
+                            setState('已就绪', 'ok');
                         }
                     });
             });
@@ -89,9 +91,9 @@
             .then(function (r) {
                 results = Array.isArray(r) ? r : ((r && r.data) || []);
                 renderList();
-                setState('共 ' + results.length + ' 条', 'ok');
+                setState('已就绪', 'ok');
             }).catch(function (e) {
-                box.innerHTML = '<div class="hint" style="padding:14px;color:#f6a1b1;">搜索失败：' + esc(e.message) + '</div>';
+                box.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>搜索失败</div><div class="mv2-empty-sub">' + esc(e.message) + '</div></div>';
                 setState('搜索失败', 'err');
             });
     }
@@ -103,75 +105,88 @@
 
     function renderList() {
         var box = $('mv2List');
+        var cnt = $('mv2Count');
+        if (cnt) cnt.textContent = results.length ? ('共 ' + results.length + ' 首 · ' + srcLabel(curPlatform || '全部')) : '没有结果';
         if (!results.length) {
-            box.innerHTML = '<div class="hint" style="padding:14px;">没有结果</div>';
+            box.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">😐</div><div>没搜到</div><div class="mv2-empty-sub">换个关键词，或切换平台试试</div></div>';
             return;
         }
         box.innerHTML = '';
         results.forEach(function (s, idx) {
             var row = document.createElement('div');
-            row.className = 'sep-res-item';
+            row.className = 'mv2-row';
             row.setAttribute('data-idx', String(idx));
-            row.setAttribute('draggable', 'false');
 
-            // 试听
-            var play = document.createElement('button');
-            play.type = 'button';
-            play.className = 'sep-res-play';
-            play.textContent = '\u25b6';
-            play.title = '试听';
-            play.addEventListener('click', function (ev) {
-                ev.stopPropagation();
-                togglePlay(s, play);
-            });
-            row.appendChild(play);
+            // 序号
+            var no = document.createElement('span');
+            no.className = 'mv2-no';
+            no.textContent = String(idx + 1);
+            row.appendChild(no);
 
-            // 平台标签
+            // 主体：歌名 / 歌手·专辑
+            var main = document.createElement('div');
+            main.className = 'mv2-main';
+            var nm = document.createElement('div');
+            nm.className = 'mv2-name';
+            nm.textContent = s.name || '';
+            nm.title = s.name || '';
+            var sub = document.createElement('div');
+            sub.className = 'mv2-sub';
+            sub.textContent = (s.singer || '未知歌手') + (s.albumName ? (' · ' + s.albumName) : '');
+            sub.title = sub.textContent;
+            main.appendChild(nm);
+            main.appendChild(sub);
+            row.appendChild(main);
+
+            // 平台徽标
             var tag = document.createElement('span');
-            tag.className = 'sep-res-tag sep-res-accomp';
+            tag.className = 'mv2-badge mv2-badge-' + (s.source || 'x');
             tag.textContent = srcLabel(s.source);
             row.appendChild(tag);
-
-            // 歌名 + 歌手/专辑
-            var info = document.createElement('div');
-            info.className = 'sep-res-info';
-            var nm = document.createElement('div');
-            nm.className = 'sep-res-name';
-            nm.textContent = s.name || '';
-            var sub = document.createElement('div');
-            sub.className = 'sep-res-sub';
-            sub.textContent = (s.singer || '') + (s.albumName ? (' · ' + s.albumName) : '');
-            info.appendChild(nm);
-            info.appendChild(sub);
-            row.appendChild(info);
 
             // 时长
             var dur = document.createElement('span');
             dur.className = 'mv2-dur';
-            dur.textContent = s.interval || '';
+            dur.textContent = s.interval || '--:--';
             row.appendChild(dur);
 
-            // 下载到音乐库
-            var dl = document.createElement('button');
-            dl.type = 'button';
-            dl.className = 'sep-res-btn';
-            dl.textContent = '\u2913 下载';
-            dl.title = '下载到音乐库目录';
-            dl.addEventListener('click', function (ev) { ev.stopPropagation(); download(s); });
-            row.appendChild(dl);
-
-            // 插入时间轴
-            var ins = document.createElement('button');
-            ins.type = 'button';
-            ins.className = 'sep-res-btn';
-            ins.textContent = '\u2192PR';
-            ins.title = '下载后插入当前时间线';
-            ins.addEventListener('click', function (ev) { ev.stopPropagation(); insertToTimeline(s); });
-            row.appendChild(ins);
+            // 操作组
+            var ops = document.createElement('div');
+            ops.className = 'mv2-ops';
+            var play = mkBtn('▶', 'mv2-btn-play', '试听', function () { togglePlay(s, play); });
+            var dl = mkBtn('⤓', 'mv2-btn', '下载到音乐库', function () { download(s); });
+            var ins = mkBtn('→PR', 'mv2-btn', '下载并插入当前时间线', function () { insertToTimeline(s); });
+            ops.appendChild(play); ops.appendChild(dl); ops.appendChild(ins);
+            row.appendChild(ops);
 
             row.addEventListener('click', function () { curSong = s; flash('已选中：' + s.name); });
             box.appendChild(row);
         });
+    }
+
+    function mkBtn(text, cls, title, fn) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = cls;
+        b.textContent = text;
+        b.title = title;
+        b.addEventListener('click', function (ev) { ev.stopPropagation(); fn(); });
+        return b;
+    }
+
+    // 关键：音频直链来自平台 CDN，浏览器直接拉会被 CORS 拦（无 Access-Control-Allow-Origin）。
+    // lxserver 自带音频代理 /api/music/download?url=...（转发 Range、处理重定向），
+    // 用它当同源代理后，试听与下载都不再有跨域问题。
+    function proxyUrl(realUrl) {
+        var agg = window.__musicAgg;
+        if (!agg) return realUrl;
+        return agg.base() + '/api/music/download?inline=1&url=' + encodeURIComponent(realUrl);
+    }
+    function dlUrl(realUrl, filename) {
+        var agg = window.__musicAgg;
+        if (!agg) return realUrl;
+        return agg.base() + '/api/music/download?url=' + encodeURIComponent(realUrl)
+            + '&filename=' + encodeURIComponent(filename || 'download.mp3');
     }
 
     // ---------- 试听（波形）----------
@@ -196,7 +211,7 @@
             });
     }
 
-    function playUrl(url, s, btn) {
+        function playUrl(url, s, btn) {
         var wrap = $('mv2Player');
         if (wrap) wrap.style.display = '';
         var title = $('mv2PlayerTitle');
@@ -204,15 +219,18 @@
         var holder = $('mv2Wave');
         if (!holder) return;
         holder.innerHTML = '';
+        var proxied = proxyUrl(url);
         try {
             if (typeof WaveSurfer === 'undefined') throw new Error('wavesurfer 未加载');
             ws = WaveSurfer.create({
                 container: holder,
-                waveColor: '#c9b6ff', progressColor: '#8b5cf6', cursorColor: '#fff',
-                height: 34, barWidth: 2, barGap: 1, barMinHeight: 1, cursorWidth: 1,
-                interact: true, hideScrollbar: true
+                waveColor: '#8ea0d0', progressColor: '#6d8cff', cursorColor: '#fff',
+                height: 40, barWidth: 2, barGap: 1, barMinHeight: 1, cursorWidth: 1,
+                interact: true, hideScrollbar: true,
+                // 走代理时是普通 mp3，用 media 元素解码最稳
+                mediaControls: false
             });
-            ws.load(url);
+            ws.load(proxied);
             ws.on('ready', function () {
                 try { ws.play(); } catch (e) {}
                 wsPlaying = true;
@@ -224,10 +242,11 @@
                 if (btn) btn.textContent = '\u25b6';
                 setState('已就绪', 'ok');
             });
-            ws.on('error', function () {
+            ws.on('error', function (e) {
                 wsPlaying = false;
                 if (btn) btn.textContent = '\u25b6';
-                setState('试听出错（可能是直链过期或跨域限制）', 'err');
+                var msg = (e && (e.message || e.type)) || '';
+                setState('试听失败' + (msg ? ('：' + msg) : '（可试试「→PR」直接下载）'), 'err');
             });
         } catch (e) {
             setState('试听失败：' + e.message, 'err');
@@ -240,9 +259,15 @@
     }
 
     // ---------- 下载到音乐库 ----------
-    // 逻辑：取直链 → 交给 lxserver 的下载接口落盘到音乐库目录
+    // 两种落盘方式：
+    //  1) 本地模式：用 Node 的 http 流式拉 lxserver 的代理地址，写进音乐库目录
+    //  2) 服务器模式：让服务器自己缓存（调 /api/music/cache/download），或直接浏览器下载
+    // 之前写的是 POST + JSON，但接口实际是 GET，故报「响应解析失败」。
     function dlDir() {
         try { return localStorage.getItem('mllibDir') || ''; } catch (e) { return ''; }
+    }
+    function sanitize(name) {
+        return String(name || 'song').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
     }
 
     function download(s, cb) {
@@ -250,33 +275,70 @@
         api('/api/music/url', { method: 'POST', body: { songInfo: s, quality: '320k' }, timeout: 60000 })
             .then(function (r) {
                 var url = (r && r.url) || ((r && r.data) || {}).url;
-                var srcName = (r && r.sourceName) || s.source;
                 if (!url) throw new Error('取不到播放地址（该平台可能无可播源）');
-                setState('正在下载…', '');
-                return api('/api/music/download', {
-                    method: 'POST', timeout: 180000,
-                    body: {
-                        url: url,
-                        filename: (s.name || 'song') + ' - ' + (s.singer || ''),
-                        songInfo: s,
-                        source: srcName,
-                        quality: '320k',
-                        dir: dlDir() || undefined
-                    }
-                });
-            })
-            .then(function (r2) {
-                var d = (r2 && r2.data) || r2 || {};
-                var f = d.file || d.path || d.filename || '';
-                setState('已下载' + (f ? ('：' + f) : ''), 'ok');
-                flash('下载完成' + (f ? ('：' + f) : ''), 'ok');
-                if (cb) cb(true, d);
+                var fname = sanitize((s.name || 'song') + ' - ' + (s.singer || '')) + '.mp3';
+                var dir = dlDir();
+                if (dir) {
+                    setState('正在下载到音乐库…', '');
+                    fetchToFile(proxyUrl(url), dir, fname, function (err, saved) {
+                        if (err) {
+                            setState('下载失败：' + err + '（改为浏览器下载）', 'err');
+                            browserDownload(dlUrl(url, fname));
+                            if (cb) cb(false, err);
+                            return;
+                        }
+                        setState('已下载：' + saved, 'ok');
+                        flash('已下载到音乐库：' + fname, 'ok');
+                        if (cb) cb(true, { file: saved });
+                    });
+                } else {
+                    // 未设置音乐库目录 → 交给浏览器下载
+                    browserDownload(dlUrl(url, fname));
+                    setState('已开始下载（浏览器）', 'ok');
+                    if (cb) cb(true, {});
+                }
             })
             .catch(function (e) {
                 setState('下载失败：' + e.message, 'err');
                 flash('下载失败：' + e.message, 'err');
                 if (cb) cb(false, e.message);
             });
+    }
+
+    // 用 Node http 流式写文件（同源代理，无跨域）
+    function fetchToFile(u, dir, fname, cb) {
+        try {
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        } catch (e) { cb('目录不可写：' + e.message); return; }
+        var out = path.join(dir, fname);
+        try {
+            var mod = require('url').parse(u).protocol === 'https:' ? require('https') : require('http');
+            var req = mod.get(u, { headers: { 'User-Agent': 'vh-Atelier' } }, function (res) {
+                if (res.statusCode !== 200) {
+                    res.resume();
+                    cb('HTTP ' + res.statusCode);
+                    return;
+                }
+                var fw = fs.createWriteStream(out);
+                res.pipe(fw);
+                fw.on('finish', function () { cb(null, out); });
+                fw.on('error', function (e) { cb('写入失败：' + e.message); });
+            });
+            req.on('error', function (e) { cb('请求失败：' + e.message); });
+            req.setTimeout(180000, function () { req.abort(); cb('超时'); });
+        } catch (e) { cb(e.message); }
+    }
+
+    // 浏览器下载（未设音乐库时的退路）
+    function browserDownload(u) {
+        try {
+            var a = document.createElement('a');
+            a.href = u;
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function () { try { a.remove(); } catch (e) {} }, 1000);
+        } catch (e) { flash('浏览器下载失败：' + e.message, 'err'); }
     }
 
     // ---------- 插入时间轴 ----------

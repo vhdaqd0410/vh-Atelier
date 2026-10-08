@@ -138,14 +138,15 @@
         var sel = $('maTarget');
         if (!sel) return;
         window.__musicAgg.setTarget(sel.value);
-        var rowSrv = $('maServerRow');
-        if (rowSrv) rowSrv.style.display = (sel.value === 'server') ? '' : 'none';
+        var sbox = $('maServerBox');
+        if (sbox) sbox.style.display = (sel.value === 'server') ? '' : 'none';
         // 音源包两种模式都可用；服务器模式下额外需要管理员口令
         var rowSrc = $('maSrcRow');
         if (rowSrc) rowSrc.style.display = '';
         var rowAdm = $('maAdminRow');
         if (rowAdm) rowAdm.style.display = (sel.value === 'server') ? '' : 'none';
         refreshSrcCount();
+        if (sel.value === 'server') checkStatus();
         // 切换后强制重载
         var f = $('maFrame');
         if (f) { f.removeAttribute('data-cur'); f.src = 'about:blank'; }
@@ -157,6 +158,7 @@
         var inp = $('maServerUrl');
         if (!inp) return;
         window.__musicAgg.setServerUrl(inp.value);
+        syncServerBox();
         setStatus('服务器地址已保存', 'ok');
         reload();
     }
@@ -169,7 +171,26 @@
         if (nEl) nEl.style.display = native ? '' : 'none';
         if (fEl) fEl.style.display = native ? 'none' : '';
         try { localStorage.setItem('vh_musicagg_view', native ? 'native' : 'player'); } catch (e) {}
-        if (!native) loadPlayer(false);   // 切到播放器才拉 iframe
+        if (native) checkStatus();   // 简洁模式也要探一次，否则状态条一直显示“未启动”
+        else loadPlayer(false);      // 切到播放器才拉 iframe
+    }
+
+    // 只探活，不拉起 iframe：刷新状态条与状态点
+    function checkStatus() {
+        var agg = window.__musicAgg;
+        if (!agg) { setStatus('音乐聚合模块未加载', 'err'); return; }
+        var t = agg.getTarget();
+        var b = agg.base();
+        if (!b) { setStatus('未填写服务器地址', 'err'); return; }
+        setStatus('正在连接' + describeTarget() + '…', '');
+        agg.ensure(function (ok, info) {
+            if (ok) setStatus('已就绪 · ' + describeTarget(), 'ok');
+            else {
+                var tgt = (info && info.target) || t;
+                setStatus(tgt === 'server' ? ('连不上服务器（' + ((info && info.error) || '超时') + '）')
+                                           : '本地服务未就绪', 'err');
+            }
+        }, function (n) { setStatus('正在连接' + describeTarget() + '…', ''); });
     }
 
     // 显示音源数量（本地数文件；服务器模式提示来源）
@@ -191,6 +212,23 @@
         } catch (e) { el.textContent = ''; }
     }
 
+    // 服务器设置折叠框：未设地址时展开提示，设好后收起并更新摘要
+    function syncServerBox() {
+        var box = $('maServerBox');
+        var sum = $('maServerSummary');
+        var inp = $('maServerUrl');
+        if (!box) return;
+        var url = window.__musicAgg.getServerUrl();
+        if (inp) inp.value = url;
+        if (url) {
+            box.open = false;                       // 已设好 → 收起
+            if (sum) sum.textContent = '服务器：' + url.replace(/^https?:\/\//, '');
+        } else {
+            box.open = true;                        // 未设 → 展开提示
+            if (sum) sum.textContent = '服务器设置（未设地址，请先填写）';
+        }
+    }
+
     function bind() {
         var sel = $('maTarget');
         if (sel) {
@@ -199,8 +237,9 @@
         }
         var inp = $('maServerUrl');
         if (inp) inp.value = window.__musicAgg.getServerUrl();
-        var rowSrv = $('maServerRow');
-        if (rowSrv) rowSrv.style.display = (window.__musicAgg.getTarget() === 'server') ? '' : 'none';
+        var sbox0 = $('maServerBox');
+        if (sbox0) sbox0.style.display = (window.__musicAgg.getTarget() === 'server') ? '' : 'none';
+        syncServerBox();
         var rowSrc0 = $('maSrcRow');
         if (rowSrc0) rowSrc0.style.display = '';
         var rowAdm0 = $('maAdminRow');
