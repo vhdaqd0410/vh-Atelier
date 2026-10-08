@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.50.2",
-  "buildTime": "2026-09-28 16:26:44",
+  "version": "1.51.0",
+  "buildTime": "2026-10-08 11:50:30",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "内置 6 个实测可用影视源 + 单层源适配 + 导入报告说清原因"
+  "notes": "移除影视板块（在线点播/直播/TVBox导入），净减约2500行；红果短剧搜索预览下载保留在短剧扒歌里"
 }
