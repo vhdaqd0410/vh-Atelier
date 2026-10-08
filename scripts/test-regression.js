@@ -768,6 +768,29 @@ console.log('\n=== 坑 16：音乐聚合（lxserver）集成 ==='); {
     // 深色模式
     ok('有主题同步按钮', /id="btnMaTheme"/.test(aidx));
     ok('有主题探测与注入', /function isDark/.test(aui) && /vh-set-theme/.test(aui));
+    // 音源包：导出 / 一键导入（本地模式）
+    ok('有导出按钮', /id="btnMaExportSrc"/.test(aidx));
+    ok('有导入按钮', /id="btnMaImportSrc"/.test(aidx));
+    ok('JS 有导出实现', /function exportSources/.test(ajs));
+    ok('JS 有导入实现', /function importSources/.test(ajs));
+    ok('导入只收 js 脚本且同名不覆盖', /\.js/i.test(ajs) && /skipped/.test(ajs));
+    ok('导入解压走 Expand-Archive', /Expand-Archive/.test(ajs));
+    ok('导出走 Compress-Archive', /Compress-Archive/.test(ajs));
+    ok('音源包暴露给 UI', /exportSources: exportSources/.test(ajs) && /importSources: importSources/.test(ajs));
+    ok('音源行随目标显隐', /maSrcRow/.test(aui));
+    ok('显示本机音源数量', /refreshSrcCount/.test(aui));
+}
+
+// ============================================================
+console.log('\n=== 坑 18：短剧扒歌下载选目录改用系统对话框 ==='); {
+    var gjs = read('js/bgm.js');
+    var gsrv = read('bgm/server.js');
+    // 之前用音乐库树形弹窗（root 锁定，无法回上层）；现改系统原生文件夹选择器
+    ok('/pick-dir 支持 desc 参数', /VHBGM_DESC/.test(gsrv));
+    ok('/pick-dir 支持 startDir 初始目录', /VHBGM_START/.test(gsrv) && /Test-Path -LiteralPath \$env:VHBGM_START/.test(gsrv));
+    ok('选歌曲目录走 /pick-dir', /pickSongDir[\s\S]{0,700}\/pick-dir/.test(gjs));
+    ok('选歌曲目录默认音乐库', /musicLibStartDir\(\)[\s\S]{0,300}startDir/.test(gjs));
+    ok('仍保留树形选择器作兜底', /__vhPickDir\(\{/.test(gjs));
 }
 
 // ============================================================

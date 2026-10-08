@@ -3621,32 +3621,32 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         return '';
     }
     function pickSongDir(cb) {
+        // 用系统原生文件夹选择器（与「扒素材/移动目录」同一套，可自由跳转、能回上层），
+        // 初始位置默认停在音乐库目录。
+        // 之前用的是音乐库的树形弹窗，root 锁在音乐库、无法往上跳，已按需求换掉。
         var start = musicLibStartDir();
-        var picked = false;
-        // 复用音乐库的树形目录选择器（window.__vhPickDir）
-        if (typeof window.__vhPickDir === 'function') {
-            window.__vhPickDir({
-                title: '选择歌曲保存目录',
-                tip: start ? ('音乐库目录: ' + start) : '选择保存位置',
-                startDir: start || undefined,
-                root: start || undefined
-            }, function (dir) {
-                if (!dir) { cb(null); return; }
-                try { localStorage.setItem(SONG_DL_DIR_KEY, dir); } catch (e) {}
-                cb(dir);
-            });
-            return;
-        }
-        // 兜底：目录选择器还没加载 → 用系统目录选择（素材板块的）
-        if (typeof window.__mediaPickFolder === 'function') {
-            window.__mediaPickFolder(start, '选择歌曲保存目录', function (p) {
-                if (p) { try { localStorage.setItem(SONG_DL_DIR_KEY, p); } catch (e) {} }
-                cb(p || null);
-            });
-            return;
-        }
-        // 最后兜底：不问，用默认
-        cb(null);
+        post('/pick-dir', { desc: '选择歌曲保存目录', startDir: start || '' }, 120000).then(function (r) {
+            var p = (r && r.data || {}).path;
+            if (!p) { cb(null); return; }   // 用户取消
+            try { localStorage.setItem(SONG_DL_DIR_KEY, p); } catch (e) {}
+            cb(p);
+        }).catch(function () {
+            // 服务不可用时退回树形选择器（保证有路可走）
+            if (typeof window.__vhPickDir === 'function') {
+                window.__vhPickDir({
+                    title: '选择歌曲保存目录',
+                    tip: start ? ('音乐库目录: ' + start) : '选择保存位置',
+                    startDir: start || undefined,
+                    root: start || undefined
+                }, function (dir) {
+                    if (!dir) { cb(null); return; }
+                    try { localStorage.setItem(SONG_DL_DIR_KEY, dir); } catch (e) {}
+                    cb(dir);
+                });
+                return;
+            }
+            cb(null);
+        });
     }
 
     // 下载一首歌到本地（存档后可拖入时间线）

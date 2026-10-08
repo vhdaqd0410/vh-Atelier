@@ -6,7 +6,8 @@
 (function () {
     'use strict';
     if (typeof window === 'undefined') return;
-    try { require('fs'); } catch (e) { return; }
+    var fs, path;
+    try { fs = require('fs'); path = require('path'); } catch (e) { return; }
 
     function $(id) { return document.getElementById(id); }
 
@@ -139,6 +140,10 @@
         window.__musicAgg.setTarget(sel.value);
         var rowSrv = $('maServerRow');
         if (rowSrv) rowSrv.style.display = (sel.value === 'server') ? '' : 'none';
+        // 音源包只在本地模式有意义
+        var rowSrc = $('maSrcRow');
+        if (rowSrc) rowSrc.style.display = (sel.value === 'server') ? 'none' : '';
+        refreshSrcCount();
         // 切换后强制重载
         var f = $('maFrame');
         if (f) { f.removeAttribute('data-cur'); f.src = 'about:blank'; }
@@ -154,6 +159,21 @@
         reload();
     }
 
+    // 显示本机音源数量（仅本地模式有意义）
+    function refreshSrcCount() {
+        var el = $('maSrcCount');
+        if (!el) return;
+        try {
+            var agg = window.__musicAgg;
+            if (!agg || agg.getTarget() !== 'local') { el.textContent = ''; return; }
+            var dir = path.join(agg.sourceDir(), '_open');
+            var n = fs.existsSync(dir)
+                ? fs.readdirSync(dir).filter(function (f) { return /\.js$/i.test(f); }).length
+                : 0;
+            el.textContent = n ? ('本机已有 ' + n + ' 个音源') : '本机还没有音源，可导入音源包';
+        } catch (e) { el.textContent = ''; }
+    }
+
     function bind() {
         var sel = $('maTarget');
         if (sel) {
@@ -164,6 +184,8 @@
         if (inp) inp.value = window.__musicAgg.getServerUrl();
         var rowSrv = $('maServerRow');
         if (rowSrv) rowSrv.style.display = (window.__musicAgg.getTarget() === 'server') ? '' : 'none';
+        var rowSrc0 = $('maSrcRow');
+        if (rowSrc0) rowSrc0.style.display = (window.__musicAgg.getTarget() === 'server') ? 'none' : '';
 
         var b1 = $('btnMaReload'); if (b1) b1.addEventListener('click', reload);
         var b2 = $('btnMaExternal'); if (b2) b2.addEventListener('click', openExternal);
@@ -173,6 +195,31 @@
             applyTheme();
             setStatus('已尝试同步主题（播放器若未响应，可在播放器内单独设置）', 'ok');
         });
+
+        // 音源包：导出 / 一键导入
+        var b6 = $('btnMaExportSrc');
+        if (b6) b6.addEventListener('click', function () {
+            setStatus('请选择音源包的保存位置…', '');
+            window.__musicAgg.exportSources(function (ok, info) {
+                if (ok) setStatus('音源包已导出到：' + info, 'ok');
+                else setStatus('导出未完成（' + info + '）', 'err');
+            });
+        });
+        var b7 = $('btnMaImportSrc');
+        if (b7) b7.addEventListener('click', function () {
+            setStatus('请选择音源包（zip）…', '');
+            window.__musicAgg.importSources(function (ok, info) {
+                if (ok) {
+                    var s = info || {};
+                    setStatus('导入完成：新增 ' + (s.added || 0) + ' 个，跳过 ' + (s.skipped || 0) + ' 个（同名不覆盖）', 'ok');
+                    refreshSrcCount();
+                    setTimeout(reload, 800);
+                } else {
+                    setStatus('导入未完成（' + info + '）', 'err');
+                }
+            });
+        });
+        refreshSrcCount();
 
         // 监听主题变化（MutationObserver 太重的场景不做，切面板时同步一次即可）
     }

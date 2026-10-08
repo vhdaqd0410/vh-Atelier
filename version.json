@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.57.0",
-  "buildTime": "2026-10-08 17:38:50",
+  "version": "1.58.0",
+  "buildTime": "2026-10-08 18:00:18",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "音乐聚合本地/服务器切换 + 就绪状态绿点 + 深色模式 + 方案文档"
+  "notes": "音乐聚合音源包一键导入 + 修短剧扒歌下载选目录（改用系统对话框）"
 }

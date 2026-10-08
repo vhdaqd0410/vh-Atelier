@@ -976,6 +976,13 @@
                 <input type="text" id="maServerUrl" class="ma-input" placeholder="http://你的服务器:17899">
                 <button class="tbtn" id="btnMaSaveServer">保存并连接</button>
             </div>
+            <!-- 音源包（仅本地模式；用于把本机配好的音源拷到其他电脑） -->
+            <div class="ma-bar" id="maSrcRow">
+                <span class="ma-sel-label">音源包</span>
+                <button class="tbtn" id="btnMaExportSrc" title="把本机已配好的音源打包成 zip（可拷到其他电脑）">⬆ 导出</button>
+                <button class="tbtn" id="btnMaImportSrc" title="选择音源包 zip，自动装到本机（同名不覆盖）">⬇ 一键导入</button>
+                <span id="maSrcCount" style="font-size:11px;color:var(--muted);"></span>
+            </div>
             <iframe id="maFrame" class="ma-frame" src="about:blank"></iframe>
             <!-- 失败时的提示与重试 -->
             <div id="maHint" style="display:none;">

@@ -1312,15 +1312,29 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/pick-dir' && req.method === 'POST') {
       // 用 PowerShell 文件夹选择器（UTF-8 临时文件绕开控制台编码）
+      // 支持传入 desc（对话框标题）与 startDir（初始目录），
+      // 便于「下载歌曲选目录」等场景默认停在音乐库。
+      let bd = {}
+      try { bd = await readBody(req) || {} } catch (e) { bd = {} }
+      const desc = String(bd.desc || '选择短剧剧集所在文件夹').replace(/"/g, '')
+      const startDir = String(bd.startDir || '')
+      // 起始目录存在才设，避免 PowerShell 报错
+      const setStart = (startDir && fs.existsSync(startDir))
+        ? ('if(Test-Path -LiteralPath $env:VHBGM_START){$f.SelectedPath=$env:VHBGM_START};')
+        : ''
       const ps = [
         'Add-Type -AssemblyName System.Windows.Forms;',
         '$f=New-Object System.Windows.Forms.FolderBrowserDialog;',
-        '$f.Description="选择短剧剧集所在文件夹";',
+        '$f.Description=$env:VHBGM_DESC;',
+        setStart,
         'if($f.ShowDialog() -eq "OK"){[System.IO.File]::WriteAllText($env:VHBGM_OUT,$f.SelectedPath,[System.Text.UTF8Encoding]::new($false))}',
       ].join(' ')
       const outFile = path.join(os.tmpdir(), 'vhbgm_dir_' + Date.now() + '.txt')
-      const r = spawnSync('powershell', ['-NoProfile', '-Command', ps],
-        { env: Object.assign({}, process.env, { VHBGM_OUT: outFile }), encoding: 'utf8', timeout: 120000 })
+      const env2 = Object.assign({}, process.env, {
+        VHBGM_OUT: outFile, VHBGM_DESC: desc, VHBGM_START: startDir,
+      })
+      spawnSync('powershell', ['-NoProfile', '-Command', ps],
+        { env: env2, encoding: 'utf8', timeout: 120000 })
       let chosen = ''
       try { if (fs.existsSync(outFile)) { chosen = fs.readFileSync(outFile, 'utf8').trim(); fs.unlinkSync(outFile) } } catch (e) {}
       return send(res, 200, { code: 0, data: { path: chosen } })
