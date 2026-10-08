@@ -39,6 +39,10 @@ config.json 结构:
 - 三种模式均**不注册/不使用 zero_shot_spk_id**：实测带 spk_id 时 instruct2 会忽略指令文本
   （frontend_instruct2 走缓存分支，prompt_text 取的是缓存里的参考文字），且 cross_lingual
   会 del 掉缓存 dict 的键、污染同一音色 ID。直接传参考音频最稳，也避免跨模式互相污染。
+- **指令格式必须是官方格式**：instruct 用 `You are a helpful assistant. {指令}<|endofprompt|>`，
+  cross 用 `You are a helpful assistant.<|endofprompt|>{文本}`。`<|endofprompt|>` 之前是给 LLM 的
+  指令、之后才是要念的内容。漏了这个标记，指令会被当成正文念出来
+  （实测转写：'用愤怒的语气大声喊出来,你给我滚出去'）。
 - 输出采样率 24000（CosyVoice3 原生）
 - 路径注入必须在 import torch 之前完成，故 import 放在 main 内部
 """
@@ -54,6 +58,16 @@ DEFAULT_MATCHA = r"D:\cosyvoice3_V30\third_party\Matcha-TTS"
 DEFAULT_MODEL_DIR = r"D:\cosyvoice3_V30\pretrained_models"
 
 MODES = ('clone', 'instruct', 'cross')
+
+# CosyVoice3 的指令前缀与分隔标记。
+# 官方 example.py 的 instruct / cross_lingual 用法：
+#   inference_instruct2(tts, 'You are a helpful assistant. {指令}<|endofprompt|>', wav)
+#   inference_cross_lingual('You are a helpful assistant.<|endofprompt|>{文本}', wav)
+# <|endofprompt|> 之前是给 LLM 的指令，之后才是要念的内容。
+# 实测：不加这个格式，LLM 会把指令也当成正文念出来
+# （转写验证：'用愤怒的语气大声喊出来,你给我滚出去'）。
+SYS_PREFIX = 'You are a helpful assistant. '
+EO_PROMPT = '<|endofprompt|>'
 
 
 def emit_stage(stage):
@@ -199,12 +213,14 @@ def main():
     try:
         chunks = []
         if mode == 'instruct':
-            # 情绪/指令控制：不传 spk_id（否则指令会被忽略），直接用参考音频
-            gen = model.inference_instruct2(tts_text, instruct_text, ref_wav,
+            # 情绪/指令控制：指令必须包成官方格式，否则指令会被当成正文念出来。
+            # 不传 spk_id（否则指令会被忽略）
+            instruct_full = SYS_PREFIX + instruct_text + EO_PROMPT
+            gen = model.inference_instruct2(tts_text, instruct_full, ref_wav,
                                             stream=False, speed=speed)
         elif mode == 'cross':
-            # 跨语言：不传参考文字，用参考音色说目标语言
-            gen = model.inference_cross_lingual(tts_text, ref_wav,
+            # 跨语言：同样需要官方前缀分隔，否则前缀会被念出
+            gen = model.inference_cross_lingual(SYS_PREFIX + EO_PROMPT + tts_text, ref_wav,
                                                 stream=False, speed=speed)
         else:
             # 零样本克隆（原行为）

@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.55.0",
-  "buildTime": "2026-10-08 14:23:35",
+  "version": "1.55.1",
+  "buildTime": "2026-10-08 14:45:42",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "语音克隆面板重构：结果可直接拖进时间轴 + 波形试听；面板从4卡片压成3步"
+  "notes": "修情绪指令把指令本身也念出（需官方 You are a helpful assistant. 前缀 + <|endofprompt|> 分隔）"
 }

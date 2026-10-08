@@ -679,6 +679,11 @@ console.log('\n=== 坑 14：语音克隆三模式 + 音色库 ==='); {
     // 关键：不使用 spk_id（实测会污染缓存 / 让 instruct 忽略指令）
     var cliCalls = ccli.split('\n').filter(function (l) { return /inference_/.test(l) && l.indexOf('#') !== 0 && l.indexOf('*') < 0; });
     ok('CLI 调用不传 zero_shot_spk_id', cliCalls.length > 0 && cliCalls.every(function (l) { return l.indexOf('zero_shot_spk_id') < 0; }), cliCalls.join(' | '));
+    // 关键：指令必须包成官方格式，否则指令会被念出来
+    ok('CLI 有官方指令前缀常量', /SYS_PREFIX\s*=\s*'You are a helpful assistant\.\s*'/.test(ccli));
+    ok('CLI 有 endofprompt 标记', /EO_PROMPT\s*=\s*'<\|endofprompt\|>'/.test(ccli));
+    ok('instruct 拼接前缀+标记', /SYS_PREFIX \+ instruct_text \+ EO_PROMPT/.test(ccli));
+    ok('cross 拼接前缀+标记', /SYS_PREFIX \+ EO_PROMPT \+ tts_text/.test(ccli));
     ok('CSS 有模式按钮样式', /\.vc-mode\s*\{/.test(ccss) && /\.vc-mode\.active/.test(ccss));
 }
 
