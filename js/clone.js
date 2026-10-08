@@ -15,6 +15,146 @@
     var busy = false;
     var audioTracks = [];       // 当前序列音轨列表 [{ index, name, clips }]
     var projectMedia = [];      // 项目素材列表 [{ name, mediaPath, binPath, duration, ext }]
+    var mode = 'clone';         // 合成模式：clone | instruct | cross
+
+    // 音色库：命名保存，下次直接复用
+    // 存储：元数据存 localStorage；参考音频文件拷到插件目录 collect\voices\ 下，
+    //       以免临时目录被清理后音色失效。
+    var VOICE_KEY = 'vh_clone_voices';
+    function voicesDir() {
+        var d = path.join(extRoot, 'collect', 'voices');
+        try { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); } catch (e) {}
+        return d;
+    }
+    function loadVoices() {
+        try { return JSON.parse(localStorage.getItem(VOICE_KEY) || '[]'); } catch (e) { return []; }
+    }
+    function saveVoices(list) {
+        try { localStorage.setItem(VOICE_KEY, JSON.stringify(list.slice(0, 60))); } catch (e) {}
+    }
+    function renderVoiceLib() {
+        if (!el.voiceLibSel) return;
+        var list = loadVoices();
+        el.voiceLibSel.innerHTML = '';
+        if (!list.length) {
+            var o = document.createElement('option');
+            o.value = ''; o.textContent = '（还没有保存的音色）';
+            el.voiceLibSel.appendChild(o);
+            el.btnUseVoice.disabled = true;
+            el.btnDelVoice.disabled = true;
+            if (el.voiceLibHint) el.voiceLibHint.textContent = '音色 = 参考音频 + 参考文字，保存后下次直接选，不用重新抓。';
+            return;
+        }
+        list.forEach(function (v, i) {
+            var o = document.createElement('option');
+            o.value = String(i);
+            var ok = v.wav && fs.existsSync(v.wav);
+            o.textContent = v.name + (ok ? '' : '（音频已丢失）');
+            el.voiceLibSel.appendChild(o);
+        });
+        syncVoiceBtns();
+    }
+    function syncVoiceBtns() {
+        var idx = parseInt(el.voiceLibSel.value, 10);
+        var list = loadVoices();
+        var ok = !isNaN(idx) && list[idx];
+        el.btnUseVoice.disabled = !ok || busy;
+        el.btnDelVoice.disabled = !ok || busy;
+        if (ok) {
+            var v = list[idx];
+            if (el.voiceLibHint) {
+                el.voiceLibHint.textContent = '参考文字：' + (v.ref_text || '（无）').slice(0, 40)
+                    + (v.ref_text && v.ref_text.length > 40 ? '…' : '');
+            }
+        }
+    }
+    function saveCurrentVoice() {
+        if (!refWavPath || !fs.existsSync(refWavPath)) { setStatus('请先抓取参考音频', 'err'); return; }
+        var text = el.refText.value.trim();
+        if (!text) { setStatus('请先填写参考音频对应的文字', 'err'); return; }
+        var name = prompt('给这个音色起个名字（如：沈母 / 男主旁白）', '');
+        if (name === null) return;
+        name = String(name).trim();
+        if (!name) { setStatus('名字不能为空', 'err'); return; }
+        try {
+            var dir = voicesDir();
+            var safe = name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+            var dst = path.join(dir, safe + '_' + Date.now() + '.wav');
+            fs.copyFileSync(refWavPath, dst);
+            var list = loadVoices();
+            // 同名覆盖（避免堆积）
+            list = list.filter(function (v) { return v.name !== name; });
+            list.unshift({ name: name, wav: dst, ref_text: text, at: Date.now() });
+            saveVoices(list);
+            renderVoiceLib();
+            el.voiceLibSel.value = '0';
+            syncVoiceBtns();
+            setStatus('已保存音色「' + name + '」，下次可直接从列表选用', 'ok');
+        } catch (e) {
+            setStatus('保存音色失败: ' + e.message, 'err');
+        }
+    }
+    function useVoice() {
+        var idx = parseInt(el.voiceLibSel.value, 10);
+        var list = loadVoices();
+        var v = !isNaN(idx) ? list[idx] : null;
+        if (!v) { setStatus('请选择一个音色', 'err'); return; }
+        if (!v.wav || !fs.existsSync(v.wav)) { setStatus('该音色的音频文件已丢失，请重新保存', 'err'); return; }
+        refWavPath = v.wav;
+        refClipMeta = { clipName: v.name, mediaPath: v.wav };
+        el.refInfo.textContent = '✓ 音色库「' + v.name + '」';
+        el.refInfo.classList.add('has');
+        el.refText.value = v.ref_text || '';
+        el.btnSaveVoice.disabled = busy;
+        updateCloneEnabled();
+        setStatus('已载入音色「' + v.name + '」，填好要说的文字即可生成', 'ok');
+    }
+    function delVoice() {
+        var idx = parseInt(el.voiceLibSel.value, 10);
+        var list = loadVoices();
+        var v = !isNaN(idx) ? list[idx] : null;
+        if (!v) return;
+        if (!confirm('删除音色「' + v.name + '」？此操作不可撤销。')) return;
+        try { if (v.wav && fs.existsSync(v.wav)) fs.unlinkSync(v.wav); } catch (e) {}
+        list.splice(idx, 1);
+        saveVoices(list);
+        renderVoiceLib();
+        setStatus('已删除音色「' + v.name + '」', 'ok');
+    }
+
+    // 按模式切换 UI 显隐
+    var MODE_HINT = {
+        clone: '克隆：参考音频说什么语言，就合成什么语言。',
+        instruct: '情绪指令：用一句自然语言描述语气/口音，如「用四川话说这句话」。',
+        cross: '跨语言：参考音频说中文、文字写英文即可，用中文音色说外语。'
+    };
+    function setMode(m) {
+        mode = (m === 'instruct' || m === 'cross') ? m : 'clone';
+        Array.prototype.forEach.call(el.modeRow.querySelectorAll('.vc-mode'), function (b) {
+            b.classList.toggle('active', b.dataset.mode === mode);
+        });
+        if (el.instructWrap) el.instructWrap.style.display = (mode === 'instruct') ? '' : 'none';
+        if (el.crossWrap) el.crossWrap.style.display = (mode === 'cross') ? '' : 'none';
+        if (el.modeHint) el.modeHint.textContent = MODE_HINT[mode] || '';
+        if (el.ttsText) {
+            el.ttsText.placeholder = (mode === 'cross')
+                ? '输入要合成的话（写英文即可，用中文音色说外语）'
+                : '输入要合成的话，中英文均可';
+        }
+        updateCloneEnabled();
+    }
+    // 合成按钮启用条件随模式变化
+    function updateCloneEnabled() {
+        if (busy) { el.btnClone.disabled = true; return; }
+        var hasVoice = refWavPath && fs.existsSync(refWavPath || '');
+        var refText = (el.refText.value || '').trim();
+        var tts = (el.ttsText.value || '').trim();
+        var instr = (el.instructText && el.instructText.value || '').trim();
+        var ok = hasVoice && tts;
+        if (mode !== 'cross') ok = ok && !!refText;
+        if (mode === 'instruct') ok = ok && !!instr;
+        el.btnClone.disabled = !ok;
+    }
 
     // DOM 引用
     var el = {
@@ -22,6 +162,17 @@
         refInfo: document.getElementById('refInfo'),
         refText: document.getElementById('refText'),
         btnAutoRef: document.getElementById('btnAutoRef'),
+        btnSaveVoice: document.getElementById('btnSaveVoice'),
+        voiceLibSel: document.getElementById('voiceLibSel'),
+        btnUseVoice: document.getElementById('btnUseVoice'),
+        btnDelVoice: document.getElementById('btnDelVoice'),
+        voiceLibHint: document.getElementById('voiceLibHint'),
+        modeRow: document.getElementById('modeRow'),
+        modeHint: document.getElementById('modeHint'),
+        instructWrap: document.getElementById('instructWrap'),
+        instructText: document.getElementById('instructText'),
+        instructChips: document.getElementById('instructChips'),
+        crossWrap: document.getElementById('crossWrap'),
         ttsText: document.getElementById('ttsText'),
         speedRange: document.getElementById('speedRange'),
         speedLabel: document.getElementById('speedLabel'),
@@ -70,10 +221,15 @@
         el.btnRefreshMedia.disabled = b;
         el.btnGrabFromMedia.disabled = b;
         el.projectMediaSel.disabled = b;
+        if (el.btnSaveVoice) el.btnSaveVoice.disabled = b || !refWavPath;
+        if (el.btnUseVoice) el.btnUseVoice.disabled = b || !el.voiceLibSel.value;
+        if (el.btnDelVoice) el.btnDelVoice.disabled = b || !el.voiceLibSel.value;
         if (b) {
             el.progressWrap.classList.add('show');
         } else {
             el.progressWrap.classList.remove('show');
+            // 松手后按当前模式重算按钮可用性（比 at 未 busy && refWavPath 更准）
+            try { updateCloneEnabled(); } catch (e) {}
         }
     }
 
@@ -384,14 +540,16 @@
         return subs;
     }
 
-    // ---------- 2. 克隆 ----------
+    // ---------- 2. 合成（克隆 / 情绪指令 / 跨语言）----------
     function clone() {
         if (busy) return;
         if (!refWavPath) { setStatus('请先抓取参考音色', 'err'); return; }
         var refText = el.refText.value.trim();
         var ttsText = el.ttsText.value.trim();
-        if (!refText) { setStatus('请填写参考音频对应文字', 'err'); return; }
+        var instructText = (el.instructText && el.instructText.value || '').trim();
         if (!ttsText) { setStatus('请填写要合成的文字', 'err'); return; }
+        if (mode !== 'cross' && !refText) { setStatus('请填写参考音频对应文字', 'err'); return; }
+        if (mode === 'instruct' && !instructText) { setStatus('情绪指令模式需要填写语气指令（或点下方词条）', 'err'); return; }
         var speed = parseFloat(el.speedRange.value) || 1.0;
         var modelVariant = el.modelSel.value || 'base';
 
@@ -407,18 +565,21 @@
         var cfgPath = path.join(tmpDir, 'clone_cfg.json');
 
         var cfg = {
+            mode: mode,
             ref_wav: refWavPath,
-            ref_text: refText,
+            ref_text: (mode === 'cross') ? '' : refText,
             tts_text: ttsText,
             out_wav: outWav,
             speed: speed,
             model: modelVariant
         };
+        if (mode === 'instruct') cfg.instruct_text = instructText;
         fs.writeFileSync(cfgPath, JSON.stringify(cfg), 'utf8');
 
+        var modeName = { clone: '克隆', instruct: '情绪指令', cross: '跨语言' }[mode] || '克隆';
         setBusy(true);
         setProgress(-1, '正在加载模型（约 15 秒）...');
-        setStatus('CosyVoice3 克隆中（首次含模型加载，请稍候）...', '');
+        setStatus('CosyVoice3 ' + modeName + '中（首次含模型加载，请稍候）...', '');
 
         var proc = child_process.execFile(pythonExe, [cliPath, cfgPath], {
             timeout: 1800000,
@@ -457,6 +618,7 @@
             el.btnPlay.textContent = '▶ 试听';
             el.resultInfo.classList.add('show');
             el.resultInfo.innerHTML =
+                '<span class="k">模式</span> ' + ({ clone: '零样本克隆', instruct: '情绪指令', cross: '跨语言' }[res.mode] || '克隆') + '<br>' +
                 '<span class="k">时长</span> ' + res.duration + ' 秒<br>' +
                 '<span class="k">语速</span> ' + res.speed + '×<br>' +
                 '<span class="k">模型</span> ' + (res.model === 'rl' ? 'RL 强化学习版' : '基础版') + '<br>' +
@@ -464,11 +626,11 @@
                 '<span class="k">生成耗时</span> ' + res.gen_sec + ' 秒<br>' +
                 '<span class="k">RTF</span> ' + res.rtf + '<br>' +
                 '<span class="k">产物</span> ' + res.out;
-            setStatus('克隆完成，可试听 / 导入素材箱 / 插入时间线', 'ok');
+            setStatus(modeName + '完成，可试听 / 导入素材箱 / 插入时间线', 'ok');
         });
 
         // 读取 stderr 里的 STAGE 标记，更新进度
-        var stagePct = { 'init': 2, 'load-model': 10, 'clone': 40, 'save': 92 };
+        var stagePct = { 'init': 2, 'load-model': 10, 'gen': 40, 'save': 92 };
         proc.stderr.on('data', function (chunk) {
             var s = chunk.toString();
             var lines = s.split(/\r?\n/);
@@ -480,7 +642,7 @@
                     var label = {
                         'init': '初始化运行时...',
                         'load-model': '加载模型（约 15 秒）...',
-                        'clone': '零样本克隆中...',
+                        'gen': modeName + '中...',
                         'save': '保存音频...'
                     }[stage] || stage;
                     setProgress(pct, label);
@@ -690,6 +852,32 @@
     el.btnRefreshTrack.addEventListener('click', refreshTracks);
     el.btnInsertTimeline.addEventListener('click', insertTimeline);
 
+    // 音色库
+    if (el.btnSaveVoice) el.btnSaveVoice.addEventListener('click', saveCurrentVoice);
+    if (el.btnUseVoice) el.btnUseVoice.addEventListener('click', useVoice);
+    if (el.btnDelVoice) el.btnDelVoice.addEventListener('click', delVoice);
+    if (el.voiceLibSel) el.voiceLibSel.addEventListener('change', syncVoiceBtns);
+
+    // 模式切换
+    if (el.modeRow) {
+        Array.prototype.forEach.call(el.modeRow.querySelectorAll('.vc-mode'), function (b) {
+            b.addEventListener('click', function () { setMode(b.dataset.mode); });
+        });
+    }
+    // 指令词条：点一下填进输入框
+    if (el.instructChips) {
+        Array.prototype.forEach.call(el.instructChips.querySelectorAll('.vc-chip'), function (c) {
+            c.addEventListener('click', function () {
+                if (el.instructText) { el.instructText.value = c.dataset.v || ''; }
+                updateCloneEnabled();
+            });
+        });
+    }
+    // 文本变化 → 重算按钮可用性
+    if (el.ttsText) el.ttsText.addEventListener('input', updateCloneEnabled);
+    if (el.refText) el.refText.addEventListener('input', updateCloneEnabled);
+    if (el.instructText) el.instructText.addEventListener('input', updateCloneEnabled);
+
     el.speedRange.addEventListener('input', function () {
         var v = parseFloat(el.speedRange.value).toFixed(2);
         el.speedLabel.textContent = v + '×';
@@ -699,6 +887,9 @@
     bindPlayerEvents();
 
     // 初始化
+    setMode('clone');
+    renderVoiceLib();
+    updateCloneEnabled();
     setStatus('就绪。先在时间轴选中要克隆的人声片段，点「抓取」', '');
     refreshTracks();
     refreshProjectMedia();

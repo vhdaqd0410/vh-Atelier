@@ -214,6 +214,19 @@
             <div class="hint">自动识别会用 whisper 听一遍参考音频，识别结果自动填入，建议核对后使用。</div>
 
             <div class="divider"></div>
+            <!-- 音色库：命名保存，下次直接复用 -->
+            <div class="row" style="align-items:center;gap:6px;">
+                <label style="margin:0;flex:1;">音色库（保存后可随时复用）</label>
+                <button id="btnSaveVoice" class="secondary mini" disabled>💾 保存当前音色</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <select id="voiceLibSel" style="flex:1;"><option value="">（还没有保存的音色）</option></select>
+                <button id="btnUseVoice" class="secondary mini" disabled>使用</button>
+                <button id="btnDelVoice" class="secondary mini" disabled>删除</button>
+            </div>
+            <div class="hint" id="voiceLibHint">音色 = 参考音频 + 参考文字，保存后下次直接选，不用重新抓。</div>
+
+            <div class="divider"></div>
             <h2 style="margin-top:2px;">或从项目素材选择</h2>
             <div class="row" style="margin-top:6px;">
                 <select id="projectMediaSel" style="flex:1;"><option value="">（点「刷新」加载项目素材）</option></select>
@@ -231,9 +244,36 @@
         </div>
 
         <div class="card">
-            <h2>2 · 合成文本 & 语速</h2>
-            <label>要克隆说出的文字</label>
+            <h2>2 · 合成模式与文本</h2>
+            <div class="vc-modes" id="modeRow">
+                <button class="vc-mode active" data-mode="clone">克隆</button>
+                <button class="vc-mode" data-mode="instruct">情绪指令</button>
+                <button class="vc-mode" data-mode="cross">跨语言</button>
+            </div>
+            <div class="hint" id="modeHint">克隆：参考音频说什么语言，就合成什么语言。</div>
+
+            <label style="margin-top:10px;">要克隆说出的文字</label>
             <textarea id="ttsText" rows="3" placeholder="输入要合成的话，中英文均可"></textarea>
+
+            <!-- 仅「情绪指令」模式显示 -->
+            <div id="instructWrap" style="display:none;margin-top:10px;">
+                <label>语气 / 指令（自然语言，留空则无效）</label>
+                <input type="text" id="instructText" placeholder="例如：用四川话说这句话 / 愤怒地大声喊 / 温柔地轻声说">
+                <div class="vc-chips" id="instructChips">
+                    <span class="vc-chip" data-v="用四川话说这句话">四川话</span>
+                    <span class="vc-chip" data-v="用愤怒的语气大声喊出来">愤怒</span>
+                    <span class="vc-chip" data-v="温柔地轻声说">温柔</span>
+                    <span class="vc-chip" data-v="悲伤地说，语速缓慢">悲伤</span>
+                    <span class="vc-chip" data-v="冷漠平淡地说">冷漠</span>
+                    <span class="vc-chip" data-v="急促地说，语速加快">急促</span>
+                </div>
+            </div>
+
+            <!-- 仅「跨语言」模式显示 -->
+            <div id="crossWrap" style="display:none;margin-top:10px;">
+                <div class="hint" style="color:var(--fg-info);">ℹ 参考音频说中文、文字写英文即可 —— 用中文音色说外语，无需英文参考音频。</div>
+            </div>
+
             <div class="grid2" style="margin-top:10px;">
                 <div>
                     <label>语速 <span id="speedVal" style="color:var(--accent);font-weight:600;">1.0</span>×</label>

@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.53.0",
-  "buildTime": "2026-10-08 13:10:06",
+  "version": "1.54.0",
+  "buildTime": "2026-10-08 13:59:29",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "移除红果面板（与短剧扒歌重复）+ 进度面板导入素材含粗剪"
+  "notes": "语音克隆升级：音色库（命名保存复用）+ 情绪指令 + 跨语言"
 }

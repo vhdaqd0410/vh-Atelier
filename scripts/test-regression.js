@@ -649,11 +649,44 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('js/movie-tvbox.js 已移除', !fs.existsSync(path.join(ROOT, 'js/movie-tvbox.js')));
 }
 
+console.log('\n=== 坑 14：语音克隆三模式 + 音色库 ==='); {
+    var cjs = read('js/clone.js');
+    var cidx = read('index.html');
+    var ccss = read('css/atelier.css');
+    var ccli = read('py/cosyvoice_cli.py');
+    // 三模式
+    ok('有模式切换行', /id="modeRow"/.test(cidx));
+    ok('三个模式按钮', (cidx.match(/class="vc-mode/g) || []).length >= 3);
+    ok('JS 有模式状态机', /var mode = 'clone'/.test(cjs) && /function setMode/.test(cjs));
+    ok('JS 传递 mode 给 CLI', /mode: mode,/.test(cjs));
+    ok('cross 模式不传 ref_text', /mode === 'cross'\) \? '' : refText/.test(cjs));
+    ok('指令输入框存在', /id="instructText"/.test(cidx));
+    ok('指令常用词条', /id="instructChips"/.test(cidx) && /\.vc-chip/.test(ccss));
+    ok('instruct 模式才显指令框', /instructWrap\.style\.display = \(mode === 'instruct'\)/.test(cjs));
+    ok('cross 模式有提示块', /id="crossWrap"/.test(cidx));
+    // 音色库
+    ok('音色库下拉存在', /id="voiceLibSel"/.test(cidx));
+    ok('保存/使用/删除按钮', /id="btnSaveVoice"/.test(cidx) && /id="btnUseVoice"/.test(cidx) && /id="btnDelVoice"/.test(cidx));
+    ok('音色库存 localStorage', /vh_clone_voices/.test(cjs));
+    ok('音色文件落到 collect/voices', /'collect', 'voices'/.test(cjs));
+    ok('有保存/载入/删除实现', /function saveCurrentVoice/.test(cjs) && /function useVoice/.test(cjs) && /function delVoice/.test(cjs));
+    ok('按钮可用性按模式算', /function updateCloneEnabled/.test(cjs));
+    // CLI
+    ok('CLI 支持三模式常量', /MODES = \('clone', 'instruct', 'cross'\)/.test(ccli));
+    ok('CLI 有 instruct 分支', /inference_instruct2/.test(ccli));
+    ok('CLI 有 cross 分支', /inference_cross_lingual/.test(ccli));
+    ok('CLI 有 clone 分支', /inference_zero_shot/.test(ccli));
+    // 关键：不使用 spk_id（实测会污染缓存 / 让 instruct 忽略指令）
+    var cliCalls = ccli.split('\n').filter(function (l) { return /inference_/.test(l) && l.indexOf('#') !== 0 && l.indexOf('*') < 0; });
+    ok('CLI 调用不传 zero_shot_spk_id', cliCalls.length > 0 && cliCalls.every(function (l) { return l.indexOf('zero_shot_spk_id') < 0; }), cliCalls.join(' | '));
+    ok('CSS 有模式按钮样式', /\.vc-mode\s*\{/.test(ccss) && /\.vc-mode\.active/.test(ccss));
+}
+
 // ============================================================
 console.log('\n=== 附加：改动文件语法自检 ===');{
     const files = ['js/localsvc.js', 'js/errorlog.js', 'js/export.js', 'js/video.js',
                    'js/music.js', 'js/bgm.js', 'js/enhance.js', 'js/media.js', 'js/updater.js',
-                   'js/progress.js'];
+                   'js/progress.js', 'js/clone.js'];
     files.forEach(function (f) {
         let err = null;
         try { new Function(read(f)); } catch (e) { err = e.message; }

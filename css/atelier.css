@@ -5090,3 +5090,14 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .tab-panel.at-pane-hidden #mllibContextMenu {
     display: none !important;
 }
+
+/* ===== 语音克隆：合成模式切换 + 指令词条 ===== */
+.vc-modes { display: flex; gap: 5px; margin-bottom: 6px; }
+.vc-mode { flex: 1; padding: 6px 4px; font-size: 12px; cursor: pointer; text-align: center;
+    background: var(--panel2); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; }
+.vc-mode:hover { border-color: var(--accent); color: var(--accent); }
+.vc-mode.active { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.vc-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.vc-chip { font-size: 11px; padding: 2px 9px; cursor: pointer; border-radius: 10px;
+    background: rgba(139,92,246,.14); color: #c9b6ff; border: 1px solid transparent; }
+.vc-chip:hover { border-color: var(--accent); color: #fff; }
