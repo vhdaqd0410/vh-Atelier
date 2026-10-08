@@ -968,7 +968,7 @@
                 </select>
                 <label class="ma-sel-label">视图</label>
                 <select id="maView" class="ma-sel" title="简洁模式（搜歌/试听/下载/插时间轴）或完整播放器">
-                    <option value="native">简洁（干活）</option>
+                    <option value="native">简洁</option>
                     <option value="player">完整播放器</option>
                 </select>
                 <button class="tbtn" id="btnMaReload" title="重新加载播放器">↻ 重载</button>
@@ -997,13 +997,20 @@
                 <span class="ma-sel-label">管理口令</span>
                 <input type="password" id="maAdminPwd" class="ma-input" style="max-width:160px;" placeholder="默认 123456">
             </div>
-            <!-- ========== 简洁模式：搜歌 / 试听 / 下载 / 插时间轴 ========== -->
+            <!-- ========== 简洁模式：首页 + 搜索 + 歌单 + 播放器 ========== -->
             <div id="maNative" class="mv2-wrap">
-                <!-- 搜索区 -->
+                <!-- 搜索条 + 类型 -->
                 <div class="mv2-search">
                     <span class="mv2-search-ico">🔍</span>
-                    <input type="text" id="mv2Query" class="mv2-input" placeholder="搜歌名 / 歌手（回车搜索）">
+                    <input type="text" id="mv2Query" class="mv2-input" placeholder="搜歌名 / 歌手 / 歌单（回车搜索）">
+                    <select id="mv2Type" class="mv2-type" title="搜索类型">
+                        <option value="song">单曲</option>
+                        <option value="playlist">歌单</option>
+                        <option value="singer">歌手</option>
+                        <option value="album">专辑</option>
+                    </select>
                     <button class="tbtn primary mv2-go" id="btnMv2Search">搜索</button>
+                    <button class="tbtn" id="btnMv2Home" title="回首页（推荐/榜单）">🏠</button>
                 </div>
                 <!-- 平台筛选 -->
                 <div class="mv2-pfs" id="mv2Platforms">
@@ -1014,30 +1021,57 @@
                     <button class="mv2-pf" data-pf="mg">味咕</button>
                     <button class="mv2-pf mv2-pf-all" data-pf="">全部平台</button>
                 </div>
-                <!-- 结果头部 -->
+                <!-- 状态行 -->
                 <div class="mv2-head">
-                    <span id="mv2Count" class="mv2-count">输入关键词开始搜索</span>
+                    <span id="mv2Count" class="mv2-count"></span>
                     <span style="flex:1"></span>
                     <span id="mv2State" class="mv2-state"></span>
                 </div>
-                <!-- 试听条 -->
-                <div id="mv2Player" class="mv2-player" style="display:none;">
-                    <div class="mv2-player-head">
-                        <span class="mv2-player-dot"></span>
-                        <span id="mv2PlayerTitle" class="mv2-player-title">未在播放</span>
-                        <span style="flex:1"></span>
-                        <button class="mv2-x" id="btnMv2PlayerClose" title="关闭">✕</button>
+                <!-- 内容区：默认首页，搜索后变结果 -->
+                <div id="mv2List" class="mv2-list mv2-home"></div>
+                <!-- 歌单详情（点歌单后展示） -->
+                <div id="mv2Sheet" class="mv2-list" style="display:none;"></div>
+
+                <!-- 播放器（对齐网易云播放控件） -->
+                <div class="music-player mv2-player-box" id="mv2Player" style="display:none;">
+                    <div class="mp-ctrl">
+                        <button id="btnMv2Prev" class="mp-btn" title="上一首">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                        </button>
+                        <button id="btnMv2PlayPause" class="mp-btn mp-main" title="播放/暂停">
+                            <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                            <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                        </button>
+                        <button id="btnMv2Next" class="mp-btn" title="下一首">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                        </button>
                     </div>
-                    <div id="mv2Wave" class="mv2-wave"></div>
-                </div>
-                <!-- 结果列表 -->
-                <div id="mv2List" class="mv2-list">
-                    <div class="mv2-empty">
-                        <div class="mv2-empty-ico">🎵</div>
-                        <div>输入歌名或歌手开始搜索</div>
-                        <div class="mv2-empty-sub">支持网易云 / QQ / 酷我 / 酷狗 / 味咕</div>
+                    <div class="mp-now">
+                        <img id="mv2Cover" class="mp-cover" alt="">
+                        <div class="mp-meta">
+                            <div class="mp-title" id="mv2PlayerTitle">未在播放</div>
+                            <div class="mp-sub" id="mv2Sub"></div>
+                        </div>
+                    </div>
+                    <div class="mp-bar">
+                        <span class="ptime" id="mv2Cur">0:00</span>
+                        <div class="seek" id="mv2Seek"><div class="seek-fill" id="mv2SeekFill"></div></div>
+                        <span class="ptime" id="mv2Dur">0:00</span>
+                    </div>
+                    <div class="mp-side">
+                        <div class="mp-vol">
+                            <input type="range" id="mv2Vol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                        </div>
+                        <button id="btnMv2Download" class="mp-mode" title="下载当前歌曲">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+                        </button>
+                        <button id="btnMv2Insert" class="mp-mode" title="下载并插入时间线">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                        </button>
+                        <button id="btnMv2Close" class="mp-mode" title="收起播放器">✕</button>
                     </div>
                 </div>
+                <audio id="mv2Audio" style="display:none;"></audio>
             </div>
             <div id="mv2Toast" class="mv2-toast" style="display:none;"></div>
             <!-- ========== 完整播放器（iframe） ========== -->

@@ -823,18 +823,42 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('有搜索框与按钮', /id="mv2Query"/.test(nidx) && /id="btnMv2Search"/.test(nidx));
     ok('有平台筛选', /id="mv2Platforms"/.test(nidx) && /mv2-pf/.test(nidx));
     ok('有结果列表', /id="mv2List"/.test(nidx));
-    ok('有试听波形区', /id="mv2Wave"/.test(nidx));
+    ok('有播放器（复用网易云控件）', /id="mv2Player"/.test(nidx) && /class="music-player/.test(nidx));
     ok('引入原生面板脚本', /js\/musicagg-native\.js/.test(nidx));
     ok('搜索走 search 接口', /\/api\/music\/search/.test(njs));
     ok('取直链走 url 接口', /\/api\/music\/url/.test(njs));
-    ok('试听用 wavesurfer', /WaveSurfer\.create/.test(njs));
+    ok('试听用 audio + 音频代理', /getAudio\(\)/.test(njs) && /proxyUrl/.test(njs));
     ok('下载走 download 接口', /\/api\/music\/download/.test(njs));
     ok('插入时间轴复用 vcInsert', /vcInsertToTimelineStr/.test(njs));
     ok('下载默认音乐库目录', /mllibDir/.test(njs));
     ok('有视图切换（简洁/播放器）', /id="maView"/.test(nidx) && /function setView/.test(nui));
     ok('视图选择持久化', /vh_musicagg_view/.test(nui));
     ok('切播放器才加载 iframe', /else loadPlayer\(false\)/.test(nui));
-    ok('CSS 有原生面板样式', /\.mv2-wrap/.test(ncss) && /\.mv2-pf/.test(ncss) && /\.mv2-wave/.test(ncss));
+    ok('CSS 有原生面板样式', /\.mv2-wrap/.test(ncss) && /\.mv2-pf/.test(ncss) && /\.mv2-row/.test(ncss));
+    // 首页：推荐歌单 + 榜单 + 热搜
+    ok('有首页加载', /function loadHome/.test(njs));
+    ok('首页拉榜单', /leaderboard\/boards/.test(njs));
+    ok('首页拉歌单', /songList\/list/.test(njs));
+    ok('首页拉热搜', /hotSearch/.test(njs));
+    ok('榜单详情用 bangid', /leaderboard\/list\?source=[\s\S]{0,60}bangid=/.test(njs));
+    ok('歌单详情接口', /songList\/detail/.test(njs));
+    // 搜索类型
+    ok('支持搜索类型切换', /id="mv2Type"/.test(nidx) && /curType === 'playlist'/.test(njs));
+    ok('歌单搜索去重', /seen\[key\]/.test(njs));
+    // 播放控件复用了网易云那套
+    ok('播放器复用 music-player 结构', /class="music-player/.test(nidx) && /mp-ctrl/.test(nidx) && /mp-bar/.test(nidx));
+    ok('播放器带音量/下载/插入', /id="mv2Vol"/.test(nidx) && /id="btnMv2Download"/.test(nidx) && /id="btnMv2Insert"/.test(nidx));
+    ok('播放走音频代理', /function proxyUrl/.test(njs));
+    ok('有播放队列与模式', /var playlist = \[\]/.test(njs) && /playMode/.test(njs));
+    // 下载：选目录 + 记忆 + 资源管理器 + 拖拽
+    ok('下载前选目录', /function pickDir/.test(njs) && /pick-dir/.test(njs));
+    ok('目录记忆到 localStorage', /vh_musicagg_dl_dir/.test(njs));
+    ok('可在资源管理器显示', /explorer\.exe.*\/select,/.test(njs));
+    ok('可更改保存目录', /function moveFile/.test(njs));
+    ok('下载完可拖进 PR', /com\.adobe\.cep\.dnd\.file\.0/.test(njs));
+    ok('有行右键菜单', /function showRowMenu/.test(njs));
+    // 命名
+    ok('视图名为「简洁」无括号备注', /<option value="native">简洁<\/option>/.test(nidx));
 }
 
 // ============================================================

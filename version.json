@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.59.1",
-  "buildTime": "2026-10-08 18:57:31",
+  "version": "1.60.0",
+  "buildTime": "2026-10-08 19:23:11",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修音乐聚合试听跨域(改走音频代理) + 下载接口改GET + 状态显示 + 简洁面板重排"
+  "notes": "音乐聚合：首页推荐/榜单+歌单搜索+统一播放控件(对齐网易云)+下载对齐扒歌(选目录/记忆/资源管理器/拖拽)"
 }

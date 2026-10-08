@@ -5169,15 +5169,6 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .mv2-state.err { color: #f6a1b1; }
 
 /* 试听条 */
-.mv2-player { border: 1px solid var(--accent); border-radius: 9px; background: var(--panel2); padding: 8px 11px; }
-.mv2-player-head { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
-.mv2-player-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
-    box-shadow: 0 0 7px var(--accent); flex: 0 0 auto; }
-.mv2-player-title { font-size: 12px; color: var(--text); font-weight: 600;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mv2-x { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 1px 5px; }
-.mv2-x:hover { color: #f6a1b1; }
-.mv2-wave { min-height: 40px; }
 
 /* 结果列表 */
 .mv2-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
@@ -5233,3 +5224,54 @@ button.primary:hover { background: var(--btn-primary-hover); }
     box-shadow: 0 4px 18px rgba(0,0,0,.45); }
 .mv2-toast.ok { border-color: #7fd68b; }
 .mv2-toast.err { border-color: #f6a1b1; color: #ffd7e0; }
+
+/* ===== 音乐聚合 · 简洁模式：首页 / 歌单 / 菜单 ===== */
+.mv2-type { padding: 3px 6px; font-size: 11.5px; background: transparent; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 6px; outline: none; }
+.mv2-type:focus { border-color: var(--accent); }
+
+/* 首页容器（可滚动） */
+.mv2-home-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; gap: 12px; }
+.mv2-sec-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 7px; }
+.mv2-sec-body { }
+
+/* 热搜词 */
+.mv2-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.mv2-chip { font-size: 11px; padding: 3px 11px; cursor: pointer; border-radius: 11px;
+    background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+.mv2-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 榜单卡片 */
+.mv2-sheet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 7px; }
+.mv2-sheet-card { padding: 10px 12px; border-radius: 8px; cursor: pointer;
+    background: linear-gradient(135deg, rgba(139,92,246,.14), rgba(139,92,246,.04));
+    border: 1px solid var(--border); transition: border-color .15s, transform .15s; }
+.mv2-sheet-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.mv2-sheet-name { font-size: 12px; color: var(--text); font-weight: 600; }
+
+/* 歌单卡片（带封面） */
+.mv2-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 9px; }
+.mv2-pick { cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.mv2-pick-cover { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 7px; overflow: hidden;
+    background: var(--panel2); border: 1px solid var(--border); }
+.mv2-pick-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mv2-pick:hover .mv2-pick-cover { border-color: var(--accent); }
+.mv2-pick-nopic { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 22px; opacity: .4; }
+.mv2-pick-name { font-size: 11px; color: var(--text); line-height: 1.35;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mv2-pick-sub { font-size: 10px; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 播放器容器（复用网易云 music-player 样式，仅调间距） */
+.mv2-player-box { margin-top: 2px; }
+
+/* 右键菜单 */
+.mv2-ctx { position: fixed; z-index: 10000; min-width: 168px; padding: 4px;
+    background: #1e1e1e; border: 1px solid var(--border); border-radius: 7px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.5); }
+.mv2-ctx-item { padding: 6px 10px; font-size: 11.5px; color: var(--text); border-radius: 5px; cursor: pointer; }
+.mv2-ctx-item:hover { background: rgba(139,92,246,.2); color: #fff; }
+
+/* 下载完成的行：可拖拽提示 */
+.mv2-row[draggable="true"] { cursor: grab; }
+.mv2-row[draggable="true"]:active { cursor: grabbing; }
