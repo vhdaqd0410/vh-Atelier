@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.51.0",
-  "buildTime": "2026-10-08 11:50:30",
+  "version": "1.52.0",
+  "buildTime": "2026-10-08 13:00:39",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "移除影视板块（在线点播/直播/TVBox导入），净减约2500行；红果短剧搜索预览下载保留在短剧扒歌里"
+  "notes": "新增红果短剧面板（插件内看全集）+ 进度面板导入素材时一并导入粗剪"
 }

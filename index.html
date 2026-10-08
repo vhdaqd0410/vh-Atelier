@@ -46,6 +46,7 @@
         <button class="ws-group" data-group="upscale">✨ 超分</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
+        <button class="ws-group" data-group="hongguo">🍿 红果</button>
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
@@ -70,6 +71,9 @@
         <button class="tab" data-tab="sfx">音效库</button>
         <button class="tab" data-tab="music">网易云</button>
         <button class="tab" data-tab="bgm">短剧扒歌</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="hongguo" style="display:none;">
+        <button class="tab active" data-tab="hongguo">在线看剧</button>
     </div>
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
         <button class="tab" data-tab="export">多版本导出</button>
@@ -898,6 +902,98 @@
     </div>
 
     <!-- ==================== 板块四：多版本导出 ==================== -->
+    <!-- ==================== 板块：红果短剧（在线看剧） ==================== -->
+    <div class="tab-panel" id="panel-hongguo" style="display:none;">
+        <div class="hg-wrap">
+            <!-- 顶部：服务状态 + 搜索 + 分享解析 -->
+            <div class="card" style="padding:10px 12px;">
+                <div class="tr" style="display:flex;gap:6px;align-items:center;">
+                    <span id="hgSrvState" class="hg-srvstate">服务未连接</span>
+                    <span style="flex:1;"></span>
+                    <span class="hg-hint">红果官网只放前 3 集，这里走 App 链路，可看全集</span>
+                </div>
+                <div class="tr" style="display:flex;gap:6px;margin-top:8px;">
+                    <input type="text" id="hgQuery" placeholder="输入剧名搜索（如：剑宗）" style="flex:1;" autocomplete="off">
+                    <button id="btnHgSearch" class="tbtn primary">搜索</button>
+                </div>
+                <div class="tr" style="display:flex;gap:6px;margin-top:8px;">
+                    <input type="text" id="hgShare" placeholder="粘贴红果分享链接 / App 短链 / 剧 ID（可带文案）" style="flex:1;">
+                    <button id="btnHgShareParse" class="tbtn primary">解析</button>
+                </div>
+            </div>
+
+            <!-- 首页：播放历史 + 榜单 -->
+            <div id="hgHome" style="margin-top:8px;">
+                <div id="hgHistWrap" style="display:none;">
+                    <div class="hg-sec-title">
+                        <span>继续看</span>
+                        <span style="flex:1;"></span>
+                        <span id="hgHistClear" class="hg-mini-link">清空</span>
+                    </div>
+                    <div id="hgHist" class="hg-hist-list"></div>
+                </div>
+                <div class="hg-sec-title" style="margin-top:10px;">
+                    <span>热门短剧</span>
+                </div>
+                <div class="hg-tabrow">
+                    <button class="tbtn hg-tab active" data-kind="all">热播总榜</button>
+                    <button class="tbtn hg-tab" data-kind="real">真人剧榜</button>
+                    <button class="tbtn hg-tab" data-kind="ai">AI 剧榜</button>
+                    <button class="tbtn hg-tab" data-kind="comic">漫剧榜</button>
+                </div>
+                <div id="hgGrid" class="hg-grid"></div>
+            </div>
+
+            <!-- 搜索结果 -->
+            <div id="hgSearchWrap" style="display:none;margin-top:8px;">
+                <div class="hg-sec-title">搜索结果</div>
+                <div id="hgSearchList" class="hg-slist"></div>
+            </div>
+
+            <!-- 剧集页 -->
+            <div id="hgSeriesWrap" style="display:none;margin-top:8px;">
+                <div class="card" style="padding:10px 12px;">
+                    <div class="tr" style="display:flex;gap:8px;align-items:center;">
+                        <button id="btnHgBack" class="tbtn" style="padding:4px 8px;">←</button>
+                        <span id="hgSeriesName" style="font-size:13px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                    </div>
+                    <div id="hgSeriesHead"></div>
+                </div>
+                <div class="hg-sec-title" style="margin-top:8px;">选集（点未下载的集会自动下载并播放）</div>
+                <div id="hgEpGrid" class="hg-epgrid"></div>
+
+                <!-- 播放器 -->
+                <div id="hgPlayerWrap" style="display:none;margin-top:10px;">
+                    <div class="hg-player">
+                        <div class="hg-player-head">
+                            <span class="hg-player-title" id="hgPlayerTitle">未在播放</span>
+                            <span style="flex:1;"></span>
+                            <label class="hg-player-chk"><input type="checkbox" id="hgAutoNext" checked> 连播</label>
+                            <button id="btnHgPrev" class="hg-pbtn" title="上一集">◀</button>
+                            <button id="btnHgPlayPause" class="hg-pbtn" title="播放/暂停">▶</button>
+                            <button id="btnHgNext" class="hg-pbtn" title="下一集">▶</button>
+                            <button id="btnHgClose" class="hg-pbtn" title="关闭播放器">✕</button>
+                        </div>
+                        <div class="hg-player-stage">
+                            <video id="hgV" playsinline preload="metadata"></video>
+                            <div id="hgBuf" class="hg-buf" style="display:none;">
+                                <div class="hg-buf-inner">
+                                    <div class="hg-buf-spin"></div>
+                                    <div class="hg-buf-msg" id="hgBufMsg">准备播放…</div>
+                                    <div class="hg-buf-bar" id="hgBufBar" style="display:none;">
+                                        <div class="hg-buf-fill" id="hgBufFill"></div>
+                                    </div>
+                                    <div class="hg-buf-sub" id="hgBufSub"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="hgToast" class="hg-toast" style="display:none;"></div>
+    </div>
+
     <div class="tab-panel" id="panel-export" style="display:none;">
         <div class="exp-header">
             <span class="dot" id="status-dot"></span>
@@ -1677,6 +1773,7 @@
     <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
     <script src="js/bgm.js"></script>
+    <script src="js/hongguo.js"></script>
     <script src="js/export.js"></script>
     <script src="js/enhance.js"></script>
     <script src="js/media.js"></script>

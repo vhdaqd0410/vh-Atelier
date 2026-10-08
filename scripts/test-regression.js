@@ -649,10 +649,44 @@ console.log('\n=== 坑 7：播放进度条（合一：进度 + BGM 色块）==='
     ok('js/movie-tvbox.js 已移除', !fs.existsSync(path.join(ROOT, 'js/movie-tvbox.js')));
 }
 
+console.log('\n=== 坑 13：红果短剧面板（在线看全集）==='); {
+    var hj = read('js/hongguo.js');
+    var hidx = read('index.html');
+    var hmj = read('js/main.js');
+    var hcss = read('css/atelier.css');
+    ok('有红果面板 DOM', /id="panel-hongguo"/.test(hidx));
+    ok('有红果工作台组按钮', /data-group="hongguo"/.test(hidx));
+    ok('有红果子tab', /data-tab="hongguo"/.test(hidx));
+    ok('引入 hongguo.js', /js\/hongguo\.js/.test(hidx));
+    ok('main.js 注册红果面板', /hongguo: document\.getElementById\('panel-hongguo'\)/.test(hmj));
+    ok('main.js 注册红果分组', /hongguo: \{ members: \['hongguo'\]/.test(hmj));
+    ok('切到红果有钩子', /__hgOnShow/.test(hmj) && /__hgOnShow/.test(hj));
+    ok('复用本地服务 17891', /17891/.test(hj));
+    ok('用 localsvc 共享模块', /__vhLocalSvc\.create/.test(hj));
+    ok('有播放器 video', /id="hgV"/.test(hidx));
+    ok('有就绪遮罩', /id="hgBuf"/.test(hidx) && /bufShow/.test(hj));
+    ok('等 canplay 才播（不静默黑屏）', /waitCanPlay/.test(hj) && /'canplay'/.test(hj));
+    ok('连播下一集', /'ended'/.test(hj) && /navPlay/.test(hj));
+    ok('未下载自动下载后播', /function playEpisode/.test(hj) && /\/download/.test(hj));
+    ok('HEVC 自动转码再播', /\/transcode/.test(hj) && /probe-codec/.test(hj));
+    ok('播放取 H.264 版', /prefer=h264/.test(hj));
+    ok('有搜索', /\/search\?keyword=/.test(hj));
+    ok('有榜单', /\/hot\?kind=/.test(hj));
+    ok('有分享链接解析', /\/share-parse/.test(hj));
+    ok('已下载检测走 /local-videos', /\/local-videos/.test(hj));
+    ok('播放历史持久化', /vh_hg_hist/.test(hj));
+    ok('现场持久化（回来仍在原剧）', /vh_hg_state/.test(hj));
+    ok('CSS 有红果卡片', /\.hg-card\s*\{/.test(hcss) && /\.hg-cover\s*\{/.test(hcss));
+    ok('CSS 有红果集网格', /\.hg-ep\s*\{/.test(hcss) && /\.hg-epgrid\s*\{/.test(hcss));
+    ok('CSS 有红果播放器', /\.hg-player\s*\{/.test(hcss) && /\.hg-buf\s*\{/.test(hcss));
+    ok('CSS 有红果 toast', /\.hg-toast\s*\{/.test(hcss));
+}
+
 // ============================================================
 console.log('\n=== 附加：改动文件语法自检 ===');{
     const files = ['js/localsvc.js', 'js/errorlog.js', 'js/export.js', 'js/video.js',
-                   'js/music.js', 'js/bgm.js', 'js/enhance.js', 'js/media.js', 'js/updater.js'];
+                   'js/music.js', 'js/bgm.js', 'js/enhance.js', 'js/media.js', 'js/updater.js',
+                   'js/hongguo.js', 'js/progress.js'];
     files.forEach(function (f) {
         let err = null;
         try { new Function(read(f)); } catch (e) { err = e.message; }

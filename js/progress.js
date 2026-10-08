@@ -1170,7 +1170,28 @@
         });
     }
 
-    // 导入素材到当前 PR 工程素材箱（保留目录结构：按相对根目录分组 → meImportTreePlanStr）
+    // 把「根目录 + 文件列表」按相对路径分组（供 meImportTreePlanStr 保留目录结构）
+    function buildImportGroups(root, files) {
+        var groups = [], byRel = {};
+        if (root && fs.existsSync(root)) {
+            files.forEach(function (fp) {
+                if (!fp) return;
+                var rel = path.relative(root, fp);
+                var parts = rel.split(path.sep);
+                parts.pop();  // 去掉文件名，剩下目录层级
+                var key = parts.join('/');
+                if (!byRel[key]) byRel[key] = { relPath: parts.filter(Boolean), files: [] };
+                byRel[key].files.push(fp);
+            });
+            Object.keys(byRel).forEach(function (k) { groups.push(byRel[k]); });
+        } else {
+            groups = [{ relPath: [], files: files }];
+        }
+        return groups;
+    }
+
+    // 导入素材到当前 PR 工程素材箱：
+    // 「01原素材」→「原素材」箱，「02粗剪」→「粗剪」箱，两份都导，均保留目录结构。
     function importMaterialsForProject(projectName) {
         if (!csInterface) {
             el.statusText.textContent = '当前非 PR 环境，无法导入素材箱';
@@ -1179,59 +1200,58 @@
         el.statusText.textContent = '正在获取「' + projectName + '」的本地素材...';
         apiGet('/api/project/' + encodeURIComponent(projectName) + '/local_materials', function (err, d) {
             if (err) { el.statusText.textContent = '获取素材失败：' + err.message; return; }
-            var files = (d && d.files) || [];
-            if (!files.length) {
+            var jobs = [];
+            var matFiles = (d && d.files) || [];
+            if (matFiles.length) jobs.push({ binName: '原素材', root: (d && d.material_dir) || '', files: matFiles });
+            var roughFiles = (d && d.rough_files) || [];
+            if (roughFiles.length) jobs.push({ binName: '粗剪', root: (d && d.rough_dir) || '', files: roughFiles });
+            if (!jobs.length) {
                 el.statusText.textContent = '该项目暂无本地素材（可能尚未创建本地项目）';
                 return;
             }
-            el.statusText.textContent = '正在导入 ' + files.length + ' 个素材（保留目录结构）...';
-            // 根目录 = material_dir（后端返回），其余文件路径相对它分组
-            var matRoot = (d && d.material_dir) || '';
-            var groups = [];
-            var byRel = {};
-            if (matRoot && fs.existsSync(matRoot)) {
-                files.forEach(function (fp) {
-                    if (!fp) return;
-                    var rel = path.relative(matRoot, fp);
-                    var parts = rel.split(path.sep);
-                    parts.pop();  // 去掉文件名
-                    var key = parts.join('/');
-                    if (!byRel[key]) byRel[key] = { relPath: parts.filter(Boolean), files: [] };
-                    byRel[key].files.push(fp);
-                });
-                Object.keys(byRel).forEach(function (k) { groups.push(byRel[k]); });
-            } else {
-                // 无根目录信息：全部平铺到根
-                groups = [{ relPath: [], files: files }];
-            }
-            // 进度弹窗（共享素材面板的模态）
             var M = window.__vhImportModal;
-            var totalN = groups.reduce(function (n, g) { return n + (g.files || []).length; }, 0);
-            try { if (M) M.open('正在导入素材到「原素材」素材箱…'); if (M) M.progress(5, '准备导入 ' + totalN + ' 个文件（保留目录结构）…'); } catch (e) {}
-            var payload = JSON.stringify({ binName: '原素材', groups: groups });
-            csInterface.evalScript('meImportPayload = ' + payload + ';', function () {
-                csInterface.evalScript('meImportTreePlanStr()', function (result) {
-                    try {
-                        var r = JSON.parse(result);
-                        if (r && r.ok) {
-                            var s = r.stats || {};
-                            var okN = s.ok || 0, failN = s.fail || 0;
-                            if (M) M.progress(100, '');
-                            var fails = (r.failed || []).slice(0, 10).join('\n');
-                            var det = failN ? '失败明细：\n' + fails + (failN > 10 ? '\n…共 ' + failN + ' 个失败' : '') : '全部成功';
-                            if (M) { M.result('✅ 导入完成', '成功 ' + okN + ' 个\n失败 ' + failN + ' 个\n\n' + det); }
-                            el.statusText.textContent = '✅ 已导入 ' + okN + ' 个素材到「原素材」（保留目录结构）' + (failN ? '，失败 ' + failN : '');
-                        } else {
-                            if (M) M.close();
-                            var msg = (r && r.error) || '导入失败';
-                            if (M) M.result('⚠ 导入失败', msg); else el.statusText.textContent = msg;
+            var totalAll = 0;
+            jobs.forEach(function (j) { totalAll += j.files.length; });
+            try {
+                if (M) M.open('正在导入素材到 PR 素材箱…');
+                if (M) M.progress(5, '准备导入 ' + totalAll + ' 个文件（原素材 + 粗剪）…');
+            } catch (e) {}
+            var okAll = 0, failAll = 0, failLines = [], idx = 0;
+
+            function step() {
+                if (idx >= jobs.length) {
+                    try { if (M) M.progress(100, ''); } catch (e) {}
+                    var det = failAll ? ('失败明细：\n' + failLines.slice(0, 10).join('\n')
+                        + (failAll > 10 ? '\n…共 ' + failAll + ' 个失败' : '')) : '全部成功';
+                    if (M) { M.result('✅ 导入完成', '成功 ' + okAll + ' 个\n失败 ' + failAll + ' 个\n\n' + det); }
+                    el.statusText.textContent = '✅ 已导入 ' + okAll + ' 个素材（原素材 + 粗剪）'
+                        + (failAll ? '，失败 ' + failAll : '');
+                    return;
+                }
+                var job = jobs[idx++];
+                try { if (M) M.progress(5 + Math.round(90 * (idx - 1) / jobs.length), '正在导入「' + job.binName + '」…'); } catch (e2) {}
+                var payload = JSON.stringify({ binName: job.binName, groups: buildImportGroups(job.root, job.files) });
+                csInterface.evalScript('meImportPayload = ' + payload + ';', function () {
+                    csInterface.evalScript('meImportTreePlanStr()', function (result) {
+                        try {
+                            var r = JSON.parse(result);
+                            if (r && r.ok) {
+                                var s = r.stats || {};
+                                okAll += (s.ok || 0); failAll += (s.fail || 0);
+                                (r.failed || []).forEach(function (x) { failLines.push('[' + job.binName + '] ' + x); });
+                            } else {
+                                failAll += job.files.length;
+                                failLines.push('[' + job.binName + '] ' + ((r && r.error) || '导入失败'));
+                            }
+                        } catch (e) {
+                            failAll += job.files.length;
+                            failLines.push('[' + job.binName + '] 解析失败: ' + result);
                         }
-                    } catch (e) {
-                        if (M) M.close();
-                        if (M) M.result('⚠ 导入失败', e.message); else el.statusText.textContent = '导入解析失败: ' + result;
-                    }
+                        step();
+                    });
                 });
-            });
+            }
+            step();
         });
     }
 

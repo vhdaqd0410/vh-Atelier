@@ -16,6 +16,7 @@
         video: document.getElementById('panel-video'),
         progress: document.getElementById('panel-progress'),
         script: document.getElementById('panel-script'),
+        hongguo: document.getElementById('panel-hongguo'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
         prconv: document.getElementById('panel-prconv'),
@@ -34,6 +35,7 @@
         audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
+        hongguo: { members: ['hongguo'], default: 'hongguo' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' },
         prconv: { members: ['prconv', 'colorxml'], default: 'prconv' },
@@ -139,6 +141,10 @@
         }
         if (name === 'bgm' && window.__bgmOnShow) {
             try { window.__bgmOnShow(); } catch (e) {}
+        }
+        // 红果短剧：切到时确保本地服务在跑并恢复上次看的剧
+        if (name === 'hongguo' && window.__hgOnShow) {
+            try { window.__hgOnShow(); } catch (e) {}
         }
         if (name === 'video' && window.__videoOnShow) {
             try { window.__videoOnShow(); } catch (e) {}
