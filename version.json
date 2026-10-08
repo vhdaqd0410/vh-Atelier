@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.52.0",
-  "buildTime": "2026-10-08 13:00:39",
+  "version": "1.53.0",
+  "buildTime": "2026-10-08 13:10:06",
   "skipDirs": [
     "collect",
     "bin",
@@ -17,5 +17,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "新增红果短剧面板（插件内看全集）+ 进度面板导入素材时一并导入粗剪"
+  "notes": "移除红果面板（与短剧扒歌重复）+ 进度面板导入素材含粗剪"
 }
