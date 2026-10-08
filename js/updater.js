@@ -73,8 +73,12 @@
     }
 
     // 不参与更新的目录（大文件 + 用户数据）
+    // 注：按目录名递归匹配。lxserver 的 node_modules（依赖，首次 npm install）、
+    //     data（用户音源脚本与账号）、cache（试听缓存）、music（下载目录）都不下发，
+    //     否则会覆盖用户已配好的音源或撑大更新包。
     var SKIP = ['collect', 'bin', 'models', 'engine', 'ncm', 'runtime', 'stubs',
-                '.git', '_tmp', '_releases', 'node_modules'];
+                '.git', '_tmp', '_releases', 'node_modules',
+                'data', 'cache', 'music', 'backups'];
 
     function readCfg() {
         try {

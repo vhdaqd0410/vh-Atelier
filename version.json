@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.55.1",
-  "buildTime": "2026-10-08 14:45:42",
+  "version": "1.56.0",
+  "buildTime": "2026-10-08 16:54:53",
   "skipDirs": [
     "collect",
     "bin",
@@ -15,7 +15,12 @@
     "stubs",
     ".git",
     "_tmp",
-    "_releases"
+    "_releases",
+    "node_modules",
+    "data",
+    "cache",
+    "music",
+    "backups"
   ],
-  "notes": "修情绪指令把指令本身也念出（需官方 You are a helpful assistant. 前缀 + <|endofprompt|> 分隔）"
+  "notes": "新增音乐聚合工作台：五平台搜索与播放（内置 lxserver）"
 }

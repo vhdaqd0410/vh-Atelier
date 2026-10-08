@@ -69,6 +69,7 @@
         <button class="tab" data-tab="musiclib">音乐库</button>
         <button class="tab" data-tab="sfx">音效库</button>
         <button class="tab" data-tab="music">网易云</button>
+        <button class="tab" data-tab="musicagg">音乐聚合</button>
         <button class="tab" data-tab="bgm">短剧扒歌</button>
     </div>
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
@@ -953,6 +954,33 @@
     </div>
 
     <!-- ==================== 板块四：多版本导出 ==================== -->
+    <!-- ==================== 板块：音乐聚合（lxserver） ==================== -->
+    <div class="tab-panel" id="panel-musicagg" style="display:none;">
+        <div class="ma-wrap">
+            <div class="ma-bar">
+                <span class="ma-dot"></span>
+                <span id="maStatus" class="ma-status">音乐聚合未启动</span>
+                <span style="flex:1"></span>
+                <button class="tbtn" id="btnMaReload" title="重新加载播放器">↻ 重载</button>
+                <button class="tbtn" id="btnMaExternal" title="在系统浏览器打开（大屏用）">↗ 外部打开</button>
+            </div>
+            <iframe id="maFrame" class="ma-frame" src="about:blank"></iframe>
+            <!-- 失败时的提示与重试 -->
+            <div id="maHint" style="display:none;">
+                <div class="ma-hint-box">
+                    <div class="ma-hint-title">音乐聚合服务没能启动</div>
+                    <div class="ma-hint-body">
+                        <p>常见原因：</p>
+                        <p>1. <b>首次使用</b>：需联网装依赖，稍等 1–2 分钟再点重试。</p>
+                        <p>2. 未装 <b>Node.js</b>：请到 nodejs.org 安装 LTS 版后重启 PR。</p>
+                        <p>3. 手动检查：在插件目录 <code>lxserver</code> 下执行 <code>npm install --omit=dev</code>，再点重试。</p>
+                    </div>
+                    <button class="tbtn primary" id="btnMaRetry">重试</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="tab-panel" id="panel-export" style="display:none;">
         <div class="exp-header">
             <span class="dot" id="status-dot"></span>
@@ -1732,6 +1760,8 @@
     <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
     <script src="js/bgm.js"></script>
+    <script src="js/musicagg.js"></script>
+    <script src="js/musicagg-ui.js"></script>
     <script src="js/export.js"></script>
     <script src="js/enhance.js"></script>
     <script src="js/media.js"></script>

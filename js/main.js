@@ -11,6 +11,7 @@
         sfx: document.getElementById('panel-sfx'),
         musiclib: document.getElementById('panel-musiclib'),
         music: document.getElementById('panel-music'),
+        musicagg: document.getElementById('panel-musicagg'),
         bgm: document.getElementById('panel-bgm'),
         export: document.getElementById('panel-export'),
         video: document.getElementById('panel-video'),
@@ -31,7 +32,7 @@
         progress: { members: ['progress'], default: 'progress' },
         todo: { members: ['todo'], default: 'todo' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
-        audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
+        audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music', 'musicagg', 'bgm'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
@@ -58,7 +59,7 @@
     // 原因：display:none 会把 iframe 压成 0×0，CEP 的 Chromium 会丢弃跨域
     //       iframe 的合成层，切回来就是黑屏（只能手动刷新）。
     //       改用「保留尺寸的隐藏」：绝对定位 + visibility:hidden + 移出可视区。
-    var IFRAME_PANELS = { shenpian: 1, upscale: 1, feedback: 1, admin: 1 };
+    var IFRAME_PANELS = { shenpian: 1, upscale: 1, feedback: 1, admin: 1, musicagg: 1 };
 
     // 真正显示某个 panel
     function showPanel(name) {
@@ -139,6 +140,10 @@
         }
         if (name === 'bgm' && window.__bgmOnShow) {
             try { window.__bgmOnShow(); } catch (e) {}
+        }
+        // 音乐聚合：切到时确保本地服务在跑并把播放器拉起来
+        if (name === 'musicagg' && window.__musicAggOnShow) {
+            try { window.__musicAggOnShow(); } catch (e) {}
         }
         if (name === 'video' && window.__videoOnShow) {
             try { window.__videoOnShow(); } catch (e) {}

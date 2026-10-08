@@ -719,10 +719,48 @@ console.log('\n=== 坑 15：语音克隆结果行（波形/试听/拖拽/导入/
 }
 
 // ============================================================
+console.log('\n=== 坑 16：音乐聚合（lxserver）集成 ==='); {
+    var ajs = read('js/musicagg.js');
+    var aui = read('js/musicagg-ui.js');
+    var aidx = read('index.html');
+    var amj = read('js/main.js');
+    var aup = read('js/updater.js');
+    var agi = read('.gitignore');
+    var avj = read('version.json');
+    ok('有音乐聚合面板 DOM', /id="panel-musicagg"/.test(aidx));
+    ok('有音乐聚合子tab', /data-tab="musicagg"/.test(aidx));
+    ok('面板内嵌 iframe', /id="maFrame"/.test(aidx));
+    ok('引入两个模块', /js\/musicagg\.js/.test(aidx) && /js\/musicagg-ui\.js/.test(aidx));
+    ok('main.js 注册面板', /musicagg: document\.getElementById\('panel-musicagg'\)/.test(amj));
+    ok('归入声音组', /members: \['separate', 'clone', 'sfx', 'musiclib', 'music', 'musicagg', 'bgm'\]/.test(amj));
+    ok('进 iframe 面板名单（切走不卸载）', /musicagg: 1/.test(amj));
+    ok('懒加载钩子', /__musicAggOnShow/.test(amj));
+    // 服务管理要点
+    ok('端口 17899（避开 ncm/扒歌/视频下载）', /17899/.test(ajs));
+    ok('用 node http 探活', /httpMod\.get/.test(ajs));
+    ok('启动前清掉系统代理', /'HTTP_PROXY'/.test(ajs) && /delete env\[k\]/.test(ajs));
+    ok('依赖缺失自动 npm install', /'install', '--omit=dev'/.test(ajs));
+    ok('依赖判定用 module-alias/needle', /'module-alias'/.test(ajs) && /'needle'/.test(ajs));
+    ok('播放器地址为根路径', /playerUrl: function \(\) \{ return BASE/.test(ajs));
+    ok('暴露 __musicAgg', /window\.__musicAgg/.test(ajs));
+    // 更新通道：node_modules/data/cache 不下发（防覆盖用户音源 + 防撑大更新包）
+    ok('updater SKIP 含 node_modules', /'node_modules'/.test(aup));
+    ok('updater SKIP 含 data', /'data'/.test(aup));
+    ok('updater SKIP 含 cache', /'cache'/.test(aup));
+    ok('gitignore 排除依赖', /lxserver\/node_modules\//.test(agi));
+    ok('gitignore 排除用户数据', /lxserver\/data\//.test(agi));
+    ok('skipDirs 含 node_modules', /"node_modules"/.test(avj));
+    // 服务素材就位
+    ok('lxserver 入口存在', fs.existsSync(path.join(ROOT, 'lxserver/index.js')));
+    ok('lxserver 播放器存在', fs.existsSync(path.join(ROOT, 'lxserver/public/music/index.html')));
+    ok('lxserver 服务端存在', fs.existsSync(path.join(ROOT, 'lxserver/server/server/server.js')));
+}
+
+// ============================================================
 console.log('\n=== 附加：改动文件语法自检 ===');{
     const files = ['js/localsvc.js', 'js/errorlog.js', 'js/export.js', 'js/video.js',
                    'js/music.js', 'js/bgm.js', 'js/enhance.js', 'js/media.js', 'js/updater.js',
-                   'js/progress.js', 'js/clone.js'];
+                   'js/progress.js', 'js/clone.js', 'js/musicagg.js', 'js/musicagg-ui.js'];
     files.forEach(function (f) {
         let err = null;
         try { new Function(read(f)); } catch (e) { err = e.message; }

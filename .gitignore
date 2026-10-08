@@ -33,6 +33,19 @@ collect/bgm/
 # 语音克隆：音色库（用户保存的参考音频，运行时数据，绝不入仓）
 collect/voices/
 
+# 音乐聚合（lxserver）：依赖与运行时数据不入仓
+#   node_modules  首次运行 npm install（与 ncm 同模式）
+#   data          用户音源脚本与账号（六音音源等），绝不覆盖
+#   cache         试听缓存（本机实测可涨到 100MB+）
+#   music         下载目录
+#   其余运行日志
+lxserver/node_modules/
+lxserver/data/
+lxserver/cache/
+lxserver/music/
+lxserver/*.log
+lxserver/debug.txt
+
 # 短剧 App 链路：设备号是运行时生成的本机标识，不入库
 py/hongguo_device.json
 
