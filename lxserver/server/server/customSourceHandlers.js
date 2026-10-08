@@ -249,7 +249,8 @@ async function handleUpload(req, res) {
             homepage: metadata.homepage || '',
             size: Buffer.byteLength(content, 'utf-8'),
             supportedSources, // 保存支持的源
-            enabled: false, // 默认禁用
+            // 默认启用（上游原为 false，导入后要手动启用；本副本改为直接可用）
+            enabled: true,
             uploadTime: new Date().toISOString(),
             allowUnsafeVM: !!requireUnsafe || !!allowUnsafeVM,
             requireUnsafe: !!requireUnsafe

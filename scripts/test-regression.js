@@ -801,6 +801,43 @@ console.log('\n=== 坑 18：短剧扒歌下载选目录改用系统对话框 ===
 }
 
 // ============================================================
+console.log('\n=== 坑 19：音源导入后默认启用 ==='); {
+    var ssrv = read('lxserver/server/server/customSourceHandlers.js');
+    var sag = read('js/musicagg.js');
+    var sidx = read('index.html');
+    ok('服务端上传即启用（不再默认禁用）', /enabled: true/.test(ssrv) && !/enabled: false, \/\/ 默认禁用/.test(ssrv));
+    ok('导入后自动启用', /function enableRemote/.test(sag));
+    ok('有「启用全部」按钮', /id="btnMaEnableAll"/.test(sidx));
+    ok('启用全部实现（区分本地/服务器）', /function enableAllSources/.test(sag) && /listSourceIds/.test(sag));
+    ok('本地走改 sources.json', /sources\.json/.test(sag));
+    ok('服务器走 toggle 接口', /custom-source\/toggle/.test(sag));
+}
+
+// ============================================================
+console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
+    var njs = read('js/musicagg-native.js');
+    var nidx = read('index.html');
+    var nui = read('js/musicagg-ui.js');
+    var ncss = read('css/atelier.css');
+    ok('有原生面板容器', /id="maNative"/.test(nidx));
+    ok('有搜索框与按钮', /id="mv2Query"/.test(nidx) && /id="btnMv2Search"/.test(nidx));
+    ok('有平台筛选', /id="mv2Platforms"/.test(nidx) && /mv2-pf/.test(nidx));
+    ok('有结果列表', /id="mv2List"/.test(nidx));
+    ok('有试听波形区', /id="mv2Wave"/.test(nidx));
+    ok('引入原生面板脚本', /js\/musicagg-native\.js/.test(nidx));
+    ok('搜索走 search 接口', /\/api\/music\/search/.test(njs));
+    ok('取直链走 url 接口', /\/api\/music\/url/.test(njs));
+    ok('试听用 wavesurfer', /WaveSurfer\.create/.test(njs));
+    ok('下载走 download 接口', /\/api\/music\/download/.test(njs));
+    ok('插入时间轴复用 vcInsert', /vcInsertToTimelineStr/.test(njs));
+    ok('下载默认音乐库目录', /mllibDir/.test(njs));
+    ok('有视图切换（简洁/播放器）', /id="maView"/.test(nidx) && /function setView/.test(nui));
+    ok('视图选择持久化', /vh_musicagg_view/.test(nui));
+    ok('切播放器才加载 iframe', /if \(!native\) loadPlayer/.test(nui));
+    ok('CSS 有原生面板样式', /\.mv2-wrap/.test(ncss) && /\.mv2-pf/.test(ncss) && /\.mv2-wave/.test(ncss));
+}
+
+// ============================================================
 console.log('\n=== 附加：改动文件语法自检 ===');{
     const files = ['js/localsvc.js', 'js/errorlog.js', 'js/export.js', 'js/video.js',
                    'js/music.js', 'js/bgm.js', 'js/enhance.js', 'js/media.js', 'js/updater.js',

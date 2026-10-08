@@ -370,19 +370,102 @@
                 xhr.timeout = 60000;
                 xhr.onreadystatechange = function () {
                     if (xhr.readyState !== 4) return;
-                    if (xhr.status === 200) { added++; }
-                    else {
+                    if (xhr.status === 200) {
+                        added++;
+                        // 导入后自动启用（上游默认禁用，这里直接帮用户启用，免去逐个点的麻烦）
+                        var sid = '';
+                        try { sid = JSON.parse(xhr.responseText || '{}').id || ''; } catch (e) {}
+                        if (sid) enableRemote(sid, function () { next(); });
+                        else next();
+                    } else {
                         var msg = '';
                         try { msg = JSON.parse(xhr.responseText || '{}').error || ''; } catch (e) {}
                         if (/已存在/.test(msg)) skipped++;
                         else failed.push(name + (msg ? ('（' + msg + '）') : ''));
+                        next();
                     }
-                    next();
                 };
                 xhr.onerror = function () { failed.push(name + '（网络）'); next(); };
                 xhr.ontimeout = function () { failed.push(name + '（超时）'); next(); };
                 xhr.send(body);
             })();
+        });
+    }
+
+    // 远程：启用某个源（导入后自动调）
+    function enableRemote(sourceId, cb) {
+        var b = base();
+        var pwd = adminPwd();
+        var body = JSON.stringify({ id: sourceId, enabled: true, username: 'default' });
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', b + '/api/custom-source/toggle', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.setRequestHeader('x-frontend-auth', pwd);
+        xhr.timeout = 30000;
+        var done = false;
+        function finish() { if (!done) { done = true; cb && cb(); } }
+        xhr.onreadystatechange = function () { if (xhr.readyState === 4) finish(); };
+        xhr.onerror = finish;
+        xhr.ontimeout = finish;
+        xhr.send(body);
+    }
+
+    // 枚举当前来源下所有音源 id（本地扫文件；服务器调 list）
+    function listSourceIds(cb) {
+        if (getTarget() === 'server') {
+            var b = base(), pwd = adminPwd();
+            if (!b) { cb([]); return; }
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', b + '/api/custom-source/list?username=default', true);
+            if (pwd) xhr.setRequestHeader('x-frontend-auth', pwd);
+            xhr.timeout = 30000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                var ids = [];
+                try {
+                    var d = JSON.parse(xhr.responseText || '[]');
+                    var arr = Array.isArray(d) ? d : (d.sources || d.list || []);
+                    arr.forEach(function (s) { if (s && s.id) ids.push({ id: s.id, name: s.name || s.id, enabled: s.enabled }); });
+                } catch (e) {}
+                cb(ids);
+            };
+            xhr.onerror = function () { cb([]); };
+            xhr.ontimeout = function () { cb([]); };
+            xhr.send();
+            return;
+        }
+        // 本地：读 sources.json
+        try {
+            var p = path.join(sourceDir(), '_open', 'sources.json');
+            if (!fs.existsSync(p)) { cb([]); return; }
+            var list = JSON.parse(fs.readFileSync(p, 'utf8'));
+            cb((list || []).map(function (s) { return { id: s.id, name: s.name || s.id, enabled: s.enabled }; }));
+        } catch (e) { cb([]); }
+    }
+
+    // 启用全部音源（处理已被禁用/历史导入的源）
+    function enableAllSources(cb) {
+        listSourceIds(function (items) {
+            if (!items.length) { cb(false, '没有找到音源'); return; }
+            var disabled = items.filter(function (x) { return x.enabled === false; });
+            if (!disabled.length) { cb(true, { total: items.length, changed: 0 }); return; }
+            if (getTarget() === 'server') {
+                var i = 0, okN = 0;
+                (function next() {
+                    if (i >= disabled.length) { cb(true, { total: items.length, changed: okN }); return; }
+                    enableRemote(disabled[i++].id, function () { okN++; next(); });
+                })();
+            } else {
+                // 本地：直接改 sources.json 的 enabled 字段
+                try {
+                    var p = path.join(sourceDir(), '_open', 'sources.json');
+                    var list = JSON.parse(fs.readFileSync(p, 'utf8'));
+                    var n = 0;
+                    list.forEach(function (s) { if (s.enabled === false) { s.enabled = true; n++; } });
+                    fs.writeFileSync(p, JSON.stringify(list, null, 2), 'utf8');
+                    cb(true, { total: items.length, changed: n });
+                } catch (e) { cb(false, e.message); }
+            }
         });
     }
 
@@ -446,6 +529,8 @@
         importSources: doImport,
         sourceDir: sourceDir,
         adminPwd: adminPwd,
-        setAdminPwd: setAdminPwd
+        setAdminPwd: setAdminPwd,
+        enableAllSources: enableAllSources,
+        listSourceIds: listSourceIds
     };
 })();

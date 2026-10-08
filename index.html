@@ -966,6 +966,11 @@
                     <option value="local">本地服务</option>
                     <option value="server">服务器</option>
                 </select>
+                <label class="ma-sel-label">视图</label>
+                <select id="maView" class="ma-sel" title="简洁模式（搜歌/试听/下载/插时间轴）或完整播放器">
+                    <option value="native">简洁（干活）</option>
+                    <option value="player">完整播放器</option>
+                </select>
                 <button class="tbtn" id="btnMaReload" title="重新加载播放器">↻ 重载</button>
                 <button class="tbtn" id="btnMaTheme" title="把当前深浅色同步给播放器">◐ 主题</button>
                 <button class="tbtn" id="btnMaExternal" title="在系统浏览器打开（大屏用）">↗ 外部打开</button>
@@ -980,7 +985,8 @@
             <div class="ma-bar" id="maSrcRow">
                 <span class="ma-sel-label">音源包</span>
                 <button class="tbtn" id="btnMaExportSrc" title="把当前来源已配好的音源打包成 zip（本地导出文件；服务器逐个拉取）">⬆ 导出</button>
-                <button class="tbtn" id="btnMaImportSrc" title="选择音源包 zip，自动导入到当前来源（同名不覆盖）">⬇ 一键导入</button>
+                <button class="tbtn" id="btnMaImportSrc" title="选择音源包 zip，自动导入到当前来源（同名不覆盖），并自动启用">⬇ 一键导入</button>
+                <button class="tbtn" id="btnMaEnableAll" title="把当前来源下所有被禁用的音源一键启用">✔ 启用全部</button>
                 <span id="maSrcCount" style="font-size:11px;color:var(--muted);"></span>
             </div>
             <!-- 服务器模式下的管理员口令（导入/导出音源需要） -->
@@ -989,6 +995,33 @@
                 <input type="password" id="maAdminPwd" class="ma-input" placeholder="lxserver 的管理员密码（默认 123456）">
                 <span style="font-size:10.5px;color:var(--muted);">导入/导出音源需要</span>
             </div>
+            <!-- ========== 简洁模式：搜歌 / 试听 / 下载 / 插时间轴 ========== -->
+            <div id="maNative" class="mv2-wrap">
+                <div class="ma-bar">
+                    <input type="text" id="mv2Query" class="ma-input" placeholder="搜歌名 / 歌手（回车搜索）">
+                    <button class="tbtn primary" id="btnMv2Search">搜索</button>
+                    <span id="mv2State" class="mv2-state"></span>
+                </div>
+                <div class="mv2-pfs" id="mv2Platforms">
+                    <button class="mv2-pf on" data-pf="wy">网易云</button>
+                    <button class="mv2-pf" data-pf="tx">QQ</button>
+                    <button class="mv2-pf" data-pf="kw">酷我</button>
+                    <button class="mv2-pf" data-pf="kg">酷狗</button>
+                    <button class="mv2-pf" data-pf="mg">味咕</button>
+                    <button class="mv2-pf" data-pf="">全部</button>
+                </div>
+                <div id="mv2Player" class="mv2-player" style="display:none;">
+                    <div class="mv2-player-head">
+                        <span id="mv2PlayerTitle" class="mv2-player-title">未在播放</span>
+                        <span style="flex:1"></span>
+                        <button class="tbtn" id="btnMv2PlayerClose" style="padding:1px 7px;font-size:11px;">✕</button>
+                    </div>
+                    <div id="mv2Wave" class="mv2-wave"></div>
+                </div>
+                <div id="mv2List" class="sep-res-list mv2-list"><div class="sep-res-empty">输入歌名搜索，或点上方平台切换</div></div>
+            </div>
+            <div id="mv2Toast" class="mv2-toast" style="display:none;"></div>
+            <!-- ========== 完整播放器（iframe） ========== -->
             <iframe id="maFrame" class="ma-frame" src="about:blank"></iframe>
             <!-- 失败时的提示与重试 -->
             <div id="maHint" style="display:none;">
@@ -1787,6 +1820,7 @@
     <script src="js/bgm.js"></script>
     <script src="js/musicagg.js"></script>
     <script src="js/musicagg-ui.js"></script>
+    <script src="js/musicagg-native.js"></script>
     <script src="js/export.js"></script>
     <script src="js/enhance.js"></script>
     <script src="js/media.js"></script>

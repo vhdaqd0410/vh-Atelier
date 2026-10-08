@@ -161,6 +161,17 @@
         reload();
     }
 
+    // 视图切换：简洁（原生干活） / 完整播放器（iframe）
+    function setView(v) {
+        var native = (v !== 'player');
+        var nEl = $('maNative');
+        var fEl = $('maFrame');
+        if (nEl) nEl.style.display = native ? '' : 'none';
+        if (fEl) fEl.style.display = native ? 'none' : '';
+        try { localStorage.setItem('vh_musicagg_view', native ? 'native' : 'player'); } catch (e) {}
+        if (!native) loadPlayer(false);   // 切到播放器才拉 iframe
+    }
+
     // 显示音源数量（本地数文件；服务器模式提示来源）
     function refreshSrcCount() {
         var el = $('maSrcCount');
@@ -201,6 +212,16 @@
             ap.addEventListener('input', function () { window.__musicAgg.setAdminPwd(ap.value.trim()); });
         }
 
+        // 视图切换（简洁 / 播放器）
+        var vsel = $('maView');
+        if (vsel) {
+            var savedView = 'native';
+            try { savedView = localStorage.getItem('vh_musicagg_view') || 'native'; } catch (e) {}
+            vsel.value = savedView;
+            vsel.addEventListener('change', function () { setView(vsel.value); });
+            setView(savedView);
+        }
+
         var b1 = $('btnMaReload'); if (b1) b1.addEventListener('click', reload);
         var b2 = $('btnMaExternal'); if (b2) b2.addEventListener('click', openExternal);
         var b3 = $('btnMaRetry'); if (b3) b3.addEventListener('click', function () { loadPlayer(true); });
@@ -232,11 +253,24 @@
                 if (ok) {
                     var s = info || {};
                     var extra = (s.failed && s.failed.length) ? ('，失败 ' + s.failed.length + ' 个：' + s.failed.slice(0, 3).join('、')) : '';
-                    setStatus('导入完成：新增 ' + (s.added || 0) + ' 个，跳过 ' + (s.skipped || 0) + ' 个（同名不覆盖）' + extra, 'ok');
+                    setStatus('导入完成：新增 ' + (s.added || 0) + ' 个（已自动启用），跳过 ' + (s.skipped || 0) + ' 个（同名不覆盖）' + extra, 'ok');
                     refreshSrcCount();
                     setTimeout(reload, 900);
                 } else {
                     setStatus('导入未完成（' + info + '）', 'err');
+                }
+            });
+        });
+        var b8 = $('btnMaEnableAll');
+        if (b8) b8.addEventListener('click', function () {
+            setStatus('正在启用全部音源…', '');
+            window.__musicAgg.enableAllSources(function (ok, info) {
+                if (ok) {
+                    var s2 = info || {};
+                    setStatus(s2.changed ? ('已启用 ' + s2.changed + ' 个音源（共 ' + s2.total + ' 个）') : ('全部 ' + s2.total + ' 个音源已是启用状态'), 'ok');
+                    setTimeout(reload, 700);
+                } else {
+                    setStatus('启用失败：' + info, 'err');
                 }
             });
         });
@@ -248,5 +282,10 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
     else bind();
 
-    window.__musicAggOnShow = function () { loadPlayer(false); setTimeout(applyTheme, 800); };
+    window.__musicAggOnShow = function () {
+        var v = 'native';
+        try { v = localStorage.getItem('vh_musicagg_view') || 'native'; } catch (e) {}
+        setView(v);
+        setTimeout(applyTheme, 800);
+    };
 })();
