@@ -140,9 +140,11 @@
         window.__musicAgg.setTarget(sel.value);
         var rowSrv = $('maServerRow');
         if (rowSrv) rowSrv.style.display = (sel.value === 'server') ? '' : 'none';
-        // 音源包只在本地模式有意义
+        // 音源包两种模式都可用；服务器模式下额外需要管理员口令
         var rowSrc = $('maSrcRow');
-        if (rowSrc) rowSrc.style.display = (sel.value === 'server') ? 'none' : '';
+        if (rowSrc) rowSrc.style.display = '';
+        var rowAdm = $('maAdminRow');
+        if (rowAdm) rowAdm.style.display = (sel.value === 'server') ? '' : 'none';
         refreshSrcCount();
         // 切换后强制重载
         var f = $('maFrame');
@@ -159,13 +161,17 @@
         reload();
     }
 
-    // 显示本机音源数量（仅本地模式有意义）
+    // 显示音源数量（本地数文件；服务器模式提示来源）
     function refreshSrcCount() {
         var el = $('maSrcCount');
         if (!el) return;
         try {
             var agg = window.__musicAgg;
-            if (!agg || agg.getTarget() !== 'local') { el.textContent = ''; return; }
+            if (!agg) { el.textContent = ''; return; }
+            if (agg.getTarget() === 'server') {
+                el.textContent = '导出的音源包可在此一键导入服务器（需管理口令）';
+                return;
+            }
             var dir = path.join(agg.sourceDir(), '_open');
             var n = fs.existsSync(dir)
                 ? fs.readdirSync(dir).filter(function (f) { return /\.js$/i.test(f); }).length
@@ -185,7 +191,15 @@
         var rowSrv = $('maServerRow');
         if (rowSrv) rowSrv.style.display = (window.__musicAgg.getTarget() === 'server') ? '' : 'none';
         var rowSrc0 = $('maSrcRow');
-        if (rowSrc0) rowSrc0.style.display = (window.__musicAgg.getTarget() === 'server') ? 'none' : '';
+        if (rowSrc0) rowSrc0.style.display = '';
+        var rowAdm0 = $('maAdminRow');
+        if (rowAdm0) rowAdm0.style.display = (window.__musicAgg.getTarget() === 'server') ? '' : 'none';
+        // 回填已保存的管理口令
+        var ap = $('maAdminPwd');
+        if (ap) {
+            ap.value = window.__musicAgg.adminPwd() || '';
+            ap.addEventListener('input', function () { window.__musicAgg.setAdminPwd(ap.value.trim()); });
+        }
 
         var b1 = $('btnMaReload'); if (b1) b1.addEventListener('click', reload);
         var b2 = $('btnMaExternal'); if (b2) b2.addEventListener('click', openExternal);
@@ -199,21 +213,28 @@
         // 音源包：导出 / 一键导入
         var b6 = $('btnMaExportSrc');
         if (b6) b6.addEventListener('click', function () {
-            setStatus('请选择音源包的保存位置…', '');
+            var tgt = window.__musicAgg.getTarget();
+            setStatus(tgt === 'server' ? '正在准备导出…' : '请选择音源包的保存位置…', '');
             window.__musicAgg.exportSources(function (ok, info) {
-                if (ok) setStatus('音源包已导出到：' + info, 'ok');
-                else setStatus('导出未完成（' + info + '）', 'err');
+                if (ok) setStatus('已导出：' + info, 'ok');
+                else setStatus((tgt === 'server' && /网页/.test(info)) ? info : ('导出未完成（' + info + '）'), ok ? 'ok' : 'err');
             });
         });
         var b7 = $('btnMaImportSrc');
         if (b7) b7.addEventListener('click', function () {
+            var tgt = window.__musicAgg.getTarget();
+            if (tgt === 'server' && !window.__musicAgg.adminPwd()) {
+                setStatus('服务器模式导入音源需要先填「管理口令」（默认 123456）', 'err');
+                return;
+            }
             setStatus('请选择音源包（zip）…', '');
             window.__musicAgg.importSources(function (ok, info) {
                 if (ok) {
                     var s = info || {};
-                    setStatus('导入完成：新增 ' + (s.added || 0) + ' 个，跳过 ' + (s.skipped || 0) + ' 个（同名不覆盖）', 'ok');
+                    var extra = (s.failed && s.failed.length) ? ('，失败 ' + s.failed.length + ' 个：' + s.failed.slice(0, 3).join('、')) : '';
+                    setStatus('导入完成：新增 ' + (s.added || 0) + ' 个，跳过 ' + (s.skipped || 0) + ' 个（同名不覆盖）' + extra, 'ok');
                     refreshSrcCount();
-                    setTimeout(reload, 800);
+                    setTimeout(reload, 900);
                 } else {
                     setStatus('导入未完成（' + info + '）', 'err');
                 }

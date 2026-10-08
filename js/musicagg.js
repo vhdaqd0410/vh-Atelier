@@ -11,12 +11,13 @@
     'use strict';
     if (typeof window === 'undefined') return;
 
-    var fs, path, childProcess, httpMod;
+    var fs, path, childProcess, httpMod, os;
     try {
         fs = require('fs');
         path = require('path');
         childProcess = require('child_process');
         httpMod = require('http');
+        os = require('os');
     } catch (e) { return; }
 
     var LOCAL_PORT = 17899;
@@ -207,12 +208,21 @@
         });
     }
 
-    // ---------- 音源包：导出 / 一键导入（仅本地模式）----------
+    // ---------- 音源包：导出 / 一键导入 ----------
+    // 本地模式：直接读写文件（导出打包 / 导入解压）
+    // 服务器模式：导入走 lxserver 的 /api/custom-source/upload（需管理口令）；
+    //             导出不可行（它的列表接口只给元数据，不返回脚本内容），
+    //             故服务器模式下的导出会提示用网页管理界面。
     // 设计意图：你在一台机器上配好音源，导出成 zip；拷到其他机器一键导入。
-    // 只操作本地服务目录（lxserver/data/users/source），不动服务器。
     function sourceDir() {
         if (!svcDir) return '';
         return path.join(svcDir, 'data', 'users', 'source');
+    }
+    function adminPwd() {
+        try { return localStorage.getItem('vh_musicagg_admin') || ''; } catch (e) { return ''; }
+    }
+    function setAdminPwd(v) {
+        try { localStorage.setItem('vh_musicagg_admin', String(v || '')); } catch (e) {}
     }
 
     function runPS(script, extraEnv, timeoutMs) {
@@ -229,80 +239,167 @@
         });
     }
 
-    // 导出：把 source 目录打包成 zip（选保存位置）
-    function exportSources(cb) {
-        var src = sourceDir();
-        if (!src || !fs.existsSync(src)) { cb(false, '本地还没有音源目录'); return; }
-        var tmp = path.join(svcDir, 'data', '_sources_bak.zip');
-        try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (e) {}
-        var save = path.join(svcDir, 'data', '_save_path.txt');
-        try { if (fs.existsSync(save)) fs.unlinkSync(save); } catch (e) {}
-        var script = [
-            '$s=New-Object System.Windows.Forms.SaveFileDialog;',
-            '$s.Filter="音源包 (*.zip)|*.zip";',
-            '$s.FileName="vh-音源包-" + (Get-Date -Format yyyyMMdd) + ".zip";',
-            'if($s.ShowDialog() -ne "OK"){exit};',
-            '$dst=$s.FileName;',
-            'if(Test-Path -LiteralPath $env:VH_TMP){Remove-Item -LiteralPath $env:VH_TMP -Force};',
-            'Compress-Archive -Path (Join-Path $env:VH_SRC "*") -DestinationPath $env:VH_TMP -Force;',
-            'Copy-Item -LiteralPath $env:VH_TMP -Destination $dst -Force;',
-            '[System.IO.File]::WriteAllText($env:VH_OUT,$dst,[System.Text.UTF8Encoding]::new($false));',
-        ];
-        runPS(script, { VH_SRC: src, VH_TMP: tmp, VH_OUT: save }, 180000).then(function () {
-            var dstPath = '';
-            try { if (fs.existsSync(save)) { dstPath = fs.readFileSync(save, 'utf8').trim(); fs.unlinkSync(save); } } catch (e) {}
-            try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (e) {}
-            if (dstPath) cb(true, dstPath); else cb(false, '已取消');
+    // 弹系统对话框选一个 zip（保存 or 打开）
+    function pickZip(mode, defaultName, cb) {
+        var outFile = path.join(os.tmpdir(), 'vh_zip_' + Date.now() + '.txt');
+        var script = mode === 'save'
+            ? ['$s=New-Object System.Windows.Forms.SaveFileDialog;',
+               '$s.Filter="音源包 (*.zip)|*.zip";',
+               '$s.FileName=$env:VH_NAME;',
+               'if($s.ShowDialog() -eq "OK"){[System.IO.File]::WriteAllText($env:VH_OUT,$s.FileName,[System.Text.UTF8Encoding]::new($false))}']
+            : ['$f=New-Object System.Windows.Forms.OpenFileDialog;',
+               '$f.Filter="音源包 (*.zip)|*.zip|所有文件|*.*";',
+               'if($f.ShowDialog() -eq "OK"){[System.IO.File]::WriteAllText($env:VH_OUT,$f.FileName,[System.Text.UTF8Encoding]::new($false))}'];
+        runPS(script, { VH_OUT: outFile, VH_NAME: defaultName || 'vh-音源包.zip' }, 120000).then(function () {
+            var p = '';
+            try { if (fs.existsSync(outFile)) { p = fs.readFileSync(outFile, 'utf8').trim(); fs.unlinkSync(outFile); } } catch (e) {}
+            cb(p);
         });
     }
 
-    // 导入：选 zip，解压到 source 目录（同名不覆盖，避免冲掉已有源）
-    function importSources(cb) {
+    var _osUnused = null;
+
+    // ---------- 本地：导出 ----------
+    function exportLocal(cb) {
+        var src = sourceDir();
+        if (!src || !fs.existsSync(src)) { cb(false, '本地还没有音源目录'); return; }
+        var jsCount = 0;
+        try {
+            (function count(d) {
+                fs.readdirSync(d, { withFileTypes: true }).forEach(function (it) {
+                    if (it.isDirectory()) count(path.join(d, it.name));
+                    else if (/\.js$/i.test(it.name)) jsCount++;
+                });
+            })(src);
+        } catch (e) {}
+        if (!jsCount) { cb(false, '本地没有音源脚本可导出'); return; }
+        pickZip('save', 'vh-音源包-' + new Date().toISOString().slice(0, 10) + '.zip', function (dst) {
+            if (!dst) { cb(false, '已取消'); return; }
+            var tmp = path.join(os.tmpdir(), 'vh_src_pack_' + Date.now() + '.zip');
+            var script = [
+                'if(Test-Path -LiteralPath $env:VH_TMP){Remove-Item -LiteralPath $env:VH_TMP -Force};',
+                'Compress-Archive -Path (Join-Path $env:VH_SRC "*") -DestinationPath $env:VH_TMP -Force;',
+                'Copy-Item -LiteralPath $env:VH_TMP -Destination $env:VH_DST -Force;',
+            ];
+            runPS(script, { VH_SRC: src, VH_TMP: tmp, VH_DST: dst }, 300000).then(function () {
+                try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (e) {}
+                if (fs.existsSync(dst)) cb(true, dst + '（' + jsCount + ' 个音源）');
+                else cb(false, '打包失败');
+            });
+        });
+    }
+
+    // ---------- 本地：导入 ----------
+    function importLocal(zipPath, cb) {
         var src = sourceDir();
         if (!src) { cb(false, '服务目录未知'); return; }
         try { if (!fs.existsSync(src)) fs.mkdirSync(src, { recursive: true }); } catch (e) {}
-        var pick = path.join(svcDir, 'data', '_pick_path.txt');
-        try { if (fs.existsSync(pick)) fs.unlinkSync(pick); } catch (e) {}
-        var openScript = [
-            '$f=New-Object System.Windows.Forms.OpenFileDialog;',
-            '$f.Filter="音源包 (*.zip)|*.zip|所有文件|*.*";',
-            'if($f.ShowDialog() -eq "OK"){[System.IO.File]::WriteAllText($env:VH_OUT,$f.FileName,[System.Text.UTF8Encoding]::new($false))}',
+        var tmpDir = path.join(os.tmpdir(), 'vh_src_imp_' + Date.now());
+        try { if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+        var script = [
+            'if(Test-Path -LiteralPath $env:VH_TMP){Remove-Item -LiteralPath $env:VH_TMP -Recurse -Force};',
+            'Expand-Archive -LiteralPath $env:VH_ZIP -DestinationPath $env:VH_TMP -Force;',
         ];
-        runPS(openScript, { VH_OUT: pick }, 120000).then(function () {
-            var zipPath = '';
-            try { if (fs.existsSync(pick)) { zipPath = fs.readFileSync(pick, 'utf8').trim(); fs.unlinkSync(pick); } } catch (e) {}
+        runPS(script, { VH_ZIP: zipPath, VH_TMP: tmpDir }, 300000).then(function () {
+            if (!fs.existsSync(tmpDir)) { cb(false, '解压失败'); return; }
+            var added = 0, skipped = 0;
+            (function walk(d) {
+                var items = [];
+                try { items = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { return; }
+                items.forEach(function (it) {
+                    var full = path.join(d, it.name);
+                    if (it.isDirectory()) { walk(full); return; }
+                    if (!/\.js$/i.test(it.name)) return;
+                    var dst = path.join(src, '_open', it.name);
+                    try {
+                        fs.mkdirSync(path.dirname(dst), { recursive: true });
+                        if (fs.existsSync(dst)) { skipped++; return; }
+                        fs.copyFileSync(full, dst);
+                        added++;
+                    } catch (e) { skipped++; }
+                });
+            })(tmpDir);
+            try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+            cb(true, { added: added, skipped: skipped });
+        });
+    }
+
+    // ---------- 服务器：导入（走它的上传接口）----------
+    function importServer(zipPath, cb) {
+        var b = base();
+        var pwd = adminPwd();
+        if (!b) { cb(false, '未配置服务器地址'); return; }
+        if (!pwd) { cb(false, '请先填写管理口令'); return; }
+        // 先解压到临时目录，再逐个上传（跳过同名）
+        var tmpDir = path.join(os.tmpdir(), 'vh_src_srv_' + Date.now());
+        try { if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+        var script = [
+            'if(Test-Path -LiteralPath $env:VH_TMP){Remove-Item -LiteralPath $env:VH_TMP -Recurse -Force};',
+            'Expand-Archive -LiteralPath $env:VH_ZIP -DestinationPath $env:VH_TMP -Force;',
+        ];
+        runPS(script, { VH_ZIP: zipPath, VH_TMP: tmpDir }, 300000).then(function () {
+            if (!fs.existsSync(tmpDir)) { cb(false, '解压失败'); return; }
+            var files = [];
+            (function walk(d) {
+                var items = [];
+                try { items = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { return; }
+                items.forEach(function (it) {
+                    var full = path.join(d, it.name);
+                    if (it.isDirectory()) { walk(full); return; }
+                    if (/\.js$/i.test(it.name)) files.push(full);
+                });
+            })(tmpDir);
+            if (!files.length) { cb(false, '音源包里没有 .js 脚本'); return; }
+
+            var added = 0, skipped = 0, failed = [], idx = 0;
+            (function next() {
+                if (idx >= files.length) {
+                    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+                    cb(true, { added: added, skipped: skipped, failed: failed });
+                    return;
+                }
+                var f = files[idx++];
+                var name = path.basename(f);
+                var content = '';
+                try { content = fs.readFileSync(f, 'utf8'); } catch (e) { failed.push(name); next(); return; }
+                var body = JSON.stringify({ filename: name, content: content, username: 'default' });
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', b + '/api/custom-source/upload', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.setRequestHeader('x-frontend-auth', pwd);
+                xhr.timeout = 60000;
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState !== 4) return;
+                    if (xhr.status === 200) { added++; }
+                    else {
+                        var msg = '';
+                        try { msg = JSON.parse(xhr.responseText || '{}').error || ''; } catch (e) {}
+                        if (/已存在/.test(msg)) skipped++;
+                        else failed.push(name + (msg ? ('（' + msg + '）') : ''));
+                    }
+                    next();
+                };
+                xhr.onerror = function () { failed.push(name + '（网络）'); next(); };
+                xhr.ontimeout = function () { failed.push(name + '（超时）'); next(); };
+                xhr.send(body);
+            })();
+        });
+    }
+
+    // 对外入口：按当前目标分派
+    function doExport(cb) {
+        if (getTarget() === 'server') {
+            cb(false, '服务器模式下导出去 lxserver 网页的管理界面操作（它的列表接口不返回脚本内容）');
+            return;
+        }
+        exportLocal(cb);
+    }
+    function doImport(cb) {
+        pickZip('open', '', function (zipPath) {
             if (!zipPath) { cb(false, '已取消'); return; }
             if (!fs.existsSync(zipPath)) { cb(false, '文件不存在'); return; }
-            // 解压到临时目录，再逐个拷贝（同名跳过）
-            var tmpDir = path.join(svcDir, 'data', '_import_tmp');
-            try { if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
-            var exScript = [
-                'if(Test-Path -LiteralPath $env:VH_TMP){Remove-Item -LiteralPath $env:VH_TMP -Recurse -Force};',
-                'Expand-Archive -LiteralPath $env:VH_ZIP -DestinationPath $env:VH_TMP -Force;',
-            ];
-            runPS(exScript, { VH_ZIP: zipPath, VH_TMP: tmpDir }, 300000).then(function () {
-                if (!fs.existsSync(tmpDir)) { cb(false, '解压失败'); return; }
-                var added = 0, skipped = 0;
-                (function walk(dir, relBase) {
-                    var items = [];
-                    try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
-                    items.forEach(function (it) {
-                        var full = path.join(dir, it.name);
-                        var rel = relBase ? path.join(relBase, it.name) : it.name;
-                        if (it.isDirectory()) { walk(full, rel); return; }
-                        if (!/\.js$/i.test(it.name)) return;   // 只收 .js 音源脚本
-                        var dst = path.join(src, '_open', it.name);
-                        try {
-                            fs.mkdirSync(path.dirname(dst), { recursive: true });
-                            if (fs.existsSync(dst)) { skipped++; return; }
-                            fs.copyFileSync(full, dst);
-                            added++;
-                        } catch (e) { skipped++; }
-                    });
-                })(tmpDir, '');
-                try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
-                cb(true, { added: added, skipped: skipped });
-            });
+            if (getTarget() === 'server') importServer(zipPath, cb);
+            else importLocal(zipPath, cb);
         });
     }
 
@@ -344,9 +441,11 @@
                 xhr.send(opt.body ? JSON.stringify(opt.body) : null);
             });
         },
-        // 音源包：导出 / 一键导入（仅本地模式）
-        exportSources: exportSources,
-        importSources: importSources,
-        sourceDir: sourceDir
+        // 音源包：导出 / 一键导入（本地直读写；服务器走上传接口）
+        exportSources: doExport,
+        importSources: doImport,
+        sourceDir: sourceDir,
+        adminPwd: adminPwd,
+        setAdminPwd: setAdminPwd
     };
 })();

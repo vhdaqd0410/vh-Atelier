@@ -976,12 +976,18 @@
                 <input type="text" id="maServerUrl" class="ma-input" placeholder="http://你的服务器:17899">
                 <button class="tbtn" id="btnMaSaveServer">保存并连接</button>
             </div>
-            <!-- 音源包（仅本地模式；用于把本机配好的音源拷到其他电脑） -->
+            <!-- 音源包（本地/服务器都可用：本地直读写文件，服务器走它的上传接口） -->
             <div class="ma-bar" id="maSrcRow">
                 <span class="ma-sel-label">音源包</span>
-                <button class="tbtn" id="btnMaExportSrc" title="把本机已配好的音源打包成 zip（可拷到其他电脑）">⬆ 导出</button>
-                <button class="tbtn" id="btnMaImportSrc" title="选择音源包 zip，自动装到本机（同名不覆盖）">⬇ 一键导入</button>
+                <button class="tbtn" id="btnMaExportSrc" title="把当前来源已配好的音源打包成 zip（本地导出文件；服务器逐个拉取）">⬆ 导出</button>
+                <button class="tbtn" id="btnMaImportSrc" title="选择音源包 zip，自动导入到当前来源（同名不覆盖）">⬇ 一键导入</button>
                 <span id="maSrcCount" style="font-size:11px;color:var(--muted);"></span>
+            </div>
+            <!-- 服务器模式下的管理员口令（导入/导出音源需要） -->
+            <div class="ma-bar" id="maAdminRow" style="display:none;">
+                <span class="ma-sel-label">管理口令</span>
+                <input type="password" id="maAdminPwd" class="ma-input" placeholder="lxserver 的管理员密码（默认 123456）">
+                <span style="font-size:10.5px;color:var(--muted);">导入/导出音源需要</span>
             </div>
             <iframe id="maFrame" class="ma-frame" src="about:blank"></iframe>
             <!-- 失败时的提示与重试 -->

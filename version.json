@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.58.0",
-  "buildTime": "2026-10-08 18:00:18",
+  "version": "1.58.1",
+  "buildTime": "2026-10-08 18:17:25",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "音乐聚合音源包一键导入 + 修短剧扒歌下载选目录（改用系统对话框）"
+  "notes": "音源包在服务器模式下也可用（导入/导出）"
 }

@@ -771,14 +771,21 @@ console.log('\n=== 坑 16：音乐聚合（lxserver）集成 ==='); {
     // 音源包：导出 / 一键导入（本地模式）
     ok('有导出按钮', /id="btnMaExportSrc"/.test(aidx));
     ok('有导入按钮', /id="btnMaImportSrc"/.test(aidx));
-    ok('JS 有导出实现', /function exportSources/.test(ajs));
-    ok('JS 有导入实现', /function importSources/.test(ajs));
+    ok('JS 有导出实现', /function exportLocal/.test(ajs) && /function doExport/.test(ajs));
+    ok('JS 有导入实现', /function importLocal/.test(ajs) && /function importServer/.test(ajs) && /function doImport/.test(ajs));
     ok('导入只收 js 脚本且同名不覆盖', /\.js/i.test(ajs) && /skipped/.test(ajs));
     ok('导入解压走 Expand-Archive', /Expand-Archive/.test(ajs));
     ok('导出走 Compress-Archive', /Compress-Archive/.test(ajs));
-    ok('音源包暴露给 UI', /exportSources: exportSources/.test(ajs) && /importSources: importSources/.test(ajs));
-    ok('音源行随目标显隐', /maSrcRow/.test(aui));
-    ok('显示本机音源数量', /refreshSrcCount/.test(aui));
+    ok('音源包暴露给 UI', /exportSources: doExport/.test(ajs) && /importSources: doImport/.test(ajs));
+    ok('音源包两种模式都显示', /rowSrc\.style\.display = ''/.test(aui));
+    ok('显示音源数量', /refreshSrcCount/.test(aui));
+    // 服务器模式：导入走 upload 接口 + 需管理口令
+    ok('有管理口令输入', /id="maAdminPwd"/.test(aidx));
+    ok('口令由 localStorage 持久化', /vh_musicagg_admin/.test(ajs));
+    ok('服务器导入走 custom-source/upload', /custom-source\/upload/.test(ajs));
+    ok('服务器导入带 x-frontend-auth', /x-frontend-auth/.test(ajs));
+    ok('服务器模式导出给明确指引', /网页/.test(ajs));
+    ok('导入结果统计失败项', /failed\.push/.test(ajs));
 }
 
 // ============================================================
