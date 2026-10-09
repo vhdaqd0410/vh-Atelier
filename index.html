@@ -595,7 +595,12 @@
                     </div>
                     <div class="mp-side">
                         <div class="mp-vol">
-                            <input type="range" id="mv2Vol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                            <button id="btnMv2Mute" class="mp-mode" title="静音/取消静音">
+                                <svg class="ic-vol-on" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                                <svg class="ic-vol-off" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                            </button>
+                            <input type="range" id="mv2Vol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8"
+                                   title="音量（拖到最左即静音）">
                         </div>
                         <button id="btnMv2BarLyric" class="mp-mode on" title="在播放栏显示歌词">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h12"/><path d="M4 17h8"/></svg>
