@@ -667,6 +667,13 @@
         // 歌词在切歌时就拉：播放栏那行也依赖它。loadLyric 内部有缓存。
         loadLyric(s);
         renderQueue();
+        // 切歌会换歌名/专辑长度，标题可能换行 → 浮层开着时同步重排
+        setTimeout(function () {
+            var f = $('mv2LyricFloat');
+            if (f && f.style.display !== 'none') {
+                try { layoutLyricFloat(); } catch (e2) {}
+            }
+        }, 60);
         try { if (!audioCtx) initWave(); else drawWave(); } catch (e) {}
     }
 
@@ -801,6 +808,13 @@
             el.classList.remove('swap');
             try { void el.offsetWidth; } catch (e) {}
             el.classList.add('swap');
+            // 歌词行从「空」变「有内容」会让播放器变高（反之变矮），
+            // 浮层开着时必须跟着重排，否则底部会与播放器错开。
+            // 不能只依赖 ResizeObserver（个别环境不调度回调），这里显式补一次。
+            var f = $('mv2LyricFloat');
+            if (f && f.style.display !== 'none') {
+                try { layoutLyricFloat(); } catch (e2) {}
+            }
         }
     }
 
@@ -844,6 +858,7 @@
             if (pr.height > 0 && pdisp !== 'none') {
                 var gap = Math.round(r.bottom - pr.top);
                 if (gap > 0 && gap < height) reserve = gap;
+                else if (gap <= 0) reserve = Math.min(pr.height, height - 160);
             }
         }
         var availH = Math.max(160, height - reserve);
@@ -879,18 +894,37 @@
         return availH;
     }
 
+    // 浮层打开后的短时校准：ResizeObserver 在部分环境不调度回调，
+    // 而播放器高度会随歌词行内容变化，这里用几次定时校准做保险。
+    var floatCalTimers = [];
+    function scheduleFloatCalibration() {
+        while (floatCalTimers.length) clearTimeout(floatCalTimers.pop());
+        [80, 260, 600, 1200].forEach(function (ms) {
+            floatCalTimers.push(setTimeout(function () {
+                var f = $('mv2LyricFloat');
+                if (!f || f.style.display === 'none') return;
+                try { layoutLyricFloat(); } catch (e) {}
+            }, ms));
+        });
+    }
+
     function toggleLyricFloat(show) {
         var box = $('mv2LyricFloat');
         if (!box) return;
         var willShow = (typeof show === 'boolean') ? show : (box.style.display === 'none');
         if (willShow) layoutLyricFloat();
         box.style.display = willShow ? '' : 'none';
-        if (willShow && playIdx >= 0 && playlist[playIdx]) {
-            loadLyric(playlist[playIdx]);
-            setTimeout(function () {
-                layoutLyricFloat();
-                syncLyric((getAudio() || {}).currentTime || 0);
-            }, 130);
+        if (willShow) {
+            scheduleFloatCalibration();
+            if (playIdx >= 0 && playlist[playIdx]) {
+                loadLyric(playlist[playIdx]);
+                setTimeout(function () {
+                    layoutLyricFloat();
+                    syncLyric((getAudio() || {}).currentTime || 0);
+                }, 130);
+            }
+        } else {
+            while (floatCalTimers.length) clearTimeout(floatCalTimers.pop());
         }
     }
 

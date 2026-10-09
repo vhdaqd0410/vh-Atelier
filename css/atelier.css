@@ -5743,19 +5743,19 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .mv2-player-box { gap: 6px 12px; padding: 9px 12px 8px;
     flex-wrap: wrap; align-items: center; }
 /* 行1：控制键 + 封面 + 歌名（歌名吃掉剩余宽度） */
-.mv2-player-box .mp-ctrl { order: 1; flex: 0 0 auto; }
-.mv2-player-box .mp-now { order: 2; flex: 1 1 150px; min-width: 120px; max-width: none; }
-.mv2-player-box .mp-cover { width: 40px; height: 40px; border-radius: 10px; }
+/* 歌名/专辑限宽：长歌名不能把右侧歌词挤没 */
+.mv2-player-box .mp-meta { flex: 0 1 auto; max-width: 40%; }
+/* 歌词：占据歌名右侧剩余宽度，左侧加一道分隔线把自己和歌名区分开 */
+.mv2-player-box .mp-lyric { flex: 1 1 auto; min-width: 0; max-width: none;
+    margin-left: 12px; padding-left: 14px; }
+.mv2-player-box .mp-lyric::after { content: ''; position: absolute; left: 0;
+    top: 2px; bottom: 2px; width: 1px; background: rgba(255,255,255,.14); }
 /* 行2：进度 + 波形，整行独占（视觉主体） */
-.mv2-player-box .mv2-bar2 { order: 3; flex: 1 1 100% !important; min-width: 0; gap: 9px !important; }
 /* 行3：音量在左、图标组在右，铺满整行（原先只占 248px，右侧空一大块）。
    音量给足宽度，两端之间的空档才不会显得突兀。 */
-.mv2-player-box .mp-side { order: 4; flex: 1 1 100%; margin-left: 0;
-    justify-content: space-between; gap: 12px; }
 .mv2-player-box .mp-vol { flex: 1 1 auto; max-width: 150px; }
 .mv2-player-box .mp-vol-slider { width: 100%; }
 /* 行4：歌词独占整行 */
-.mv2-player-box .mv2-barlyric-row { order: 5; }
 .mv2-player-box .mp-cover:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mv2-player-box .mp-title { font-size: 12.5px; }
 .mv2-player-box .mp-sub { font-size: 10.5px; }
@@ -5839,11 +5839,8 @@ button.primary:hover { background: var(--btn-primary-hover); }
 
 /* ===== 播放栏歌词（播放控件栏内显示当前句）+ 按钮激活态 ===== */
 .mp-mode.on { color: var(--accent); background: rgba(167,139,250,.14); }
-/* 歌词行：独占整行，占满宽度（与图标同排会被挤成一小截，这是它显得小的原因） */
-.mv2-barlyric-row { flex: 1 1 100%; order: 5; min-width: 0;
-    padding: 3px 1px 0; border-top: 1px solid rgba(255,255,255,.07); }
-.mp-lyric { position: relative; font-size: 14px; line-height: 1.6;
-    height: 24px; margin-top: 3px; padding-left: 12px;
+.mp-lyric { position: relative; font-size: 16px; line-height: 1.6;
+    height: 27px; margin-top: 2px; padding-left: 13px;
     overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
     /* 渐变文字：当前句更亮更显眼，与歌名/歌手拉开层次 */
     background: linear-gradient(90deg, #c4b5fd 0%, #8ea2ff 55%, #7dd3fc 100%);
@@ -5860,7 +5857,7 @@ button.primary:hover { background: var(--btn-primary-hover); }
     100% { opacity: 1; transform: translateY(0); }
 }
 /* 左侧一根随节奏呼吸的竖条，让播放栏歌词更醒目 */
-.mp-lyric::before { content: ''; position: absolute; left: 0; top: 3px; bottom: 3px;
+.mp-lyric::before { content: ''; position: absolute; left: 0; top: 4px; bottom: 4px;
     width: 3px; border-radius: 2px; background: var(--accent);
     animation: mpLyricPulse 1.6s ease-in-out infinite; }
 @keyframes mpLyricPulse {
@@ -6098,17 +6095,22 @@ button.primary:hover { background: var(--btn-primary-hover); }
    用 order 固定顺序，避免 flex-wrap 自动换行时顺序乱掉。 */
 .mv2-player-box { gap: 6px 12px; padding: 9px 12px 8px; flex-wrap: wrap; align-items: center; }
 .mv2-player-box .mp-ctrl { order: 1; flex: 0 0 auto; }
-.mv2-player-box .mp-now { order: 2; flex: 1 1 150px; min-width: 120px; max-width: none; }
-.mv2-player-box .mp-cover { width: 40px; height: 40px; border-radius: 10px; }
+.mv2-player-box .mp-now { order: 2; flex: 1 1 auto; min-width: 0; max-width: none; }
+/* 歌名/专辑限宽：长歌名不能把右侧歌词挤没 */
+.mv2-player-box .mp-meta { flex: 0 1 auto; max-width: 40%; }
+/* 歌词：占据歌名右侧剩余宽度，左侧加一道分隔线把自己和歌名区分开 */
+.mv2-player-box .mp-lyric { flex: 1 1 auto; min-width: 0; max-width: none;
+    margin-left: 12px; padding-left: 14px; }
+.mv2-player-box .mp-lyric::after { content: ''; position: absolute; left: 0;
+    top: 2px; bottom: 2px; width: 1px; background: rgba(255,255,255,.14); }
+
 .mv2-player-box .mv2-bar2 { order: 3; flex: 1 1 100% !important; min-width: 0; gap: 9px !important; }
 .mv2-player-box .mp-side { order: 4; flex: 1 1 100%; margin-left: 0;
     justify-content: space-between; gap: 12px; }
 .mv2-player-box .mp-vol { flex: 1 1 auto; max-width: 150px; }
 .mv2-player-box .mp-vol-slider { width: 100%; }
-.mv2-player-box .mv2-barlyric-row { order: 5; }
 .mv2-player-box .mp-mode { padding: 4px 5px; }
 .mv2-player-box .mp-mode svg { width: 15px; height: 15px; }
-.mv2-player-box .mp-now { flex: 0 0 32%; }
 .mv2-player-box .mp-cover { width: 44px; height: 44px; }
 .mv2-player-box .mp-cover:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mv2-player-box .mp-title { font-size: 12.5px; }

@@ -117,12 +117,13 @@ function runChecks(){
       function box(sel){var e=document.querySelector(sel); if(!e)return null;
         var b=e.getBoundingClientRect();
         return {top:Math.round(b.top-st.top),bottom:Math.round(b.bottom-st.top),
+                left:Math.round(b.left-st.left),right:Math.round(b.right-st.left),
                 h:Math.round(b.height),w:Math.round(b.width)};}
       var out={stage:{w:__W__,h:900},modLoaded:!!window.__modLoaded,errs:(window.__errs||[]).slice(0,3),
         float:box('#mv2LyricFloat'),card:box('#mv2LyricFloat .mv2-lyric-card'),
         lyricArea:box('#mv2LyricBody'),line:box('#mv2LyricBody .mv2-lyric-line'),
         leftCol:box('#mv2LyricFloat .mv2-lyric-left'),
-        player:box('#mv2Player'),lyricRow:box('.mv2-barlyric-row'),barLyric:box('#mv2BarLyric')};
+        player:box('#mv2Player'),barLyric:box('#mv2BarLyric'),meta:box('#mv2Player .mp-meta')};
       var pre=document.createElement('pre'); pre.id='__probe';
       pre.textContent=JSON.stringify(out,null,1); document.body.appendChild(pre);
     },350);
@@ -151,8 +152,8 @@ try:
             continue
         q = dom.find('</pre>', k); seg = dom[k:q]; seg = seg[seg.find('>')+1:]
         d = json.loads(seg)
-        fl, pl, card, area, line1, row = (d['float'], d['player'], d['card'],
-                                         d['lyricArea'], d['line'], d['lyricRow'])
+        fl, pl, card, area, line1 = (d['float'], d['player'], d['card'],
+                                     d['lyricArea'], d['line'])
 
         ok('宽度 %d：模块已加载' % W, d.get('modLoaded'), d.get('errs'))
         ok('宽度 %d：浮层铺满面板宽度' % W, fl and fl['w'] == W, fl)
@@ -160,8 +161,11 @@ try:
            fl and pl and fl['bottom'] <= pl['top'] + 1,
            'float.bottom=%s player.top=%s' % (fl and fl['bottom'], pl and pl['top']))
         ok('宽度 %d：播放器完整可见' % W, pl and pl['bottom'] <= 900, pl)
-        ok('宽度 %d：歌词行独占整宽' % W,
-           row and pl and row['w'] >= pl['w'] - 40, (row, pl))
+        bl, mt = d.get('barLyric'), d.get('meta')
+        ok('宽度 %d：歌词在歌名右侧' % W,
+           bl and mt and bl['top'] <= mt['bottom'] + 4 and bl['left'] >= mt['left'] + mt['w'] - 6,
+           (mt, bl))
+        ok('宽度 %d：歌词有足够宽度（>150px）' % W, bl and bl['w'] > 150, bl)
         # 窄面板专项：歌词区必须够宽（左右分栏会只剩 100 余像素）
         if W <= 620:
             ok('宽度 %d：窄面板歌词区够宽（>280px）' % W, area and area['w'] > 280, area)

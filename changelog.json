@@ -4,6 +4,33 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.39.0",
+      "date": "2026-10-09",
+      "title": "音乐聚合：播放栏歌词移到歌名右侧并放大",
+      "items": [
+        {
+          "kind": "impr",
+          "text": "播放栏歌词从底部整行改为歌名/专辑右侧，吃剩余宽度；左侧加竖分隔线"
+        },
+        {
+          "kind": "impr",
+          "text": "歌名/专辑限宽 40%，长歌名不挤掉歌词"
+        },
+        {
+          "kind": "impr",
+          "text": "歌词字号 14px → 16px"
+        },
+        {
+          "kind": "fix",
+          "text": "清理音乐聚合区块里的重复播放器规则（旧 .mv2-player-box .mp-now { flex: 0 0 32% } 排在后面会覆盖新规则，导致歌名+歌词被压成几十像素）"
+        },
+        {
+          "kind": "fix",
+          "text": "浮层重排加固：除 ResizeObserver 外加定时校准与切歌重排"
+        }
+      ]
+    },
+    {
       "version": "1.38.0",
       "date": "2026-10-09",
       "title": "音乐聚合：歌词浮层定位改为实测驱动，播放器布局重排",
