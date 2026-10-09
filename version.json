@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.35.1",
-  "buildTime": "2026-10-09 12:08:46",
+  "version": "1.36.0",
+  "buildTime": "2026-10-09 13:49:41",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修清空搜索框后切平台旧词回来 + 歌词浮层重做"
+  "notes": "修拖拽进PR + 音源包导入登记 + 歌词浮层铺满/更透 + 播放栏歌词与开关"
 }

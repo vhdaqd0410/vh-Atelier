@@ -289,6 +289,20 @@
         });
     }
 
+    // 从音源脚本里提取元数据（规则与 lxserver 的 extractMetadata 保持一致）
+    function extractScriptMeta(content) {
+        var meta = {};
+        var m = String(content || '').match(/\/\*[*!]([\s\S]*?)\*\//);
+        if (!m) return meta;
+        var c = m[1], g;
+        if ((g = c.match(/@name\s+(.+)/))) meta.name = g[1].trim();
+        if ((g = c.match(/@version\s+(.+)/))) meta.version = g[1].trim();
+        if ((g = c.match(/@author\s+(.+)/))) meta.author = g[1].trim();
+        if ((g = c.match(/@description\s+(.+)/))) meta.description = g[1].trim();
+        if ((g = c.match(/@homepage\s+(.+)/))) meta.homepage = g[1].trim();
+        return meta;
+    }
+
     // ---------- 本地：导入 ----------
     function importLocal(zipPath, cb) {
         var src = sourceDir();
@@ -302,6 +316,18 @@
         ];
         runPS(script, { VH_ZIP: zipPath, VH_TMP: tmpDir }, 300000).then(function () {
             if (!fs.existsSync(tmpDir)) { cb(false, '解压失败'); return; }
+            var openDir = path.join(src, '_open');
+            try { fs.mkdirSync(openDir, { recursive: true }); } catch (e) {}
+            // 关键：音源能否被加载，完全取决于 _open/sources.json 里有没有登记。
+            // 只把 .js 拷进目录而不登记，服务端 initUserApis 不会扫描到它
+            //（它只遍历 sources.json 的条目），于是表现为"提示启用失败/没有找到音源"。
+            var metaPath = path.join(openDir, 'sources.json');
+            var sources = [];
+            try { if (fs.existsSync(metaPath)) sources = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch (e) { sources = []; }
+            if (!Array.isArray(sources)) sources = [];
+            function registered(id) {
+                return sources.some(function (s) { return s && s.id === id; });
+            }
             var added = 0, skipped = 0;
             (function walk(d) {
                 var items = [];
@@ -310,17 +336,37 @@
                     var full = path.join(d, it.name);
                     if (it.isDirectory()) { walk(full); return; }
                     if (!/\.js$/i.test(it.name)) return;
-                    var dst = path.join(src, '_open', it.name);
+                    var dst = path.join(openDir, it.name);
                     try {
-                        fs.mkdirSync(path.dirname(dst), { recursive: true });
-                        if (fs.existsSync(dst)) { skipped++; return; }
-                        fs.copyFileSync(full, dst);
+                        if (fs.existsSync(dst) || registered(it.name)) { skipped++; return; }
+                        var content = fs.readFileSync(full, 'utf8');
+                        fs.writeFileSync(dst, content, 'utf8');
+                        var meta = extractScriptMeta(content);
+                        sources.push({
+                            id: it.name,
+                            name: meta.name || it.name.replace(/\.js$/i, ''),
+                            version: meta.version || '1.0.0',
+                            author: meta.author || '未知',
+                            description: meta.description || '',
+                            homepage: meta.homepage || '',
+                            size: Buffer.byteLength(content, 'utf8'),
+                            supportedSources: [],
+                            // 上游默认禁用，导入后要手动点一遍；这里直接置为可用
+                            enabled: true,
+                            uploadTime: new Date().toISOString(),
+                            allowUnsafeVM: false,
+                            requireUnsafe: false
+                        });
                         added++;
                     } catch (e) { skipped++; }
                 });
             })(tmpDir);
             try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
-            cb(true, { added: added, skipped: skipped });
+            // 写回元数据表，服务端的文件监控会据此重载这些源
+            try {
+                if (added) fs.writeFileSync(metaPath, JSON.stringify(sources, null, 2), 'utf8');
+            } catch (e) { cb(false, '写音源元数据失败：' + e.message); return; }
+            cb(true, { added: added, skipped: skipped, reloaded: added > 0 });
         });
     }
 

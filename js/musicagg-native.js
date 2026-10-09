@@ -58,6 +58,13 @@
     ];
     var curPlatform = 'wy';
     var curType = 'song';
+    // 歌单检索能力：实测只有网易云的音源提供 searchPlaylist，
+    // 其余平台服务端直接返回 500 "does not support playlist search"。
+    var PLAYLIST_OK = { wy: true };
+    function platformSupportsPlaylist(pf) {
+        if (!pf) return true;   // 全部平台：由网易云出结果
+        return !!PLAYLIST_OK[pf];
+    }
     var playlist = [];      // 当前播放队列
     var playIdx = -1;       // 当前播放下标
 
@@ -390,7 +397,13 @@
         api(searchPath(curPlatform, kw, curType, 30))
             .then(function (r) { afterSearch(norm(r), kw); })
             .catch(function (e) {
-                if (box) box.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>搜索失败</div><div class="mv2-empty-sub">' + esc(e.message) + '</div></div>';
+                var msg = (e && e.message) || '';
+                if (curType === 'playlist' && !platformSupportsPlaylist(curPlatform)) {
+                    if (box) box.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">🎧</div><div>' + esc(srcLabel(curPlatform)) + '不支持歌单搜索</div><div class="mv2-empty-sub">歌单检索目前只有网易云的音源提供，切到「网易云」再搜</div></div>';
+                    setState('该平台不支持歌单搜索', 'err');
+                    return;
+                }
+                if (box) box.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>搜索失败</div><div class="mv2-empty-sub">' + esc(msg) + '</div></div>';
                 setState('搜索失败', 'err');
             });
     }
@@ -482,9 +495,22 @@
             var ops = document.createElement('div');
             ops.className = 'mv2-ops';
             ops.appendChild(mkBtn('▶', 'mv2-btn-play', '播放', function () { playListAt(idx); }));
-            ops.appendChild(mkBtn('⤓', 'mv2-btn', '下载（可选目录）', function () { download(s); }));
+            var dlBtn = mkBtn('⤓', 'mv2-btn', '下载（可选目录）', function () { download(s); });
+            ops.appendChild(dlBtn);
             ops.appendChild(mkBtn('→PR', 'mv2-btn', '下载并插入当前时间线', function () { insertToTimeline(s); }));
             row.appendChild(ops);
+
+            // 已下载过的：按钮变✔、行可拖；未下载也能拖（拖时提示先下载）
+            var lp = localPathOf(s);
+            if (lp) {
+                dlBtn.textContent = '✔';
+                dlBtn.title = '已下载：' + lp + '（可拖进 PR，右键更多操作）';
+                dlBtn.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    showRowMenu({ clientX: ev.clientX, clientY: ev.clientY, preventDefault: function () {} }, lp);
+                });
+            }
+            attachRowDrag(row, s);
 
             row.addEventListener('dblclick', function () { playListAt(idx); });
             box.appendChild(row);
@@ -580,8 +606,9 @@
         if (big) { var im2 = s.img || s.picUrl || ''; if (im2) big.src = im2; big.style.display = im2 ? '' : 'none'; }
         var bt = $('mv2BigTitle'); if (bt) bt.textContent = s.name || '';
         var bs = $('mv2BigSub'); if (bs) bs.textContent = (s.singer || '') + (s.albumName ? (' · ' + s.albumName) : '');
-        // 同步刷新歌词（仅在悬浮层已打开时）与播放列表，并启动频谱
-        if ($('mv2LyricFloat') && $('mv2LyricFloat').style.display !== 'none') loadLyric(s);
+        // 同步刷新歌词与播放列表，并启动频谱。
+        // 歌词在切歌时就拉：播放栏那行也依赖它。loadLyric 内部有缓存。
+        loadLyric(s);
         renderQueue();
         try { if (!audioCtx) initWave(); else drawWave(); } catch (e) {}
     }
@@ -652,6 +679,11 @@
             });
             body.appendChild(d);
         });
+        // 歌词是异步拉回来的：渲染完立刻按当前播放位置定位一次
+        try {
+            var a0 = getAudio();
+            if (a0 && isFinite(a0.currentTime)) syncLyric(a0.currentTime);
+        } catch (e) {}
     }
 
     function syncLyric(cur) {
@@ -662,17 +694,47 @@
             if (lyricLines[i].t <= cur + 0.25) idx = i; else break;
         }
         if (idx < 0) return;
+        renderBarLyric(idx);
         var lines = body.children;
         for (var j = 0; j < lines.length; j++) {
-            if (lines[j].classList) lines[j].classList.toggle('on', j === idx);
+            if (!lines[j].classList) continue;
+            lines[j].classList.toggle('on', j === idx);
+            lines[j].classList.toggle('near', j !== idx && Math.abs(j - idx) <= 4);
         }
         var curEl = lines[idx];
         if (curEl && typeof body.scrollTop === 'number') {
+            // 当前句定位在容器偏下（约 62% 处），上方保留已唱过的歌词作为上下文
             try {
-                var top = curEl.offsetTop - body.clientHeight / 2 + curEl.clientHeight / 2;
-                body.scrollTop = Math.max(0, top);
+                var target = curEl.offsetTop - body.clientHeight * 0.62 + curEl.clientHeight / 2;
+                body.scrollTop = Math.max(0, target);
             } catch (e) {}
         }
+    }
+
+    // ---------- 播放栏歌词：开关 + 当前句 ----------
+    var BAR_LYRIC_KEY = 'vh_musicagg_barlyric';
+    var barLyricOn = true;
+    try { barLyricOn = (localStorage.getItem(BAR_LYRIC_KEY) !== '0'); } catch (e) {}
+    var lastLyricIdx = -1;
+    function setBarLyric(on) {
+        barLyricOn = !!on;
+        try { localStorage.setItem(BAR_LYRIC_KEY, barLyricOn ? '1' : '0'); } catch (e) {}
+        var el = $('mv2BarLyric');
+        if (el) {
+            el.style.display = barLyricOn ? '' : 'none';
+            if (!barLyricOn) el.textContent = '';
+        }
+        var btn = $('btnMv2BarLyric');
+        if (btn) btn.classList.toggle('on', barLyricOn);
+        if (barLyricOn) renderBarLyric(lastLyricIdx);
+    }
+    // 播放栏只显示当前句（双行歌词取第一行，避免高度跳动）
+    function renderBarLyric(idx) {
+        lastLyricIdx = (typeof idx === 'number') ? idx : lastLyricIdx;
+        var el = $('mv2BarLyric');
+        if (!el || !barLyricOn) return;
+        var line = (lastLyricIdx >= 0 && lyricLines[lastLyricIdx]) ? lyricLines[lastLyricIdx] : null;
+        el.textContent = line ? String(line.text || '').split('\n')[0] : '';
     }
 
     function toggleLyricFloat(show) {
@@ -837,6 +899,10 @@
         // 歌词/大图：点封面或歌词按钮都打开悬浮层
         var lb = $('btnMv2Lyric');
         if (lb) lb.addEventListener('click', function () { toggleLyricFloat(); });
+        // 播放栏歌词开关
+        var blb = $('btnMv2BarLyric');
+        if (blb) blb.addEventListener('click', function () { setBarLyric(!barLyricOn); });
+        setBarLyric(barLyricOn);
         var cov = $('mv2Cover');
         if (cov) cov.addEventListener('click', function () { toggleLyricFloat(true); });
         var lc = $('btnMv2LyricClose');
@@ -908,7 +974,10 @@
                 .then(function (saved) {
                     setState('已下载：' + saved, 'ok');
                     flash('已下载到：' + saved, 'ok');
-                    markRowDownloaded(s, saved);
+                    // 写入映射表（行拖拽靠它查路径），并局部刷新该行按钮
+                    downloadedMap[songKey(s)] = saved;
+                    saveDlMap();
+                    refreshRowState(s);
                 })
                 .catch(function (e) {
                     setState('下载失败：' + e.message, 'err');
@@ -944,38 +1013,63 @@
         } catch (e) { cb(e.message); }
     }
 
-    // 下载完成 → 行内按钮变「已下载」，并把文件路径挂到行上（可拖进 PR）
-    function markRowDownloaded(s, filePath) {
-        var boxes = [$('mv2List'), $('mv2Sheet')];
-        boxes.forEach(function (box) {
-            if (!box) return;
+    // 已下载文件映射：key = 歌名|歌手|songmid → 本地路径
+    // 行创建时就带上 draggable，拖拽时实时查表，不再靠事后补事件（重渲染就丢）。
+    function songKey(s) {
+        return [s.name || '', s.singer || s.artist || '', s.songmid || ''].join('|');
+    }
+    var downloadedMap = {};
+    try { downloadedMap = JSON.parse(localStorage.getItem('vh_musicagg_dl') || '{}'); } catch (e) { downloadedMap = {}; }
+    function saveDlMap() {
+        try { localStorage.setItem('vh_musicagg_dl', JSON.stringify(downloadedMap)); } catch (e) {}
+    }
+    function localPathOf(s) {
+        try { return downloadedMap[songKey(s)] || ''; } catch (e) { return ''; }
+    }
+
+    // 给行挂上拖拽（不管有没有下载过，拖时再判断）
+    function attachRowDrag(row, s) {
+        row.setAttribute('draggable', 'true');
+        row.addEventListener('dragstart', function (ev) {
+            var p = localPathOf(s);
+            if (!p || !/^[a-zA-Z]:[\\/]/.test(p)) {
+                ev.preventDefault();
+                flash('先点「⤓」下载这首，下载完就能拖进 PR 了');
+                return;
+            }
+            try {
+                ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', p);
+                ev.dataTransfer.setData('text/plain', p);
+                ev.dataTransfer.effectAllowed = 'copy';
+            } catch (e) {}
+        });
+        row.addEventListener('contextmenu', function (ev) {
+            var p = localPathOf(s);
+            if (!p) return;
+            ev.preventDefault();
+            showRowMenu(ev, p);
+        });
+    }
+
+    // 下载完成 → 刷新对应行按钮状态（按 songKey 匹配，不靠歌名文本）
+    function refreshRowState(s) {
+        var key = songKey(s);
+        [$('mv2List'), $('mv2Sheet')].forEach(function (box) {
+            if (!box || !box.children) return;
             var rows = box.children;
             for (var i = 0; i < rows.length; i++) {
                 var r = rows[i];
                 if (!r.classList || r.className.indexOf('mv2-row') < 0) continue;
-                var nm = r.querySelector && r.querySelector('.mv2-name');
-                if (nm && nm.textContent === (s.name || '')) {
-                    r.setAttribute('draggable', 'true');
-                    r.dataset.file = filePath;
-                    r.addEventListener('dragstart', function (ev) {
-                        try {
-                            ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', filePath);
-                            ev.dataTransfer.setData('text/plain', filePath);
-                            ev.dataTransfer.effectAllowed = 'copy';
-                        } catch (e) {}
-                    });
-                    var ops = r.querySelector('.mv2-ops');
-                    if (ops && ops.children[1]) {
-                        ops.children[1].textContent = '✔';
-                        ops.children[1].title = '已下载：' + filePath + '（可拖进 PR；右键菜单）';
-                        // 右键菜单：改目录 / 资源管理器 / 导入PR / 插时间线
-                        r.addEventListener('contextmenu', function (ev) {
-                            ev.preventDefault();
-                            showRowMenu(ev, filePath);
-                        });
-                    }
-                    break;
+                var idx = parseInt(r.getAttribute('data-idx'), 10);
+                var song = (lastRendered && lastRendered.list && isFinite(idx)) ? lastRendered.list[idx] : null;
+                if (!song || songKey(song) !== key) continue;
+                var ops = r.querySelector && r.querySelector('.mv2-ops');
+                if (ops && ops.children[1]) {
+                    var p = localPathOf(s);
+                    ops.children[1].textContent = p ? '✔' : '⤓';
+                    ops.children[1].title = p ? ('已下载：' + p + '（可拖进 PR；右键菜单）') : '下载（可选目录）';
                 }
+                break;
             }
         });
     }
@@ -1065,7 +1159,10 @@
                             fetchToFile(proxyUrl(url), dir, fname, function (err, saved) { if (err) rej(new Error(err)); else res(saved); });
                         });
                     })
-                    .then(function () { ok++; i++; setTimeout(tick, 120); })
+                    .then(function (saved) {
+                        if (saved) { downloadedMap[songKey(s)] = saved; saveDlMap(); }
+                        ok++; i++; setTimeout(tick, 120);
+                    })
                     .catch(function () { fail++; i++; setTimeout(tick, 120); });
             }
             tick();
@@ -1127,6 +1224,13 @@
         Array.prototype.forEach.call(document.querySelectorAll('#mv2Platforms .mv2-pf'), function (b) {
             b.classList.toggle('on', b.dataset.pf === id);
         });
+
+        // 歌单类型在不支持的平台会让用户白搜一次：直接退回单曲并说明。
+        if (curType === 'playlist' && !platformSupportsPlaylist(id)) {
+            curType = 'song';
+            var tyEl = $('mv2Type'); if (tyEl) tyEl.value = 'song';
+            flash(srcLabel(id) + '不支持歌单搜索，已切回单曲；歌单请用网易云');
+        }
 
         // 输入框是用户的现场，不被回填覆盖：切平台时以「当前输入框内容」为准。
         // （之前从 lastSearch.kw 兼底，导致用户清空输入框后切平台，旧词又冒出来。）
