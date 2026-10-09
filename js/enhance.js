@@ -1793,43 +1793,49 @@
     init();
   })();
 
-  // ---------- 对外：导出当前序列（无字幕底版）供「本地去字幕」使用 ----------
-  // 复用本模块既有的 exportOne + 无字幕预设 + 临时目录；
-  // cb(err, file) —— 成功回调导出后的文件绝对路径。
-  window.__vhEnhanceExportForLocal = function (cb) {
+    // ---------- 对外：导出（供「本地去字幕」使用） ----------
+  // cb(err, file)
+  // seqName 可选：指定序列名；不传则用勾选的第一个
+  // range 可选：{ startSec, endSec } 只导出该区间
+  // preset 可选：指定导出预设路径；不传则自动选「有字幕」预设（去字幕要先烧字幕）
+  window.__vhEnhanceExportForLocal = function (cb, seqName, range, preset) {
     cb = cb || function () {};
     (async function () {
       try {
-        // 1) 取目标序列：优先已勾选，否则取列表里的第一个
         var seqs = [];
-        try {
-          document.querySelectorAll('#enSeqList input[type=checkbox]').forEach(function (cbx) {
-            if (cbx.checked) seqs.push(cbx.value);
-          });
-        } catch (e) {}
+        if (seqName) seqs.push(seqName);
+        if (!seqs.length) {
+          try {
+            document.querySelectorAll('#enSeqList input[type=checkbox]').forEach(function (cbx) {
+              if (cbx.checked) seqs.push(cbx.value);
+            });
+          } catch (e) {}
+        }
         if (!seqs.length) {
           try {
             var first = document.querySelector('#enSeqList input[type=checkbox]');
             if (first && first.value) seqs.push(first.value);
           } catch (e) {}
         }
-        if (!seqs.length) { cb(new Error('未找到可导出的序列（请先点「🔄 刷新」加载序列）')); return; }
-        var seqName = seqs[0];
+        if (!seqs.length) { cb(new Error('未找到可导出的序列（请先点「🔄 刷新」）')); return; }
+        var useSeq = seqs[0];
 
-        // 2) 无字幕预设（复用本模块既有的探测函数）
-        var preset = '';
-        try { preset = findNoSubtitlePreset(); } catch (e) {}
-        if (!preset) { cb(new Error('找不到「无字幕」导出预设（.epr）')); return; }
+        // 预设：优先用传入的；否则自动找「有字幕」版（去字幕必须先把字幕烧进画面）
+        var presetPath = preset || '';
+        if (!presetPath) {
+          try { presetPath = findSubtitlePreset() || findNoSubtitlePreset() || ''; } catch (e) {}
+        }
+        if (!presetPath) { cb(new Error('找不到可用的导出预设（.epr）')); return; }
 
-        // 3) 输出到本地去字幕的临时目录
         var outDir = tmpRoot;
         try { if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
-        var outFile = path.join(outDir, seqName.replace(/[\\/:*?"<>|]/g, '_') + '_nosub.mp4');
+        var tag = range ? '_clip' : '_full';
+        var outFile = path.join(outDir, useSeq.replace(/[\\/:*?"<>|]/g, '_') + '_nosub' + tag + '.mp4');
+        try { if (fs.existsSync(outFile)) fs.unlinkSync(outFile); } catch (e) {}
 
-        log('▶ [本地去字幕] 导出序列：' + seqName);
-        await exportOne(seqName, preset, outFile, null);
+        log('▶ [本地去字幕] 导出序列：' + useSeq + (range ? '（区间）' : '（整条）'));
+        await exportOne(useSeq, presetPath, outFile, range || null);
 
-        // 4) 等文件落地（exportOne 已等过，这里再兜一层）
         var deadline = Date.now() + 5 * 60 * 1000;
         while (!fs.existsSync(outFile) && Date.now() < deadline) {
           await new Promise(function (r) { setTimeout(r, 800); });

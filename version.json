@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.71.0",
-  "buildTime": "2026-10-09 19:16:46",
+  "version": "1.72.0",
+  "buildTime": "2026-10-09 19:43:10",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修 ME 通道字幕不归位 + 本地去字幕(VSR)"
+  "notes": "本地去字幕独立成面板 + 序列/区间能力抽取共用"
 }

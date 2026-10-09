@@ -19,6 +19,7 @@
         script: document.getElementById('panel-script'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
+        localsub: document.getElementById('panel-localsub'),
         prconv: document.getElementById('panel-prconv'),
         colorxml: document.getElementById('panel-colorxml'),
         todo: document.getElementById('panel-todo'),
@@ -36,7 +37,7 @@
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
-        upscale: { members: ['upscale'], default: 'upscale' },
+        upscale: { members: ['upscale', 'localsub'], default: 'upscale' },
         prconv: { members: ['prconv', 'colorxml'], default: 'prconv' },
         feedback: { members: ['feedback'], default: 'feedback' },
         admin: { members: ['admin'], default: 'admin' }
@@ -183,6 +184,9 @@
         // 超分面板：切到时刷新序列列表
         if (name === 'upscale' && window.__enhanceOnShow) {
             try { window.__enhanceOnShow(); } catch (e) {}
+        }
+        if (name === 'localsub' && window.__localsubOnShow) {
+            try { window.__localsubOnShow(); } catch (e) {}
         }
         // 反馈中心：切到时把 iframe 拉起来
         if (name === 'feedback' && window.__feedbackPanelOnShow) {
