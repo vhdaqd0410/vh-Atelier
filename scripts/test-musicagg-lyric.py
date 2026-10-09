@@ -7,8 +7,20 @@
 import os, sys, subprocess
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 D = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(D, '_tmp_test_lyric')
+OUT = os.path.join(D, '_tmp', 'test-lyric')
 os.makedirs(OUT, exist_ok=True)
+
+# 跑完自动清理临时目录（避免在插件目录里留垃圾）
+import atexit as _atexit, shutil as _shutil
+def _cleanup_tmp():
+    try:
+        _p = os.path.join(D, '_tmp')
+        if os.path.exists(_p):
+            _shutil.rmtree(_p, ignore_errors=True)
+    except Exception:
+        pass
+_atexit.register(_cleanup_tmp)
+
 
 JS = r'''
 const fs=require('fs'), path=require('path'), vm=require('vm');

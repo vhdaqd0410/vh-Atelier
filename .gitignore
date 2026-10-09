@@ -81,3 +81,6 @@ collect/feedback.json
 *.pregv.bak
 *.precache.bak
 *.v4bak
+
+# 测试临时产物
+_tmp/

@@ -8,11 +8,23 @@ import os, sys, json, shutil, subprocess
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 D = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TMP = os.path.join(D, '_tmp_test_import')
+TMP = os.path.join(D, '_tmp', 'test-import')
 shutil.rmtree(TMP, ignore_errors=True)
 EXT = os.path.join(TMP, 'ext')
 OPEN = os.path.join(EXT, 'lxserver', 'data', 'users', 'source', '_open')
 os.makedirs(OPEN, exist_ok=True)
+
+# 跑完自动清理临时目录（避免在插件目录里留垃圾）
+import atexit as _atexit, shutil as _shutil
+def _cleanup_tmp():
+    try:
+        _p = os.path.join(D, '_tmp')
+        if os.path.exists(_p):
+            _shutil.rmtree(_p, ignore_errors=True)
+    except Exception:
+        pass
+_atexit.register(_cleanup_tmp)
+
 
 SRC_PACK = os.path.join(TMP, 'pack')
 os.makedirs(SRC_PACK, exist_ok=True)
