@@ -41,6 +41,10 @@ JOBS = [
     ("test-purge.js",      "node", False, "扁平化临时目录清理：只删本功能目录", None),
     ("test-cx-ui.js",      "node", False, "扁平化 UI 绑定逻辑加载无错", None),
     ("test-split.js",      "node", False, "拖动分隔条宽度计算与记忆", None),
+    # 音乐聚合面板（原生简洁模式）行为测试：有明确判据，纳入门禁
+    ("test-musicagg-import.py", "python", True, "音源包导入登记 sources.json（否则服务端扫不到）", None),
+    ("test-musicagg-drag.py",   "python", True, "拖拽进 PR（draggable + 路径映射表）与播放栏歌词", None),
+    ("test-musicagg-lyric.py",  "python", True, "歌词浮层滚动定位（高亮偏下 / 保留上文）", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）

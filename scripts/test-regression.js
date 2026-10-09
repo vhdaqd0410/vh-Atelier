@@ -816,6 +816,7 @@ console.log('\n=== 坑 19：音源导入后默认启用 ==='); {
 // ============================================================
 console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     var njs = read('js/musicagg-native.js');
+    var nagg = read('js/musicagg.js');
     var nidx = read('index.html');
     var nui = read('js/musicagg-ui.js');
     var ncss = read('css/atelier.css');
@@ -893,7 +894,35 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('频谱与进度条同行', /class="mp-bar mv2-bar2"/.test(nidx) && /class="mv2-seekwrap"/.test(nidx));
     ok('封面可点击放大', /class="mp-cover" alt="" title=/.test(nidx) && /cov\.addEventListener\('click'/.test(njs));
     ok('歌词层左图右词', /mv2-lyric-left/.test(nidx) && /mv2-lyric-right/.test(nidx) && /id="mv2BigCover"/.test(nidx));
-    ok('歌词层毛玻璃', /backdrop-filter: blur\(40px\)/.test(ncss) && /blur\(22px\)/.test(ncss));
+    // 毛玻璃：断言"两层都有 backdrop-filter"（不锁死具体数值，数值是可调的设计参数）
+    ok('歌词层毛玻璃',
+        /\.mv2-lyric-float\s*\{[^}]*backdrop-filter:\s*blur\(/.test(ncss) &&
+        /\.mv2-lyric-card\s*\{[^}]*backdrop-filter:\s*blur\(/.test(ncss) &&
+        /\.mv2-lyric-float\s*\{[^}]*webkit-backdrop-filter/.test(ncss));
+    // 本轮：铺满面板 / 播放栏歌词 / 拖拽 / 音源导入登记 / 歌单平台能力
+    ok('浮层遮罩层撑满（不居中卡住）',
+        /\.mv2-lyric-float\s*\{[^}]*align-items:\s*stretch/.test(ncss) &&
+        /\.mv2-lyric-float\s*\{[^}]*justify-content:\s*stretch/.test(ncss));
+    ok('歌词区显式清除 max-height（否则被 168px 钉住）',
+        /\.mv2-lyric-right\s+\.mv2-lyric\s*\{[^}]*max-height:\s*none/.test(ncss));
+    ok('卡片可垂直撑满', /\.mv2-lyric-card\s*\{[^}]*min-height:\s*0/.test(ncss));
+    ok('播放栏歌词容器存在', /id="mv2BarLyric"/.test(nidx) && /\.mp-lyric/.test(ncss));
+    ok('播放栏歌词有开关按钮', /id="btnMv2BarLyric"/.test(nidx) && /function setBarLyric/.test(njs));
+    ok('播放栏歌词开关持久化', /vh_musicagg_barlyric/.test(njs));
+    ok('切歌即拉歌词（播放栏依赖）',
+        /function updateNow[\s\S]{0,1400}?loadLyric\(s\);/.test(njs));
+    ok('播放栏歌词只取首行（双语不撑高）',
+        /function renderBarLyric[\s\S]{0,600}?\.split\(.{0,8}\)\[0\]/.test(njs));
+    ok('下载行创建即 draggable', /function attachRowDrag/.test(njs) && /row\.setAttribute\('draggable', 'true'\)/.test(njs));
+    ok('拖拽查本地路径映射表', /function localPathOf/.test(njs) && /com\.adobe\.cep\.dnd\.file\.0/.test(njs));
+    ok('下载完成写映射表（单首+批量）',
+        (njs.match(/downloadedMap\[songKey\(s\)\] = saved/g) || []).length >= 2);
+    ok('导入音源登记 sources.json（否则服务端扫不到）',
+        /function extractScriptMeta/.test(njs) && /registered\(it\.name\)/.test(njs) ||
+        /function extractScriptMeta/.test(nagg) && /registered\(it\.name\)/.test(nagg));
+    ok('导入的音源默认启用', /enabled: true/.test(nagg));
+    ok('歌单平台能力表', /PLAYLIST_OK/.test(njs) && /function platformSupportsPlaylist/.test(njs));
+    ok('不支持歌单的平台给中文提示', /不支持歌单搜索/.test(njs));
     ok('有搜索历史', /id="mv2HistList"/.test(nidx) && /function addSearchHist/.test(njs));
     ok('历史可点击复搜', /doSearch\(kw\)/.test(njs));
     ok('历史可清空', /id="mv2HistClear"/.test(nidx) && /function clearHist/.test(njs));
