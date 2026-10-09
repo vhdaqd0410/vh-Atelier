@@ -45,6 +45,8 @@ JOBS = [
     ("test-musicagg-import.py", "python", True, "音源包导入登记 sources.json（否则服务端扫不到）", None),
     ("test-musicagg-drag.py",   "python", True, "拖拽进 PR（draggable + 路径映射表）与播放栏歌词", None),
     ("test-musicagg-lyric.py",  "python", True, "歌词浮层滚动定位（高亮偏下 / 保留上文）", None),
+    ("test-musicagg-list.py",   "python", True, "歌单分享链接直接打开 + 类型不随平台变", None),
+    ("test-musicagg-bar.py",    "python", True, "歌词浮窗尺寸 + 播放栏歌词动画与配色", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）

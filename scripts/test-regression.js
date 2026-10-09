@@ -900,9 +900,12 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
         /\.mv2-lyric-card\s*\{[^}]*backdrop-filter:\s*blur\(/.test(ncss) &&
         /\.mv2-lyric-float\s*\{[^}]*webkit-backdrop-filter/.test(ncss));
     // 本轮：铺满面板 / 播放栏歌词 / 拖拽 / 音源导入登记 / 歌单平台能力
-    ok('浮层遮罩层撑满（不居中卡住）',
-        /\.mv2-lyric-float\s*\{[^}]*align-items:\s*stretch/.test(ncss) &&
-        /\.mv2-lyric-float\s*\{[^}]*justify-content:\s*stretch/.test(ncss));
+    // 浮层尺寸：改为靠下居中的小窗，底部留白让播放控件露出来（不再铺满面板）
+    ok('浮层缩小并露出播放控件',
+        /\.mv2-lyric-float\s*\{[^}]*align-items:\s*flex-end/.test(ncss) &&
+        /\.mv2-lyric-float\s*\{[^}]*padding:[^;]*84px/.test(ncss) &&
+        /\.mv2-lyric-card\s*\{[^}]*height:\s*min\(/.test(ncss));
+    ok('歌词区留白改百分比（适配矮卡片）', /\.mv2-lyric-right\s+\.mv2-lyric\s*\{[^}]*padding:\s*45%/.test(ncss));
     ok('歌词区显式清除 max-height（否则被 168px 钉住）',
         /\.mv2-lyric-right\s+\.mv2-lyric\s*\{[^}]*max-height:\s*none/.test(ncss));
     ok('卡片可垂直撑满', /\.mv2-lyric-card\s*\{[^}]*min-height:\s*0/.test(ncss));
@@ -913,6 +916,24 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
         /function updateNow[\s\S]{0,1400}?loadLyric\(s\);/.test(njs));
     ok('播放栏歌词只取首行（双语不撑高）',
         /function renderBarLyric[\s\S]{0,600}?\.split\(.{0,8}\)\[0\]/.test(njs));
+    // 本轮：播放栏歌词动画与配色
+    ok('播放栏歌词有渐变色', /\.mp-lyric\s*\{[^}]*background-clip:\s*text/.test(ncss));
+    ok('播放栏歌词有换句动画', /@keyframes mpLyricSwap/.test(ncss) && /\.mp-lyric\.swap/.test(ncss));
+    ok('播放栏歌词有呼吸竖条', /mpLyricPulse/.test(ncss));
+    ok('换句才重播动画（同句不闪）', /var changed = \(text !== el\.textContent\)/.test(njs));
+    // 本轮：歌单分享链接直接打开
+    ok('可解析歌单分享链接', /function parsePlaylistInput/.test(njs) && /function extractPlaylistId/.test(njs));
+    ok('覆盖各平台域名',
+        /LINK_SOURCE_RULES/.test(njs) && /163cn/.test(njs) && /kugou/.test(njs) &&
+        /kuwo/.test(njs) && /migu/.test(njs) && /qq/.test(njs));
+    ok('歌单类型下链接直接打开', /var asList = \(\$\('mv2Type'\)/.test(njs) && /openSheet\(\{ id: parsed\.id/.test(njs));
+    ok('支持分享文案里夹链接（正则抽链接）',
+        njs.indexOf('s.match(/https?:\\/\\/[^\\s]+/i)') >= 0);
+    // 本轮：搜索类型不随平台切换而变
+    ok('切平台不改搜索类型', !/已切回单曲/.test(njs));
+    ok('切平台读当前类型下拉', /curType = \(\$\('mv2Type'\) && \$\('mv2Type'\)\.value\) \|\| curType/.test(njs));
+    ok('恢复现场不覆写类型下拉',
+        /function restoreView[\s\S]{0,700}?var viewType = v\.type \|\| 'song'[\s\S]{0,300}?curType = \(ty0 && ty0\.value\)/.test(njs));
     ok('下载行创建即 draggable', /function attachRowDrag/.test(njs) && /row\.setAttribute\('draggable', 'true'\)/.test(njs));
     ok('拖拽查本地路径映射表', /function localPathOf/.test(njs) && /com\.adobe\.cep\.dnd\.file\.0/.test(njs));
     ok('下载完成写映射表（单首+批量）',

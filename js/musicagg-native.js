@@ -66,6 +66,58 @@
         if (!pf) return true;   // 全部平台：由网易云出结果
         return !!PLAYLIST_OK[pf];
     }
+
+    // ---------- 歌单分享链接解析 ----------
+    // 需求：把网易云歌单的分享链接直接粘进输入框就能打开歌单。
+    // 服务端各音源的 getListDetail 本身已经能吃「链接或 ID」并自行提取，
+    // 但需要先告诉它这是哪个平台的链接（跨源打不开），所以这里只做两件事：
+    //   1) 按域名判断来源平台
+    //   2) 确认输入确实是一个歌单链接 / 歌单 ID（避免把普通搜索词误当链接）
+    var LINK_SOURCE_RULES = [
+        { re: /(?:music\.163\.com|y\.music\.163\.com|163cn\.tv|music\.126\.net)/i, src: 'wy' },
+        { re: /(?:y\.qq\.com|c\.y\.qq\.com|i\.y\.qq\.com|qq\.com\/n\/ryqq)/i,        src: 'tx' },
+        { re: /(?:kugou\.com|mobile\.kugou\.com)/i,                                     src: 'kg' },
+        { re: /(?:kuwo\.cn|m\.kuwo\.cn)/i,                                              src: 'kw' },
+        { re: /(?:migu\.cn|music\.migu\.cn|h5\.nf\.migu\.cn)/i,                       src: 'mg' }
+    ];
+    // 从链接里提取歌单 id（各平台路径形式不同，逐一覆盖）
+    function extractPlaylistId(text) {
+        var s = String(text || '').trim();
+        var m;
+        if ((m = s.match(/[?&]id=(\w+)/))) return m[1];                       // ?id=xxx（网易云/咪咕等）
+        if ((m = s.match(/global_collection_id=(\w+)/))) return m[1];         // 酷狗收藏歌单
+        if ((m = s.match(/\/playlist\/(\d+)/))) return m[1];                  // /playlist/12345
+        if ((m = s.match(/\/playsquare\/([\w.]+)\.html/))) return m[1];       // QQ /playsquare/xxx.html
+        if ((m = s.match(/special\/single\/(\d+)/))) return m[1];            // 酷狗 /special/single/123.html
+        if ((m = s.match(/dissid=(\w+)/))) return m[1];                       // QQ disstid
+        return '';
+    }
+    // 判断输入是不是「歌单链接或纯歌单 ID」；是则返回 {source, id, raw}
+    function parsePlaylistInput(text) {
+        var s = String(text || '').trim();
+        if (!s) return null;
+        var isLink = /^https?:\/\//i.test(s);
+        // 分享文案里夹着链接也很常见（「分享歌单 《xxx》 https://... (来自@网易云音乐)」）
+        if (!isLink) {
+            var um = s.match(/https?:\/\/[^\s]+/i);
+            if (um) { s = um[0]; isLink = true; }
+        }
+        if (isLink) {
+            var src = '';
+            for (var i = 0; i < LINK_SOURCE_RULES.length; i++) {
+                if (LINK_SOURCE_RULES[i].re.test(s)) { src = LINK_SOURCE_RULES[i].src; break; }
+            }
+            var id = extractPlaylistId(s);
+            if (!id) return null;
+            // 认不出平台时，退到当前选中平台（与网页端「不支持跨源」的提示口径一致）
+            return { source: src || curPlatform || 'wy', id: id, raw: s };
+        }
+        // 纯 ID：只认纯数字/字母数字，且长度像 id，避免把普通歌名当 id
+        if (/^[A-Za-z0-9_-]{5,}$/.test(s) && /\d/.test(s) && !/\s/.test(s)) {
+            return { source: curPlatform || 'wy', id: s, raw: s };
+        }
+        return null;
+    }
     var playlist = [];      // 当前播放队列
     var playIdx = -1;       // 当前播放下标
 
@@ -370,6 +422,18 @@
     function doSearch(kwArg) {
         var kw = (typeof kwArg === 'string' ? kwArg : ($('mv2Query').value || '')).trim();
         if (!kw) { flash('请输入关键词'); return; }
+        // 类型选「歌单」时，粘贴的歌单链接 / 歌单 ID 直接打开歌单，不当作关键词去搜。
+        // （分享文案里夹着链接也能识别，见 parsePlaylistInput）
+        var asList = ($('mv2Type') && $('mv2Type').value) === 'playlist';
+        if (asList) {
+            var parsed = parsePlaylistInput(kw);
+            if (parsed) {
+                curType = 'playlist';
+                addSearchHist(kw);
+                openSheet({ id: parsed.id, name: '歌单 ' + parsed.id, source: parsed.source });
+                return;
+            }
+        }
         var qEl = $('mv2Query'); if (qEl) qEl.value = kw;
         addSearchHist(kw);
         curType = ($('mv2Type') && $('mv2Type').value) || 'song';
@@ -449,7 +513,7 @@
         var el = $('mv2BarLyric');
         if (el) {
             el.style.display = barLyricOn ? '' : 'none';
-            if (!barLyricOn) el.textContent = '';
+            if (!barLyricOn) { el.textContent = ''; el.classList.remove('show', 'swap'); }
         }
         var btn = $('btnMv2BarLyric');
         if (btn) btn.classList.toggle('on', barLyricOn);
@@ -458,11 +522,26 @@
     var lastLyricIdx = -1;
     // 播放栏只显示当前句（双行歌词取第一行，避免高度跳动）
     function renderBarLyric(idx) {
+        var prev = lastLyricIdx;
         lastLyricIdx = (typeof idx === 'number') ? idx : lastLyricIdx;
         var el = $('mv2BarLyric');
         if (!el || !barLyricOn) return;
         var line = (lastLyricIdx >= 0 && lyricLines[lastLyricIdx]) ? lyricLines[lastLyricIdx] : null;
-        el.textContent = line ? String(line.text || '').split('\n')[0] : '';
+        var text = line ? String(line.text || '').split('\n')[0] : '';
+        var changed = (text !== el.textContent);
+        el.textContent = text;
+        if (!text) { el.classList.remove('show', 'swap'); return; }
+        el.classList.add('show');
+        // 换句时重放一次动画（先摘掉再挂上，强制重启动画；不能每帧都播）
+        if (changed && el.classList) {
+            el.classList.remove('swap');
+            try {
+                void el.offsetWidth;
+            } catch (e) {}
+            el.classList.add('swap');
+        }
+        // 回退到开头（用户拖进度条回到第 0 秒）时也算一次变化
+        if (prev !== lastLyricIdx && !changed) { /* 文本相同就不重播，避免闪烁 */ }
     }
 
     // 已下载文件映射：key = 歌名|歌手|songmid → 本地路径
@@ -1236,12 +1315,9 @@
             b.classList.toggle('on', b.dataset.pf === id);
         });
 
-        // 歌单类型在不支持的平台会让用户白搜一次：直接退回单曲并说明。
-        if (curType === 'playlist' && !platformSupportsPlaylist(id)) {
-            curType = 'song';
-            var tyEl = $('mv2Type'); if (tyEl) tyEl.value = 'song';
-            flash(srcLabel(id) + '不支持歌单搜索，已切回单曲；歌单请用网易云');
-        }
+        // 搜索类型由用户自己选，切平台不改它（要搜单曲由用户自己切）。
+        // 若当前是歌单而目标平台没有歌单检索，只在搜索失败时给提示，不强行改用户的选择。
+        curType = ($('mv2Type') && $('mv2Type').value) || curType || 'song';
 
         // 输入框是用户的现场，不被回填覆盖：切平台时以「当前输入框内容」为准。
         // （之前从 lastSearch.kw 兼底，导致用户清空输入框后切平台，旧词又冒出来。）
@@ -1266,8 +1342,11 @@
     }
 
     function restoreView(v) {
-        curType = v.type || 'song';
-        var ty = $('mv2Type'); if (ty) ty.value = curType;
+        // 类型下拉是用户的设定，恢复现场时不动它（只用 v.type 决定内容怎么渲染）。
+        // 这样「选中的类型」在任何平台切换后都保持不变。
+        var viewType = v.type || 'song';
+        var ty0 = $('mv2Type');
+        curType = (ty0 && ty0.value) || curType || 'song';
         // 注意：不回填输入框（用户可能已改成别的词）。
         // 只在输入框为空、且现场确实有搜索词时，给出提示而不强制覆盖。
         var q = $('mv2Query');
@@ -1281,10 +1360,10 @@
             return;
         }
         if (v.view === 'search' && v.list) {
-            lastSearch = { list: v.list, kw: v.kw, type: v.type };
+            lastSearch = { list: v.list, kw: v.kw, type: viewType };
             showListView();
             currentView = 'search';
-            if (v.type === 'playlist') renderPlaylistCards(v.list, v.kw);
+            if (viewType === 'playlist') renderPlaylistCards(v.list, v.kw);
             else { setCount('共 ' + v.list.length + ' 首 · ' + srcLabel(curPlatform || '全部')); renderSongRows(v.list, v.kw, $('mv2List'), { pickable: true }); updatePickCount(); }
             setState('已就绪', 'ok');
             return;
