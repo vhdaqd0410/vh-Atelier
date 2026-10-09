@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.67.0",
-  "buildTime": "2026-10-09 15:15:51",
+  "version": "1.68.0",
+  "buildTime": "2026-10-09 15:47:13",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "播放栏歌词移到歌名右侧并放大到 16px + 浮层重排加固"
+  "notes": "音量滑块修准 + 静音按钮 + 歌词渐变流动/换句高光 + 波形 5 种风格循环"
 }

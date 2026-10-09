@@ -1030,17 +1030,158 @@
         var ctx = cv.getContext ? cv.getContext('2d') : null;
         if (!ctx) return;
         var buf = new Uint8Array(analyser.frequencyBinCount);
+
+        // ---- 波形风格定义 ----
+        // 每种风格：颜色 + 绘制函数。每 STYLE_MS 自动换一种，点击画布可手动切换。
+        var STYLE_MS = 10000;
+        var styles = [
+            {
+                name: '柱状频谱',
+                color: function (v) { return 'rgba(139,92,246,' + (0.35 + v * 0.55) + ')'; },
+                draw: function (w, h) {
+                    var bars = 40, bw = w / bars;
+                    for (var i = 0; i < bars; i++) {
+                        var v = buf[Math.floor(i * buf.length / bars)] / 255;
+                        var bh = Math.max(2, v * h);
+                        ctx.fillStyle = styles[styleIdx].color(v);
+                        ctx.fillRect(i * bw + 1, h - bh, bw - 2, bh);
+                    }
+                }
+            },
+            {
+                name: '镜像对称',
+                color: function (v) { return 'rgba(125,211,252,' + (0.3 + v * 0.6) + ')'; },
+                draw: function (w, h) {
+                    var bars = 32, bw = w / bars, mid = h / 2;
+                    for (var i = 0; i < bars; i++) {
+                        var v = buf[Math.floor(i * buf.length / bars)] / 255;
+                        var bh = Math.max(2, v * mid * 0.95);
+                        ctx.fillStyle = styles[styleIdx].color(v);
+                        // 上下对称：中间向外生长
+                        ctx.fillRect(i * bw + 1, mid - bh, bw - 2, bh);
+                        ctx.fillRect(i * bw + 1, mid, bw - 2, bh);
+                    }
+                }
+            },
+            {
+                name: '圆点律动',
+                color: function (v) { return 'rgba(167,139,250,' + (0.35 + v * 0.6) + ')'; },
+                draw: function (w, h) {
+                    var dots = 26, step = w / dots, mid = h / 2;
+                    for (var i = 0; i < dots; i++) {
+                        var v = buf[Math.floor(i * buf.length / dots)] / 255;
+                        var r = Math.max(1.5, v * (h / 2) * 0.85);
+                        ctx.beginPath();
+                        ctx.fillStyle = styles[styleIdx].color(v);
+                        ctx.arc(i * step + step / 2, mid, r, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            },
+            {
+                name: '平滑曲线',
+                color: function (v) { return 'rgba(110,231,183,' + (0.4 + v * 0.5) + ')'; },
+                draw: function (w, h) {
+                    var pts = 40, step = w / (pts - 1);
+                    ctx.beginPath();
+                    for (var i = 0; i < pts; i++) {
+                        var v = buf[Math.floor(i * buf.length / pts)] / 255;
+                        var y = h - Math.max(1, v * h * 0.9);
+                        var x = i * step;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else {
+                            // 二次曲线让折线变平滑
+                            var px = (i - 0.5) * step;
+                            var pv = buf[Math.floor((i - 0.5) * buf.length / pts)] / 255;
+                            var py = h - Math.max(1, pv * h * 0.9);
+                            ctx.quadraticCurveTo(px, py, x, y);
+                        }
+                    }
+                    ctx.strokeStyle = 'rgba(110,231,183,.75)';
+                    ctx.lineWidth = 1.8;
+                    ctx.stroke();
+                    // 曲线下方淡淡填充
+                    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+                    ctx.fillStyle = 'rgba(110,231,183,.12)';
+                    ctx.fill();
+                }
+            },
+            {
+                name: '双色弧光',
+                color: function (v) { return 'rgba(196,181,253,' + (0.3 + v * 0.6) + ')'; },
+                draw: function (w, h) {
+                    var bars = 22, bw = w / bars;
+                    for (var i = 0; i < bars; i++) {
+                        var v = buf[Math.floor(i * buf.length / bars)] / 255;
+                        var bh = Math.max(3, v * h * 0.92);
+                        var g = ctx.createLinearGradient(0, h, 0, h - bh);
+                        g.addColorStop(0, 'rgba(139,92,246,' + (0.35 + v * 0.5) + ')');
+                        g.addColorStop(1, 'rgba(125,211,252,' + (0.5 + v * 0.5) + ')');
+                        ctx.fillStyle = g;
+                        // 顶端圆角，像一根根灯柱
+                        var x = i * bw + 1.5, bwid = bw - 3;
+                        ctx.beginPath();
+                        var r = Math.min(bwid / 2, 3);
+                        ctx.moveTo(x, h);
+                        ctx.lineTo(x, h - bh + r);
+                        ctx.quadraticCurveTo(x, h - bh, x + r, h - bh);
+                        ctx.lineTo(x + bwid - r, h - bh);
+                        ctx.quadraticCurveTo(x + bwid, h - bh, x + bwid, h - bh + r);
+                        ctx.lineTo(x + bwid, h);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                }
+            }
+        ];
+
+        var styleIdx = 0;
+        var styleSince = Date.now();
+        // 记住上次选择，避免每次进面板都从头开始
+        try {
+            var sv = parseInt(localStorage.getItem('vh_musicagg_wavestyle'), 10);
+            if (isFinite(sv) && sv >= 0 && sv < styles.length) styleIdx = sv;
+        } catch (e) {}
+        // 画布上显示当前风格名（小字，右下角）
+        function drawBadge(w, h) {
+            try {
+                ctx.save();
+                ctx.font = '9px sans-serif';
+                ctx.fillStyle = 'rgba(255,255,255,.45)';
+                ctx.textAlign = 'right';
+                ctx.fillText(styles[styleIdx].name, w - 4, h - 3);
+                ctx.restore();
+            } catch (e) {}
+        }
+        // 点击画布手动切换风格
+        if (!cv.__vhWaveClick) {
+            cv.__vhWaveClick = true;
+            cv.style.cursor = 'pointer';
+            cv.title = '点击切换波形动画风格';
+            cv.addEventListener('click', function () {
+                styleIdx = (styleIdx + 1) % styles.length;
+                styleSince = Date.now();
+                try { localStorage.setItem('vh_musicagg_wavestyle', String(styleIdx)); } catch (e) {}
+            });
+        }
+
         function frame() {
             waveRAF = requestAnimationFrame(frame);
             analyser.getByteFrequencyData(buf);
             var w = cv.width || 400, h = cv.height || 34;
             ctx.clearRect(0, 0, w, h);
-            var bars = 40, bw = w / bars;
-            for (var i = 0; i < bars; i++) {
-                var v = buf[Math.floor(i * buf.length / bars)] / 255;
-                var bh = Math.max(2, v * h);
-                ctx.fillStyle = 'rgba(139,92,246,' + (0.35 + v * 0.5) + ')';
-                ctx.fillRect(i * bw + 1, h - bh, bw - 2, bh);
+            // 定时自动切换风格（让波形一直有变化）
+            if (Date.now() - styleSince > STYLE_MS) {
+                styleIdx = (styleIdx + 1) % styles.length;
+                styleSince = Date.now();
+                try { localStorage.setItem('vh_musicagg_wavestyle', String(styleIdx)); } catch (e) {}
+            }
+            try {
+                styles[styleIdx].draw(w, h);
+                drawBadge(w, h);
+            } catch (e) {
+                // 某风格异常不影响播放：退回最简单的柱状
+                try { styles[0].draw(w, h); } catch (e2) {}
             }
         }
         if (waveRAF) cancelAnimationFrame(waveRAF);
@@ -1130,8 +1271,64 @@
             try { a.pause(); } catch (e) {}
             var box = $('mv2Player'); if (box) box.style.display = 'none';
         });
+        // ---------- 音量 / 静音 ----------
+        // 注意不能用 `parseFloat(v) || 0.8`：0 是假值，会被兜底成 0.8，
+        // 拖到最左反而把音量拉大（这是「滑块不准确」的根因）。
+        var VOL_KEY = 'vh_musicagg_vol';
         var vol = $('mv2Vol');
-        if (vol) vol.addEventListener('input', function () { a.volume = parseFloat(vol.value) || 0.8; });
+        var muteBtn = $('btnMv2Mute');
+
+        function savedVol() {
+            var v = NaN;
+            try { v = parseFloat(localStorage.getItem(VOL_KEY)); } catch (e) {}
+            return (isFinite(v) && v >= 0 && v <= 1) ? v : 0.8;
+        }
+        function applyVol(v, persist) {
+            var val = Math.max(0, Math.min(1, isFinite(v) ? v : 0.8));
+            a.volume = val;
+            if (vol) {
+                vol.value = String(val);
+                // 已填充比例：让滑块「看着多少就是多少」
+                try { vol.style.setProperty('--vol', Math.round(val * 100) + '%'); } catch (e) {}
+            }
+            if (persist) { try { localStorage.setItem(VOL_KEY, String(val)); } catch (e) {} }
+            syncMuteIcon();
+        }
+        function syncMuteIcon() {
+            var off = a.muted || a.volume === 0;
+            if (muteBtn) {
+                var on = muteBtn.querySelector('.ic-vol-on'), of = muteBtn.querySelector('.ic-vol-off');
+                if (on) on.style.display = off ? 'none' : '';
+                if (of) of.style.display = off ? '' : 'none';
+                muteBtn.classList.toggle('on', !!off);
+            }
+            if (vol) vol.classList.toggle('muted', !!off);
+        }
+        // 初始化：把记住的音量真正写进 audio，滑块与播放器保持一致
+        applyVol(savedVol(), false);
+
+        if (vol) vol.addEventListener('input', function () {
+            var v = parseFloat(vol.value);
+            if (!isFinite(v)) v = 0;
+            // 手动拖动即视为取消静音
+            if (a.muted) a.muted = false;
+            applyVol(v, true);
+        });
+        if (muteBtn) muteBtn.addEventListener('click', function () {
+            // 静音时记住当前音量，取消时恢复
+            if (a.muted || a.volume === 0) {
+                a.muted = false;
+                var back = parseFloat(vol && vol.value);
+                if (!isFinite(back) || back <= 0) back = 0.8;
+                a.volume = back;
+            } else {
+                a.muted = true;
+            }
+            if (vol) {
+                try { vol.style.setProperty('--vol', Math.round((a.muted ? 0 : a.volume) * 100) + '%'); } catch (e) {}
+            }
+            syncMuteIcon();
+        });
         var seek = $('mv2Seek');
         if (seek) seek.addEventListener('click', function (ev) {
             var r = seek.getBoundingClientRect();

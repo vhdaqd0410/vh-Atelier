@@ -5419,7 +5419,6 @@ button.primary:hover { background: var(--btn-primary-hover); }
 /* 窄面板：图标与音量收紧，给歌词腾宽度 */
 .mv2-player-box .mp-mode { padding: 4px 5px; }
 .mv2-player-box .mp-mode svg { width: 15px; height: 15px; }
-.mv2-player-box .mp-vol-slider { width: 104px; }
 
 /* 歌词区：铺满卡片高度（必须显式清掉基础规则的 max-height，否则被钉在 168px） */
 /* 上下留白的 px 由 JS 按实际高度设（CSS 百分比 padding 是按宽度算的，用不了）；
@@ -5442,26 +5441,75 @@ button.primary:hover { background: var(--btn-primary-hover); }
 .mp-lyric { position: relative; font-size: 16px; line-height: 1.6;
     height: 27px; margin-top: 2px; padding-left: 13px;
     overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-    /* 渐变文字：当前句更亮更显眼，与歌名/歌手拉开层次 */
-    background: linear-gradient(90deg, #c4b5fd 0%, #8ea2ff 55%, #7dd3fc 100%);
+    /* 渐变文字：三色随播放缓慢流动（background-position 动画），比静态渐变更有生气 */
+    background: linear-gradient(90deg, #c4b5fd 0%, #8ea2ff 30%, #7dd3fc 55%, #a78bfa 80%, #c4b5fd 100%);
+    background-size: 260% 100%;
     -webkit-background-clip: text; background-clip: text;
     -webkit-text-fill-color: transparent; color: transparent;
     opacity: 0; transform: translateY(3px);
     transition: opacity .28s ease, transform .28s ease; }
-.mp-lyric.show { opacity: 1; transform: translateY(0); }
-/* 每次换句做一次短促的淡入，强调「这句在唱」 */
-.mp-lyric.swap { animation: mpLyricSwap .42s ease; }
+.mp-lyric.show { opacity: 1; transform: translateY(0);
+    animation: mpLyricFlow 9s linear infinite; }
+/* 颜色流动：让歌词像在呼吸的彩带 */
+@keyframes mpLyricFlow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 260% 50%; }
+}
+/* 每次换句：上移淡入 + 轻微缩放 + 掠过一道高光 */
+.mp-lyric.swap { animation: mpLyricSwap .5s cubic-bezier(.22,.9,.28,1); }
 @keyframes mpLyricSwap {
-    0%   { opacity: 0; transform: translateY(6px); }
-    60%  { opacity: 1; transform: translateY(0); }
-    100% { opacity: 1; transform: translateY(0); }
+    0%   { opacity: 0; transform: translateY(9px) scale(.97); }
+    55%  { opacity: 1; transform: translateY(0) scale(1.015); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
 }
-/* 左侧一根随节奏呼吸的竖条，让播放栏歌词更醒目 */
+/* 换句时从左掠过一道高光（用伪元素做，不影响文字） */
+.mp-lyric::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 46px; pointer-events: none; opacity: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.5), rgba(255,255,255,0)); }
+.mp-lyric.swap::after { animation: mpLyricSheen .62s ease-out; }
+@keyframes mpLyricSheen {
+    0%   { opacity: 0; transform: translateX(-30px); }
+    25%  { opacity: 1; }
+    100% { opacity: 0; transform: translateX(320px); }
+}
+/* 左侧竖条：呼吸节奏更明显，颜色随主题强调色 */
 .mp-lyric::before { content: ''; position: absolute; left: 0; top: 4px; bottom: 4px;
-    width: 3px; border-radius: 2px; background: var(--accent);
-    animation: mpLyricPulse 1.6s ease-in-out infinite; }
+    width: 3px; border-radius: 2px;
+    background: linear-gradient(180deg, var(--accent), #7dd3fc);
+    animation: mpLyricPulse 1.35s ease-in-out infinite; }
 @keyframes mpLyricPulse {
-    0%, 100% { opacity: .35; }
-    50%      { opacity: 1; }
+    0%, 100% { opacity: .3;  transform: scaleY(.7); }
+    45%      { opacity: 1;   transform: scaleY(1.05); }
 }
-.mp-lyric { padding-left: 8px; }
+/* 高亮行附近（歌词浮层内）：颜色过渡更细腻 */
+.mv2-lyric-right .mv2-lyric-line.near { color: rgba(255,255,255,.62); }
+
+/* ===== 音量滑块（视觉与数值一致）+ 静音按钮 ===== */
+/* 已填充部分跟随当前音量：用 background-size 表达比例，避免"看着像满的其实很小" */
+.mv2-player-box .mp-vol-slider {
+    height: 5px; border-radius: 3px; cursor: pointer;
+    background-image: linear-gradient(90deg, var(--accent), var(--accent));
+    background-repeat: no-repeat;
+    background-color: rgba(255,255,255,.15);
+    /* 由 JS 设置 --vol 百分比 */
+    background-size: var(--vol, 80%) 100%;
+}
+.mv2-player-box .mp-vol-slider.muted {
+    background-image: none;
+    background-color: rgba(255,255,255,.12);
+}
+.mv2-player-box .mp-vol-slider::-webkit-slider-thumb {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: #fff; border: 2px solid var(--accent);
+    box-shadow: 0 1px 4px rgba(0,0,0,.45);
+    transition: transform .12s ease;
+}
+.mv2-player-box .mp-vol-slider:hover::-webkit-slider-thumb { transform: scale(1.15); }
+.mv2-player-box .mp-vol-slider::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: #fff; border: 2px solid var(--accent);
+    box-shadow: 0 1px 4px rgba(0,0,0,.45);
+}
+/* 静音按钮：与其它图标同规格，静音态用强调色提示 */
+#btnMv2Mute { display: inline-flex; align-items: center; }
+#btnMv2Mute.on { color: #f6a1b1; background: rgba(246,161,177,.14); }

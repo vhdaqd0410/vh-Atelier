@@ -933,6 +933,26 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('歌词与歌名有分隔线', /\.mv2-player-box \.mp-lyric::after/.test(ncss));
     ok('播放栏歌词已放大', /\.mp-lyric\s*\{[^}]*font-size:\s*1[5-9]px/.test(ncss));
     ok('窗口变化时浮层重排', /addEventListener\('resize'[\s\S]{0,160}?layoutLyricFloat/.test(njs));
+    // 本轮：音量准确性 + 静音 + 波形多风格 + 歌词动画增强
+    ok('音量不再用 || 兜底（0 会被误当成 0.8）',
+        !/parseFloat\(vol\.value\) \|\| 0\.8/.test(njs));
+    ok('音量初始化写进播放器（不再滑块 0.8 / 实际 1）',
+        /function applyVol/.test(njs) && /applyVol\(savedVol\(\), false\)/.test(njs));
+    ok('音量记忆', /vh_musicagg_vol/.test(njs));
+    ok('滑块填充跟随数值',
+        /setProperty\('--vol'/.test(njs) &&
+        /\.mp-vol-slider\s*\{[^}]*background-size:\s*var\(--vol/.test(ncss));
+    ok('有静音按钮', /id="btnMv2Mute"/.test(nidx));
+    ok('静音可切换且记忆恢复', /a\.muted = true/.test(njs) && /a\.muted = false/.test(njs));
+    ok('拖动滑块取消静音', /if \(a\.muted\) a\.muted = false/.test(njs));
+    ok('静音图标双态', /ic-vol-on/.test(nidx) && /ic-vol-off/.test(nidx));
+    ok('波形多风格', /styles\s*=\s*\[/.test(njs) && /styleIdx/.test(njs));
+    ok('波形可自动循环切换', /STYLE_MS/.test(njs) && /styleSince/.test(njs));
+    ok('波形可点击手动切换', /vh_musicagg_wavestyle/.test(njs));
+    ok('波形风格名', /\u67f1\u72b6\u9891\u8c31|镜像对称/.test(njs));
+    ok('歌词渐变流动动画', /@keyframes mpLyricFlow/.test(ncss) && /background-size:\s*260%/.test(ncss));
+    ok('歌词换句有高光掠过', /mpLyricSheen/.test(ncss));
+    ok('歌词竖条呼吸加强', /mpLyricPulse/.test(ncss) && /scaleY/.test(ncss));
     ok('歌词区显式清除 max-height（否则被 168px 钉住）',
         /\.mv2-lyric-right\s+\.mv2-lyric\s*\{[^}]*max-height:\s*none/.test(ncss));
     ok('卡片可垂直撑满', /\.mv2-lyric-card\s*\{[^}]*min-height:\s*0/.test(ncss));
