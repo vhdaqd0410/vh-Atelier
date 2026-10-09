@@ -1127,15 +1127,25 @@
         Array.prototype.forEach.call(document.querySelectorAll('#mv2Platforms .mv2-pf'), function (b) {
             b.classList.toggle('on', b.dataset.pf === id);
         });
+
+        // 输入框是用户的现场，不被回填覆盖：切平台时以「当前输入框内容」为准。
+        // （之前从 lastSearch.kw 兼底，导致用户清空输入框后切平台，旧词又冒出来。）
+        var typed = ($('mv2Query') && ($('mv2Query').value || '').trim()) || '';
+
+        // 1) 回到过的平台且有现场 → 恢复现场（只恢复内容区，不动输入框）
         var saved = id ? viewByPlatform[id] : null;
-        if (saved) { restoreView(saved); return; }
-        // 新平台：有搜索词就重新搜（切到哪个平台显示哪个平台的结果）
-        var kw = (lastSearch && lastSearch.kw) || ($('mv2Query') && ($('mv2Query').value || '').trim()) || '';
-        if (kw) {
-            curType = (lastSearch && lastSearch.type) || curType || 'song';
-            var ty = $('mv2Type'); if (ty) ty.value = curType;
-            doSearch(kw);
+        if (saved && !opts.force) {
+            restoreView(saved);
+            return;
+        }
+
+        // 2) 没现场（或强制重载）：有输入词就搜该词，否则回首页
+        if (typed) {
+            var ty = $('mv2Type');
+            curType = (ty && ty.value) || curType || 'song';
+            doSearch(typed);
         } else {
+            lastSearch = null;
             loadHome();
         }
     }
@@ -1143,7 +1153,13 @@
     function restoreView(v) {
         curType = v.type || 'song';
         var ty = $('mv2Type'); if (ty) ty.value = curType;
-        var q = $('mv2Query'); if (q && v.kw) q.value = v.kw;
+        // 注意：不回填输入框（用户可能已改成别的词）。
+        // 只在输入框为空、且现场确实有搜索词时，给出提示而不强制覆盖。
+        var q = $('mv2Query');
+        if (q && !(q.value || '').trim() && v.kw) {
+            // 不写回；只把提示放在状态栏，避免“删了又回来”
+            setState('已恢复上次在该平台的搜索：' + v.kw, '');
+        }
         if (v.view === 'sheet' && v.sheet) {
             // 恢复歌单/榜单现场
             openSheetLike(v.sheet, v.sheetList);
@@ -1182,7 +1198,18 @@
         });
         var s = $('btnMv2Search'); if (s) s.addEventListener('click', doSearch);
         var q = $('mv2Query');
-        if (q) q.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doSearch(); });
+        if (q) {
+            q.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doSearch(); });
+            // 用户清空输入框 → 同时清掉当前平台的搜索现场，
+            // 否则切走再切回会“无词却出旧结果”，也不该再把词写回输入框。
+            q.addEventListener('input', function () {
+                if (!(q.value || '').trim()) {
+                    lastSearch = null;
+                    var v = viewByPlatform[curPlatform];
+                    if (v && v.view === 'search') delete viewByPlatform[curPlatform];
+                }
+            });
+        }
         var hm = $('btnMv2Home'); if (hm) hm.addEventListener('click', function () { lastSearch = null; showListView(); loadHome(); });
         var hc = $('mv2HistClear'); if (hc) hc.addEventListener('click', function () { clearHist(); });
         var ty = $('mv2Type'); if (ty) ty.addEventListener('change', function () { if (($('mv2Query').value || '').trim()) doSearch(); });
