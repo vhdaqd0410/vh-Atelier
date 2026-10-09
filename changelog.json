@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.44.0",
+      "date": "2026-10-09",
+      "title": "重组：本地去字幕独立成面板 + 序列/区间能力抽取共用",
+      "items": [
+        {
+          "kind": "impr",
+          "text": "本地去字幕拆成独立子面板，不再混在「去字幕/超分」里"
+        },
+        {
+          "kind": "impr",
+          "text": "抽出 js/en-shared.js 共用序列选择与区间读取；本地去字幕支持勾选序列与选中区间两种入口"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-en-shared.js 行为测试"
+        }
+      ]
+    },
+    {
       "version": "1.43.0",
       "date": "2026-10-09",
       "title": "修「一键导出无反应」+ ME 通道字幕不归位 + 本地去字幕（VSR）",

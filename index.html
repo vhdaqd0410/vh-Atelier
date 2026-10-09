@@ -132,7 +132,8 @@
         <button class="tab" data-tab="script">剧本阅读</button>
     </div>
     <div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
-        <button class="tab active" data-tab="upscale">去字幕 / 超分</button>
+        <button class="tab active" data-tab="upscale">去字幕 / 超分（云端）</button>
+        <button class="tab" data-tab="localsub">本地去字幕</button>
     </div>
     <div class="tabs ws-subtabs" data-group="feedback" style="display:none;">
         <button class="tab active" data-tab="feedback">反馈中心</button>
@@ -1426,54 +1427,7 @@
                 <div class="en-act-hint" id="enActHint"></div>
             </div>
 
-            <!-- 卡3：本地去字幕（VSR，免费不上传） -->
-            <div class="en-card" id="enLocalCard">
-                <div class="en-card-head">
-                    <span>🧹 本地去字幕（VSR）</span>
-                    <span style="margin-left:auto;font-size:10.5px;color:#8a8a8a;">免费 · 不上传 · 需显卡</span>
-                </div>
-                <div class="en-row2">
-                    <label class="en-f"><span>算法</span>
-                        <select id="enLocalMode">
-                            <option value="sttn-auto" selected>STTN 直绘（配固定区域·最快）</option>
-                            <option value="sttn-det">STTN 检测（区域内识别字幕）</option>
-                            <option value="lama">LaMa（动画/漫剧效果好）</option>
-                            <option value="propainter">ProPainter（剧烈运动·吃显存）</option>
-                            <option value="opencv">OpenCV（极快·效果一般）</option>
-                        </select>
-                    </label>
-                    <label class="en-f"><span>字幕区域</span>
-                        <select id="enLocalArea">
-                            <option value="preset-bottom" selected>底部固定区（短剧/漫剧）</option>
-                            <option value="manual">自定义比例</option>
-                            <option value="auto">区域内自动检测</option>
-                        </select>
-                    </label>
-                </div>
-                <div class="en-row2" id="enLocalAreaRow" style="display:none;">
-                    <label class="en-f"><span>y 起点</span><input type="number" id="enLocalY0" value="0.78" step="0.01" min="0" max="1" style="width:64px;"></label>
-                    <label class="en-f"><span>y 终点</span><input type="number" id="enLocalY1" value="1" step="0.01" min="0" max="1" style="width:64px;"></label>
-                    <label class="en-f"><span>x 起点</span><input type="number" id="enLocalX0" value="0" step="0.01" min="0" max="1" style="width:64px;"></label>
-                    <label class="en-f"><span>x 终点</span><input type="number" id="enLocalX1" value="1" step="0.01" min="0" max="1" style="width:64px;"></label>
-                </div>
-                <div class="en-row2" style="margin-top:2px;">
-                    <span style="font-size:10px;color:#8a8a8a;" id="enLocalAreaHint">区域用相对比例（0–1），对竖屏短剧默认覆盖底部字幕带</span>
-                </div>
-                <div class="en-actions">
-                    <button id="enLocalGo" class="en-go" title="用本地 VSR 处理当前序列导出的文件">🧹 本地去字幕</button>
-                    <button id="enLocalPick" class="secondary mini" title="直接选一个视频文件处理（跳过导出）">📁 选文件…</button>
-                    <button id="enLocalCheck" class="secondary mini" title="检查 VSR 与显卡是否就绪">🔧 自检</button>
-                    <button id="enLocalStop" class="secondary mini" disabled>停止</button>
-                </div>
-                <div id="enLocalProgWrap" class="en-prog" style="display:none;">
-                    <div class="en-prog-bar"><div id="enLocalProgFill" class="en-prog-fill"></div></div>
-                    <div class="en-prog-meta"><span id="enLocalProgText"></span><span id="enLocalProgPct"></span></div>
-                </div>
-                <div class="en-act-hint" id="enLocalAlgoWarn" style="display:none;color:#ffb84d;"></div>
-                <div class="en-act-hint" id="enLocalHint"></div>
-                <div id="vLocalLog" class="en-log" style="display:none;max-height:120px;overflow:auto;margin-top:6px;font-size:11px;"></div>
-            </div>
-            <!-- 卡2：任务(左) + 日志(右) 并排 -->
+                        <!-- 卡2：任务(左) + 日志(右) 并排 -->
             <div class="en-split">
                 <div class="en-card en-col" id="enTaskCard">
                     <div class="en-card-head">
@@ -1500,6 +1454,88 @@
                 </div>
             </div>
         </div>
+
+    <!-- ==================== 本地去字幕（VSR） ==================== -->
+    <div class="tab-panel" id="panel-localsub" style="display:none;">
+        <div class="en-scroll">
+            <!-- 卡1：序列 + 区间（与超分面板同构） -->
+            <div class="en-card">
+                <div class="en-card-head">
+                    <span>🎞 选择序列 · 区间</span>
+                    <button id="lsRefSeq" class="secondary mini" style="margin-left:auto;">🔄 刷新</button>
+                </div>
+                <div id="lsSeqList" class="en-seqs"><div class="hint" style="padding:4px 6px;">点「刷新」加载序列，默认选当前活动序列</div></div>
+                <div class="en-clip-row">
+                    <button id="lsGrabClip" class="secondary mini">✂ 从时间轴读取区间</button>
+                    <span id="lsClipInfo" class="en-clip-info">未读取（在时间轴选中片段，或按 I / O 设好入出点）</span>
+                </div>
+                <div class="en-row2" style="margin-top:4px;">
+                    <label class="en-f"><span>区间来源</span>
+                        <select id="lsClipSrc">
+                            <option value="selection" selected>选中片段</option>
+                            <option value="inout">入点→出点</option>
+                        </select>
+                    </label>
+                    <span style="font-size:10px;color:#8a8a8a;">选「入点→出点」时，按时间轴 I / O 设定的区间处理</span>
+                </div>
+            </div>
+
+            <!-- 卡2：本地引擎设置 -->
+            <div class="en-card" id="lsEngineCard">
+                <div class="en-card-head">
+                    <span>🧹 本地去字幕（VSR）</span>
+                    <span style="margin-left:auto;font-size:10.5px;color:#8a8a8a;">免费 · 不上传 · 需显卡</span>
+                </div>
+                <div class="en-row2">
+                    <label class="en-f"><span>算法</span>
+                        <select id="lsMode">
+                            <option value="sttn-auto" selected>STTN 直绘（配固定区域·最快）</option>
+                            <option value="sttn-det">STTN 检测（区域内识别字幕）</option>
+                            <option value="lama">LaMa（动画/漫剧效果好）</option>
+                            <option value="propainter">ProPainter（剧烈运动·吃显存）</option>
+                            <option value="opencv">OpenCV（极快·效果一般）</option>
+                        </select>
+                    </label>
+                    <label class="en-f"><span>字幕区域</span>
+                        <select id="lsArea">
+                            <option value="preset-bottom" selected>底部固定区（短剧/漫剧）</option>
+                            <option value="manual">自定义比例</option>
+                            <option value="auto">区域内自动检测</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="en-row2" id="lsAreaRow" style="display:none;">
+                    <label class="en-f"><span>y 起点</span><input type="number" id="lsY0" value="0.78" step="0.01" min="0" max="1" style="width:64px;"></label>
+                    <label class="en-f"><span>y 终点</span><input type="number" id="lsY1" value="1" step="0.01" min="0" max="1" style="width:64px;"></label>
+                    <label class="en-f"><span>x 起点</span><input type="number" id="lsX0" value="0" step="0.01" min="0" max="1" style="width:64px;"></label>
+                    <label class="en-f"><span>x 终点</span><input type="number" id="lsX1" value="1" step="0.01" min="0" max="1" style="width:64px;"></label>
+                </div>
+                <div class="en-row2" style="margin-top:2px;">
+                    <span style="font-size:10px;color:#8a8a8a;" id="lsAreaHint">区域用相对比例（0–1），对竖屏短剧默认覆盖底部字幕带</span>
+                </div>
+                <div class="en-row2">
+                    <label class="en-f"><span>导出预设</span>
+                        <select id="lsPreset"><option value="">自动（有字幕）</option></select>
+                    </label>
+                </div>
+                <div class="en-actions">
+                    <button id="lsGoSeq" class="en-go" title="导出勾选序列（有字幕底版）再用本地 VSR 去字幕">🧹 处理勾选序列</button>
+                    <button id="lsGoClip" class="en-go" title="对时间轴读取的区间跑完整流程（支持选中片段或入点→出点）">🎬 处理选中区间</button>
+                    <button id="lsPick" class="secondary mini" title="直接选一个视频文件处理（跳过导出）">📁 选文件…</button>
+                    <button id="lsCheck" class="secondary mini" title="检查 VSR 与显卡是否就绪">🔧 自检</button>
+                    <button id="lsStop" class="secondary mini" disabled>停止</button>
+                </div>
+                <div id="lsProgWrap" class="en-prog" style="display:none;">
+                    <div class="en-prog-bar"><div id="lsProgFill" class="en-prog-fill"></div></div>
+                    <div class="en-prog-meta"><span id="lsProgText"></span><span id="lsProgPct"></span></div>
+                </div>
+                <div class="en-act-hint" id="lsAlgoWarn" style="display:none;color:#ffb84d;"></div>
+                <div class="en-act-hint" id="lsHint"></div>
+                <div id="vLocalLog" class="en-log" style="display:none;max-height:140px;overflow:auto;margin-top:6px;font-size:11px;"></div>
+            </div>
+        </div>
+    </div>
+
         <!-- 拖拽分隔条：上下拖动调整内嵌站高度 -->
         <div class="en-splitter" id="upSplitter" title="上下拖动调整内嵌网站高度；双击还原默认">
             <span class="en-splitter-grip"></span>
@@ -1558,8 +1594,6 @@
     <!-- license.js 必须在 main.js 之前：main.js 启动时会注册授权状态回调 -->
     <script src="js/license.js"></script>
     <script src="js/updater.js"></script>
-    <script src="js/vsr.js"></script>
-    <script src="js/vsr-ui.js"></script>
     <script src="js/main.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/localsvc.js"></script>
@@ -1576,7 +1610,10 @@
     <script src="js/musicagg-ui.js"></script>
     <script src="js/musicagg-native.js"></script>
     <script src="js/export.js"></script>
+    <script src="js/en-shared.js"></script>
     <script src="js/enhance.js"></script>
+    <script src="js/vsr.js"></script>
+    <script src="js/vsr-ui.js"></script>
     <script src="js/media.js"></script>
     <script src="js/project.js"></script>
     <script src="js/project-ui.js"></script>

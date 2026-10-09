@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.43.0",
-  "buildTime": "2026-10-09 19:16:46",
+  "version": "1.44.0",
+  "buildTime": "2026-10-09 19:43:10",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修一键导出无反应 + ME 字幕不归位 + 本地去字幕(VSR)"
+  "notes": "本地去字幕独立成面板 + 公共模块 en-shared"
 }

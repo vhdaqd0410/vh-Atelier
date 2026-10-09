@@ -1867,18 +1867,24 @@
 
     init();
 
-    // ---------- 对外：导出当前序列（无字幕底版）供「本地去字幕」使用 ----------
-    // 复用本模块既有的 exportOne + 无字幕预设；cb(err, file)
-    window.__vhEnhanceExportForLocal = function (cb) {
+        // ---------- 对外：导出（供「本地去字幕」使用） ----------
+    // cb(err, file)
+    // seqName 可选：指定序列名；不传则用勾选的第一个
+    // range   可选：{ startSec, endSec } 只导出该区间
+    // preset  可选：指定导出预设；不传则优先「有字幕」版（去字幕需先烧字幕）
+    window.__vhEnhanceExportForLocal = function (cb, seqNameArg, range, presetArg) {
       cb = cb || function () {};
       (async function () {
         try {
           var seqs = [];
-          try {
-            document.querySelectorAll('#enSeqList input[type=checkbox]').forEach(function (cbx) {
-              if (cbx.checked) seqs.push(cbx.value);
-            });
-          } catch (e) {}
+          if (seqNameArg) seqs.push(seqNameArg);
+          if (!seqs.length) {
+            try {
+              document.querySelectorAll('#enSeqList input[type=checkbox]').forEach(function (cbx) {
+                if (cbx.checked) seqs.push(cbx.value);
+              });
+            } catch (e) {}
+          }
           if (!seqs.length) {
             try {
               var first = document.querySelector('#enSeqList input[type=checkbox]');
@@ -1886,18 +1892,22 @@
             } catch (e) {}
           }
           if (!seqs.length) { cb(new Error('未找到可导出的序列（请先点「🔄 刷新」）')); return; }
-          var seqName = seqs[0];
+          var useSeq = seqs[0];
 
-          var preset = '';
-          try { preset = findNoSubtitlePreset(); } catch (e) {}
-          if (!preset) { cb(new Error('找不到「无字幕」导出预设（.epr）')); return; }
+          var presetPath = presetArg || '';
+          if (!presetPath) {
+            try { presetPath = findSubtitlePreset() || findNoSubtitlePreset() || ''; } catch (e) {}
+          }
+          if (!presetPath) { cb(new Error('找不到可用的导出预设（.epr）')); return; }
 
           var outDir = tmpRoot;
           try { if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
-          var outFile = path.join(outDir, seqName.replace(/[\\/:*?"<>|]/g, '_') + '_nosub.mp4');
+          var tail = range ? '_clip' : '_full';
+          var outFile = path.join(outDir, useSeq.replace(/[\\/:*?"<>|]/g, '_') + '_nosub' + tail + '.mp4');
+          try { if (fs.existsSync(outFile)) fs.unlinkSync(outFile); } catch (e) {}
 
-          log('▶ [本地去字幕] 导出序列：' + seqName);
-          await exportOne(seqName, preset, outFile, null);
+          log('▶ [本地去字幕] 导出序列：' + useSeq + (range ? '（区间）' : '（整条）'));
+          await exportOne(useSeq, presetPath, outFile, range || null);
 
           var deadline = Date.now() + 5 * 60 * 1000;
           while (!fs.existsSync(outFile) && Date.now() < deadline) {
