@@ -1029,8 +1029,18 @@
                 </div>
                 <!-- 内容区：默认首页，搜索后变结果 -->
                 <div id="mv2List" class="mv2-list mv2-home"></div>
-                <!-- 歌单详情（点歌单后展示） -->
-                <div id="mv2Sheet" class="mv2-list" style="display:none;"></div>
+                <!-- 歌单/榜单详情 -->
+                <div id="mv2Sheet" class="mv2-sheet" style="display:none;">
+                    <div class="mv2-sheet-bar">
+                        <button class="mv2-back" id="btnMv2Back" title="返回上一层">‹ 返回</button>
+                        <span id="mv2SheetTitle" class="mv2-sheet-title"></span>
+                        <span style="flex:1"></span>
+                        <button class="tbtn" id="btnMv2SelAll" title="全选/取消全部">全选</button>
+                        <button class="tbtn" id="btnMv2DlSel" title="下载勾选的歌曲">下载选中</button>
+                        <button class="tbtn primary" id="btnMv2DlAll" title="下载整个歌单（逐首串行）">下载整个歌单</button>
+                    </div>
+                    <div id="mv2SheetList" class="mv2-list"></div>
+                </div>
 
                 <!-- 播放器（对齐网易云播放控件） -->
                 <div class="music-player mv2-player-box" id="mv2Player" style="display:none;">
@@ -1058,6 +1068,8 @@
                         <div class="seek" id="mv2Seek"><div class="seek-fill" id="mv2SeekFill"></div></div>
                         <span class="ptime" id="mv2Dur">0:00</span>
                     </div>
+                    <!-- 频谱波形（对齐网页端可视化） -->
+                    <canvas id="mv2WaveCanvas" class="mv2-wave-canvas" width="400" height="34"></canvas>
                     <div class="mp-side">
                         <div class="mp-vol">
                             <input type="range" id="mv2Vol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
@@ -1078,16 +1090,22 @@
                     </div>
                 </div>
                 <audio id="mv2Audio" style="display:none;"></audio>
-                <!-- 歌词（可折叠） -->
-                <details id="mv2LyricBox" class="mv2-fold" style="display:none;">
-                    <summary>歌词</summary>
-                    <div id="mv2LyricBody" class="mv2-lyric"></div>
-                </details>
-                <!-- 播放列表（可折叠） -->
+                <!-- 播放列表（可折叠；歌词改悬浮） -->
                 <details id="mv2QueueBox" class="mv2-fold" style="display:none;">
                     <summary id="mv2QueueSummary">播放列表</summary>
                     <div id="mv2Queue" class="mv2-queue"></div>
                 </details>
+            </div>
+            <!-- 歌词悬浮层（全屏遮罩，点击空白关闭） -->
+            <div id="mv2LyricFloat" class="mv2-lyric-float" style="display:none;">
+                <div class="mv2-lyric-card">
+                    <div class="mv2-lyric-head">
+                        <span id="mv2LyricTitle">歌词</span>
+                        <span style="flex:1"></span>
+                        <button class="mv2-x" id="btnMv2LyricClose">✕</button>
+                    </div>
+                    <div id="mv2LyricBody" class="mv2-lyric"></div>
+                </div>
             </div>
             <div id="mv2Toast" class="mv2-toast" style="display:none;"></div>
             <!-- ========== 完整播放器（iframe） ========== -->

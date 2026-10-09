@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.61.0",
-  "buildTime": "2026-10-09 09:17:21",
+  "version": "1.62.0",
+  "buildTime": "2026-10-09 09:54:28",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修歌单点开一直加载中 + 播放器加歌词/播放列表 + 目录选择统一树形"
+  "notes": "音乐聚合：歌单返回+批量/整单下载+歌词悬浮+频谱波形+切平台保留结果"
 }

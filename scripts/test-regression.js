@@ -860,10 +860,10 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     // 命名
     ok('视图名为「简洁」无括号备注', /<option value="native">简洁<\/option>/.test(nidx));
     // 本轮修复：歌单点开一直加载中
-    ok('歌曲渲染显式传容器（修加载中）', /function renderSongRows\(list, title, targetEl\)/.test(njs));
+    ok('歌曲渲染显式传容器（修加载中）', /function renderSongRows\(list, title, targetEl, options\)/.test(njs));
     ok('不再按 curType 猜容器', !/curType === 'playlist'\) \? \$\(mv2List\)/.test(njs));
     // 歌词
-    ok('有歌词面板', /id="mv2LyricBox"/.test(nidx) && /id="mv2LyricBody"/.test(nidx));
+    ok('有歌词悬浮层', /id="mv2LyricFloat"/.test(nidx) && /id="mv2LyricBody"/.test(nidx));
     ok('有 LRC 解析', /function parseLrc/.test(njs));
     ok('歌词接口调用', /api\/music\/lyric/.test(njs));
     ok('歌词跟随进度高亮', /function syncLyric/.test(njs) && /syncLyric\(a.currentTime\)/.test(njs));
@@ -876,6 +876,19 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('选目录优先树形选择器', /__vhPickDir/.test(njs) && /typeof window\.__vhPickDir === 'function'/.test(njs));
     ok('CSS 有歌词样式', /\.mv2-lyric-line/.test(ncss));
     ok('CSS 有队列样式', /\.mv2-q-item/.test(ncss));
+    // 本轮：返回 / 多选 / 整单下载 / 歌词悬浮 / 频谱
+    ok('有返回按钮', /id="btnMv2Back"/.test(nidx) && /function goBack/.test(njs));
+    ok('返回恢复上次搜索结果', /lastSearch/.test(njs));
+    ok('切平台保留结果', /当前结果不变/.test(njs));
+    ok('歌单行可多选', /id="mv2SheetList"/.test(nidx) && /pickable: true/.test(njs) && /function pickedSongs/.test(njs));
+    ok('有全选', /function togglePickAll/.test(njs));
+    ok('有下载选中', /id="btnMv2DlSel"/.test(nidx));
+    ok('有下载整个歌单', /id="btnMv2DlAll"/.test(nidx) && /function downloadList/.test(njs));
+    ok('整单下载串行且可停', /batchCancel/.test(njs) && /⏹ 停止/.test(njs));
+    ok('歌词改悬浮层', /id="mv2LyricFloat"/.test(nidx) && /function toggleLyricFloat/.test(njs));
+    ok('歌词层可关闭', /id="btnMv2LyricClose"/.test(nidx));
+    ok('有频谱波形', /id="mv2WaveCanvas"/.test(nidx) && /function drawWave/.test(njs));
+    ok('波形用 AudioContext 分析', /createAnalyser/.test(njs) && /getByteFrequencyData/.test(njs));
 }
 
 // ============================================================

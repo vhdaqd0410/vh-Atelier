@@ -5304,3 +5304,33 @@ button.primary:hover { background: var(--btn-primary-hover); }
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mv2-q-singer { flex: 0 0 auto; max-width: 40%; color: var(--muted); font-size: 10.5px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== 音乐聚合 · 详情返回栏 / 多选 / 歌词悬浮 / 波形 ===== */
+.mv2-sheet { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.mv2-sheet-bar { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
+.mv2-back { padding: 3px 11px; font-size: 11.5px; cursor: pointer; border-radius: 6px;
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+.mv2-back:hover { border-color: var(--accent); color: var(--accent); }
+.mv2-sheet-title { font-size: 12.5px; font-weight: 600; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+
+/* 勾选框 */
+.mv2-cb { flex: 0 0 auto; width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); }
+
+/* 歌词悬浮层 */
+.mv2-lyric-float { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 9998;
+    display: flex; align-items: center; justify-content: center; padding: 24px; }
+.mv2-lyric-card { width: min(560px, 92%); max-height: 76vh; display: flex; flex-direction: column;
+    background: linear-gradient(180deg, #252530, #1c1c22); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,.6); padding: 12px 14px; }
+.mv2-lyric-head { display: flex; align-items: center; gap: 8px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.mv2-lyric-head > span:first-child { font-size: 13px; font-weight: 600; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv2-lyric-float .mv2-lyric { max-height: none; flex: 1 1 auto; overflow-y: auto; padding: 8px 4px; }
+.mv2-lyric-float .mv2-lyric-line { font-size: 13.5px; line-height: 2.1; text-align: center; }
+.mv2-lyric-float .mv2-lyric-line.on { font-size: 14.5px; }
+
+/* 频谱波形画布 */
+.mv2-wave-canvas { display: block; width: 100%; height: 34px; margin-top: 4px;
+    border-radius: 5px; background: rgba(255,255,255,.03); }

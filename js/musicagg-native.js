@@ -205,48 +205,92 @@
 
     // ==================== 榜单 / 歌单详情 ====================
     function openBoard(b) {
-        var agg = window.__musicAgg;
         var src = curPlatform || (b.id || '').split('__')[0] || 'wy';
         var bangid = b.bangid || b.id;
         setCount('榜单：' + (b.name || ''));
         setState('正在加载…', '');
-        showSheetView();
+        showSheetView(b.name || '榜单');
+        sheetHistory.push({ kind: 'board', data: b });
         api('/api/music/leaderboard/list?source=' + src + '&bangid=' + encodeURIComponent(bangid)).then(function (r) {
             var list = r && (r.list || r.data) || [];
-            renderSongRows(list, b.name || '榜单', $('mv2Sheet'));
+            renderSongRows(list, b.name || '榜单', $('mv2SheetList'), { pickable: true });
+            updatePickCount();
             setState('已就绪', 'ok');
         }).catch(function (e) {
-            $('mv2Sheet').innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>榜单加载失败</div><div class="mv2-empty-sub">' + esc(e.message) + '</div></div>';
+            $('mv2SheetList').innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>榜单加载失败</div><div class="mv2-empty-sub">' + esc(e.message) + '</div></div>';
             setState('加载失败', 'err');
         });
     }
 
     function openSheet(s) {
-        var agg = window.__musicAgg;
         setCount('歌单：' + (s.name || ''));
         setState('正在加载歌单…', '');
-        showSheetView();
+        showSheetView(s.name || '歌单');
+        sheetHistory.push({ kind: 'sheet', data: s });
         var src = s.source || curPlatform || 'wy';
         api('/api/music/songList/detail?source=' + src + '&id=' + encodeURIComponent(s.id)).then(function (r) {
             var list = r && (r.list || r.data || r.songs) || [];
-            renderSongRows(list, s.name || '歌单', $('mv2Sheet'));
+            renderSongRows(list, s.name || '歌单', $('mv2SheetList'), { pickable: true });
+            updatePickCount();
             setState('共 ' + list.length + ' 首', 'ok');
         }).catch(function (e) {
-            $('mv2Sheet').innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>歌单加载失败</div><div class="mv2-empty-sub">' + esc(e.message) + '</div></div>';
+            $('mv2SheetList').innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>歌单加载失败</div><div class="mv2-empty-sub">' + esc(e.message) + '</div></div>';
             setState('加载失败', 'err');
         });
     }
 
-    function showSheetView() {
+    // 已进入的层级（供返回）
+    var sheetHistory = [];
+
+    function showSheetView(title) {
         var box = $('mv2List'), sheet = $('mv2Sheet');
         if (box) { box.style.display = 'none'; box.className = 'mv2-list'; }
-        if (sheet) { sheet.style.display = ''; sheet.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⏳</div><div>加载中…</div></div>'; }
+        if (sheet) sheet.style.display = '';
+        var tl = $('mv2SheetTitle');
+        if (tl) tl.textContent = title || '';
+        var lst = $('mv2SheetList');
+        if (lst) lst.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⏳</div><div>加载中…</div></div>';
     }
 
     function showListView() {
         var box = $('mv2List'), sheet = $('mv2Sheet');
         if (sheet) sheet.style.display = 'none';
         if (box) { box.style.display = ''; box.className = 'mv2-list'; }
+    }
+
+    // 返回：从详情退回到上一层（搜索/首页）
+    function goBack() {
+        sheetHistory = [];
+        showListView();
+        // 如果当前是搜索结果，重新渲染它
+        if (lastSearch && lastSearch.list && lastSearch.list.length) {
+            if (lastSearch.type === 'playlist') renderPlaylistCards(lastSearch.list, lastSearch.kw);
+            else { setCount('共 ' + lastSearch.list.length + ' 首 · ' + srcLabel(curPlatform || '全部')); renderSongRows(lastSearch.list, lastSearch.kw, $('mv2List')); }
+            setState('已就绪', 'ok');
+        } else {
+            loadHome();
+        }
+    }
+
+    var lastSearch = null;   // { list, kw, type }  用于返回时恢复
+
+    // 歌单卡片列表（搜索结果 type=playlist 或首页推荐）
+    function renderPlaylistCards(list, kw) {
+        var box = $('mv2List');
+        if (!box) return;
+        box.innerHTML = '';
+        box.className = 'mv2-list mv2-home';
+        var g = document.createElement('div');
+        g.className = 'mv2-pick-grid';
+        var seen = {};
+        list.forEach(function (s) {
+            var key = String(s.id) + (s.source || '');
+            if (seen[key]) return;
+            seen[key] = 1;
+            g.appendChild(mkSheetCard(s));
+        });
+        box.appendChild(g);
+        setCount('共 ' + Object.keys(seen).length + ' 个歌单');
     }
 
     // ==================== 搜索 ====================
@@ -296,6 +340,7 @@
     function afterSearch(list, kw) {
         var box = $('mv2List');
         setState('已就绪', 'ok');
+        lastSearch = { list: list, kw: kw, type: curType };
         if (!box) return;
         if (!list.length) {
             box.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">😐</div><div>没搜到「' + esc(kw) + '」</div><div class="mv2-empty-sub">换个关键词或类型试试</div></div>';
@@ -303,44 +348,40 @@
             return;
         }
         if (curType === 'playlist') {
-            setCount('共 ' + list.length + ' 个歌单');
-            box.innerHTML = '';
-            box.className = 'mv2-list mv2-home';
-            var g = document.createElement('div');
-            g.className = 'mv2-pick-grid';
-            var seen = {};
-            list.forEach(function (s) {
-                var key = String(s.id) + (s.source || '');
-                if (seen[key]) return;
-                seen[key] = 1;
-                g.appendChild(mkSheetCard(s));
-            });
-            box.appendChild(g);
+            renderPlaylistCards(list, kw);
             return;
         }
-        // 单曲/歌手/专辑：都先按可播列表展示（歌手/专辑只列名字，点击再取详情）
         setCount('共 ' + list.length + ' 首 · ' + srcLabel(curPlatform || '全部'));
-        renderSongRows(list, kw, $('mv2List'));
+        renderSongRows(list, kw, $('mv2List'), { pickable: true });
+        updatePickCount();
     }
 
     // ==================== 歌曲行渲染 ====================
-    // 注意：容器必须显式传入。之前按 curType 猜容器，
-    // 导致「搜过歌单后再点歌单」把歌曲渲染进已隐藏的 mv2List，
-    // 而 mv2Sheet 永远停在“加载中”（用户反馈的 bug）。
-    function renderSongRows(list, title, targetEl) {
-        var box = targetEl;
-        if (!box) {
-            var sheet0 = $('mv2Sheet');
-            box = (sheet0 && sheet0.style.display !== 'none') ? sheet0 : $('mv2List');
-        }
+    // 容器显式传入（修过「搜过歌单后点歌单一直加载中」的 bug）。
+    // options.pickable=true 时行前带勾选框（歌单详情用）。
+    function renderSongRows(list, title, targetEl, options) {
+        options = options || {};
+        var box = targetEl || $('mv2List');
         if (!box) return;
+        var pickable = !!options.pickable;
         box.innerHTML = '';
-        // 统一成播放队列
-        playlist = list.slice();
+        // 只有搜索结果/歌单详情才当播放队列
+        if (!options.keepQueue) { playlist = list.slice(); renderQueue(); }
+        lastRendered = { list: list, title: title, targetEl: box, pickable: pickable };
+
         list.forEach(function (s, idx) {
             var row = document.createElement('div');
             row.className = 'mv2-row';
             row.setAttribute('data-idx', String(idx));
+
+            if (pickable) {
+                var cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'mv2-cb';
+                cb.dataset.idx = String(idx);
+                cb.addEventListener('click', function (ev) { ev.stopPropagation(); updatePickCount(); });
+                row.appendChild(cb);
+            }
 
             var no = document.createElement('span');
             no.className = 'mv2-no';
@@ -380,6 +421,38 @@
             row.addEventListener('dblclick', function () { playListAt(idx); });
             box.appendChild(row);
         });
+    }
+
+    // 记住最近一次渲染（供返回到上一层）
+    var lastRendered = null;
+
+    // 批量选择相关
+    function pickedSongs() {
+        var out = [];
+        if (!lastRendered || !lastRendered.pickable) return out;
+        var box = lastRendered.targetEl;
+        var cbs = box.querySelectorAll ? box.querySelectorAll('.mv2-cb') : [];
+        for (var i = 0; i < cbs.length; i++) {
+            if (cbs[i].checked) {
+                var idx = parseInt(cbs[i].dataset.idx, 10);
+                if (lastRendered.list[idx]) out.push(lastRendered.list[idx]);
+            }
+        }
+        return out;
+    }
+    function updatePickCount() {
+        var n = pickedSongs().length;
+        var b = $('btnMv2DlSel');
+        if (b) b.textContent = n ? ('下载选中（' + n + '）') : '下载选中';
+    }
+    function togglePickAll() {
+        if (!lastRendered || !lastRendered.pickable) { flash('当前列表不支持多选'); return; }
+        var box = lastRendered.targetEl;
+        var cbs = box.querySelectorAll ? box.querySelectorAll('.mv2-cb') : [];
+        var allOn = true;
+        for (var i = 0; i < cbs.length; i++) { if (!cbs[i].checked) { allOn = false; break; } }
+        for (var j = 0; j < cbs.length; j++) { cbs[j].checked = !allOn; }
+        updatePickCount();
     }
 
     function mkBtn(text, cls, title, fn) {
@@ -433,14 +506,14 @@
             cov.style.display = img ? '' : 'none';
             if (img) cov.src = img;
         }
-        // 同步刷新歌词与播放列表
-        loadLyric(s);
+        // 同步刷新歌词（仅在悬浮层已打开时）与播放列表，并启动频谱
+        if ($('mv2LyricFloat') && $('mv2LyricFloat').style.display !== 'none') loadLyric(s);
         renderQueue();
+        try { if (!audioCtx) initWave(); else drawWave(); } catch (e) {}
     }
 
-    // ==================== 歌词 ====================
-    var lyricLines = [];   // [{ t: 秒, text }]
-    var lyricScroll = true;
+    // ==================== 歌词（悬浮层） ====================
+    var lyricLines = [];
 
     function parseLrc(text) {
         var out = [];
@@ -457,35 +530,38 @@
         return out;
     }
 
+    var lyricCache = {};   // songmid -> lines（避免重复请求）
+
     function loadLyric(s) {
-        var box = $('mv2LyricBox');
         var body = $('mv2LyricBody');
-        if (!box || !body) return;
-        if (!s || !s.songmid) { box.style.display = 'none'; return; }
-        box.style.display = '';
-        body.innerHTML = '<div class="mv2-lyric-empty">加载歌词…</div>';
+        if (!body) return;
+        var key = String(s && s.songmid || '');
+        var title = $('mv2LyricTitle');
+        if (title) title.textContent = (s && s.name) ? (s.name + (s.singer ? (' · ' + s.singer) : '')) : '歌词';
+        if (!key) { lyricLines = []; body.innerHTML = '<div class="mv2-lyric-empty">暂无歌曲信息</div>'; return; }
+        if (lyricCache[key]) { lyricLines = lyricCache[key]; renderLyric(); return; }
         lyricLines = [];
+        body.innerHTML = '<div class="mv2-lyric-empty">加载歌词…</div>';
         var src = s.source || curPlatform || 'wy';
-        api('/api/music/lyric?source=' + src + '&songmid=' + encodeURIComponent(s.songmid), { timeout: 30000 })
+        api('/api/music/lyric?source=' + src + '&songmid=' + encodeURIComponent(key), { timeout: 30000 })
             .then(function (r) {
                 var raw = (r && (r.lyric || r.lrc)) || '';
                 var tl = (r && (r.tlyric || r.rlyric)) || '';
-                lyricLines = parseLrc(raw);
-                // 有翻译就拼接（原文 + \n 译文）
+                var lines = parseLrc(raw);
                 if (tl) {
                     var tr = parseLrc(tl);
                     var map = {};
                     tr.forEach(function (x) { map[Math.round(x.t)] = x.text; });
-                    lyricLines.forEach(function (x) {
+                    lines.forEach(function (x) {
                         var tt = map[Math.round(x.t)];
                         if (tt) x.text = x.text + '\n' + tt;
                     });
                 }
+                lyricCache[key] = lines;
+                lyricLines = lines;
                 renderLyric();
             })
-            .catch(function () {
-                body.innerHTML = '<div class="mv2-lyric-empty">暂无歌词</div>';
-            });
+            .catch(function () { body.innerHTML = '<div class="mv2-lyric-empty">暂无歌词</div>'; });
     }
 
     function renderLyric() {
@@ -506,7 +582,6 @@
         });
     }
 
-    // 当前播放位置高亮对应歌词行
     function syncLyric(cur) {
         var body = $('mv2LyricBody');
         if (!body || !lyricLines.length) return;
@@ -517,16 +592,77 @@
         if (idx < 0) return;
         var lines = body.children;
         for (var j = 0; j < lines.length; j++) {
-            var on = (j === idx);
-            if (lines[j].classList) lines[j].classList.toggle('on', on);
+            if (lines[j].classList) lines[j].classList.toggle('on', j === idx);
         }
-        var cur2 = lines[idx];
-        if (cur2 && body.scrollTop !== undefined) {
+        var curEl = lines[idx];
+        if (curEl && typeof body.scrollTop === 'number') {
             try {
-                var top = cur2.offsetTop - body.clientHeight / 2 + cur2.clientHeight / 2;
+                var top = curEl.offsetTop - body.clientHeight / 2 + curEl.clientHeight / 2;
                 body.scrollTop = Math.max(0, top);
             } catch (e) {}
         }
+    }
+
+    function toggleLyricFloat(show) {
+        var box = $('mv2LyricFloat');
+        if (!box) return;
+        var willShow = (typeof show === 'boolean') ? show : (box.style.display === 'none');
+        box.style.display = willShow ? '' : 'none';
+        if (willShow && playIdx >= 0 && playlist[playIdx]) {
+            loadLyric(playlist[playIdx]);
+            setTimeout(function () { syncLyric((getAudio() || {}).currentTime || 0); }, 120);
+        }
+    }
+
+    // ==================== 频谱波形（对齐网页端可视化）====================
+    var audioCtx = null, analyser = null, srcNode = null, waveRAF = null;
+
+    function initWave() {
+        var a = getAudio();
+        var cv = $('mv2WaveCanvas');
+        if (!a || !cv) return;
+        try {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            if (!audioCtx) {
+                audioCtx = new AC();
+                srcNode = audioCtx.createMediaElementSource(a);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 128;
+                srcNode.connect(analyser);
+                analyser.connect(audioCtx.destination);
+            }
+            drawWave();
+        } catch (e) {
+            // 某些环境下 createMediaElementSource 可能失败（不影响播放）
+        }
+    }
+
+    function drawWave() {
+        var cv = $('mv2WaveCanvas');
+        if (!cv || !analyser) return;
+        var ctx = cv.getContext ? cv.getContext('2d') : null;
+        if (!ctx) return;
+        var buf = new Uint8Array(analyser.frequencyBinCount);
+        function frame() {
+            waveRAF = requestAnimationFrame(frame);
+            analyser.getByteFrequencyData(buf);
+            var w = cv.width || 400, h = cv.height || 34;
+            ctx.clearRect(0, 0, w, h);
+            var bars = 40, bw = w / bars;
+            for (var i = 0; i < bars; i++) {
+                var v = buf[Math.floor(i * buf.length / bars)] / 255;
+                var bh = Math.max(2, v * h);
+                ctx.fillStyle = 'rgba(139,92,246,' + (0.35 + v * 0.5) + ')';
+                ctx.fillRect(i * bw + 1, h - bh, bw - 2, bh);
+            }
+        }
+        if (waveRAF) cancelAnimationFrame(waveRAF);
+        frame();
+    }
+
+    function stopWave() {
+        if (waveRAF) { try { cancelAnimationFrame(waveRAF); } catch (e) {} waveRAF = null; }
     }
 
     // ==================== 播放列表 ====================
@@ -588,8 +724,8 @@
             var dur = $('mv2Dur');
             if (dur) dur.textContent = fmtTime(a.duration);
         });
-        a.addEventListener('play', syncPlayIcon);
-        a.addEventListener('pause', syncPlayIcon);
+        a.addEventListener('play', function () { syncPlayIcon(); try { initWave(); } catch (e) {} });
+        a.addEventListener('pause', function () { syncPlayIcon(); stopWave(); });
         a.addEventListener('ended', function () {
             syncPlayIcon();
             if (playMode === 'one') { try { a.currentTime = 0; a.play(); } catch (e) {} return; }
@@ -626,19 +762,19 @@
             if (playIdx >= 0 && playlist[playIdx]) insertToTimeline(playlist[playIdx]);
             else flash('先选一首歌');
         });
-        // 歌词面板开关
+        // 歌词：打开悬浮层（控件上的按钮；不再有折叠框）
         var lb = $('btnMv2Lyric');
-        if (lb) lb.addEventListener('click', function () {
-            var box = $('mv2LyricBox');
-            if (box) box.open = !box.open;
-        });
+        if (lb) lb.addEventListener('click', function () { toggleLyricFloat(); });
+        var lc = $('btnMv2LyricClose');
+        if (lc) lc.addEventListener('click', function () { toggleLyricFloat(false); });
+        var lf = $('mv2LyricFloat');
+        if (lf) lf.addEventListener('click', function (ev) { if (ev.target === lf) toggleLyricFloat(false); });
         // 播放列表面板开关
         var qb = $('btnMv2Queue');
         if (qb) qb.addEventListener('click', function () {
             var box = $('mv2QueueBox');
             if (box) box.open = !box.open;
         });
-        // 每首歌都进队列（双击列表行播放）
     }
 
     // ==================== 下载（对齐扒歌：选目录 + 记忆 + 资源管理器 + 拖拽）====================
@@ -816,6 +952,52 @@
         } catch (e) { flash('移动失败：' + e.message, 'err'); }
     }
 
+    // ==================== 批量 / 整单下载 ====================
+    // 串行下载（避免并发把服务打满），带进度与可中断
+    var batchCancel = false;
+
+    function downloadList(songs, label) {
+        if (!songs || !songs.length) { flash('没有可下载的歌'); return; }
+        var btnAll = $('btnMv2DlAll');
+        var btnSel = $('btnMv2DlSel');
+        // 正在下载时点同一按钮 = 停止
+        if (btnAll && btnAll.dataset.busy === '1') { batchCancel = true; return; }
+        pickDir(function (dir) {
+            if (!dir) return;
+            batchCancel = false;
+            var ok = 0, fail = 0, i = 0;
+            if (btnAll) { btnAll.textContent = '⏹ 停止'; btnAll.dataset.busy = '1'; }
+
+            function finish(stopped) {
+                if (btnAll) { btnAll.textContent = '下载整个歌单'; delete btnAll.dataset.busy; }
+                if (btnSel) btnSel.textContent = '下载选中';
+                var msg = (stopped ? '已停止，' : '') + '完成：成功 ' + ok + ' 首' + (fail ? ('，失败 ' + fail + ' 首') : '');
+                setState(msg, fail ? 'err' : 'ok');
+                flash(msg, fail ? 'err' : 'ok');
+            }
+            function tick() {
+                if (batchCancel) { finish(true); return; }
+                if (i >= songs.length) { finish(false); return; }
+                var s = songs[i];
+                var tip = label + '：' + (i + 1) + '/' + songs.length + ' · ' + (s.name || '');
+                setState(tip, '');
+                if (btnSel) btnSel.textContent = i + '/' + songs.length;
+                api('/api/music/url', { method: 'POST', body: { songInfo: s, quality: '320k' }, timeout: 60000 })
+                    .then(function (r) {
+                        var url = (r && r.url) || ((r && r.data) || {}).url;
+                        if (!url) throw new Error('无直链');
+                        var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
+                        return new Promise(function (res, rej) {
+                            fetchToFile(proxyUrl(url), dir, fname, function (err, saved) { if (err) rej(new Error(err)); else res(saved); });
+                        });
+                    })
+                    .then(function () { ok++; i++; setTimeout(tick, 120); })
+                    .catch(function () { fail++; i++; setTimeout(tick, 120); });
+            }
+            tick();
+        });
+    }
+
     // ==================== 插入时间线 ====================
     function insertFileToTimeline(filePath) {
         var csInterface = (typeof window.__adobe_cep__ !== 'undefined') ? new CSInterface() : null;
@@ -866,13 +1048,43 @@
 
     function bind() {
         Array.prototype.forEach.call(document.querySelectorAll('#mv2Platforms .mv2-pf'), function (b) {
-            b.addEventListener('click', function () { setPlatform(b.dataset.pf); loadHome(); });
+            b.addEventListener('click', function () {
+                setPlatform(b.dataset.pf);
+                // 切平台保留当前结果（之前会直接回首页，搜索结果丢失）
+                if (lastSearch && lastSearch.kw && lastSearch.list && lastSearch.list.length) {
+                    showListView();
+                    curType = lastSearch.type || 'song';
+                    if (curType === 'playlist') renderPlaylistCards(lastSearch.list, lastSearch.kw);
+                    else { setCount('共 ' + lastSearch.list.length + ' 首 · ' + srcLabel(curPlatform || '全部')); renderSongRows(lastSearch.list, lastSearch.kw, $('mv2List'), { pickable: true }); updatePickCount(); }
+                    flash('已切到' + srcLabel(curPlatform || '全部') + '（当前结果不变，可重新搜索）');
+                } else {
+                    loadHome();
+                }
+            });
         });
         var s = $('btnMv2Search'); if (s) s.addEventListener('click', doSearch);
         var q = $('mv2Query');
         if (q) q.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doSearch(); });
-        var hm = $('btnMv2Home'); if (hm) hm.addEventListener('click', loadHome);
+        var hm = $('btnMv2Home'); if (hm) hm.addEventListener('click', function () { lastSearch = null; showListView(); loadHome(); });
         var ty = $('mv2Type'); if (ty) ty.addEventListener('change', function () { if (($('mv2Query').value || '').trim()) doSearch(); });
+        // 返回
+        var bk = $('btnMv2Back'); if (bk) bk.addEventListener('click', goBack);
+        // 多选 / 批量下载
+        var sa = $('btnMv2SelAll'); if (sa) sa.addEventListener('click', togglePickAll);
+        var ds = $('btnMv2DlSel');
+        if (ds) ds.addEventListener('click', function () {
+            var picked = pickedSongs();
+            if (!picked.length) { flash('先勾选要下载的歌'); return; }
+            downloadList(picked, '下载选中');
+        });
+        var da = $('btnMv2DlAll');
+        if (da) da.addEventListener('click', function () {
+            // 正在下载时点它 = 停止
+            if (da.dataset.busy === '1') { batchCancel = true; return; }
+            var all = (lastRendered && lastRendered.list) || [];
+            if (!all.length) { flash('当前没有歌单内容'); return; }
+            downloadList(all, '下载整单');
+        });
         bindPlayer();
         setPlatform('wy');
         loadHome();
