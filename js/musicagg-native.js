@@ -959,129 +959,184 @@
         if (!ctx) return;
         var buf = new Uint8Array(analyser.frequencyBinCount);
 
-        // ---- 波形风格定义 ----
-        // 每种风格：颜色 + 绘制函数。每 STYLE_MS 自动换一种，点击画布可手动切换。
+        // ---- 画布按实际显示尺寸 + 设备像素比重设，避免被 CSS 拉伸导致模糊 ----
+        function fitCanvas() {
+            var rect = cv.getBoundingClientRect ? cv.getBoundingClientRect() : null;
+            var cssW = Math.max(80, Math.round((rect && rect.width) || cv.clientWidth || 400));
+            var cssH = Math.max(20, Math.round((rect && rect.height) || cv.clientHeight || 40));
+            var dpr = Math.min(2, window.devicePixelRatio || 1);
+            var pw = Math.round(cssW * dpr), ph = Math.round(cssH * dpr);
+            if (cv.width !== pw || cv.height !== ph) {
+                cv.width = pw; cv.height = ph;
+            }
+            try { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {}
+            return { w: cssW, h: cssH };
+        }
+        var size = fitCanvas();
+        if (!cv.__vhWaveResize) {
+            cv.__vhWaveResize = true;
+            try {
+                if (typeof ResizeObserver !== 'undefined') {
+                    new ResizeObserver(function () { size = fitCanvas(); }).observe(cv);
+                } else {
+                    window.addEventListener('resize', function () { size = fitCanvas(); });
+                }
+            } catch (e) {}
+        }
+
         var STYLE_MS = 10000;
+        var TAU = Math.PI * 2;
+
+        // 通用：画一条淡淡的中轴线，让画面有"基准"
+        function baseline(w, h) {
+            ctx.fillStyle = 'rgba(255,255,255,.07)';
+            ctx.fillRect(0, Math.round(h / 2), w, 1);
+        }
+        // 通用：取下第 i 段频谱强度 0..1（做一点平滑，避免柱子乱跳）
+        var smooth = new Array(64).fill(0);
+        function level(i, total) {
+            var v = buf[Math.floor(i * buf.length / total)] / 255;
+            var prev = smooth[i] || 0;
+            // 上升快、下落慢，观感更"跟得上"音乐
+            var s = v > prev ? (prev * 0.35 + v * 0.65) : (prev * 0.72 + v * 0.28);
+            smooth[i] = s;
+            return s;
+        }
+
         var styles = [
             {
                 name: '柱状频谱',
-                color: function (v) { return 'rgba(139,92,246,' + (0.35 + v * 0.55) + ')'; },
                 draw: function (w, h) {
-                    var bars = 40, bw = w / bars;
+                    var bars = 42, gap = Math.max(1, w / bars * 0.22), bw = w / bars;
                     for (var i = 0; i < bars; i++) {
-                        var v = buf[Math.floor(i * buf.length / bars)] / 255;
-                        var bh = Math.max(2, v * h);
-                        ctx.fillStyle = styles[styleIdx].color(v);
-                        ctx.fillRect(i * bw + 1, h - bh, bw - 2, bh);
+                        var v = level(i, bars);
+                        var bh = Math.max(2, v * (h - 6));
+                        var x = i * bw + gap / 2, y = h - bh;
+                        // 退化保护：y 与 h 重合时渐变无高度，部分实现会静默不画
+                        var gTop = Math.min(y, h - 1);
+                        var g = ctx.createLinearGradient(0, h, 0, gTop);
+                        g.addColorStop(0, 'rgba(139,92,246,.35)');
+                        g.addColorStop(.55, 'rgba(167,139,250,' + (0.5 + v * 0.4) + ')');
+                        g.addColorStop(1, 'rgba(196,181,253,' + (0.65 + v * 0.35) + ')');
+                        ctx.fillStyle = g;
+                        var r = Math.min(bw / 2 - gap / 2, 2.5);
+                        ctx.beginPath();
+                        ctx.moveTo(x, h);
+                        ctx.lineTo(x, y + r);
+                        ctx.quadraticCurveTo(x, y, x + r, y);
+                        ctx.lineTo(x + bw - gap - r, y);
+                        ctx.quadraticCurveTo(x + bw - gap, y, x + bw - gap, y + r);
+                        ctx.lineTo(x + bw - gap, h);
+                        ctx.closePath();
+                        ctx.fill();
                     }
                 }
             },
             {
                 name: '镜像对称',
-                color: function (v) { return 'rgba(125,211,252,' + (0.3 + v * 0.6) + ')'; },
                 draw: function (w, h) {
-                    var bars = 32, bw = w / bars, mid = h / 2;
+                    var bars = 34, gap = Math.max(1, w / bars * 0.22), bw = w / bars, mid = h / 2;
+                    ctx.save();
+                    ctx.shadowColor = 'rgba(125,211,252,.45)';
+                    ctx.shadowBlur = 6;
                     for (var i = 0; i < bars; i++) {
-                        var v = buf[Math.floor(i * buf.length / bars)] / 255;
-                        var bh = Math.max(2, v * mid * 0.95);
-                        ctx.fillStyle = styles[styleIdx].color(v);
-                        // 上下对称：中间向外生长
-                        ctx.fillRect(i * bw + 1, mid - bh, bw - 2, bh);
-                        ctx.fillRect(i * bw + 1, mid, bw - 2, bh);
+                        var v = level(i, bars);
+                        var bh = Math.max(1.5, v * (mid - 3));
+                        var x = i * bw + gap / 2, bwid = bw - gap;
+                        var g = ctx.createLinearGradient(0, mid - bh, 0, mid + bh);
+                        g.addColorStop(0, 'rgba(125,211,252,' + (0.55 + v * 0.4) + ')');
+                        g.addColorStop(.5, 'rgba(196,181,253,.9)');
+                        g.addColorStop(1, 'rgba(125,211,252,' + (0.55 + v * 0.4) + ')');
+                        ctx.fillStyle = g;
+                        ctx.fillRect(x, mid - bh, bwid, bh * 2);
                     }
+                    ctx.restore();
+                    baseline(w, h);
                 }
             },
             {
                 name: '圆点律动',
-                color: function (v) { return 'rgba(167,139,250,' + (0.35 + v * 0.6) + ')'; },
                 draw: function (w, h) {
                     var dots = 26, step = w / dots, mid = h / 2;
                     for (var i = 0; i < dots; i++) {
-                        var v = buf[Math.floor(i * buf.length / dots)] / 255;
-                        var r = Math.max(1.5, v * (h / 2) * 0.85);
+                        var v = level(i, dots);
+                        var r = Math.max(2, v * (mid - 2));
                         ctx.beginPath();
-                        ctx.fillStyle = styles[styleIdx].color(v);
-                        ctx.arc(i * step + step / 2, mid, r, 0, Math.PI * 2);
+                        var g = ctx.createRadialGradient(i * step + step / 2, mid, 0,
+                                                        i * step + step / 2, mid, r);
+                        g.addColorStop(0, 'rgba(226,215,255,' + (0.75 + v * 0.25) + ')');
+                        g.addColorStop(1, 'rgba(139,92,246,.35)');
+                        ctx.fillStyle = g;
+                        ctx.arc(i * step + step / 2, mid, r, 0, TAU);
                         ctx.fill();
                     }
+                    baseline(w, h);
                 }
             },
             {
                 name: '平滑曲线',
-                color: function (v) { return 'rgba(110,231,183,' + (0.4 + v * 0.5) + ')'; },
                 draw: function (w, h) {
-                    var pts = 40, step = w / (pts - 1);
+                    var pts = 48, step = w / (pts - 1);
                     ctx.beginPath();
-                    for (var i = 0; i < pts; i++) {
-                        var v = buf[Math.floor(i * buf.length / pts)] / 255;
-                        var y = h - Math.max(1, v * h * 0.9);
-                        var x = i * step;
-                        if (i === 0) ctx.moveTo(x, y);
-                        else {
-                            // 二次曲线让折线变平滑
-                            var px = (i - 0.5) * step;
-                            var pv = buf[Math.floor((i - 0.5) * buf.length / pts)] / 255;
-                            var py = h - Math.max(1, pv * h * 0.9);
-                            ctx.quadraticCurveTo(px, py, x, y);
-                        }
+                    ctx.moveTo(0, h - level(0, pts) * (h - 6) - 3);
+                    for (var i = 1; i < pts; i++) {
+                        var v = level(i, pts);
+                        var y = h - Math.max(1.5, v * (h - 6)) - 3;
+                        var px = (i - 1) * step, x = i * step;
+                        var cx = (px + x) / 2;
+                        ctx.bezierCurveTo(cx, h - level(i - 1, pts) * (h - 6) - 3, cx, y, x, y);
                     }
-                    ctx.strokeStyle = 'rgba(110,231,183,.75)';
-                    ctx.lineWidth = 1.8;
+                    ctx.strokeStyle = 'rgba(110,231,183,.85)';
+                    ctx.lineWidth = 2;
+                    ctx.lineJoin = 'round';
+                    ctx.shadowColor = 'rgba(110,231,183,.5)';
+                    ctx.shadowBlur = 7;
                     ctx.stroke();
-                    // 曲线下方淡淡填充
+                    ctx.shadowBlur = 0;
+                    // 曲线下方渐变填充
                     ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-                    ctx.fillStyle = 'rgba(110,231,183,.12)';
+                    var g = ctx.createLinearGradient(0, 0, 0, h);
+                    g.addColorStop(0, 'rgba(110,231,183,.22)');
+                    g.addColorStop(1, 'rgba(110,231,183,0)');
+                    ctx.fillStyle = g;
                     ctx.fill();
                 }
             },
             {
                 name: '双色弧光',
-                color: function (v) { return 'rgba(196,181,253,' + (0.3 + v * 0.6) + ')'; },
                 draw: function (w, h) {
-                    var bars = 22, bw = w / bars;
+                    var bars = 24, gap = Math.max(1.5, w / bars * 0.26), bw = w / bars;
                     for (var i = 0; i < bars; i++) {
-                        var v = buf[Math.floor(i * buf.length / bars)] / 255;
-                        var bh = Math.max(3, v * h * 0.92);
-                        var g = ctx.createLinearGradient(0, h, 0, h - bh);
-                        g.addColorStop(0, 'rgba(139,92,246,' + (0.35 + v * 0.5) + ')');
-                        g.addColorStop(1, 'rgba(125,211,252,' + (0.5 + v * 0.5) + ')');
+                        var v = level(i, bars);
+                        var bh = Math.max(3, v * (h - 6));
+                        var x = i * bw + gap / 2, bwid = bw - gap, y = h - bh;
+                        var g = ctx.createLinearGradient(0, h, 0, Math.min(y, h - 1));
+                        g.addColorStop(0, 'rgba(139,92,246,' + (0.45 + v * 0.4) + ')');
+                        g.addColorStop(1, 'rgba(125,211,252,' + (0.7 + v * 0.3) + ')');
                         ctx.fillStyle = g;
-                        // 顶端圆角，像一根根灯柱
-                        var x = i * bw + 1.5, bwid = bw - 3;
-                        ctx.beginPath();
                         var r = Math.min(bwid / 2, 3);
+                        ctx.beginPath();
                         ctx.moveTo(x, h);
-                        ctx.lineTo(x, h - bh + r);
-                        ctx.quadraticCurveTo(x, h - bh, x + r, h - bh);
-                        ctx.lineTo(x + bwid - r, h - bh);
-                        ctx.quadraticCurveTo(x + bwid, h - bh, x + bwid, h - bh + r);
+                        ctx.lineTo(x, y + r);
+                        ctx.quadraticCurveTo(x, y, x + r, y);
+                        ctx.lineTo(x + bwid - r, y);
+                        ctx.quadraticCurveTo(x + bwid, y, x + bwid, y + r);
                         ctx.lineTo(x + bwid, h);
                         ctx.closePath();
                         ctx.fill();
+                        // 顶部小亮点
+                        ctx.fillStyle = 'rgba(226,240,255,' + (0.3 + v * 0.5) + ')';
+                        ctx.fillRect(x + bwid / 2 - 1, y - 1.5, 2, 2);
                     }
                 }
             }
         ];
 
-        var styleIdx = 0;
-        var styleSince = Date.now();
-        // 记住上次选择，避免每次进面板都从头开始
+        var styleIdx = 0, styleSince = Date.now();
         try {
             var sv = parseInt(localStorage.getItem('vh_musicagg_wavestyle'), 10);
             if (isFinite(sv) && sv >= 0 && sv < styles.length) styleIdx = sv;
         } catch (e) {}
-        // 画布上显示当前风格名（小字，右下角）
-        function drawBadge(w, h) {
-            try {
-                ctx.save();
-                ctx.font = '9px sans-serif';
-                ctx.fillStyle = 'rgba(255,255,255,.45)';
-                ctx.textAlign = 'right';
-                ctx.fillText(styles[styleIdx].name, w - 4, h - 3);
-                ctx.restore();
-            } catch (e) {}
-        }
-        // 点击画布手动切换风格
         if (!cv.__vhWaveClick) {
             cv.__vhWaveClick = true;
             cv.style.cursor = 'pointer';
@@ -1093,12 +1148,17 @@
             });
         }
 
+        var _warned = false;
         function frame() {
             waveRAF = requestAnimationFrame(frame);
+            // 容器尺寸可能在首帧之后才稳定，这里低频校准一次
+            if (!cv.__vhFitTick || Date.now() - cv.__vhFitTick > 1000) {
+                cv.__vhFitTick = Date.now();
+                size = fitCanvas();
+            }
             analyser.getByteFrequencyData(buf);
-            var w = cv.width || 400, h = cv.height || 34;
+            var w = size.w, h = size.h;
             ctx.clearRect(0, 0, w, h);
-            // 定时自动切换风格（让波形一直有变化）
             if (Date.now() - styleSince > STYLE_MS) {
                 styleIdx = (styleIdx + 1) % styles.length;
                 styleSince = Date.now();
@@ -1106,10 +1166,27 @@
             }
             try {
                 styles[styleIdx].draw(w, h);
-                drawBadge(w, h);
+                ctx.save();
+                ctx.font = '9px -apple-system, "Segoe UI", sans-serif';
+                ctx.fillStyle = 'rgba(255,255,255,.4)';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(styles[styleIdx].name, w - 4, h - 2);
+                ctx.restore();
             } catch (e) {
-                // 某风格异常不影响播放：退回最简单的柱状
-                try { styles[0].draw(w, h); } catch (e2) {}
+                if (!_warned) {
+                    _warned = true;
+                    try { console.warn('[wave] 风格绘制异常，已退回简单画法:', e && e.message); } catch (e3) {}
+                }
+                try {
+                    // 兜底：最朴素的柱状（不依赖渐变/圆角）
+                    var n2 = 32, bw2 = w / n2;
+                    for (var q2 = 0; q2 < n2; q2++) {
+                        var v2 = buf[Math.floor(q2 * buf.length / n2)] / 255;
+                        ctx.fillStyle = 'rgba(167,139,250,.7)';
+                        ctx.fillRect(q2 * bw2 + 1, h - Math.max(2, v2 * h), bw2 - 2, Math.max(2, v2 * h));
+                    }
+                } catch (e2) {}
             }
         }
         if (waveRAF) cancelAnimationFrame(waveRAF);

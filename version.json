@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.40.0",
-  "buildTime": "2026-10-09 15:47:13",
+  "version": "1.41.0",
+  "buildTime": "2026-10-09 16:52:27",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "音量滑块修准 + 静音按钮 + 歌词动画增强 + 波形 5 种风格循环"
+  "notes": "波形观感优化（清晰度 + 绘制质感）"
 }
