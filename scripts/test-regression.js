@@ -922,8 +922,16 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('播放器分行且顺序固定', /\.mv2-player-box\s*\{[^}]*flex-wrap:\s*wrap/.test(ncss) && /order:\s*1/.test(ncss));
     ok('进度波形独占整行', /\.mv2-player-box \.mv2-bar2\s*\{[^}]*flex:\s*1 1 100%/.test(ncss));
     ok('行3音量与图标铺满对齐', /\.mv2-player-box \.mp-side\s*\{[^}]*flex:\s*1 1 100%/.test(ncss));
-    ok('播放栏歌词独占整行', /\.mv2-barlyric-row\s*\{[^}]*flex:\s*1 1 100%/.test(ncss));
-    ok('播放栏歌词已放大', /\.mp-lyric\s*\{[^}]*font-size:\s*1[34]px/.test(ncss));
+    // 歌词位置：放在歌名/专辑右侧（不再独占底部整行）
+    ok('歌词在歌名右侧（不占整行）',
+        /id="mv2BarLyric"/.test(nidx) &&
+        !/mv2-barlyric-row/.test(nidx) &&
+        /class="mp-meta"[\s\S]{0,500}?id="mv2BarLyric"/.test(nidx) &&
+        /\.mp-lyric/.test(ncss));
+    ok('歌名限宽避免挤掉歌词', /\.mv2-player-box \.mp-meta\s*\{[^}]*max-width:\s*40%/.test(ncss));
+    ok('歌词吃剩余宽度', /\.mv2-player-box \.mp-lyric\s*\{[^}]*flex:\s*1 1 auto/.test(ncss));
+    ok('歌词与歌名有分隔线', /\.mv2-player-box \.mp-lyric::after/.test(ncss));
+    ok('播放栏歌词已放大', /\.mp-lyric\s*\{[^}]*font-size:\s*1[5-9]px/.test(ncss));
     ok('窗口变化时浮层重排', /addEventListener\('resize'[\s\S]{0,160}?layoutLyricFloat/.test(njs));
     ok('歌词区显式清除 max-height（否则被 168px 钉住）',
         /\.mv2-lyric-right\s+\.mv2-lyric\s*\{[^}]*max-height:\s*none/.test(ncss));
