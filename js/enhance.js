@@ -1792,4 +1792,54 @@
 
     init();
   })();
+
+  // ---------- 对外：导出当前序列（无字幕底版）供「本地去字幕」使用 ----------
+  // 复用本模块既有的 exportOne + 无字幕预设 + 临时目录；
+  // cb(err, file) —— 成功回调导出后的文件绝对路径。
+  window.__vhEnhanceExportForLocal = function (cb) {
+    cb = cb || function () {};
+    (async function () {
+      try {
+        // 1) 取目标序列：优先已勾选，否则取列表里的第一个
+        var seqs = [];
+        try {
+          document.querySelectorAll('#enSeqList input[type=checkbox]').forEach(function (cbx) {
+            if (cbx.checked) seqs.push(cbx.value);
+          });
+        } catch (e) {}
+        if (!seqs.length) {
+          try {
+            var first = document.querySelector('#enSeqList input[type=checkbox]');
+            if (first && first.value) seqs.push(first.value);
+          } catch (e) {}
+        }
+        if (!seqs.length) { cb(new Error('未找到可导出的序列（请先点「🔄 刷新」加载序列）')); return; }
+        var seqName = seqs[0];
+
+        // 2) 无字幕预设（复用本模块既有的探测函数）
+        var preset = '';
+        try { preset = findNoSubtitlePreset(); } catch (e) {}
+        if (!preset) { cb(new Error('找不到「无字幕」导出预设（.epr）')); return; }
+
+        // 3) 输出到本地去字幕的临时目录
+        var outDir = tmpRoot;
+        try { if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
+        var outFile = path.join(outDir, seqName.replace(/[\\/:*?"<>|]/g, '_') + '_nosub.mp4');
+
+        log('▶ [本地去字幕] 导出序列：' + seqName);
+        await exportOne(seqName, preset, outFile, null);
+
+        // 4) 等文件落地（exportOne 已等过，这里再兜一层）
+        var deadline = Date.now() + 5 * 60 * 1000;
+        while (!fs.existsSync(outFile) && Date.now() < deadline) {
+          await new Promise(function (r) { setTimeout(r, 800); });
+        }
+        if (!fs.existsSync(outFile)) { cb(new Error('导出文件未出现：' + outFile)); return; }
+        log('✅ [本地去字幕] 导出完成：' + outFile);
+        cb(null, outFile);
+      } catch (e) {
+        cb(e instanceof Error ? e : new Error(String(e && e.message || e)));
+      }
+    })();
+  };
 })();

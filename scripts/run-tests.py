@@ -48,6 +48,7 @@ JOBS = [
     ("test-musicagg-list.py",   "python", True, "歌单分享链接直接打开 + 类型不随平台变", None),
     ("test-musicagg-bar.py",    "python", True, "歌词浮窗尺寸 + 播放栏歌词动画与配色", None),
     ("test-musicagg-layout.py", "python", True, "真实渲染验证：浮层定位与多宽度布局（需 Chrome）", None),
+    ("test-srt-sidecar.js", "node", True, "字幕侧车归位：AMA/PR 命名差异、晚到、批量兜底、作用域防回归", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）
