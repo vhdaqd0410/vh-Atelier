@@ -879,7 +879,7 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     // 本轮：返回 / 多选 / 整单下载 / 歌词悬浮 / 频谱
     ok('有返回按钮', /id="btnMv2Back"/.test(nidx) && /function goBack/.test(njs));
     ok('返回恢复上次搜索结果', /lastSearch/.test(njs));
-    ok('切平台保留结果', /当前结果不变/.test(njs));
+    ok('切平台用每平台独立现场', /viewByPlatform/.test(njs) && /function snapshotView/.test(njs) && /function restoreView/.test(njs));
     ok('歌单行可多选', /id="mv2SheetList"/.test(nidx) && /pickable: true/.test(njs) && /function pickedSongs/.test(njs));
     ok('有全选', /function togglePickAll/.test(njs));
     ok('有下载选中', /id="btnMv2DlSel"/.test(nidx));
@@ -889,6 +889,16 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('歌词层可关闭', /id="btnMv2LyricClose"/.test(nidx));
     ok('有频谱波形', /id="mv2WaveCanvas"/.test(nidx) && /function drawWave/.test(njs));
     ok('波形用 AudioContext 分析', /createAnalyser/.test(njs) && /getByteFrequencyData/.test(njs));
+    // 本轮：进度条重排 + 毛玻璃歌词 + 封面大图 + 搜索历史 + 每平台独立现场
+    ok('频谱与进度条同行', /class="mp-bar mv2-bar2"/.test(nidx) && /class="mv2-seekwrap"/.test(nidx));
+    ok('封面可点击放大', /class="mp-cover" alt="" title=/.test(nidx) && /cov\.addEventListener\('click'/.test(njs));
+    ok('歌词层左图右词', /mv2-lyric-left/.test(nidx) && /mv2-lyric-right/.test(nidx) && /id="mv2BigCover"/.test(nidx));
+    ok('歌词层毛玻璃', /backdrop-filter: blur\(30px\)/.test(ncss));
+    ok('有搜索历史', /id="mv2HistList"/.test(nidx) && /function addSearchHist/.test(njs));
+    ok('历史可点击复搜', /doSearch\(kw\)/.test(njs));
+    ok('历史可清空', /id="mv2HistClear"/.test(nidx) && /function clearHist/.test(njs));
+    ok('每平台缓存上限', /MAX_VIEW_CACHE/.test(njs));
+    ok('切新平台重新搜索', /切到哪个平台显示哪个平台/.test(njs));
 }
 
 // ============================================================
