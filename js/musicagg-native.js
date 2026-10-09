@@ -804,14 +804,93 @@
         }
     }
 
+    // 浮层占位：铺在「面板区域」上，底部精确让出播放控件高度。
+    // 播放器跟着内容流排版（位置随列表长度变化），固定留白猜不准会错位，故读实际几何。
+    // 播放器高度会随内容变化（歌词行有无内容、是否换行），
+    // 浮层开着时要跟着重排，否则底部会与播放器错开。
+    function watchPlayerResize() {
+        var player = $('mv2Player');
+        if (!player) return;
+        if (player.__vhRO) return;
+        if (typeof ResizeObserver === 'undefined') return;
+        try {
+            player.__vhRO = new ResizeObserver(function () {
+                var f = $('mv2LyricFloat');
+                if (f && f.style.display !== 'none') layoutLyricFloat();
+            });
+            player.__vhRO.observe(player);
+        } catch (e) {}
+    }
+    function layoutLyricFloat() {
+        var box = $('mv2LyricFloat');
+        if (!box) return;
+        var host = document.getElementById('panel-musicagg')
+                || document.querySelector('.ma-wrap')
+                || document.body;
+        var r = host.getBoundingClientRect();
+        var top = Math.max(0, Math.round(r.top));
+        var left = Math.max(0, Math.round(r.left));
+        var width = Math.round(r.width);
+        var height = Math.round(r.height);
+
+        // 播放器若真的显示，底部让出它到面板底边的距离。
+        // 不能用行内 style.display 判断（可能被 CSS 覆盖），以渲染高度为准。
+        var player = $('mv2Player');
+        var reserve = 0;
+        if (player) {
+            var pr = player.getBoundingClientRect();
+            var pdisp = '';
+            try { pdisp = window.getComputedStyle(player).display; } catch (e) {}
+            if (pr.height > 0 && pdisp !== 'none') {
+                var gap = Math.round(r.bottom - pr.top);
+                if (gap > 0 && gap < height) reserve = gap;
+            }
+        }
+        var availH = Math.max(160, height - reserve);
+
+        // 窄面板：左右分栏会把歌词挤到只剩一百余像素，改成上下布局
+        var needNarrow = width < 620;
+        if (box.classList) {
+            if (needNarrow) box.classList.add('narrow'); else box.classList.remove('narrow');
+        }
+
+        box.style.top = top + 'px';
+        box.style.left = left + 'px';
+        box.style.width = width + 'px';
+        box.style.height = availH + 'px';
+        box.style.right = 'auto';
+        box.style.bottom = 'auto';
+
+        // 歌词区上下留白：为了「当前句落在偏下、上方保留已唱段」。
+        // CSS 百分比 padding 按宽度算（窄面板 382px 宽会得到 172px 留白，把歌词挤空），
+        // 所以这里按实际高度用像素精确设置。
+        var lyr = $('mv2LyricBody');
+        if (lyr) {
+            var lh = lyr.clientHeight || 0;
+            if (lh > 80) {
+                lyr.style.paddingTop = Math.round(lh * 0.42) + 'px';
+                lyr.style.paddingBottom = Math.round(lh * 0.58) + 'px';
+                try {
+                    var a1 = getAudio();
+                    if (a1 && isFinite(a1.currentTime)) syncLyric(a1.currentTime);
+                } catch (e) {}
+            }
+        }
+        return availH;
+    }
+
     function toggleLyricFloat(show) {
         var box = $('mv2LyricFloat');
         if (!box) return;
         var willShow = (typeof show === 'boolean') ? show : (box.style.display === 'none');
+        if (willShow) layoutLyricFloat();
         box.style.display = willShow ? '' : 'none';
         if (willShow && playIdx >= 0 && playlist[playIdx]) {
             loadLyric(playlist[playIdx]);
-            setTimeout(function () { syncLyric((getAudio() || {}).currentTime || 0); }, 120);
+            setTimeout(function () {
+                layoutLyricFloat();
+                syncLyric((getAudio() || {}).currentTime || 0);
+            }, 130);
         }
     }
 
@@ -1400,6 +1479,7 @@
             if (!all.length) { flash('当前没有歌单内容'); return; }
             downloadList(all, '下载整单');
         });
+        watchPlayerResize();
         bindPlayer();
         renderHist();
         setPlatform('wy', { force: true });
@@ -1408,4 +1488,11 @@
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
     else bind();
+
+    try {
+        window.addEventListener('resize', function () {
+            var f = $('mv2LyricFloat');
+            if (f && f.style.display !== 'none') layoutLyricFloat();
+        });
+    } catch (e) {}
 })();

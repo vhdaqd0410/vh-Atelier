@@ -22,6 +22,8 @@ _atexit.register(_cleanup_tmp)
 
 
 # ---- 1) CSS 静态断言 ----
+j = open(os.path.join(D, 'js', 'musicagg-native.js'), encoding='utf-8', errors='replace').read()
+
 c = open(os.path.join(D, r'css\atelier.css'), encoding='utf-8', errors='replace').read()
 pass1 = fail1 = 0
 def ok(n, cond, e=None):
@@ -29,16 +31,22 @@ def ok(n, cond, e=None):
     if cond: pass1 += 1; print('  [OK]   ' + n)
     else: fail1 += 1; print('  [FAIL] ' + n + ((' -> ' + str(e)) if e is not None else ''))
 
-print('=== 1. 浮窗尺寸（不再铺满）===')
-m = re.search(r'\.mv2-lyric-float\s*\{([^}]*)\}', c)
-body = m.group(1) if m else ''
-ok('浮层改为靠下对齐', 'align-items: flex-end' in body, body[:120])
-ok('底部留出播放控件空间（84px）', '84px' in body)
-ok('卡片有固定高度上限（不再 flex:1 撑满）', bool(re.search(r'\.mv2-lyric-card\s*\{[^}]*height:\s*min\(', c)))
-ok('卡片不再 flex:1 撑满', 'flex: 1 1 auto; min-height: 0; display: flex' not in (re.search(r'\.mv2-lyric-card\s*\{([^}]*)\}', c).group(1)))
-ok('歌词区留白改为百分比（适配矮卡片）', 'padding: 45% 10px 45%' in c)
+print('=== 1. 浮层定位：由 JS 实测几何驱动 ===')
+# 固定留白会与播放器实际位置错开（播放器跟着内容流排版、高度随歌词行变化），
+# 故改为每次打开时读实际几何，并用 ResizeObserver 跟随播放器尺寸变化。
+ok('有 layoutLyricFloat', 'function layoutLyricFloat' in j)
+ok('读面板矩形', "getElementById('panel-musicagg')" in j and 'getBoundingClientRect' in j)
+ok('让出播放器高度', 'r.bottom - pr.top' in j)
+ok('按渲染高度判定播放器可见', 'getComputedStyle(player).display' in j)
+ok('不用行内 style.display 判定', "player.style.display !== 'none'" not in j)
+ok('跟随播放器尺寸变化', 'ResizeObserver' in j and 'watchPlayerResize' in j)
+ok('歌词区留白按高度设 px', 'lyr.style.paddingTop' in j and 'lyr.style.paddingBottom' in j)
+ok('CSS 不再用百分比留白', 'padding: 45%' not in c)
+ok('窄面板改上下布局', '.mv2-lyric-float.narrow .mv2-lyric-card' in c)
+ok('按宽度决定窄布局', 'needNarrow' in j)
+ok('播放器可分行为', 'flex-wrap: wrap' in c)
+ok('歌词行独占整宽', 'flex: 1 1 100%' in c)
 
-print()
 print('=== 2. 播放栏歌词动画与颜色 ===')
 ok('有渐变色文字', 'background-clip: text' in c and 'linear-gradient(90deg, #c4b5fd' in c)
 ok('有换句动画 keyframes', '@keyframes mpLyricSwap' in c)
