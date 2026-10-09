@@ -74,7 +74,8 @@
 
     // 不参与更新的目录（大文件 + 用户数据）
     var SKIP = ['collect', 'bin', 'models', 'engine', 'ncm', 'runtime', 'stubs',
-                '.git', '_tmp', '_releases', 'node_modules'];
+                '.git', '_tmp', '_releases', 'node_modules',
+                'data', 'cache', 'music', 'backups', 'cover_cache'];
 
     function readCfg() {
         try {

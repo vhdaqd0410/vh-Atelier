@@ -117,6 +117,7 @@
         <button class="tab" data-tab="musiclib">音乐库</button>
         <button class="tab" data-tab="sfx">音效库</button>
         <button class="tab" data-tab="music">网易云</button>
+        <button class="tab" data-tab="musicagg">音乐聚合</button>
         <button class="tab" data-tab="bgm">短剧扒歌</button>
     </div>
     <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
@@ -464,6 +465,179 @@
 
     
 
+<!-- ==================== 板块：音乐聚合（lxserver） ==================== -->
+    <div class="tab-panel" id="panel-musicagg" style="display:none;">
+        <div class="ma-wrap">
+            <div class="ma-bar">
+                <span class="ma-dot" id="maDot"></span>
+                <span id="maStatus" class="ma-status">音乐聚合未启动</span>
+                <span style="flex:1"></span>
+                <label class="ma-sel-label">来源</label>
+                <select id="maTarget" class="ma-sel" title="选择用本机服务还是你自己的服务器">
+                    <option value="local">本地服务</option>
+                    <option value="server">服务器</option>
+                </select>
+                <label class="ma-sel-label">视图</label>
+                <select id="maView" class="ma-sel" title="简洁模式（搜歌/试听/下载/插时间轴）或完整播放器">
+                    <option value="native">简洁</option>
+                    <option value="player">完整播放器</option>
+                </select>
+                <button class="tbtn" id="btnMaReload" title="重新加载播放器">↻ 重载</button>
+                <button class="tbtn" id="btnMaTheme" title="把当前深浅色同步给播放器">◐ 主题</button>
+                <button class="tbtn" id="btnMaExternal" title="在系统浏览器打开（大屏用）">↗ 外部打开</button>
+            </div>
+            <!-- 服务器地址（可折叠：未设时默认展开提示，保存后收起） -->
+            <details id="maServerBox" class="ma-fold" open>
+                <summary id="maServerSummary">服务器设置</summary>
+                <div class="ma-bar" style="margin-top:6px;">
+                    <span class="ma-sel-label">地址</span>
+                    <input type="text" id="maServerUrl" class="ma-input" placeholder="http://你的服务器:17899">
+                    <button class="tbtn" id="btnMaSaveServer">保存并连接</button>
+                </div>
+            </details>
+            <!-- 音源包（本地/服务器都可用：本地直读写文件，服务器走它的上传接口） -->
+            <div class="ma-bar" id="maSrcRow">
+                <span class="ma-sel-label">音源包</span>
+                <button class="tbtn" id="btnMaExportSrc" title="把当前来源已配好的音源打包成 zip（本地导出文件；服务器逐个拉取）">⬆ 导出</button>
+                <button class="tbtn" id="btnMaImportSrc" title="选择音源包 zip，自动导入到当前来源（同名不覆盖），并自动启用">⬇ 一键导入</button>
+                <button class="tbtn" id="btnMaEnableAll" title="把当前来源下所有被禁用的音源一键启用">✔ 启用全部</button>
+                <span id="maSrcCount" style="font-size:11px;color:var(--muted);"></span>
+            </div>
+            <!-- 服务器模式下的管理员口令（导入/导出音源需要） -->
+            <div class="ma-bar" id="maAdminRow" style="display:none;">
+                <span class="ma-sel-label">管理口令</span>
+                <input type="password" id="maAdminPwd" class="ma-input" style="max-width:160px;" placeholder="默认 123456">
+            </div>
+            <!-- ========== 简洁模式：首页 + 搜索 + 歌单 + 播放器 ========== -->
+            <div id="maNative" class="mv2-wrap">
+                <!-- 搜索条 + 类型 -->
+                <div class="mv2-search">
+                    <span class="mv2-search-ico">🔍</span>
+                    <input type="text" id="mv2Query" class="mv2-input" placeholder="搜歌名 / 歌手 / 歌单（回车搜索）">
+                    <select id="mv2Type" class="mv2-type" title="搜索类型">
+                        <option value="song">单曲</option>
+                        <option value="playlist">歌单</option>
+                        <option value="singer">歌手</option>
+                        <option value="album">专辑</option>
+                    </select>
+                    <button class="tbtn primary mv2-go" id="btnMv2Search">搜索</button>
+                    <button class="tbtn" id="btnMv2Home" title="回首页（推荐/榜单）">🏠</button>
+                </div>
+                <!-- 平台筛选 -->
+                <div class="mv2-pfs" id="mv2Platforms">
+                    <button class="mv2-pf on" data-pf="wy">网易云</button>
+                    <button class="mv2-pf" data-pf="tx">QQ</button>
+                    <button class="mv2-pf" data-pf="kw">酷我</button>
+                    <button class="mv2-pf" data-pf="kg">酷狗</button>
+                    <button class="mv2-pf" data-pf="mg">味咕</button>
+                    <button class="mv2-pf mv2-pf-all" data-pf="">全部平台</button>
+                </div>
+                <!-- 状态行 -->
+                <div class="mv2-head">
+                    <span id="mv2Count" class="mv2-count"></span>
+                    <span style="flex:1"></span>
+                    <span id="mv2State" class="mv2-state"></span>
+                </div>
+                <!-- 内容区：默认首页，搜索后变结果 -->
+                <div id="mv2List" class="mv2-list mv2-home"></div>
+                <!-- 歌单/榜单详情 -->
+                <div id="mv2Sheet" class="mv2-sheet" style="display:none;">
+                    <div class="mv2-sheet-bar">
+                        <button class="mv2-back" id="btnMv2Back" title="返回上一层">‹ 返回</button>
+                        <span id="mv2SheetTitle" class="mv2-sheet-title"></span>
+                        <span style="flex:1"></span>
+                        <button class="tbtn" id="btnMv2SelAll" title="全选/取消全部">全选</button>
+                        <button class="tbtn" id="btnMv2DlSel" title="下载勾选的歌曲">下载选中</button>
+                        <button class="tbtn primary" id="btnMv2DlAll" title="下载整个歌单（逐首串行）">下载整个歌单</button>
+                    </div>
+                    <div id="mv2SheetList" class="mv2-list"></div>
+                </div>
+
+                <!-- 播放器（对齐网易云播放控件） -->
+                <div class="music-player mv2-player-box" id="mv2Player" style="display:none;">
+                    <div class="mp-ctrl">
+                        <button id="btnMv2Prev" class="mp-btn" title="上一首">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                        </button>
+                        <button id="btnMv2PlayPause" class="mp-btn mp-main" title="播放/暂停">
+                            <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                            <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                        </button>
+                        <button id="btnMv2Next" class="mp-btn" title="下一首">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                        </button>
+                    </div>
+                    <div class="mp-now">
+                        <img id="mv2Cover" class="mp-cover" alt="">
+                        <div class="mp-meta">
+                            <div class="mp-title" id="mv2PlayerTitle">未在播放</div>
+                            <div class="mp-sub" id="mv2Sub"></div>
+                        </div>
+                    </div>
+                    <div class="mp-bar">
+                        <span class="ptime" id="mv2Cur">0:00</span>
+                        <div class="seek" id="mv2Seek"><div class="seek-fill" id="mv2SeekFill"></div></div>
+                        <span class="ptime" id="mv2Dur">0:00</span>
+                    </div>
+                    <!-- 频谱波形（对齐网页端可视化） -->
+                    <canvas id="mv2WaveCanvas" class="mv2-wave-canvas" width="400" height="34"></canvas>
+                    <div class="mp-side">
+                        <div class="mp-vol">
+                            <input type="range" id="mv2Vol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                        </div>
+                        <button id="btnMv2Lyric" class="mp-mode" title="歌词">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h10"/></svg>
+                        </button>
+                        <button id="btnMv2Queue" class="mp-mode" title="播放列表">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h13"/><path d="M3 18h9"/><path d="M17 15l4 3-4 3z"/></svg>
+                        </button>
+                        <button id="btnMv2Download" class="mp-mode" title="下载当前歌曲">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+                        </button>
+                        <button id="btnMv2Insert" class="mp-mode" title="下载并插入时间线">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                        </button>
+                        <button id="btnMv2Close" class="mp-mode" title="收起播放器">✕</button>
+                    </div>
+                </div>
+                <audio id="mv2Audio" style="display:none;"></audio>
+                <!-- 播放列表（可折叠；歌词改悬浮） -->
+                <details id="mv2QueueBox" class="mv2-fold" style="display:none;">
+                    <summary id="mv2QueueSummary">播放列表</summary>
+                    <div id="mv2Queue" class="mv2-queue"></div>
+                </details>
+            </div>
+            <!-- 歌词悬浮层（全屏遮罩，点击空白关闭） -->
+            <div id="mv2LyricFloat" class="mv2-lyric-float" style="display:none;">
+                <div class="mv2-lyric-card">
+                    <div class="mv2-lyric-head">
+                        <span id="mv2LyricTitle">歌词</span>
+                        <span style="flex:1"></span>
+                        <button class="mv2-x" id="btnMv2LyricClose">✕</button>
+                    </div>
+                    <div id="mv2LyricBody" class="mv2-lyric"></div>
+                </div>
+            </div>
+            <div id="mv2Toast" class="mv2-toast" style="display:none;"></div>
+            <!-- ========== 完整播放器（iframe） ========== -->
+            <iframe id="maFrame" class="ma-frame" src="about:blank"></iframe>
+            <!-- 失败时的提示与重试 -->
+            <div id="maHint" style="display:none;">
+                <div class="ma-hint-box">
+                    <div class="ma-hint-title">音乐聚合服务没能启动</div>
+                    <div class="ma-hint-body">
+                        <p>常见原因：</p>
+                        <p>1. <b>首次使用</b>：需联网装依赖，稍等 1–2 分钟再点重试。</p>
+                        <p>2. 未装 <b>Node.js</b>：请到 nodejs.org 安装 LTS 版后重启 PR。</p>
+                        <p>3. 手动检查：在插件目录 <code>lxserver</code> 下执行 <code>npm install --omit=dev</code>，再点重试。</p>
+                    </div>
+                    <button class="tbtn primary" id="btnMaRetry">重试</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
     <!-- ==================== 板块：短剧扒歌 ==================== -->
     <div class="tab-panel" id="panel-bgm" style="display:none;">
         <div class="bgm-wrap">
@@ -1321,6 +1495,9 @@
     <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
     <script src="js/bgm.js"></script>
+    <script src="js/musicagg.js"></script>
+    <script src="js/musicagg-ui.js"></script>
+    <script src="js/musicagg-native.js"></script>
     <script src="js/export.js"></script>
     <script src="js/enhance.js"></script>
     <script src="js/media.js"></script>

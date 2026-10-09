@@ -38,3 +38,14 @@ py/hongguo_device.json
 collect/bgm/
 # 短剧扒歌：下载与转码缓存
 collect/video/
+
+# 音乐聚合（lxserver）：依赖与运行时数据不入仓
+lxserver/node_modules/
+lxserver/data/
+lxserver/cache/
+lxserver/cover_cache/
+lxserver/music/
+lxserver/logs/
+lxserver/backups/
+lxserver/*.log
+lxserver/debug.txt
