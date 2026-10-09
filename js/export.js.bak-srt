@@ -896,57 +896,29 @@
   // ── 收尾 sidecar 字幕文件（1.mp4.srt → 1.srt，并可归位到独立字幕目录） ──
   // PR 导出 sidecar 字幕时会生成「视频名+扩展名+.srt」如 1.mp4.srt，
   // 这里把它重命名为「视频名去扩展名+.srt」如 1.srt，再可选移动到字幕目录。
-  // ── 收尾 sidecar 字幕文件（1.mp4.srt → 1.srt，并可归位到独立字幕目录） ──
-  // PR 导出 sidecar 字幕时会生成「视频名+扩展名+.srt」如 1.mp4.srt；
-  // AME 的命名规则不保证一致（可能叫 1.srt、1.mp4.srt、1_字幕.srt 等），
-  // 所以这里不再死认两种名字：先试常见形态，再退到「扫描目录里以视频名为前缀的 .srt」。
-  // 超时给足 90s —— AME 的任务完成回调在视频渲染完就触发，srt 可能更晚才落盘。
   function finalizeSidecar(outObj, destDir) {
     return new Promise(function (resolve) {
       var stem = path.basename(outObj.file, path.extname(outObj.file)); // 1
       var sidecar = path.join(outObj.dir, outObj.file + '.srt');        // 1.mp4.srt
       var sameDir = path.join(outObj.dir, stem + '.srt');               // 同目录 1.srt
       var start = Date.now();
-      var timeoutMs = 90000;
-
-      // 在输出目录里找一个「属于这个视频」的 srt：
-      // 以视频名为前缀（1.srt / 1.mp4.srt / 1_字幕.srt 都算），且不是别的视频的。
-      function scanCandidate() {
-        var names = [];
-        try { names = fs.readdirSync(outObj.dir); } catch (e) { return ''; }
-        var hit = '';
-        for (var i = 0; i < names.length; i++) {
-          var n = names[i];
-          if (n.length < 5 || n.slice(-4).toLowerCase() !== '.srt') continue;
-          if (n.indexOf(stem) !== 0) continue;                 // 必须以视频名为前缀
-          // 前缀后紧跟 . - _ 空格 或扩展名边界，避免「10.srt」被当成「1」的
-          var rest = n.slice(stem.length);
-          if (rest.charAt(0) !== '.' && rest.charAt(0) !== '-' && rest.charAt(0) !== '_' &&
-              rest.charAt(0) !== ' ' && n.slice(0, stem.length + 1) !== stem + '.') continue;
-          var full = path.join(outObj.dir, n);
-          try { if (fs.statSync(full).size > 0) { hit = full; break; } } catch (e) {}
-        }
-        return hit;
-      }
-
+      var timeoutMs = 15000;
       function finish(nameInSameDir) {
+        // 若无独立字幕目录，就留在视频目录；否则移动到 destDir
         var finalDir = (destDir && fs.existsSync(destDir)) ? destDir : outObj.dir;
         var finalTarget = path.join(finalDir, stem + '.srt');
         try {
-          if (path.resolve(finalTarget) === path.resolve(nameInSameDir)) {
-            resolve({ found: true, target: finalTarget });
-            return;
-          }
           if (fs.existsSync(finalTarget)) fs.unlinkSync(finalTarget);
           fs.renameSync(nameInSameDir, finalTarget);
           resolve({ found: true, target: finalTarget });
         } catch (e) { resolve({ found: true, target: nameInSameDir, err: e.message }); }
       }
-
       function probe() {
-        // 1) 同目录已是目标名
-        if (fs.existsSync(sameDir) && fs.statSync(sameDir).size > 0) { finish(sameDir); return; }
-        // 2) PR 的经典形态
+        // 优先探测同目录已改名好的 1.srt（可能上次遗留或 PR 直接生成）
+        if (fs.existsSync(sameDir) && fs.statSync(sameDir).size > 0) {
+          finish(sameDir);
+          return;
+        }
         var exists = fs.existsSync(sidecar);
         var sz = 0;
         try { if (exists) sz = fs.statSync(sidecar).size; } catch (_) {}
@@ -955,8 +927,10 @@
             var sz2 = 0;
             try { if (fs.existsSync(sidecar)) sz2 = fs.statSync(sidecar).size; } catch (_) {}
             if (sz2 === sz) {
-              try { fs.renameSync(sidecar, sameDir); finish(sameDir); }
-              catch (e) { resolve({ found: true, target: sidecar, err: e.message }); }
+              try {
+                fs.renameSync(sidecar, sameDir);
+                finish(sameDir);
+              } catch (e) { resolve({ found: true, target: sidecar, err: e.message }); }
               return;
             }
             if (Date.now() - start > timeoutMs) { resolve({ found: true, target: sidecar, err: '字幕文件持续写入，未重命名' }); return; }
@@ -964,76 +938,14 @@
           }, 1500);
           return;
         }
-        // 3) 扫描目录（AME 等其它命名）
-        var cand = scanCandidate();
-        if (cand && path.resolve(cand) !== path.resolve(sameDir)) {
-          // 等它写完再改名
-          setTimeout(function () {
-            var s1 = 0, s2 = 0;
-            try { s1 = fs.statSync(cand).size; } catch (_) {}
-            setTimeout(function () {
-              try { s2 = fs.statSync(cand).size; } catch (_) {}
-              if (s1 > 0 && s1 === s2) { finish(cand); return; }
-              if (Date.now() - start > timeoutMs) { finish(cand); return; }
-              probe();
-            }, 900);
-          }, 600);
+        if (Date.now() - start > timeoutMs) {
+          resolve({ found: false });
           return;
         }
-        // 视频已就位且稳定时，不必死等满 90 秒：
-        // 该版本的导出已结束，若这段时间内仍没有任何候选 srt，
-        // 再留 12 秒容忍 srt 晚写，然后判定「没有字幕文件」。
-        var vidReady = false;
-        try {
-          var vpath = path.join(outObj.dir, outObj.file);
-          var r1 = fs.existsSync(vpath) ? fs.statSync(vpath).size : 0;
-          if (r1 > 0) {
-            var r2 = fs.existsSync(vpath) ? fs.statSync(vpath).size : 0;
-            vidReady = (r1 === r2);
-          }
-        } catch (e) {}
-        var graceMs = vidReady ? 12000 : timeoutMs;
-        if (Date.now() - start > graceMs) { resolve({ found: false }); return; }
         setTimeout(probe, 800);
       }
       probe();
     });
-  }
-
-  // ── 兜底清扫：把输出目录里残留的、属于这些视频的 srt 归位 ──
-  // 用在 ME 批量结束之后：AME 写 srt 可能晚于任务完成回调，
-  // 逐任务的 finalizeSidecar 可能错过；这里统一再扫一遍。
-  function sweepSidecars(outputs, destDir) {
-    var moved = 0, checked = 0;
-    (outputs || []).forEach(function (o) {
-      if (!o || !o.dir || !o.file) return;
-      checked++;
-      var stem = path.basename(o.file, path.extname(o.file));
-      var finalDir = (destDir && fs.existsSync(destDir)) ? destDir : o.dir;
-      var finalTarget = path.join(finalDir, stem + '.srt');
-      if (fs.existsSync(finalTarget)) return;      // 已就位
-      var names = [];
-      try { names = fs.readdirSync(o.dir); } catch (e) { return; }
-      for (var i = 0; i < names.length; i++) {
-        var n = names[i];
-        if (n.length < 5 || n.slice(-4).toLowerCase() !== '.srt') continue;
-        if (n.indexOf(stem) !== 0) continue;
-        var full = path.join(o.dir, n);
-        var size = 0;
-        try { size = fs.statSync(full).size; } catch (e) { continue; }
-        if (size <= 0) continue;
-        try {
-          if (fs.existsSync(finalTarget)) fs.unlinkSync(finalTarget);
-          fs.renameSync(full, finalTarget);
-          moved++;
-          setLog('  ✓ 字幕归位：' + finalTarget, 'success');
-        } catch (e) {
-          setLog('  ⚠ 字幕归位失败：' + n + '（' + e.message + '）', 'warn');
-        }
-        break;
-      }
-    });
-    return { moved: moved, checked: checked };
   }
 
   // ── 构建每个版本的输出目标（处理目录冲突） ────
@@ -1231,10 +1143,6 @@
     amePendings = [];
     var totalSeq = seqs.length;
     var totalJobs = 0;
-    // 开始时快照字幕开关与目录：批量跑很久，期间用户可能改界面，
-    // 用快照值保证「同一批次」行为一致（逐任务收尾与兜底清扫都用它）。
-    var srtOn = chkSubtitle.checked;
-    var srtDir = (subtitleDir.value || '').trim();
 
     // ── 进度模型 ──
     // 入队是「读序列状态 + 递交给 ME」，几秒就完事；渲染才是耗时主体。
@@ -1319,8 +1227,9 @@
           var pd = pendByFile[job.file];
           if (pd) {
             var srtNote = '';
-            if (srtOn) {
-              var sc = await finalizeSidecar(pd.out, srtDir);
+            if (chkSubtitle.checked) {
+              var sen = (subtitleDir.value || '').trim();
+              var sc = await finalizeSidecar(pd.out, sen);
               if (sc.found) {
                 srtNote = sc.err ? '（字幕未归位：' + sc.err + '）' : ' + srt';
                 setLog(sc.err ? ('  ⚠ 字幕未归位：' + sc.target) : ('  ✓ 字幕 ' + sc.target), sc.err ? 'warn' : 'success');
@@ -1335,18 +1244,6 @@
               file: job.file, dir: pd.out.dir, size: fmtSize(sz2), duration: pd.duration
             });
           }
-        }
-      }
-
-      // 兜底清扫：AME 写 srt 可能晚于任务完成回调，
-      // 逐任务收尾可能错过；这里在批量结束后统一再扫一遍输出目录。
-      if (srtOn) {
-        try {
-          var outsAll = amePendings.map(function (pd) { return pd.out; });
-          var sw = sweepSidecars(outsAll, srtDir);
-          if (sw.moved) setLog('  ✓ 批量兜底：归位 ' + sw.moved + ' 个字幕文件', 'success');
-        } catch (e) {
-          setLog('  ⚠ 字幕兜底清扫异常：' + (e && e.message), 'warn');
         }
       }
 

@@ -4,6 +4,52 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.43.0",
+      "date": "2026-10-09",
+      "title": "修「一键导出无反应」+ ME 通道字幕不归位 + 本地去字幕（VSR）",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修「交付时选 ME，点一键导出完全没反应」：guardBeforeExport 被误写在 runExport 函数内部，外部点击处理访问不到，抛 ReferenceError 后静默无响应。该问题自 v1.8.0 引入体检验证时即存在"
+        },
+        {
+          "kind": "fix",
+          "text": "修 ME 通道导出后独立 srt 不自定归位：原先只认两种文件名且只等 15 秒；改为扫描目录识别以视频名为前缀的 .srt，窗口放宽到 90 秒"
+        },
+        {
+          "kind": "fix",
+          "text": "AME 批量结束后新增字幕兜底清扫；字幕开关与目录改为批次快照"
+        },
+        {
+          "kind": "feat",
+          "text": "新增本地去字幕（VSR）面板：免费不上传，5 种算法、三种字幕区域模式，一键自检与实时进度"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-srt-sidecar.js（12 项，含 guardBeforeExport 作用域防回归断言）"
+        }
+      ]
+    },
+    {
+      "version": "1.42.0",
+      "date": "2026-10-09",
+      "title": "新增「本地去字幕（VSR）」",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "超分去字幕面板新增本地去字幕（VSR）：免费、不上传，支持 5 种算法与三种字幕区域模式"
+        },
+        {
+          "kind": "feat",
+          "text": "一键自检、实时进度、可停止；结果落 collect/vsr_results"
+        },
+        {
+          "kind": "note",
+          "text": "插件不引 torch/paddle，子进程调用 VSR 独立 venv；安装步骤见 docs/本地去字幕VSR.md"
+        }
+      ]
+    },
+    {
       "version": "1.41.0",
       "date": "2026-10-09",
       "title": "波形观感优化（清晰度 + 绘制质感）",
