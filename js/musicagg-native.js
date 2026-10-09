@@ -60,6 +60,31 @@
     var curType = 'song';
     var playlist = [];      // 当前播放队列
     var playIdx = -1;       // 当前播放下标
+
+    // 【每平台独立视图】切平台时各自保留自己的现场，切回即恢复。
+    // 每个平台一份：{ view: 'home'|'search'|'sheet', kw, type, list, sheet: {kind,data}, sheetList }
+    var viewByPlatform = {};
+    var MAX_VIEW_CACHE = 20;
+    function snapshotView() {
+        if (!curPlatform) return;
+        viewByPlatform[curPlatform] = {
+            view: currentView,
+            kw: (lastSearch && lastSearch.kw) || '',
+            type: curType,
+            list: (lastSearch && lastSearch.list) || null,
+            sheet: currentSheet,
+            sheetList: (lastRendered && lastRendered.list) || null,
+            at: Date.now()
+        };
+        // 限制缓存数量
+        var keys = Object.keys(viewByPlatform);
+        if (keys.length > MAX_VIEW_CACHE) {
+            keys.sort(function (a, b) { return (viewByPlatform[a].at || 0) - (viewByPlatform[b].at || 0); });
+            while (keys.length > MAX_VIEW_CACHE) delete viewByPlatform[keys.shift()];
+        }
+    }
+    var currentView = 'home';   // home | search | sheet
+    var currentSheet = null;    // { kind:'sheet'|'board', data }
     var audio = null;       // <audio>
     var playMode = 'list';  // list | one | random
     var lastDlDir = '';     // 上次下载目录（记忆）
@@ -101,6 +126,8 @@
         var sheet = $('mv2Sheet');
         if (sheet) sheet.style.display = 'none';
         if (box) { box.style.display = ''; box.className = 'mv2-list mv2-home'; }
+        currentView = 'home';
+        currentSheet = null;
         setCount('');
         setState('正在加载首页…', '');
         if (box) box.innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⏳</div><div>加载首页…</div></div>';
@@ -209,8 +236,9 @@
         var bangid = b.bangid || b.id;
         setCount('榜单：' + (b.name || ''));
         setState('正在加载…', '');
+        currentSheet = { kind: 'board', data: b };
         showSheetView(b.name || '榜单');
-        sheetHistory.push({ kind: 'board', data: b });
+        currentView = 'sheet';
         api('/api/music/leaderboard/list?source=' + src + '&bangid=' + encodeURIComponent(bangid)).then(function (r) {
             var list = r && (r.list || r.data) || [];
             renderSongRows(list, b.name || '榜单', $('mv2SheetList'), { pickable: true });
@@ -225,8 +253,9 @@
     function openSheet(s) {
         setCount('歌单：' + (s.name || ''));
         setState('正在加载歌单…', '');
+        currentSheet = { kind: 'sheet', data: s };
         showSheetView(s.name || '歌单');
-        sheetHistory.push({ kind: 'sheet', data: s });
+        currentView = 'sheet';
         var src = s.source || curPlatform || 'wy';
         api('/api/music/songList/detail?source=' + src + '&id=' + encodeURIComponent(s.id)).then(function (r) {
             var list = r && (r.list || r.data || r.songs) || [];
@@ -260,12 +289,13 @@
 
     // 返回：从详情退回到上一层（搜索/首页）
     function goBack() {
-        sheetHistory = [];
         showListView();
         // 如果当前是搜索结果，重新渲染它
         if (lastSearch && lastSearch.list && lastSearch.list.length) {
+            currentView = 'search';
+            currentSheet = null;
             if (lastSearch.type === 'playlist') renderPlaylistCards(lastSearch.list, lastSearch.kw);
-            else { setCount('共 ' + lastSearch.list.length + ' 首 · ' + srcLabel(curPlatform || '全部')); renderSongRows(lastSearch.list, lastSearch.kw, $('mv2List')); }
+            else { setCount('共 ' + lastSearch.list.length + ' 首 · ' + srcLabel(curPlatform || '全部')); renderSongRows(lastSearch.list, lastSearch.kw, $('mv2List'), { pickable: true }); updatePickCount(); }
             setState('已就绪', 'ok');
         } else {
             loadHome();
@@ -293,12 +323,50 @@
         setCount('共 ' + Object.keys(seen).length + ' 个歌单');
     }
 
+    // ==================== 搜索历史 ====================
+    var HIST_KEY = 'vh_musicagg_hist';
+    var HIST_MAX = 12;
+
+    function getHist() {
+        try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) { return []; }
+    }
+    function addSearchHist(kw) {
+        kw = String(kw || '').trim();
+        if (!kw) return;
+        var list = getHist().filter(function (x) { return x !== kw; });
+        list.unshift(kw);
+        try { localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, HIST_MAX))); } catch (e) {}
+        renderHist();
+    }
+    function clearHist() {
+        try { localStorage.removeItem(HIST_KEY); } catch (e) {}
+        renderHist();
+    }
+    function renderHist() {
+        var wrap = $('mv2HistWrap'), list = $('mv2HistList');
+        if (!wrap || !list) return;
+        var h = getHist();
+        if (!h.length) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        list.innerHTML = '';
+        h.forEach(function (kw) {
+            var c = document.createElement('span');
+            c.className = 'mv2-chip';
+            c.textContent = kw;
+            c.addEventListener('click', function () { doSearch(kw); });
+            list.appendChild(c);
+        });
+    }
+
     // ==================== 搜索 ====================
-    function doSearch() {
-        var kw = ($('mv2Query').value || '').trim();
+    function doSearch(kwArg) {
+        var kw = (typeof kwArg === 'string' ? kwArg : ($('mv2Query').value || '')).trim();
         if (!kw) { flash('请输入关键词'); return; }
+        var qEl = $('mv2Query'); if (qEl) qEl.value = kw;
+        addSearchHist(kw);
         curType = ($('mv2Type') && $('mv2Type').value) || 'song';
         showListView();
+        currentView = 'search';
         var box = $('mv2List');
         setCount('');
         setState('搜索中…', '');
@@ -505,7 +573,13 @@
             var img = s.img || s.picUrl || '';
             cov.style.display = img ? '' : 'none';
             if (img) cov.src = img;
+            cov.style.cursor = 'pointer';
         }
+        // 大图 + 歌词悬浮层信息
+        var big = $('mv2BigCover');
+        if (big) { var im2 = s.img || s.picUrl || ''; if (im2) big.src = im2; big.style.display = im2 ? '' : 'none'; }
+        var bt = $('mv2BigTitle'); if (bt) bt.textContent = s.name || '';
+        var bs = $('mv2BigSub'); if (bs) bs.textContent = (s.singer || '') + (s.albumName ? (' · ' + s.albumName) : '');
         // 同步刷新歌词（仅在悬浮层已打开时）与播放列表，并启动频谱
         if ($('mv2LyricFloat') && $('mv2LyricFloat').style.display !== 'none') loadLyric(s);
         renderQueue();
@@ -536,8 +610,6 @@
         var body = $('mv2LyricBody');
         if (!body) return;
         var key = String(s && s.songmid || '');
-        var title = $('mv2LyricTitle');
-        if (title) title.textContent = (s && s.name) ? (s.name + (s.singer ? (' · ' + s.singer) : '')) : '歌词';
         if (!key) { lyricLines = []; body.innerHTML = '<div class="mv2-lyric-empty">暂无歌曲信息</div>'; return; }
         if (lyricCache[key]) { lyricLines = lyricCache[key]; renderLyric(); return; }
         lyricLines = [];
@@ -762,9 +834,11 @@
             if (playIdx >= 0 && playlist[playIdx]) insertToTimeline(playlist[playIdx]);
             else flash('先选一首歌');
         });
-        // 歌词：打开悬浮层（控件上的按钮；不再有折叠框）
+        // 歌词/大图：点封面或歌词按钮都打开悬浮层
         var lb = $('btnMv2Lyric');
         if (lb) lb.addEventListener('click', function () { toggleLyricFloat(); });
+        var cov = $('mv2Cover');
+        if (cov) cov.addEventListener('click', function () { toggleLyricFloat(true); });
         var lc = $('btnMv2LyricClose');
         if (lc) lc.addEventListener('click', function () { toggleLyricFloat(false); });
         var lf = $('mv2LyricFloat');
@@ -1038,34 +1112,79 @@
         }, 4000);
     }
 
-    // ==================== 平台 / 事件绑定 ====================
-    function setPlatform(id) {
+    // ==================== 平台切换（每平台独立现场）====================
+    // 行为：
+    //  1) 切走前存下当前平台的现场（首页/搜索结果/歌单）
+    //  2) 切回的若是空平台 → 若有搜索词，在新平台重新搜一遍（显示该平台的结果）；
+    //                            否则展示首页
+    //  3) 切回的若是刚才离开的平台 → 原样恢复（包括正打开的的歌单）
+    function setPlatform(id, opts) {
+        opts = opts || {};
+        var old = curPlatform;
+        if (old === id && !opts.force) return;
+        if (old) snapshotView();
         curPlatform = id;
         Array.prototype.forEach.call(document.querySelectorAll('#mv2Platforms .mv2-pf'), function (b) {
             b.classList.toggle('on', b.dataset.pf === id);
         });
+        var saved = id ? viewByPlatform[id] : null;
+        if (saved) { restoreView(saved); return; }
+        // 新平台：有搜索词就重新搜（切到哪个平台显示哪个平台的结果）
+        var kw = (lastSearch && lastSearch.kw) || ($('mv2Query') && ($('mv2Query').value || '').trim()) || '';
+        if (kw) {
+            curType = (lastSearch && lastSearch.type) || curType || 'song';
+            var ty = $('mv2Type'); if (ty) ty.value = curType;
+            doSearch(kw);
+        } else {
+            loadHome();
+        }
+    }
+
+    function restoreView(v) {
+        curType = v.type || 'song';
+        var ty = $('mv2Type'); if (ty) ty.value = curType;
+        var q = $('mv2Query'); if (q && v.kw) q.value = v.kw;
+        if (v.view === 'sheet' && v.sheet) {
+            // 恢复歌单/榜单现场
+            openSheetLike(v.sheet, v.sheetList);
+            return;
+        }
+        if (v.view === 'search' && v.list) {
+            lastSearch = { list: v.list, kw: v.kw, type: v.type };
+            showListView();
+            currentView = 'search';
+            if (v.type === 'playlist') renderPlaylistCards(v.list, v.kw);
+            else { setCount('共 ' + v.list.length + ' 首 · ' + srcLabel(curPlatform || '全部')); renderSongRows(v.list, v.kw, $('mv2List'), { pickable: true }); updatePickCount(); }
+            setState('已就绪', 'ok');
+            return;
+        }
+        loadHome();
+    }
+
+    // 按现场直接恢复详情（不重新拉取）
+    function openSheetLike(sheet, list) {
+        currentSheet = sheet;
+        showSheetView(sheet.data && sheet.data.name || '');
+        currentView = 'sheet';
+        if (list && list.length) {
+            renderSongRows(list, (sheet.data && sheet.data.name) || '', $('mv2SheetList'), { pickable: true });
+            updatePickCount();
+            setState('共 ' + list.length + ' 首', 'ok');
+        }
     }
 
     function bind() {
         Array.prototype.forEach.call(document.querySelectorAll('#mv2Platforms .mv2-pf'), function (b) {
             b.addEventListener('click', function () {
+                // setPlatform 内部已处理「存当前平台现场 / 恢复目标平台现场 / 新平台重新搜索」
                 setPlatform(b.dataset.pf);
-                // 切平台保留当前结果（之前会直接回首页，搜索结果丢失）
-                if (lastSearch && lastSearch.kw && lastSearch.list && lastSearch.list.length) {
-                    showListView();
-                    curType = lastSearch.type || 'song';
-                    if (curType === 'playlist') renderPlaylistCards(lastSearch.list, lastSearch.kw);
-                    else { setCount('共 ' + lastSearch.list.length + ' 首 · ' + srcLabel(curPlatform || '全部')); renderSongRows(lastSearch.list, lastSearch.kw, $('mv2List'), { pickable: true }); updatePickCount(); }
-                    flash('已切到' + srcLabel(curPlatform || '全部') + '（当前结果不变，可重新搜索）');
-                } else {
-                    loadHome();
-                }
             });
         });
         var s = $('btnMv2Search'); if (s) s.addEventListener('click', doSearch);
         var q = $('mv2Query');
         if (q) q.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') doSearch(); });
         var hm = $('btnMv2Home'); if (hm) hm.addEventListener('click', function () { lastSearch = null; showListView(); loadHome(); });
+        var hc = $('mv2HistClear'); if (hc) hc.addEventListener('click', function () { clearHist(); });
         var ty = $('mv2Type'); if (ty) ty.addEventListener('change', function () { if (($('mv2Query').value || '').trim()) doSearch(); });
         // 返回
         var bk = $('btnMv2Back'); if (bk) bk.addEventListener('click', goBack);
@@ -1086,7 +1205,8 @@
             downloadList(all, '下载整单');
         });
         bindPlayer();
-        setPlatform('wy');
+        renderHist();
+        setPlatform('wy', { force: true });
         loadHome();
     }
 

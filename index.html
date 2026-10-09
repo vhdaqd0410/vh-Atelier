@@ -538,6 +538,15 @@
                     <span style="flex:1"></span>
                     <span id="mv2State" class="mv2-state"></span>
                 </div>
+                <!-- 搜索历史（无内容时显示） -->
+                <div id="mv2HistWrap" class="mv2-hist" style="display:none;">
+                    <div class="mv2-hist-head">
+                        <span>搜索历史</span>
+                        <span style="flex:1"></span>
+                        <span id="mv2HistClear" class="mv2-mini-link">清空</span>
+                    </div>
+                    <div id="mv2HistList" class="mv2-chips"></div>
+                </div>
                 <!-- 内容区：默认首页，搜索后变结果 -->
                 <div id="mv2List" class="mv2-list mv2-home"></div>
                 <!-- 歌单/榜单详情 -->
@@ -568,19 +577,20 @@
                         </button>
                     </div>
                     <div class="mp-now">
-                        <img id="mv2Cover" class="mp-cover" alt="">
+                        <img id="mv2Cover" class="mp-cover" alt="" title="点击查看大图与歌词">
                         <div class="mp-meta">
                             <div class="mp-title" id="mv2PlayerTitle">未在播放</div>
                             <div class="mp-sub" id="mv2Sub"></div>
                         </div>
                     </div>
-                    <div class="mp-bar">
+                    <div class="mp-bar mv2-bar2">
                         <span class="ptime" id="mv2Cur">0:00</span>
-                        <div class="seek" id="mv2Seek"><div class="seek-fill" id="mv2SeekFill"></div></div>
+                        <div class="mv2-seekwrap">
+                            <canvas id="mv2WaveCanvas" class="mv2-wave-cv" width="600" height="40"></canvas>
+                            <div class="seek mv2-seek" id="mv2Seek"><div class="seek-fill" id="mv2SeekFill"></div></div>
+                        </div>
                         <span class="ptime" id="mv2Dur">0:00</span>
                     </div>
-                    <!-- 频谱波形（对齐网页端可视化） -->
-                    <canvas id="mv2WaveCanvas" class="mv2-wave-canvas" width="400" height="34"></canvas>
                     <div class="mp-side">
                         <div class="mp-vol">
                             <input type="range" id="mv2Vol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
@@ -607,15 +617,22 @@
                     <div id="mv2Queue" class="mv2-queue"></div>
                 </details>
             </div>
-            <!-- 歌词悬浮层（全屏遮罩，点击空白关闭） -->
+            <!-- 歌词/大图悬浮层（毛玻璃，点击空白关闭） -->
             <div id="mv2LyricFloat" class="mv2-lyric-float" style="display:none;">
                 <div class="mv2-lyric-card">
-                    <div class="mv2-lyric-head">
-                        <span id="mv2LyricTitle">歌词</span>
-                        <span style="flex:1"></span>
-                        <button class="mv2-x" id="btnMv2LyricClose">✕</button>
+                    <div class="mv2-lyric-left">
+                        <img id="mv2BigCover" class="mv2-big-cover" alt="">
+                        <div class="mv2-big-title" id="mv2BigTitle"></div>
+                        <div class="mv2-big-sub" id="mv2BigSub"></div>
                     </div>
-                    <div id="mv2LyricBody" class="mv2-lyric"></div>
+                    <div class="mv2-lyric-right">
+                        <div class="mv2-lyric-head">
+                            <span>歌词</span>
+                            <span style="flex:1"></span>
+                            <button class="mv2-x" id="btnMv2LyricClose">✕</button>
+                        </div>
+                        <div id="mv2LyricBody" class="mv2-lyric"></div>
+                    </div>
                 </div>
             </div>
             <div id="mv2Toast" class="mv2-toast" style="display:none;"></div>
@@ -638,7 +655,7 @@
     </div>
 
     
-    <!-- ==================== 板块：短剧扒歌 ==================== -->
+<!-- ==================== 板块：短剧扒歌 ==================== -->
     <div class="tab-panel" id="panel-bgm" style="display:none;">
         <div class="bgm-wrap">
 

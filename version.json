@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.34.0",
-  "buildTime": "2026-10-09 10:17:42",
+  "version": "1.35.0",
+  "buildTime": "2026-10-09 11:10:30",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "新增音乐聚合工作台（五平台搜索/歌单/歌词/批量下载/频谱波形）"
+  "notes": "音乐聚合：每平台独立现场+封面大图歌词+搜索历史+播放器重排"
 }
