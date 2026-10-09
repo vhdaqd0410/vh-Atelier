@@ -1062,6 +1062,12 @@
                         <div class="mp-vol">
                             <input type="range" id="mv2Vol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
                         </div>
+                        <button id="btnMv2Lyric" class="mp-mode" title="歌词">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h10"/></svg>
+                        </button>
+                        <button id="btnMv2Queue" class="mp-mode" title="播放列表">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13"/><path d="M3 12h13"/><path d="M3 18h9"/><path d="M17 15l4 3-4 3z"/></svg>
+                        </button>
                         <button id="btnMv2Download" class="mp-mode" title="下载当前歌曲">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
                         </button>
@@ -1072,6 +1078,16 @@
                     </div>
                 </div>
                 <audio id="mv2Audio" style="display:none;"></audio>
+                <!-- 歌词（可折叠） -->
+                <details id="mv2LyricBox" class="mv2-fold" style="display:none;">
+                    <summary>歌词</summary>
+                    <div id="mv2LyricBody" class="mv2-lyric"></div>
+                </details>
+                <!-- 播放列表（可折叠） -->
+                <details id="mv2QueueBox" class="mv2-fold" style="display:none;">
+                    <summary id="mv2QueueSummary">播放列表</summary>
+                    <div id="mv2Queue" class="mv2-queue"></div>
+                </details>
             </div>
             <div id="mv2Toast" class="mv2-toast" style="display:none;"></div>
             <!-- ========== 完整播放器（iframe） ========== -->

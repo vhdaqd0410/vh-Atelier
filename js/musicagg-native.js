@@ -213,7 +213,7 @@
         showSheetView();
         api('/api/music/leaderboard/list?source=' + src + '&bangid=' + encodeURIComponent(bangid)).then(function (r) {
             var list = r && (r.list || r.data) || [];
-            renderSongRows(list, b.name || '榜单');
+            renderSongRows(list, b.name || '榜单', $('mv2Sheet'));
             setState('已就绪', 'ok');
         }).catch(function (e) {
             $('mv2Sheet').innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>榜单加载失败</div><div class="mv2-empty-sub">' + esc(e.message) + '</div></div>';
@@ -229,7 +229,7 @@
         var src = s.source || curPlatform || 'wy';
         api('/api/music/songList/detail?source=' + src + '&id=' + encodeURIComponent(s.id)).then(function (r) {
             var list = r && (r.list || r.data || r.songs) || [];
-            renderSongRows(list, s.name || '歌单');
+            renderSongRows(list, s.name || '歌单', $('mv2Sheet'));
             setState('共 ' + list.length + ' 首', 'ok');
         }).catch(function (e) {
             $('mv2Sheet').innerHTML = '<div class="mv2-empty"><div class="mv2-empty-ico">⚠</div><div>歌单加载失败</div><div class="mv2-empty-sub">' + esc(e.message) + '</div></div>';
@@ -320,12 +320,19 @@
         }
         // 单曲/歌手/专辑：都先按可播列表展示（歌手/专辑只列名字，点击再取详情）
         setCount('共 ' + list.length + ' 首 · ' + srcLabel(curPlatform || '全部'));
-        renderSongRows(list, kw);
+        renderSongRows(list, kw, $('mv2List'));
     }
 
     // ==================== 歌曲行渲染 ====================
-    function renderSongRows(list, title) {
-        var box = (curType === 'playlist') ? $('mv2List') : (($('mv2Sheet') && $('mv2Sheet').style.display !== 'none') ? $('mv2Sheet') : $('mv2List'));
+    // 注意：容器必须显式传入。之前按 curType 猜容器，
+    // 导致「搜过歌单后再点歌单」把歌曲渲染进已隐藏的 mv2List，
+    // 而 mv2Sheet 永远停在“加载中”（用户反馈的 bug）。
+    function renderSongRows(list, title, targetEl) {
+        var box = targetEl;
+        if (!box) {
+            var sheet0 = $('mv2Sheet');
+            box = (sheet0 && sheet0.style.display !== 'none') ? sheet0 : $('mv2List');
+        }
         if (!box) return;
         box.innerHTML = '';
         // 统一成播放队列
@@ -426,6 +433,122 @@
             cov.style.display = img ? '' : 'none';
             if (img) cov.src = img;
         }
+        // 同步刷新歌词与播放列表
+        loadLyric(s);
+        renderQueue();
+    }
+
+    // ==================== 歌词 ====================
+    var lyricLines = [];   // [{ t: 秒, text }]
+    var lyricScroll = true;
+
+    function parseLrc(text) {
+        var out = [];
+        if (!text) return out;
+        text.split(/\r?\n/).forEach(function (line) {
+            var m = line.match(/\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
+            if (!m) return;
+            var t = parseInt(m[1], 10) * 60 + parseFloat(m[2]);
+            var txt = (m[3] || '').trim();
+            if (!txt) return;
+            out.push({ t: t, text: txt });
+        });
+        out.sort(function (a, b) { return a.t - b.t; });
+        return out;
+    }
+
+    function loadLyric(s) {
+        var box = $('mv2LyricBox');
+        var body = $('mv2LyricBody');
+        if (!box || !body) return;
+        if (!s || !s.songmid) { box.style.display = 'none'; return; }
+        box.style.display = '';
+        body.innerHTML = '<div class="mv2-lyric-empty">加载歌词…</div>';
+        lyricLines = [];
+        var src = s.source || curPlatform || 'wy';
+        api('/api/music/lyric?source=' + src + '&songmid=' + encodeURIComponent(s.songmid), { timeout: 30000 })
+            .then(function (r) {
+                var raw = (r && (r.lyric || r.lrc)) || '';
+                var tl = (r && (r.tlyric || r.rlyric)) || '';
+                lyricLines = parseLrc(raw);
+                // 有翻译就拼接（原文 + \n 译文）
+                if (tl) {
+                    var tr = parseLrc(tl);
+                    var map = {};
+                    tr.forEach(function (x) { map[Math.round(x.t)] = x.text; });
+                    lyricLines.forEach(function (x) {
+                        var tt = map[Math.round(x.t)];
+                        if (tt) x.text = x.text + '\n' + tt;
+                    });
+                }
+                renderLyric();
+            })
+            .catch(function () {
+                body.innerHTML = '<div class="mv2-lyric-empty">暂无歌词</div>';
+            });
+    }
+
+    function renderLyric() {
+        var body = $('mv2LyricBody');
+        if (!body) return;
+        if (!lyricLines.length) { body.innerHTML = '<div class="mv2-lyric-empty">暂无歌词</div>'; return; }
+        body.innerHTML = '';
+        lyricLines.forEach(function (x, i) {
+            var d = document.createElement('div');
+            d.className = 'mv2-lyric-line';
+            d.dataset.idx = String(i);
+            d.textContent = x.text;
+            d.addEventListener('click', function () {
+                var a = getAudio();
+                if (a && isFinite(a.duration)) a.currentTime = x.t;
+            });
+            body.appendChild(d);
+        });
+    }
+
+    // 当前播放位置高亮对应歌词行
+    function syncLyric(cur) {
+        var body = $('mv2LyricBody');
+        if (!body || !lyricLines.length) return;
+        var idx = -1;
+        for (var i = 0; i < lyricLines.length; i++) {
+            if (lyricLines[i].t <= cur + 0.25) idx = i; else break;
+        }
+        if (idx < 0) return;
+        var lines = body.children;
+        for (var j = 0; j < lines.length; j++) {
+            var on = (j === idx);
+            if (lines[j].classList) lines[j].classList.toggle('on', on);
+        }
+        var cur2 = lines[idx];
+        if (cur2 && body.scrollTop !== undefined) {
+            try {
+                var top = cur2.offsetTop - body.clientHeight / 2 + cur2.clientHeight / 2;
+                body.scrollTop = Math.max(0, top);
+            } catch (e) {}
+        }
+    }
+
+    // ==================== 播放列表 ====================
+    function renderQueue() {
+        var box = $('mv2QueueBox');
+        var list = $('mv2Queue');
+        var sum = $('mv2QueueSummary');
+        if (!box || !list) return;
+        if (!playlist.length) { box.style.display = 'none'; return; }
+        box.style.display = '';
+        if (sum) sum.textContent = '播放列表（' + playlist.length + ' 首）';
+        list.innerHTML = '';
+        playlist.forEach(function (s, i) {
+            var row = document.createElement('div');
+            row.className = 'mv2-q-item' + (i === playIdx ? ' on' : '');
+            row.innerHTML = '<span class="mv2-q-no">' + (i + 1) + '</span>' +
+                '<span class="mv2-q-name">' + esc(s.name || '') + '</span>' +
+                '<span class="mv2-q-singer">' + esc(s.singer || s.artist || '') + '</span>';
+            row.addEventListener('dblclick', function () { playListAt(i); });
+            row.addEventListener('click', function () { playListAt(i); });
+            list.appendChild(row);
+        });
     }
 
     function syncPlayIcon() {
@@ -459,6 +582,7 @@
             var d = a.duration;
             if (isFinite(d) && d > 0 && fill) fill.style.width = Math.min(100, a.currentTime / d * 100) + '%';
             if (cur) cur.textContent = fmtTime(a.currentTime);
+            syncLyric(a.currentTime);
         });
         a.addEventListener('loadedmetadata', function () {
             var dur = $('mv2Dur');
@@ -502,6 +626,19 @@
             if (playIdx >= 0 && playlist[playIdx]) insertToTimeline(playlist[playIdx]);
             else flash('先选一首歌');
         });
+        // 歌词面板开关
+        var lb = $('btnMv2Lyric');
+        if (lb) lb.addEventListener('click', function () {
+            var box = $('mv2LyricBox');
+            if (box) box.open = !box.open;
+        });
+        // 播放列表面板开关
+        var qb = $('btnMv2Queue');
+        if (qb) qb.addEventListener('click', function () {
+            var box = $('mv2QueueBox');
+            if (box) box.open = !box.open;
+        });
+        // 每首歌都进队列（双击列表行播放）
     }
 
     // ==================== 下载（对齐扒歌：选目录 + 记忆 + 资源管理器 + 拖拽）====================
@@ -513,26 +650,30 @@
         lastDlDir = d || '';
     }
 
-    // 选目录：优先系统原生对话框（经本地服务），起始位置为「上次选的目录 → 音乐库」
+    // 选目录：统一用插件自带树形选择器（__vhPickDir），起始位置为「上次选的目录 → 音乐库」
     function pickDir(cb) {
         var start = getDlDir() || (function () { try { return localStorage.getItem('mllibDir') || ''; } catch (e) { return ''; } })();
+        if (typeof window.__vhPickDir === 'function') {
+            window.__vhPickDir({
+                title: '选择歌曲保存目录',
+                tip: start ? ('上次/音乐库：' + start) : '选择保存位置',
+                startDir: start || undefined,
+                root: start || undefined
+            }, function (d) {
+                if (d) setDlDir(d);
+                cb(d || null);
+            });
+            return;
+        }
+        // 树形选择器未加载时，退回系统对话框（本地模式才可用）
         var agg = window.__musicAgg;
-        var isLocal = agg && agg.getTarget() === 'local';
-        if (isLocal) {
+        if (agg && agg.getTarget() === 'local') {
             agg.api('/pick-dir', { method: 'POST', body: { desc: '选择歌曲保存目录', startDir: start }, timeout: 120000 })
                 .then(function (r) {
                     var p = (r && r.data && r.data.path) || '';
                     if (p) { setDlDir(p); cb(p); } else cb(null);
                 })
                 .catch(function () { cb(null); });
-            return;
-        }
-        // 服务器模式：本地没跑服务，退回树形选择器
-        if (typeof window.__vhPickDir === 'function') {
-            window.__vhPickDir({ title: '选择歌曲保存目录', startDir: start || undefined, root: start || undefined }, function (d) {
-                if (d) setDlDir(d);
-                cb(d || null);
-            });
             return;
         }
         cb(null);

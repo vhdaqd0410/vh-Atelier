@@ -859,6 +859,23 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('有行右键菜单', /function showRowMenu/.test(njs));
     // 命名
     ok('视图名为「简洁」无括号备注', /<option value="native">简洁<\/option>/.test(nidx));
+    // 本轮修复：歌单点开一直加载中
+    ok('歌曲渲染显式传容器（修加载中）', /function renderSongRows\(list, title, targetEl\)/.test(njs));
+    ok('不再按 curType 猜容器', !/curType === 'playlist'\) \? \$\(mv2List\)/.test(njs));
+    // 歌词
+    ok('有歌词面板', /id="mv2LyricBox"/.test(nidx) && /id="mv2LyricBody"/.test(nidx));
+    ok('有 LRC 解析', /function parseLrc/.test(njs));
+    ok('歌词接口调用', /api\/music\/lyric/.test(njs));
+    ok('歌词跟随进度高亮', /function syncLyric/.test(njs) && /syncLyric\(a.currentTime\)/.test(njs));
+    ok('有歌词按钮', /id="btnMv2Lyric"/.test(nidx));
+    // 播放列表
+    ok('有播放列表面板', /id="mv2QueueBox"/.test(nidx) && /id="mv2Queue"/.test(nidx));
+    ok('有队列渲染', /function renderQueue/.test(njs));
+    ok('有队列按钮', /id="btnMv2Queue"/.test(nidx));
+    // 目录选择统一为树形
+    ok('选目录优先树形选择器', /__vhPickDir/.test(njs) && /typeof window\.__vhPickDir === 'function'/.test(njs));
+    ok('CSS 有歌词样式', /\.mv2-lyric-line/.test(ncss));
+    ok('CSS 有队列样式', /\.mv2-q-item/.test(ncss));
 }
 
 // ============================================================

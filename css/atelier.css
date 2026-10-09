@@ -5275,3 +5275,32 @@ button.primary:hover { background: var(--btn-primary-hover); }
 /* 下载完成的行：可拖拽提示 */
 .mv2-row[draggable="true"] { cursor: grab; }
 .mv2-row[draggable="true"]:active { cursor: grabbing; }
+
+/* ===== 音乐聚合 · 歌词 / 播放列表 ===== */
+.mv2-fold { border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); padding: 6px 10px; }
+.mv2-fold > summary { cursor: pointer; font-size: 11.5px; color: var(--text); list-style: none; user-select: none; }
+.mv2-fold > summary::-webkit-details-marker { display: none; }
+.mv2-fold > summary::before { content: '\25B8'; display: inline-block; width: 13px; color: var(--accent); transition: transform .15s; }
+.mv2-fold[open] > summary::before { transform: rotate(90deg); }
+.mv2-fold > summary:hover { color: var(--accent); }
+
+/* 歌词区 */
+.mv2-lyric { max-height: 168px; overflow-y: auto; padding: 6px 2px; margin-top: 4px; }
+.mv2-lyric-line { font-size: 12px; color: var(--muted); line-height: 1.85; padding: 2px 6px;
+    border-radius: 4px; cursor: pointer; white-space: pre-line; transition: color .15s; }
+.mv2-lyric-line:hover { color: var(--text); }
+.mv2-lyric-line.on { color: var(--accent); font-weight: 600; }
+.mv2-lyric-empty { font-size: 11.5px; color: var(--muted); text-align: center; padding: 14px 0; }
+
+/* 播放列表 */
+.mv2-queue { max-height: 190px; overflow-y: auto; margin-top: 4px; }
+.mv2-q-item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 5px;
+    font-size: 11.5px; cursor: pointer; }
+.mv2-q-item:hover { background: rgba(255,255,255,.05); }
+.mv2-q-item.on { background: rgba(139,92,246,.16); }
+.mv2-q-item.on .mv2-q-name { color: var(--accent); font-weight: 600; }
+.mv2-q-no { flex: 0 0 20px; text-align: right; color: var(--muted); font-size: 10.5px; }
+.mv2-q-name { flex: 1 1 auto; min-width: 0; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv2-q-singer { flex: 0 0 auto; max-width: 40%; color: var(--muted); font-size: 10.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
