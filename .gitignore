@@ -49,3 +49,7 @@ lxserver/logs/
 lxserver/backups/
 lxserver/*.log
 lxserver/debug.txt
+
+# 临时备份文件（不进仓库）
+*.bak-*
+*.bak
