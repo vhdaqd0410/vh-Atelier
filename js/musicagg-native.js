@@ -864,14 +864,103 @@
         }
     }
 
+    // 浮层占位：铺在「面板区域」上，并在底部精确让出播放控件的高度。
+    // 之前用固定 padding 猜底部留白，而播放器是跟着内容流排版的（位置随列表长度变化），
+    // 猜不准就会错位。这里改为读实际几何：面板矩形 + 播放器高度。
+    // 播放器高度会随内容变化（歌词行有无内容、是否换行），
+    // 浮层开着时要跟着重排，否则底部会与播放器错开。
+    function watchPlayerResize() {
+        var player = $('mv2Player');
+        if (!player) return;
+        if (player.__vhRO) return;
+        if (typeof ResizeObserver === 'undefined') return;
+        try {
+            player.__vhRO = new ResizeObserver(function () {
+                var f = $('mv2LyricFloat');
+                if (f && f.style.display !== 'none') layoutLyricFloat();
+            });
+            player.__vhRO.observe(player);
+        } catch (e) {}
+    }
+    function layoutLyricFloat() {
+        var box = $('mv2LyricFloat');
+        if (!box) return;
+        var host = document.getElementById('panel-musicagg')
+                || document.querySelector('.ma-wrap')
+                || document.body;
+        var r = host.getBoundingClientRect();
+        var top = Math.max(0, Math.round(r.top));
+        var left = Math.max(0, Math.round(r.left));
+        var width = Math.round(r.width);
+        var height = Math.round(r.height);
+
+        // 播放器若真的显示出来了，底部让出它的高度，保证控件完整可见。
+        // 注意：不能用行内 style.display 判断（可能被 CSS 覆盖），
+        // 以「实际渲染高度 + computed display」为准。
+        var player = $('mv2Player');
+        var reserve = 0;
+        if (player) {
+            var pr = player.getBoundingClientRect();
+            var pdisp = '';
+            try { pdisp = window.getComputedStyle(player).display; } catch (e) {}
+            if (pr.height > 0 && pdisp !== 'none') {
+                // 播放器上沿到面板底边的距离 = 需要让出的高度
+                var gap = Math.round(r.bottom - pr.top);
+                if (gap > 0 && gap < height) reserve = gap;
+            }
+        }
+        var availH = Math.max(160, height - reserve);
+
+        // 窄面板（CEP 里常是这个宽度）：左右分栏会把歌词挤到只剩一百来像素，
+        // 文字频繁换行。此时改用上下布局（左栏收到顶部一行），把宽度全让给歌词。
+        var card = box.querySelector ? box.querySelector('.mv2-lyric-card') : null;
+        var needNarrow = width < 620;
+        if (box.classList) {
+            if (needNarrow) box.classList.add('narrow'); else box.classList.remove('narrow');
+        }
+        // 注意：这里不能再改 availH。之前把卡片高度当占位高度，导致浮层只剩 144px，
+        // 歌词内容溢出到页面中间。占位高度恒定为「面板高度 − 播放器高度」。
+
+        box.style.top = top + 'px';
+        box.style.left = left + 'px';
+        box.style.width = width + 'px';
+        box.style.height = availH + 'px';
+        box.style.right = 'auto';
+        box.style.bottom = 'auto';
+
+        // 歌词区的上下留白：为了「当前句落在偏下、上方保留已唱段」，
+        // 需要等于可视高度一定比例的上下空白。CSS 的百分比 padding 是按宽度算的
+        // （窄面板 382px 宽会得到 172px 上下留白，把歌词挤空），所以这里用像素精确设置。
+        var lyr = $('mv2LyricBody');
+        if (lyr) {
+            var lh = lyr.clientHeight || 0;
+            if (lh > 80) {
+                var padTop = Math.round(lh * 0.42);
+                var padBottom = Math.round(lh * 0.58);
+                lyr.style.paddingTop = padTop + 'px';
+                lyr.style.paddingBottom = padBottom + 'px';
+                // 留白变了，当前句位置也要跟着校准
+                try {
+                    var a1 = getAudio();
+                    if (a1 && isFinite(a1.currentTime)) syncLyric(a1.currentTime);
+                } catch (e) {}
+            }
+        }
+        return availH;
+    }
+
     function toggleLyricFloat(show) {
         var box = $('mv2LyricFloat');
         if (!box) return;
         var willShow = (typeof show === 'boolean') ? show : (box.style.display === 'none');
+        if (willShow) layoutLyricFloat();
         box.style.display = willShow ? '' : 'none';
         if (willShow && playIdx >= 0 && playlist[playIdx]) {
             loadLyric(playlist[playIdx]);
-            setTimeout(function () { syncLyric((getAudio() || {}).currentTime || 0); }, 120);
+            setTimeout(function () {
+                layoutLyricFloat();   // 内容渲染后高度可能变，再校准一次
+                syncLyric((getAudio() || {}).currentTime || 0);
+            }, 130);
         }
     }
 
@@ -1425,6 +1514,7 @@
             if (!all.length) { flash('当前没有歌单内容'); return; }
             downloadList(all, '下载整单');
         });
+        watchPlayerResize();
         bindPlayer();
         renderHist();
         setPlatform('wy', { force: true });
@@ -1433,4 +1523,12 @@
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
     else bind();
+
+    // 面板尺寸变化（CEP 里拖窗口/切布局）时，浮层若开着要跟着重排
+    try {
+        window.addEventListener('resize', function () {
+            var f = $('mv2LyricFloat');
+            if (f && f.style.display !== 'none') layoutLyricFloat();
+        });
+    } catch (e) {}
 })();

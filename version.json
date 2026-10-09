@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.65.0",
-  "buildTime": "2026-10-09 14:14:53",
+  "version": "1.66.0",
+  "buildTime": "2026-10-09 14:47:56",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "歌单分享链接直接打开 + 类型不随平台变 + 歌词浮窗缩小 + 播放栏歌词动画"
+  "notes": "歌词浮层定位改为实测驱动（修错位）+ 窄面板上下布局 + 播放器四行重排 + 播放栏歌词独占整行放大"
 }

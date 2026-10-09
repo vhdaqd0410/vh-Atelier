@@ -900,12 +900,31 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
         /\.mv2-lyric-card\s*\{[^}]*backdrop-filter:\s*blur\(/.test(ncss) &&
         /\.mv2-lyric-float\s*\{[^}]*webkit-backdrop-filter/.test(ncss));
     // 本轮：铺满面板 / 播放栏歌词 / 拖拽 / 音源导入登记 / 歌单平台能力
-    // 浮层尺寸：改为靠下居中的小窗，底部留白让播放控件露出来（不再铺满面板）
-    ok('浮层缩小并露出播放控件',
-        /\.mv2-lyric-float\s*\{[^}]*align-items:\s*flex-end/.test(ncss) &&
-        /\.mv2-lyric-float\s*\{[^}]*padding:[^;]*84px/.test(ncss) &&
-        /\.mv2-lyric-card\s*\{[^}]*height:\s*min\(/.test(ncss));
-    ok('歌词区留白改百分比（适配矮卡片）', /\.mv2-lyric-right\s+\.mv2-lyric\s*\{[^}]*padding:\s*45%/.test(ncss));
+    // 浮层定位：改为按「面板矩形 − 播放器高度」实测设定（不再猜固定留白，
+    // 固定留白对不上播放器随内容流变化的实际位置，就是之前错位的原因）
+    ok('浮层位置由实测几何驱动',
+        /function layoutLyricFloat/.test(njs) &&
+        /getElementById\('panel-musicagg'\)/.test(njs) &&
+        /getBoundingClientRect/.test(njs));
+    ok('底部让出播放器高度（用渲染高度判定可见）',
+        /r\.bottom - pr\.top/.test(njs) && /getComputedStyle\(player\)\.display/.test(njs));
+    ok('不再用行内 style.display 判断播放器可见',
+        !/player\.style\.display !== 'none'/.test(njs));
+    ok('歌词区上下留白由 JS 按高度设 px',
+        /lyr\.style\.paddingTop/.test(njs) && /lyr\.style\.paddingBottom/.test(njs));
+    ok('CSS 不再用百分比 padding（按宽度解析会挤空歌词）',
+        !/\.mv2-lyric-right\s+\.mv2-lyric\s*\{[^}]*padding:\s*45%/.test(ncss));
+    // 窄面板适配：CEP 面板宽度下左右分栏会把歌词挤到 100 余像素
+    ok('窄面板改上下布局', /\.mv2-lyric-float\.narrow \.mv2-lyric-card\s*\{[^}]*flex-direction:\s*column/.test(ncss));
+    ok('窄面板左栏收到顶部一行', /\.mv2-lyric-float\.narrow \.mv2-lyric-left\s*\{[^}]*flex-direction:\s*row/.test(ncss));
+    ok('按面板宽度决定是否窄布局', /needNarrow/.test(njs) && /classList\.add\('narrow'\)/.test(njs));
+    // 播放器布局：窄面板按职责分四行，用 order 固定顺序
+    ok('播放器分行且顺序固定', /\.mv2-player-box\s*\{[^}]*flex-wrap:\s*wrap/.test(ncss) && /order:\s*1/.test(ncss));
+    ok('进度波形独占整行', /\.mv2-player-box \.mv2-bar2\s*\{[^}]*flex:\s*1 1 100%/.test(ncss));
+    ok('行3音量与图标铺满对齐', /\.mv2-player-box \.mp-side\s*\{[^}]*flex:\s*1 1 100%/.test(ncss));
+    ok('播放栏歌词独占整行', /\.mv2-barlyric-row\s*\{[^}]*flex:\s*1 1 100%/.test(ncss));
+    ok('播放栏歌词已放大', /\.mp-lyric\s*\{[^}]*font-size:\s*1[34]px/.test(ncss));
+    ok('窗口变化时浮层重排', /addEventListener\('resize'[\s\S]{0,160}?layoutLyricFloat/.test(njs));
     ok('歌词区显式清除 max-height（否则被 168px 钉住）',
         /\.mv2-lyric-right\s+\.mv2-lyric\s*\{[^}]*max-height:\s*none/.test(ncss));
     ok('卡片可垂直撑满', /\.mv2-lyric-card\s*\{[^}]*min-height:\s*0/.test(ncss));
