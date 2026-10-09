@@ -893,12 +893,13 @@ console.log('\n=== 坑 20：音乐聚合原生面板（简洁模式）==='); {
     ok('频谱与进度条同行', /class="mp-bar mv2-bar2"/.test(nidx) && /class="mv2-seekwrap"/.test(nidx));
     ok('封面可点击放大', /class="mp-cover" alt="" title=/.test(nidx) && /cov\.addEventListener\('click'/.test(njs));
     ok('歌词层左图右词', /mv2-lyric-left/.test(nidx) && /mv2-lyric-right/.test(nidx) && /id="mv2BigCover"/.test(nidx));
-    ok('歌词层毛玻璃', /backdrop-filter: blur\(30px\)/.test(ncss));
+    ok('歌词层毛玻璃', /backdrop-filter: blur\(40px\)/.test(ncss) && /blur\(22px\)/.test(ncss));
     ok('有搜索历史', /id="mv2HistList"/.test(nidx) && /function addSearchHist/.test(njs));
     ok('历史可点击复搜', /doSearch\(kw\)/.test(njs));
     ok('历史可清空', /id="mv2HistClear"/.test(nidx) && /function clearHist/.test(njs));
     ok('每平台缓存上限', /MAX_VIEW_CACHE/.test(njs));
-    ok('切新平台重新搜索', /切到哪个平台显示哪个平台/.test(njs));
+    ok('切新平台按当前输入词搜索', /var typed = .*mv2Query/.test(njs) && /doSearch\(typed\)/.test(njs));
+    ok('清空输入框不被回填', /输入框是用户的现场/.test(njs) && !/q\.value = v\.kw/.test(njs));
 }
 
 // ============================================================
