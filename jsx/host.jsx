@@ -1197,17 +1197,42 @@ function meActivateSequence(name) {
 }
 
 // 列出活动序列的所有音频轨（含名称）
-function meListAudioTracks() {
+// 读取音频轨列表。
+// 可选 seqName：指定序列名时按名激活后再读 —— 关键，因为 activeSequence 未必
+// 是用户勾选的那条序列；若读错序列，就会只看到它自己的音轨（例如只有 A1）。
+// 返回 { seqName, numTracks, tracks:[{index,name,muted}] }
+function meListAudioTracks(seqName) {
     try {
-        var s = app.project.activeSequence;
-        if (!s) return "ERR:没有活动序列";
-        var tracks = [];
-        for (var i = 0; i < s.audioTracks.numTracks; i++) {
-            var nm = "";
-            try { nm = s.audioTracks[i].name; } catch (_) {}
-            tracks.push({ index: i, name: nm });
+        var s = null;
+        var want = String(seqName == null ? "" : seqName);
+        if (want) {
+            // 按名精确/宽松匹配（与 meActivateSequence 同口径）
+            function norm(x) { return String(x == null ? "" : x).replace(/\u3000/g, " ").replace(/^\s+|\s+$/g, "").toLowerCase(); }
+            function compact(x) { return norm(x).replace(/\s+/g, ""); }
+            var tn = norm(want), tc = compact(want), exact = null, loose = null;
+            for (var k = 0; k < app.project.sequences.numSequences; k++) {
+                var sq = app.project.sequences[k];
+                var sn = String(sq.name == null ? "" : sq.name);
+                if (!exact && norm(sn) === tn) exact = sq;
+                if (!loose && compact(sn) === tc) loose = sq;
+            }
+            s = exact || loose || null;
+            if (s) { try { app.project.activeSequence = s; } catch (_) {} }
         }
-        return "OK:" + JSON.stringify(tracks);
+        if (!s) s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+
+        var tracks = [];
+        var n = 0;
+        try { n = s.audioTracks.numTracks; } catch (_) {}
+        for (var i = 0; i < n; i++) {
+            var nm = "", muted = null;
+            try { nm = s.audioTracks[i].name; } catch (_) {}
+            try { muted = !!s.audioTracks[i].isMuted(); } catch (_) {}
+            tracks.push({ index: i, name: nm, muted: muted });
+        }
+        var out = { seqName: String(s.name == null ? "" : s.name), numTracks: n, tracks: tracks };
+        return "OK:" + JSON.stringify(out);
     } catch (e) { return "ERR:" + e; }
 }
 

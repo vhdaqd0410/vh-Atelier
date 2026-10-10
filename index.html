@@ -134,6 +134,7 @@
     <div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
         <button class="tab active" data-tab="upscale">去字幕 / 超分（云端）</button>
         <button class="tab" data-tab="localsub">本地去字幕</button>
+        <button class="tab" data-tab="localup">本地超分</button>
     </div>
     <div class="tabs ws-subtabs" data-group="feedback" style="display:none;">
         <button class="tab active" data-tab="feedback">反馈中心</button>
@@ -1589,7 +1590,133 @@
                 </div>
                 <div class="en-act-hint" id="lsAlgoWarn" style="display:none;color:#ffb84d;"></div>
                 <div class="en-act-hint" id="lsHint"></div>
-                <div id="vLocalLog" class="en-log" style="display:none;max-height:140px;overflow:auto;margin-top:6px;font-size:11px;"></div>
+            </div>
+
+            <!-- 卡3：历史记录（本地产出，可直接拖进时间轴 / 定位 / 导入素材箱） -->
+            <div class="en-card" id="lsHistCard">
+                <div class="en-card-head">
+                    <span>🗂 历史记录</span>
+                    <span id="lsHistCount" style="font-size:10.5px;color:#8a8a8a;margin-left:6px;"></span>
+                    <button id="lsHistLoc" class="secondary mini" style="margin-left:auto;" title="打开当前输出目录">📂 目录</button>
+                    <button id="lsHistClear" class="secondary mini" title="清空历史记录（不删除视频文件）">清空</button>
+                    <button id="lsHistExpand" class="wb-nav-btn en-card-exp" title="展开：历史列表占满面板（再点还原）">⤢</button>
+                </div>
+                <div class="en-task-hint" id="lsHistHint"></div>
+                <div id="lsHistList" class="en-tasks"><div class="hint" style="padding:6px;">还没有处理记录</div></div>
+            </div>
+
+            <!-- 卡4：运行日志 -->
+            <div class="en-card" id="lsLogCard">
+                <div class="en-card-head">
+                    <span>📋 运行日志</span>
+                    <button id="lsLogClear" class="secondary mini" style="margin-left:auto;">清空</button>
+                    <button id="lsLogExpand" class="wb-nav-btn en-card-exp" title="展开：日志占满面板（再点还原）">⤢</button>
+                </div>
+                <div id="vLocalLog" class="en-log" style="max-height:180px;overflow:auto;font-size:11px;"></div>
+            </div>
+        </div>
+    </div>
+
+
+<!-- ==================== 本地超分（Real-ESRGAN） ==================== -->
+    <div class="tab-panel" id="panel-localup" style="display:none;">
+        <div class="en-scroll">
+            <!-- 卡1：序列 + 区间 -->
+            <div class="en-card">
+                <div class="en-card-head">
+                    <span>🎞 选择序列 · 区间</span>
+                    <button id="lupRefSeq" class="secondary mini" style="margin-left:auto;">🔄 刷新</button>
+                </div>
+                <div id="lupSeqList" class="en-seqs"><div class="hint" style="padding:4px 6px;">点「刷新」加载序列，默认选当前活动序列</div></div>
+                <div class="en-clip-row">
+                    <button id="lupGrabClip" class="secondary mini">✂ 从时间轴读取区间</button>
+                    <span id="lupClipInfo" class="en-clip-info">未读取（在时间轴选中片段，或按 I / O 设好入点）</span>
+                </div>
+                <div class="en-row2" style="margin-top:4px;">
+                    <label class="en-f"><span>区间来源</span>
+                        <select id="lupClipSrc">
+                            <option value="selection" selected>选中片段</option>
+                            <option value="inout">入点→出点</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 卡2：引擎设置 -->
+            <div class="en-card" id="lupEngineCard">
+                <div class="en-card-head">
+                    <span>🔍 本地超分（Real-ESRGAN）</span>
+                    <span style="margin-left:auto;font-size:10.5px;color:#8a8a8a;">免费 · 不上传 · 走显卡</span>
+                </div>
+                <div class="en-row2">
+                    <label class="en-f"><span>模型</span>
+                        <select id="lupModel">
+                            <option value="anime" selected>动漫/视频（最快）</option>
+                            <option value="anime4x">动漫 4x（细节强）</option>
+                            <option value="photo">真人写实（慢）</option>
+                        </select>
+                    </label>
+                    <label class="en-f"><span>倍率</span>
+                        <select id="lupScale">
+                            <option value="2" selected>2x</option>
+                            <option value="3">3x</option>
+                            <option value="4">4x</option>
+                        </select>
+                    </label>
+                    <label class="en-f"><span>目标长边</span>
+                        <select id="lupTarget">
+                            <option value="1080" selected>1080（交付标准）</option>
+                            <option value="1440">1440</option>
+                            <option value="1920">1920</option>
+                            <option value="2160">2160（4K）</option>
+                            <option value="none">不缩（保持放大尺寸）</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="en-row2" style="margin-top:2px;">
+                    <span style="font-size:10px;color:#8a8a8a;" id="lupHint">先按倍率放大，再缩到目标长边；音频直接沿用原片</span>
+                </div>
+                <div class="en-row2">
+                    <label class="en-f"><span>导出预设（取中间件）</span>
+                        <select id="lupPreset"><option value="">自动（无字幕）</option></select>
+                    </label>
+                </div>
+                <div class="en-actions">
+                    <button id="lupGoSeq" class="en-go" title="导出勾选序列再用本地超分引擎放大">🔍 处理勾选序列</button>
+                    <button id="lupGoClip" class="en-go" title="对时间轴读取的区间跑完整流程">🎬 处理选中区间</button>
+                    <button id="lupPick" class="secondary mini" title="直接选一个视频文件处理（跳过导出）">📁 选文件…</button>
+                    <button id="lupCheck" class="secondary mini" title="检查引擎与 ffmpeg 是否就绪">🔧 自检</button>
+                    <button id="lupStop" class="secondary mini" disabled>停止</button>
+                </div>
+                <div id="lupProgWrap" class="en-prog" style="display:none;">
+                    <div class="en-prog-bar"><div id="lupProgFill" class="en-prog-fill"></div></div>
+                    <div class="en-prog-meta"><span id="lupProgText"></span><span id="lupProgPct"></span></div>
+                </div>
+                <div class="en-act-hint" id="lupAlgoWarn" style="display:none;color:#ffb84d;"></div>
+                <div class="en-act-hint" id="lupHintLine"></div>
+            </div>
+
+            <!-- 卡3：历史 -->
+            <div class="en-card" id="lupHistCard">
+                <div class="en-card-head">
+                    <span>🗂 历史记录</span>
+                    <span id="lupHistCount" style="font-size:10.5px;color:#8a8a8a;margin-left:6px;"></span>
+                    <button id="lupHistLoc" class="secondary mini" style="margin-left:auto;" title="打开当前输出目录">📂 目录</button>
+                    <button id="lupHistClear" class="secondary mini" title="清空历史记录（不删除视频文件）">清空</button>
+                    <button id="lupHistExpand" class="wb-nav-btn en-card-exp" title="展开：历史列表占满面板（再点还原）">⤢</button>
+                </div>
+                <div class="en-task-hint" id="lupHistHint"></div>
+                <div id="lupHistList" class="en-tasks"><div class="hint" style="padding:6px;">还没有处理记录</div></div>
+            </div>
+
+            <!-- 卡4：日志 -->
+            <div class="en-card" id="lupLogCard">
+                <div class="en-card-head">
+                    <span>📋 运行日志</span>
+                    <button id="lupLogClear" class="secondary mini" style="margin-left:auto;">清空</button>
+                    <button id="lupLogExpand" class="wb-nav-btn en-card-exp" title="展开：日志占满面板（再点还原）">⤢</button>
+                </div>
+                <div id="lupLog" class="en-log" style="max-height:180px;overflow:auto;font-size:11px;"></div>
             </div>
         </div>
     </div>
@@ -1655,6 +1782,7 @@
     <script src="js/enhance.js"></script>
     <script src="js/vsr.js"></script>
     <script src="js/vsr-ui.js"></script>
+    <script src="js/upscale-local.js"></script>
     <script src="js/media.js"></script>
     <script src="js/project.js"></script>
     <script src="js/project-ui.js"></script>

@@ -333,10 +333,24 @@
 
   // ── 音轨结构（全局一份，供每个版本的保留列表渲染） ──
   async function refreshAudioTracks() {
-    var r = await evalHost('meListAudioTracks()');
+    // 关键：带上「当前勾选的第一个序列」，避免读到 PR 里碰巧活动的另一条序列
+    var want = '';
+    try {
+      var cs = getCheckedSeqs();
+      if (cs.length) want = cs[0];
+    } catch (_) {}
+    var r = await evalHost('meListAudioTracks(' + JSON.stringify(want) + ')');
     if (r.indexOf('OK:') !== 0) { setLog('读取音轨失败：' + r, true); return; }
-    audioTracks = JSON.parse(r.slice(3));
-    setLog('已加载 ' + audioTracks.length + ' 条音频轨', 'success');
+    var d = {};
+    try { d = JSON.parse(r.slice(3)); } catch (_) {}
+    // 兼容旧返回（直接是数组）
+    if (Array.isArray(d)) { audioTracks = d; d = { tracks: d, numTracks: d.length }; }
+    audioTracks = d.tracks || [];
+    var names = audioTracks.map(function (t) { return 'A' + (t.index + 1); }).join('/');
+    setLog('已加载 ' + audioTracks.length + ' 条音频轨' +
+           (d.seqName ? ('（序列「' + d.seqName + '」：' + (names || '无') + '）') : '') +
+           (audioTracks.length <= 1 ? '  ← 若该序列确有更多音轨，请检查 PR 里该序列的音轨数' : ''),
+           'success');
     renderVersions(); // 音轨结构变了，重渲版本卡片里的保留列表
   }
 

@@ -18,6 +18,7 @@
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
         localsub: document.getElementById('panel-localsub'),
+  localup: document.getElementById('panel-localup'),
         feedback: document.getElementById('panel-feedback')
     };
 
@@ -29,7 +30,7 @@
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
-        upscale: { members: ['upscale', 'localsub'], default: 'upscale' },
+        upscale: { members: ['upscale', 'localsub', 'localup'], default: 'upscale' },
         prconv: { members: ['prconv'], default: 'prconv' },
         feedback: { members: ['feedback'], default: 'feedback' }
     };
@@ -165,6 +166,9 @@
         }
         if (name === 'localsub' && window.__localsubOnShow) {
             try { window.__localsubOnShow(); } catch (e) {}
+        }
+        if (name === 'localup' && window.__localupOnShow) {
+            try { window.__localupOnShow(); } catch (e) {}
         }
         // 反馈中心：切到时把 iframe 拉起来
         if (name === 'feedback' && window.__feedbackPanelOnShow) {

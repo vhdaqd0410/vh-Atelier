@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.46.0",
-  "buildTime": "2026-10-10 11:51:59",
+  "version": "1.47.0",
+  "buildTime": "2026-10-10 13:37:41",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修 AME 通道从未真正入队(选了 ME 却由 PR 渲染) + 超分面板消失 + 区域预设"
+  "notes": "修去字幕抽搐 + 新增本地超分面板 + 历史记录"
 }
