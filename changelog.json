@@ -4,6 +4,17 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.47.3",
+      "date": "2026-10-10",
+      "title": "测试：补公共模块接线完整性断言（防引用未定义 loc）",
+      "items": [
+        {
+          "kind": "note",
+          "text": "同上，A 版同步"
+        }
+      ]
+    },
+    {
       "version": "1.47.2",
       "date": "2026-10-10",
       "title": "同步：A 版本地面板接入公共模块（补齐上一步漏改）",
