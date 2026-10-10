@@ -16,50 +16,34 @@
 
     var running = null;      // 当前 VSR 任务句柄
     var clip = null;         // 公共模块实例
+
+    // 公共模块：历史/输出目录/进度提示等（与「本地超分」共用一份实现）
+    var loc = (window.__vhLocal && window.__vhLocal.mount) ? window.__vhLocal.mount({
+        prefix: 'ls',
+        hintSuffix: '',
+        logId: 'vLocalLog',
+        histFile: 'vsr_history.json',
+        dirKey: 'vh_vsr_outdir',
+        resultDir: 'vsr_results',
+        importBin: '去字幕',
+        presetAuto: '自动（有字幕版）',
+        presetPrefer: /有字幕|交片|成片|with.?sub/i,
+        histTip: '可直接把文件名拖到时间轴；也可点「导入」放进素材箱',
+        busyIds: ['lsGoSeq', 'lsGoClip', 'lsPick']
+    }) : null;
     var DIR_KEY = 'vh_vsr_outdir';
 
     // ---------- 小工具 ----------
-    function hint(msg, cls) {
-        var el = $('lsHint');
-        if (!el) return;
-        el.textContent = msg || '';
-        el.className = 'en-act-hint' + (cls ? ' ' + cls : '');
-    }
-    function log(msg, cls) {
-        try { if (window.__vhVSR) window.__vhVSR.log(msg, cls); } catch (e) {}
-    }
+    function hint(msg, cls) { return loc ? loc.hint(msg, cls) : null; }
+    function log(msg, cls) { return loc ? loc.log(msg, cls) : null; }
     function setLogVisible() {
         var el = $('vLocalLog');
         if (el && el.style.display === 'none') el.style.display = '';
     }
-    function setProg(pct, text) {
-        var w = $('lsProgWrap');
-        if (w) w.style.display = (pct === null) ? 'none' : '';
-        if (pct !== null) {
-            var f = $('lsProgFill'); if (f) f.style.width = Math.max(0, Math.min(100, pct)) + '%';
-            var p = $('lsProgPct'); if (p) p.textContent = Math.round(pct) + '%';
-        }
-        if (text !== undefined) { var t = $('lsProgText'); if (t) t.textContent = text; }
-    }
-    function setBusy(on) {
-        ['lsGoSeq', 'lsGoClip', 'lsPick'].forEach(function (id) {
-            var b = $(id); if (b) b.disabled = !!on;
-        });
-        var s = $('lsStop'); if (s) s.disabled = !on;
-    }
-    function getOutDir() {
-        try { return localStorage.getItem(DIR_KEY) || ''; } catch (e) { return ''; }
-    }
-    function setOutDir(d) { try { localStorage.setItem(DIR_KEY, d || ''); } catch (e) {} }
-    function defaultOutDir() {
-        var saved = getOutDir();
-        if (saved && fs.existsSync(saved)) return saved;
-        var ext = '';
-        try { ext = csInterface.getSystemPath('extension'); } catch (e) {}
-        var d = ext ? path.join(ext, 'collect', 'vsr_results') : path.join(os.homedir(), 'vhAtelier_vsr');
-        try { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); } catch (e) {}
-        return d;
-    }
+    function setProg(pct, text) { return loc ? loc.setProg(pct, text) : null; }
+    function setBusy(on) { return loc ? loc.setBusy(on) : null; }
+    function getOutDir() { return loc ? loc.getOutDir() : ''; }
+    function setOutDir(d) { return loc ? loc.setOutDir(d) : null; }
 
     // ---------- 字幕区域 ----------
     function currentArea() {
@@ -146,40 +130,12 @@
     // 还能直接拖进时间轴 / 在资源管理器里定位。
     var HIST_FILE = '';
     var HIST_MAX = 300;      // 最多保留条数，防无限增长
-    function histFile() {
-        if (HIST_FILE) return HIST_FILE;
-        var ext = '';
-        try { ext = csInterface.getSystemPath('extension'); } catch (e) {}
-        HIST_FILE = ext ? path.join(ext, 'collect', 'vsr_history.json') : '';
-        return HIST_FILE;
-    }
-    function loadHistory() {
-        var f = histFile();
-        if (!f) return [];
-        try {
-            if (!fs.existsSync(f)) return [];
-            var arr = JSON.parse(fs.readFileSync(f, 'utf8'));
-            return Array.isArray(arr) ? arr : [];
-        } catch (e) { return []; }
-    }
+    function histFile() { return loc ? loc.histFile() : ''; }
+    function loadHistory() { return loc ? loc.loadHistory() : []; }
     function saveHistory(arr) { return loc ? loc.saveHistory(arr) : false; }
-    // 处理完成后追加一条
-    function addHistory(rec) {
-        try {
-            var arr = loadHistory();
-            arr.unshift(rec);
-            if (arr.length > HIST_MAX) arr = arr.slice(0, HIST_MAX);
-            if (saveHistory(arr)) { renderHistory(); }
-        } catch (e) {}
-    }
-    function delHistory(id) {
-        var arr = loadHistory().filter(function (r) { return String(r.id) !== String(id); });
-        if (saveHistory(arr)) renderHistory();
-    }
-    function clearHistory() {
-        if (!window.confirm('清空历史记录？（只清列表，不删除磁盘上的视频文件）')) return;
-        if (saveHistory([])) { renderHistory(); hint('历史记录已清空', 'ok'); }
-    }
+    function addHistory(rec) { return loc ? loc.addHistory(rec) : null; }
+    function delHistory(id) { return loc ? loc.delHistory(id) : null; }
+    function clearHistory() { return loc ? loc.clearHistory() : null; }
 
     function fmtSize2(n) {
         n = Number(n) || 0;
@@ -195,121 +151,12 @@
     }
 
     // 在资源管理器里打开一个目录（Win）
-    function openDir(d) {
-        try {
-            var cp = require('child_process');
-            cp.exec('explorer "' + String(d).replace(/\//g, '\\') + '"', { windowsHide: true });
-        } catch (e) { hint('打开目录失败：' + e.message, 'err'); }
-    }
+    function openDir(d) { return loc ? loc.openDir(d) : null; }
 
     // 在资源管理器里定位文件（Win）
-    function revealFile(p) {
-        try {
-            var cp = require('child_process');
-            if (fs.existsSync(p)) cp.exec('explorer /select,"' + String(p).replace(/\//g, '\\') + '"', { windowsHide: true });
-            else cp.exec('explorer "' + String(path.dirname(p)).replace(/\//g, '\\') + '"', { windowsHide: true });
-        } catch (e) { hint('打开位置失败：' + e.message, 'err'); }
-    }
+    function revealFile(p) { return loc ? loc.revealFile(p) : null; }
 
-    function renderHistory() {
-        var box = $('lsHistList');
-        if (!box) return;
-        var arr = loadHistory();
-        var cnt = $('lsHistCount');
-        var hintEl = $('lsHistHint');
-        if (cnt) cnt.textContent = arr.length ? ('共 ' + arr.length + ' 条') : '';
-        if (hintEl) {
-            hintEl.textContent = arr.length
-                ? '可直接把文件名拖到时间轴；也可点「导入」放进素材箱'
-                : '';
-        }
-        if (!arr.length) {
-            box.innerHTML = '<div class="hint" style="padding:6px;">还没有处理记录</div>';
-            return;
-        }
-        box.innerHTML = '';
-        arr.forEach(function (r) {
-            var row = document.createElement('div');
-            row.className = 'ls-hist-row';
-            var exists = false;
-            try { exists = fs.existsSync(r.out); } catch (e) {}
-            if (!exists) row.classList.add('missing');
-
-            // 主行：文件名（可拖）+ 状态
-            var main = document.createElement('div');
-            main.className = 'ls-hist-main';
-            var nm = document.createElement('span');
-            nm.className = 'ls-hist-name';
-            nm.textContent = path.basename(r.out || '(未知)');
-            nm.title = r.out || '';
-            // 拖拽到时间轴：PR 认 com.adobe.cep.dnd.file.N
-            if (exists) {
-                nm.setAttribute('draggable', 'true');
-                nm.addEventListener('dragstart', function (ev) {
-                    try {
-                        ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', r.out);
-                        ev.dataTransfer.setData('text/plain', r.out);
-                        ev.dataTransfer.effectAllowed = 'copy';
-                    } catch (e) {}
-                });
-                nm.style.cursor = 'grab';
-            }
-            main.appendChild(nm);
-            if (!exists) {
-                var miss = document.createElement('span');
-                miss.className = 'ls-hist-miss';
-                miss.textContent = '文件已不在';
-                main.appendChild(miss);
-            }
-            row.appendChild(main);
-
-            // 次行：时间 / 算法 / 区域 / 耗时 / 大小
-            var meta = document.createElement('div');
-            meta.className = 'ls-hist-meta';
-            var bits = [];
-            if (r.at) bits.push(String(r.at).replace('T', ' ').slice(0, 16));
-            if (r.mode) bits.push(r.mode);
-            if (r.area) bits.push('区域 y' + r.area.y0 + '-' + r.area.y1);
-            if (r.elapsed) bits.push(fmtDur2(r.elapsed));
-            if (r.size) bits.push(fmtSize2(r.size));
-            meta.textContent = bits.join(' · ');
-            row.appendChild(meta);
-
-            // 操作行
-            var ops = document.createElement('div');
-            ops.className = 'ls-hist-ops';
-            function mkBtn(label, title, fn, cls) {
-                var b = document.createElement('button');
-                b.className = 'secondary mini' + (cls ? ' ' + cls : '');
-                b.textContent = label;
-                b.title = title || '';
-                b.addEventListener('click', fn);
-                return b;
-            }
-            ops.appendChild(mkBtn('⬆ 导入', '导入 PR「去字幕」素材箱', function () {
-                if (!exists) { hint('文件已不在：' + r.out, 'err'); return; }
-                log('📥 正在导入素材箱「去字幕」…');
-                importToBin([r.out], '去字幕').then(function (res) {
-                    if (res && res.ok && (res.imported || []).length)
-                        hint('✅ 已导入素材箱：' + (res.imported || []).join('、'), 'ok');
-                    else hint('⚠ 导入失败：' + ((res && (res.error || JSON.stringify(res))) || '未知'), 'warn');
-                });
-            }));
-            ops.appendChild(mkBtn('📂 位置', '在资源管理器里定位', function () {
-                revealFile(r.out);
-            }));
-            ops.appendChild(mkBtn('▶ 打开', '用系统默认播放器打开', function () {
-                if (!exists) { hint('文件已不在', 'err'); return; }
-                try { require('child_process').exec('start "" "' + String(r.out).replace(/\//g, '\\') + '"'); } catch (e) {}
-            }));
-            ops.appendChild(mkBtn('✕', '从列表删除（不删文件）', function () {
-                delHistory(r.id);
-            }, 'ls-hist-del'));
-            row.appendChild(ops);
-
-            box.appendChild(row);
-        });
-    }
+    function renderHistory() { return loc ? loc.renderHistory() : null; }
 
     // 卡片最大化：历史 / 日志 各占满面板（复用超分面板那套 class）
     var LOCAL_EXP_KEY = 'vh_vsr_card_exp';   // '' | 'hist' | 'log'
@@ -701,18 +548,7 @@
 
 
     // 生成不覆盖的输出路径：目标已存在时依次尝试 _2 / _3 …（绝不覆盖上一次结果）
-    function uniqueOutPath(dir, baseName, ext) {
-        ext = ext || '.mp4';
-        var cand = path.join(dir, baseName + ext);
-        if (!fs.existsSync(cand)) return cand;
-        for (var n = 2; n <= 999; n++) {
-            cand = path.join(dir, baseName + '_' + n + ext);
-            if (!fs.existsSync(cand)) return cand;
-        }
-        // 极端情况（999 个同名）：退到时间戳，保证唯一
-        var ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-        return path.join(dir, baseName + '_' + ts + ext);
-    }
+    function uniqueOutPath(dir, baseName, ext) { return loc ? loc.uniqueOutPath(dir, baseName, ext) : ''; }
 
     // 由中间导出文件推导「干净、可读」的输出基名
     // 中间名形如 <序列名>_nosub_full.mp4 / <序列名>_nosub_clip.mp4，
@@ -725,44 +561,10 @@
     // ---------- 导入 PR「去字幕」素材箱（对齐超分面板）----------
     // 宿主通道：meImportFilesToBinStr，入参经全局 meImportPayload 传入
     // （JS window 变量传不进 ExtendScript，必须先在 ExtendScript 里赋值）
-    function importToBin(files, binName) {
-        return new Promise(function (resolve) {
-            try {
-                var list = (files || []).filter(function (f) { return !!f; });
-                if (!list.length) { resolve({ ok: false, error: '没有可导入的文件' }); return; }
-                if (!csInterface || typeof csInterface.evalScript !== 'function') {
-                    resolve({ ok: false, error: '宿主桥不可用（面板未在 PR 内运行？）' }); return;
-                }
-                var cs = csInterface;
-                cs.evalScript('meImportPayload = ' +
-                    JSON.stringify({ files: list, binName: binName || '去字幕' }) + ';', function () {
-                    cs.evalScript('meImportFilesToBinStr()', function (r) {
-                        try { resolve(JSON.parse(r)); }
-                        catch (e) { resolve({ ok: false, error: String(r) }); }
-                    });
-                });
-            } catch (e) { resolve({ ok: false, error: e.message }); }
-        });
-    }
+    function importToBin(files, binName) { return loc ? loc.importToBin(files, binName) : Promise.resolve({ ok: false, error: 'en-local 未加载' }); }
 
     // 统一收尾：把处理结果导入素材箱，日志里给出明确结果
-    function importResult(file, binName, onDone) {
-        if (!file) { if (onDone) onDone(); return; }
-        log('📥 正在导入 PR 素材箱「' + binName + '」…');
-        importToBin([file], binName).then(function (r) {
-            if (r && r.ok && (r.imported || []).length) {
-                var names = (r.imported || []).join('、');
-                hint('✅ 已处理并导入「' + binName + '」：' + names, 'ok');
-                log('📥 已导入素材箱「' + binName + '」：' + names, 'ok');
-                if ((r.failed || []).length) log('⚠ 部分未导入：' + r.failed.join('、'), 'warn');
-            } else {
-                var why = (r && (r.error || (r.failed || []).join('、'))) || '未知原因';
-                hint('⚠ 已处理完成，但导入素材箱失败：' + why + '（文件仍在：' + file + '）', 'warn');
-                log('⚠ 导入素材箱失败：' + why, 'warn');
-            }
-            if (onDone) onDone();
-        });
-    }
+    function importResult(file, binName, onDone) { return loc ? loc.importResult(file, binName, onDone) : null; }
 
     function runOne(input, output, onDone) {
         var opts = {
@@ -1098,29 +900,7 @@
     }
 
     // 填充「导出预设」下拉：与云端面板用同一份 AME 预设扫描结果
-    function fillPresets() {
-        var sel = $('lsPreset');
-        if (!sel) return;
-        var hits = [];
-        try {
-            if (typeof window.__vhListPresets === 'function') hits = window.__vhListPresets() || [];
-        } catch (e) { hits = []; }
-        var prev = sel.value;
-        sel.innerHTML = '<option value="">自动（有字幕版）</option>';
-        hits.forEach(function (h) {
-            var o = document.createElement('option');
-            o.value = h.full;
-            o.textContent = h.name;
-            sel.appendChild(o);
-        });
-        // 默认选中第一个「有字幕」预设（去字幕需要把字幕烧进画面）
-        if (prev) {
-            sel.value = prev;
-        } else {
-            var prefer = hits.filter(function (h) { return /有字幕|交片|成片|with.?sub/i.test(h.name); });
-            if (prefer.length) sel.value = prefer[0].full;
-        }
-    }
+    function fillPresets() { return loc ? loc.fillPresets() : null; }
 
     // 切到本 tab 时：拉一次序列（用户不用手动刷新）
     window.__localsubOnShow = function () {

@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.47.2",
+      "date": "2026-10-10",
+      "title": "同步：A 版本地面板接入公共模块（补齐上一步漏改）",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "补齐 A 版「本地去字幕」接入 en-local 公共模块（上一步只改了主版与两版超分面板）；补回被顺带吞掉的 addHistory"
+        },
+        {
+          "kind": "note",
+          "text": "两版四面板现已完全一致，真实渲染验证全通过"
+        }
+      ]
+    },
+    {
       "version": "1.47.1",
       "date": "2026-10-10",
       "title": "重构：本地面板公共模块（去字幕/超分共用一套实现）",

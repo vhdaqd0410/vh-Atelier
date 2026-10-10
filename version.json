@@ -3,7 +3,7 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.47.1",
+  "version": "1.47.2",
   "buildTime": "2026-10-10 14:26:07",
   "skipDirs": [
     "collect",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "重构：本地面板公共模块 en-local.js"
+  "notes": "同步 A 版本地面板公共模块（补齐漏改）"
 }
