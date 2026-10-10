@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.47.0",
-  "buildTime": "2026-10-10 13:37:41",
+  "version": "1.47.1",
+  "buildTime": "2026-10-10 14:26:07",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修去字幕抽搐 + 新增本地超分面板 + 历史记录"
+  "notes": "重构：本地面板公共模块 en-local.js"
 }

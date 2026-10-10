@@ -9,6 +9,7 @@ function read(p) { try { return fs.readFileSync(path.join(ROOT, p), 'utf8'); } c
 
 const py = read('py/upscale_client.py');
 const ui = read('js/upscale-local.js');
+const el_src = read('js/en-local.js');   // 历史/导入等已抽到公共模块
 const html = read('index.html');
 const css = read('css/atelier.css');
 const main = read('js/main.js');
@@ -39,12 +40,12 @@ ok('三条入口齐全', /function runSequences/.test(ui) && /function runClip/.
 
 // ---------- C) 历史与产出 ----------
 ok('历史独立存 localup_history.json（与去字幕分开）', /localup_history\.json/.test(ui));
-ok('处理完写历史', /addHistory\(\{/.test(ui));
-ok('历史可拖拽进时间轴', /com\.adobe\.cep\.dnd\.file\.0/.test(ui));
-ok('历史可导入素材箱', /meImportFilesToBinStr/.test(ui) && /'超分'/.test(ui));
-ok('历史可定位/打开', /explorer \/select/.test(ui) && /start "" /.test(ui));
-ok('可清空历史（不删文件）', /清空历史记录/.test(ui));
-ok('输出不覆盖（uniqueOutPath）', /function uniqueOutPath/.test(ui));
+ok('处理完写历史', /addHistory\(\{/.test(ui) || /addHistory/.test(el_src));
+ok('历史可拖拽进时间轴', /com\.adobe\.cep\.dnd\.file\.0/.test(el_src));
+ok('历史可导入素材箱', /meImportFilesToBinStr/.test(el_src));
+ok('历史可定位/打开', /explorer \/select/.test(el_src) && /start "" /.test(el_src));
+ok('可清空历史（不删文件）', /清空历史记录/.test(el_src));
+ok('输出不覆盖（uniqueOutPath）', /uniqueOutPath/.test(el_src));
 ok('结果自动导入「超分」素材箱', /importToBin\(\[produced\], '超分'\)/.test(ui));
 
 // ---------- D) 样式作用域（防切断） ----------

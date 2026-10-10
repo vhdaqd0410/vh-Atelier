@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.47.1",
+      "date": "2026-10-10",
+      "title": "重构：本地面板公共模块（去字幕/超分共用一套实现）",
+      "items": [
+        {
+          "kind": "impr",
+          "text": "抽出新公共模块 js/en-local.js，收拢两个本地面板的 19 个重复函数；面板只传配置"
+        },
+        {
+          "kind": "note",
+          "text": "行为不变，回归全通过"
+        }
+      ]
+    },
+    {
       "version": "1.47.0",
       "date": "2026-10-10",
       "title": "修去字幕抽搐 + 新增本地超分 + 本地去字幕历史记录",

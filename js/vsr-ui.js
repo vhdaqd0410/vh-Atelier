@@ -162,16 +162,7 @@
             return Array.isArray(arr) ? arr : [];
         } catch (e) { return []; }
     }
-    function saveHistory(arr) {
-        var f = histFile();
-        if (!f) return false;
-        try {
-            var d = path.dirname(f);
-            if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-            fs.writeFileSync(f, JSON.stringify((arr || []).slice(0, HIST_MAX), null, 2), 'utf8');
-            return true;
-        } catch (e) { return false; }
-    }
+    function saveHistory(arr) { return loc ? loc.saveHistory(arr) : false; }
     // 处理完成后追加一条
     function addHistory(rec) {
         try {

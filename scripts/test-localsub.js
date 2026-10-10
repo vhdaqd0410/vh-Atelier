@@ -8,16 +8,17 @@ function ok(n, c, e) { if (c) { pass++; console.log('  [OK]   ' + n); }
 function read(p) { return fs.readFileSync(path.join(ROOT, p), 'utf8'); }
 
 const ui = read('js/vsr-ui.js');
+const el_src = read('js/en-local.js');   // 历史/导入/路径等已抽到公共模块
 const html = read('index.html');
 const css = read('css/atelier.css');
 const host = read('jsx/host.jsx');
 const py = read('py/vsr_client.py');
 
 // ---------- A) 处理完成后导入 PR 素材箱 ----------
-ok('有 importToBin 实现', /function importToBin\s*\(/.test(ui));
-ok('importToBin 走宿主 meImportFilesToBinStr', /meImportFilesToBinStr/.test(ui));
+ok('有 importToBin 实现', /function importToBin\s*\(/.test(el_src));
+ok('importToBin 走宿主 meImportFilesToBinStr', /meImportFilesToBinStr/.test(el_src));
 ok('importToBin 先写 meImportPayload（JS 变量传不进 ExtendScript）',
-   /meImportPayload\s*=\s*/.test(ui));
+   /meImportPayload\s*=\s*/.test(el_src));
 ok('有 importResult 统一收尾', /function importResult\s*\(/.test(ui));
 ok('素材箱名为「去字幕」', /'去字幕'/.test(ui));
 ok('处理勾选序列完成后调用 importResult', /importResult\(produced, '去字幕', next\)/.test(ui));
