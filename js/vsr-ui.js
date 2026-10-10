@@ -87,12 +87,18 @@
         var mode = (($('lsArea') || {}).value) || 'pick';
         var row = $('lsAreaRow');
         if (row) row.style.display = (mode === 'manual') ? '' : 'none';
+        // 框选区默认折叠：这里只控制「折叠按钮 + 徽标」那一行是否出现；
+        // 真正的画布由 setPickOpen 控制展开状态。
         var pr = $('lsPickRow');
-        if (pr) pr.style.display = (mode === 'pick') ? '' : 'none';
+        var tog = $('lsPickToggle');
+        if (tog) tog.parentNode.style.display = (mode === 'pick') ? '' : 'none';
+        var apRow = $('lsAreaPresetRow');
+        if (apRow) apRow.style.display = (mode === 'pick' || mode === 'manual') ? '' : 'none';
+        if (mode !== 'pick' && pr) pr.style.display = 'none';
         var h = $('lsAreaHint');
         if (h) {
             h.textContent = (mode === 'pick')
-                ? '点「截取节目窗口当前帧」→ 在图上拖框圈住字幕 → 点「用这块区域」'
+                ? '展开截帧框选 → 拖框圈住字幕 → 用这块区域；位置固定可「存位置」以后一键调用'
                 : (mode === 'auto')
                     ? '在偏底部范围内用 OCR 自动找字幕位置（需配合 STTN 检测 / LaMa 等会检测的算法）'
                     : (mode === 'manual')
@@ -131,6 +137,154 @@
 
     // ---------- 单次处理 ----------
 
+
+
+    // ==================== 字幕区域预设 ====================
+    // 存到 collect/：该目录被 sync-to-pr 与在线更新器双重排除，
+    // 升级不会覆盖；拷到别的电脑也能一起带走（字幕位置一般全剧通用）。
+    var PRESET_FILE = '';
+    function presetFile() {
+        if (PRESET_FILE) return PRESET_FILE;
+        var ext = '';
+        try { ext = csInterface.getSystemPath('extension'); } catch (e) {}
+        PRESET_FILE = ext ? path.join(ext, 'collect', 'vsr_area_presets.json') : '';
+        return PRESET_FILE;
+    }
+    function loadAreaPresets() {
+        var f = presetFile();
+        if (!f) return [];
+        try {
+            if (!fs.existsSync(f)) return [];
+            var arr = JSON.parse(fs.readFileSync(f, 'utf8'));
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+    function saveAreaPresets(arr) {
+        var f = presetFile();
+        if (!f) return false;
+        try {
+            var d = path.dirname(f);
+            if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+            fs.writeFileSync(f, JSON.stringify(arr || [], null, 2), 'utf8');
+            return true;
+        } catch (e) { return false; }
+    }
+
+    // 把预设列表渲染进下拉
+    function renderAreaPresets(keepId) {
+        var sel = $('lsAreaPreset');
+        if (!sel) return;
+        var arr = loadAreaPresets();
+        var cur = keepId || sel.value || '';
+        sel.innerHTML = '';
+        var o0 = document.createElement('option');
+        o0.value = ''; o0.textContent = arr.length ? '（未选预设）' : '（还没有预设，先框选再「存位置」）';
+        sel.appendChild(o0);
+        arr.forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = String(p.id || p.name);
+            o.textContent = p.name + '　y ' + p.y0 + '–' + p.y1 + ' · x ' + p.x0 + '–' + p.x1;
+            sel.appendChild(o);
+        });
+        if (cur) { try { sel.value = cur; } catch (e) {} }
+    }
+
+    // 应用某个预设到 picked
+    function applyAreaPreset(id) {
+        var arr = loadAreaPresets();
+        for (var i = 0; i < arr.length; i++) {
+            if (String(arr[i].id || arr[i].name) === String(id)) {
+                var p = arr[i];
+                picked = { y0: p.y0, y1: p.y1, x0: p.x0, x1: p.x1 };
+                updateAppliedBadge();
+                hint('✅ 已套用区域预设「' + p.name + '」', 'ok');
+                log('🎯 套用区域预设「' + p.name + '」: y ' + p.y0 + '–' + p.y1 +
+                    '  x ' + p.x0 + '–' + p.x1);
+                return p;
+            }
+        }
+        return null;
+    }
+
+    // 存当前框选（或当前比例）为预设
+    function saveCurrentAreaAsPreset() {
+        var r = picked;
+        // 没框过就用框选画布上的当前框；再没有就用下拉的自定义比例
+        if (!r) r = boxToRatio();
+        if (!r) {
+            var mode = (($('lsArea') || {}).value) || 'pick';
+            if (mode === 'manual') {
+                r = { y0: num('lsY0', 0.78), y1: num('lsY1', 1), x0: num('lsX0', 0), x1: num('lsX1', 1) };
+            }
+        }
+        if (!r) { hint('请先在图上框出字幕区域（或展开截帧框选），再存预设', 'err'); return; }
+        var name = window.prompt('给这个区域起个名字（以后所有剧都能直接用）：', '字幕区');
+        if (!name) { hint('已取消', ''); return; }
+        var arr = loadAreaPresets();
+        // 同名覆盖，避免堆积
+        var id = 'a' + Date.now();
+        arr = arr.filter(function (p) { return p.name !== name; });
+        arr.push({ id: id, name: name, y0: r.y0, y1: r.y1, x0: r.x0, x1: r.x1,
+                   savedAt: new Date().toISOString().slice(0, 10) });
+        if (saveAreaPresets(arr)) {
+            picked = { y0: r.y0, y1: r.y1, x0: r.x0, x1: r.x1 };
+            renderAreaPresets(id);
+            updateAppliedBadge();
+            hint('✅ 已存为预设「' + name + '」：y ' + r.y0 + '–' + r.y1 + ' · x ' + r.x0 + '–' + r.x1, 'ok');
+            log('💾 已存区域预设「' + name + '」');
+        } else {
+            hint('存预设失败（collect 目录不可写？）', 'err');
+        }
+    }
+
+    function deleteCurrentAreaPreset() {
+        var sel = $('lsAreaPreset');
+        var id = sel ? sel.value : '';
+        if (!id) { hint('请先在下拉里选中要删除的预设', 'err'); return; }
+        var arr = loadAreaPresets();
+        var hit = arr.filter(function (p) { return String(p.id || p.name) === String(id); })[0];
+        if (!hit) { hint('找不到该预设', 'err'); return; }
+        if (!window.confirm('删除预设「' + hit.name + '」？')) return;
+        arr = arr.filter(function (p) { return String(p.id || p.name) !== String(id); });
+        if (saveAreaPresets(arr)) {
+            renderAreaPresets('');
+            hint('已删除预设「' + hit.name + '」', 'ok');
+        } else hint('删除失败', 'err');
+    }
+
+    // 已应用区域的小徽标（折叠时也能看到当前生效的区域）
+    function updateAppliedBadge() {
+        var el = $('lsAppliedBadge');
+        if (!el) return;
+        if (!picked) { el.textContent = ''; return; }
+        el.textContent = '当前区域：y ' + picked.y0 + '–' + picked.y1 + ' · x ' + picked.x0 + '–' + picked.x1;
+    }
+
+    // 折叠/展开截帧框选区（记住用户选择）
+    var PICK_OPEN_KEY = 'vh_vsr_pick_open';
+    function setPickOpen(open) {
+        var row = $('lsPickRow');
+        var btn = $('lsPickToggle');
+        if (row) row.style.display = open ? '' : 'none';
+        if (btn) btn.textContent = (open ? '▾ 收起截帧框选' : '▸ 展开截帧框选');
+        try { localStorage.setItem(PICK_OPEN_KEY, open ? '1' : '0'); } catch (e) {}
+        // 展开后 stage 才有尺寸；若之前是收起状态，默认框会摆错，这里重摆一次
+        if (open) {
+            setTimeout(function () {
+                var stage = $('lsPickStage');
+                var box = $('lsPickBox');
+                if (!stage || !box || !box.classList.contains('on')) return;
+                if (stage.clientHeight > 0 && (!pickBox || pickBox.h < 12)) {
+                    setBox(Math.round(stage.clientWidth * 0.02), Math.round(stage.clientHeight * 0.78),
+                           Math.round(stage.clientWidth * 0.96), Math.round(stage.clientHeight * 0.20));
+                    updateReadout();
+                }
+            }, 30);
+        }
+    }
+    function pickOpenSaved() {
+        try { return localStorage.getItem(PICK_OPEN_KEY) === '1'; } catch (e) { return false; }
+    }
 
     // ==================== 截帧框选 ====================
     var picked = null;        // {y0,y1,x0,x1} 相对比例（已应用的框选区域）
@@ -601,6 +755,26 @@
 
         var ck = $('lsCheck'); if (ck) ck.addEventListener('click', doCheck);
 
+        // 区域预设
+        renderAreaPresets();
+        var ps = $('lsAreaPreset');
+        if (ps) ps.addEventListener('change', function () {
+            if (ps.value) applyAreaPreset(ps.value);
+        });
+        var psv = $('lsAreaPresetSave');
+        if (psv) psv.addEventListener('click', saveCurrentAreaAsPreset);
+        var pdl = $('lsAreaPresetDel');
+        if (pdl) pdl.addEventListener('click', deleteCurrentAreaPreset);
+
+        // 折叠：默认收起（字幕位置通常固定，不需要一直占屏幕）
+        setPickOpen(pickOpenSaved());
+        var ptog = $('lsPickToggle');
+        if (ptog) ptog.addEventListener('click', function () {
+            var row = $('lsPickRow');
+            var open = !(row && row.style.display !== 'none');
+            setPickOpen(open);
+        });
+
         // 截帧框选
         bindPickDrag();
         var gf = $('lsGrabFrame');
@@ -625,6 +799,7 @@
             var r = boxToRatio();
             if (!r) { hint('框太小了，请拖大一点', 'err'); return; }
             picked = r;
+            updateAppliedBadge();
             var ap = $('lsPickApplied');
             if (ap) {
                 ap.style.display = '';

@@ -4,6 +4,33 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.46.0",
+      "date": "2026-10-10",
+      "title": "修 A 版 AME 通道从未真正入队（选了 ME 却由 PR 渲染）+ 超分面板消失",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修 AME 队列通道：A 版此前只有宿主侧的 meEnqueueAME，面板侧从未调用它 —— 拉起 ME 后直接用 meExport 走 PR 本地渲染，ME 队列里看不到任务。这是「选了 ME 却由 PR 导出」的直接原因"
+        },
+        {
+          "kind": "fix",
+          "text": "修「超分/云端面板没内容」：共享样式展开时复合选择器被切断，导致 `#panel-upscale.en-expanded` 整体 display:none"
+        },
+        {
+          "kind": "fix",
+          "text": "ME 通道等就绪后再入队 + 新增 AME 预检（PR/ME 版本不配套明确告警）+ 无回调却出文件时提示可能本地渲染"
+        },
+        {
+          "kind": "feat",
+          "text": "本地去字幕新增区域预设（存 collect/，跨电脑可带走）+ 截帧框选区默认折叠"
+        },
+        {
+          "kind": "note",
+          "text": "新增 test-ame-channel.js / test-css-scope.js 回归"
+        }
+      ]
+    },
+    {
       "version": "1.45.0",
       "date": "2026-10-09",
       "title": "本地去字幕：处理完自动导入素材箱 + 截帧可视化框选字幕区",

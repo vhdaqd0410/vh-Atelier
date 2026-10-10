@@ -1523,8 +1523,21 @@
                     </label>
                 </div>
 
-                <!-- 框选：截一帧 → 在图上拖框 → 换算比例 -->
-                <div class="en-row2" id="lsPickRow" style="flex-direction:column;align-items:stretch;gap:6px;">
+                <!-- 区域预设：存一次，以后一键调用 -->
+                <div class="en-row2" id="lsAreaPresetRow" style="align-items:flex-end;">
+                    <label class="en-f"><span>区域预设</span>
+                        <select id="lsAreaPreset"><option value="">（未选预设）</option></select>
+                    </label>
+                    <button id="lsAreaPresetSave" class="secondary mini" title="把当前框选的位置存成预设，以后所有剧通用">存位置</button>
+                    <button id="lsAreaPresetDel" class="secondary mini" title="删除选中的预设">删除</button>
+                </div>
+
+                <!-- 框选：截一帧 → 在图上拖框 → 换算比例（可折叠，平时不占地方） -->
+                <div class="en-row2" style="align-items:center;gap:6px;">
+                    <button id="lsPickToggle" class="secondary mini" style="flex:0 0 auto;">▸ 展开截帧框选</button>
+                    <span id="lsAppliedBadge" style="font-size:10px;color:#7fd68b;"></span>
+                </div>
+                <div class="en-row2" id="lsPickRow" style="flex-direction:column;align-items:stretch;gap:6px;display:none;">
                     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                         <button id="lsGrabFrame" class="secondary mini">📷 截取节目窗口当前帧</button>
                         <button id="lsPickFromFile" class="secondary mini" title="用本地已有的图片框选">🖼 用图片…</button>

@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.45.0",
-  "buildTime": "2026-10-10 10:57:16",
+  "version": "1.46.0",
+  "buildTime": "2026-10-10 11:51:59",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "本地去字幕处理完自动导入素材箱 + 截帧框选字幕区"
+  "notes": "修 AME 通道从未真正入队(选了 ME 却由 PR 渲染) + 超分面板消失 + 区域预设"
 }
