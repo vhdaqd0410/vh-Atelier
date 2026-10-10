@@ -1867,7 +1867,12 @@
 
     init();
 
-        // ---------- 对外：导出（供「本地去字幕」使用） ----------
+        // 对外：列出可用的导出预设（供「本地去字幕」面板填下拉）
+window.__vhListPresets = function () {
+  try { return findPresets(/\.epr$/i) || []; } catch (e) { return []; }
+};
+
+// ---------- 对外：导出（供「本地去字幕」使用） ----------
     // cb(err, file)
     // seqName 可选：指定序列名；不传则用勾选的第一个
     // range   可选：{ startSec, endSec } 只导出该区间

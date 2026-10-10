@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.44.1",
+      "date": "2026-10-09",
+      "title": "修本地去字幕：序列名乱码、预设传参、时间格式、面板样式",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修序列名 [object Object]（宿主返回对象数组）、preset 误塞进 range、时间显示 0:010.0"
+        },
+        {
+          "kind": "fix",
+          "text": "修本地面板样式不匹配（.en-* 限定在 #panel-upscale）；补上导出预设下拉填充"
+        },
+        {
+          "kind": "impr",
+          "text": "按钮不换行、主辅按钮分两行"
+        }
+      ]
+    },
+    {
       "version": "1.44.0",
       "date": "2026-10-09",
       "title": "重组：本地去字幕独立成面板 + 序列/区间能力抽取共用",
