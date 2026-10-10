@@ -37,10 +37,13 @@
         });
     }
 
+    // 秒 → m:ss.s
+    // 注意：宿主返回的秒数可能是字符串（如 "10.0"），必须先转数，
+    // 否则 r - m*60 会变成字符串运算，出现 "0:010.0" 这类结果。
     function fmtSec(s) {
-        s = Number(s);
-        if (!isFinite(s) || s < 0) s = 0;
-        var m = Math.floor(s / 60), r = s - m * 60;
+        var n = (typeof s === 'number') ? s : parseFloat(s);
+        if (!isFinite(n) || n < 0) n = 0;
+        var m = Math.floor(n / 60), r = n - m * 60;
         return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1);
     }
 
@@ -63,6 +66,15 @@
         }
 
         // ---------- 序列列表 ----------
+        // 宿主 meListSequences 返回的是对象数组 [{name, id}]；
+        // 这里统一归一成名字字符串，兼容将来可能返回纯字符串数组的情况。
+        function seqNameOf(s) {
+            if (s == null) return '';
+            if (typeof s === 'string') return s;
+            if (typeof s === 'object') return String(s.name != null ? s.name : (s.seqName || ''));
+            return String(s);
+        }
+
         function renderSeqs() {
             if (!el.seqList) return;
             if (!state.seqs.length) {
@@ -73,6 +85,7 @@
             state.seqs.forEach(function (name) {
                 var lab = document.createElement('label');
                 lab.className = 'en-seq-item' + (state.checked.indexOf(name) >= 0 ? ' checked' : '');
+                lab.title = name;
                 var cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.value = name;
@@ -85,6 +98,7 @@
                 });
                 var sp = document.createElement('span');
                 sp.textContent = name;
+                sp.title = name;
                 lab.appendChild(cb);
                 lab.appendChild(sp);
                 el.seqList.appendChild(lab);
@@ -97,22 +111,18 @@
                     if (!silent) onLog('读取序列失败：' + (r || '无返回'), 'err');
                     return [];
                 }
-                var arr = [];
-                try { arr = JSON.parse(r.slice(3)); } catch (e) {}
-                if (!Array.isArray(arr)) arr = [];
-                state.seqs = arr;
-                // 默认选当前活动序列；没有就选第一个
-                var act = '';
-                try {
-                    if (arr.length && window.__vhActiveSeq) act = window.__vhActiveSeq;
-                } catch (e) {}
-                state.checked = [];
-                if (act && arr.indexOf(act) >= 0) state.checked = [act];
-                else if (arr.length) state.checked = [arr[0]];
+                var raw = [];
+                try { raw = JSON.parse(r.slice(3)); } catch (e) {}
+                if (!Array.isArray(raw)) raw = [];
+                // 归一成名字数组（宿主给的是 [{name,id}]）
+                var names = raw.map(seqNameOf).filter(function (x) { return !!x; });
+                state.seqs = names;
+                // 默认勾第一个（宿主按项目顺序返回，首个即当前活动序列）
+                state.checked = names.length ? [names[0]] : [];
                 renderSeqs();
-                if (!silent) onLog('已加载 ' + arr.length + ' 个序列' +
+                if (!silent) onLog('已加载 ' + names.length + ' 个序列' +
                     (state.checked.length ? ('（默认选 ' + state.checked[0] + '）') : ''), 'ok');
-                return arr;
+                return names;
             });
         }
 

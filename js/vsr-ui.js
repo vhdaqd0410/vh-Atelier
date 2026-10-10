@@ -232,13 +232,15 @@
                     return;
                 }
                 var preset = (($('lsPreset') || {}).value) || '';
+                // 注意签名是 (cb, seqName, range, preset) —— preset 必须单独传，
+                // 早前误塞进 range 对象里，导致「导出预设不存在：[object Object]」。
                 window.__vhEnhanceExportForLocal(function (err, file) {
                     if (err || !file) { hint('区间导出失败：' + ((err && err.message) || '未知'), 'err'); return; }
                     var base = path.basename(file).replace(/\.[^.]+$/, '');
                     var out = path.join(dir, base + '_erased.mp4');
                     try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
                     runOne(file, out, function () {});
-                }, c.seqName, { startSec: c.startSec, endSec: c.endSec, preset: preset });
+                }, c.seqName, { startSec: c.startSec, endSec: c.endSec }, preset);
             });
         });
     }
@@ -295,6 +297,9 @@
             }
         });
 
+        // 填充导出预设下拉（复用 enhance 面板同一份预设扫描）
+        fillPresets();
+
         // 首次进入静默自检
         setTimeout(function () {
             window.__vhVSR.check(false, function (r) {
@@ -304,11 +309,35 @@
         }, 1200);
     }
 
+    // 填充「导出预设」下拉：与云端面板用同一份 AME 预设扫描结果
+    function fillPresets() {
+        var sel = $('lsPreset');
+        if (!sel) return;
+        var hits = [];
+        try {
+            if (typeof window.__vhListPresets === 'function') hits = window.__vhListPresets() || [];
+        } catch (e) { hits = []; }
+        var prev = sel.value;
+        sel.innerHTML = '<option value="">自动（有字幕版）</option>';
+        hits.forEach(function (h) {
+            var o = document.createElement('option');
+            o.value = h.full;
+            o.textContent = h.name;
+            sel.appendChild(o);
+        });
+        // 默认选中第一个「有字幕」预设（去字幕需要把字幕烧进画面）
+        if (prev) {
+            sel.value = prev;
+        } else {
+            var prefer = hits.filter(function (h) { return /有字幕|交片|成片|with.?sub/i.test(h.name); });
+            if (prefer.length) sel.value = prefer[0].full;
+        }
+    }
+
     // 切到本 tab 时：拉一次序列（用户不用手动刷新）
     window.__localsubOnShow = function () {
-        try {
-            if (clip && clip.getCheckedSeqs().length === 0) clip.refreshSeqs(true);
-        } catch (e) {}
+        try { if (clip) clip.refreshSeqs(true); } catch (e) {}
+        try { fillPresets(); } catch (e) {}
     };
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);

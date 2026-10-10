@@ -104,7 +104,19 @@ setTimeout(() => {
         clip.clearClip();
         ok('清空后提示未读取', /未读取/.test(getEl('lsClipInfo').textContent),
            getEl('lsClipInfo').textContent);
-        console.log('\n通过 ' + pass + ' / 失败 ' + fail);
+      
+// ---- 回归：宿主返回对象数组时，序列名不能变成 [object Object] ----
+(function () {
+  // 直接单测 fmtSec（字符串秒数曾导致 0:010.0）
+  const f = require('path').join(ROOT, 'js', 'en-shared.js');
+  const src2 = require('fs').readFileSync(f, 'utf8');
+  ok('fmtSec 数字与字符串结果一致（防 0:010.0）',
+     /typeof s === 'number'/.test(src2) && /parseFloat\(s\)/.test(src2));
+  ok('序列名做对象归一（防 [object Object]）',
+     /function seqNameOf/.test(src2) && /s\.name/.test(src2));
+})();
+
+  console.log('\n通过 ' + pass + ' / 失败 ' + fail);
         process.exit(fail === 0 ? 0 : 1);
       });
     });

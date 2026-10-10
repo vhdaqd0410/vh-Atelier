@@ -4,6 +4,41 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.72.1",
+      "date": "2026-10-09",
+      "title": "修本地去字幕：序列名乱码、预设传参、时间格式、面板样式",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修序列名显示 [object Object]：宿主 meListSequences 返回的是对象数组 [{name,id}]，公共模块按字符串处理；现统一取 .name（并兼容纯字符串数组）"
+        },
+        {
+          "kind": "fix",
+          "text": "修「导出预设不存在：[object Object]」：调用导出能力时把 preset 误塞进了 range 对象，导致第 4 个参数（preset）收到对象；改为独立传参"
+        },
+        {
+          "kind": "fix",
+          "text": "修时间显示 0:010.0：宿主返回的 durationSec 可能是字符串，fmtSec 未先转数导致字符串拼接；现做数值归一"
+        },
+        {
+          "kind": "fix",
+          "text": "修本地面板排版裸奔：.en-* 样式原先全部限定在 #panel-upscale 下，新面板不匹配；已把 62 处选择器扩展为两个面板共用（注意展开成后代选择器，避免失去限定）"
+        },
+        {
+          "kind": "fix",
+          "text": "补上「导出预设」下拉的填充（原先从未被填），默认选中「有字幕」预设 —— 去字幕需先把字幕烧进画面"
+        },
+        {
+          "kind": "impr",
+          "text": "本地面板排版优化：按钮不换行，主操作与辅助按钮分两行，序列区与区间行间距统一"
+        },
+        {
+          "kind": "note",
+          "text": "test-en-shared.js 扩到 12 项，新增序列对象归一与 fmtSec 字符串输入的回归断言"
+        }
+      ]
+    },
+    {
       "version": "1.72.0",
       "date": "2026-10-09",
       "title": "重组：本地去字幕独立成面板 + 序列/区间能力抽取共用",
