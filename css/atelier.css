@@ -1665,102 +1665,121 @@ select{
         }#panel-progress .prg-ops-more .prg-open-btn{
             font-size: 10.5px; padding: 2px 7px; opacity: .92;
             background: transparent; color: var(--muted); border-color: var(--border);
-        }#panel-progress .prg-ops-more .prg-open-btn:hover{ background: var(--panel2); color: var(--text); }
-        /* 刷新/分秒帧专属配色沿用上方旧规则 */
+        }#panel-progress .prg-ops-more .prg-open-btn:hover{ background: var(--panel2); color: var(--text); }/* 刷新/分秒帧专属配色沿用上方旧规则 */
         /* ===== 超分面板：卡片操作区 + 下站点 iframe ===== */#panel-upscale,
-#panel-localsub{
+#panel-localsub,
+#panel-localup{
             display: flex; flex-direction: column;
             height: calc(100vh - 130px); overflow: hidden;
-        }
-        /* 操作卡片区：弹性占满面板上部，日志/任务区吃掉剩余空间 */#panel-upscale .en-scroll,
-#panel-localsub .en-scroll{
+        }/* 操作卡片区：弹性占满面板上部，日志/任务区吃掉剩余空间 */#panel-upscale .en-scroll,
+#panel-localsub .en-scroll,
+#panel-localup .en-scroll{
             flex: 1 1 auto; min-height: 0; overflow-y: auto;
             display: flex; flex-direction: column; gap: 6px; padding-right: 2px;
         }#panel-upscale .en-card,
-#panel-localsub .en-card{
+#panel-localsub .en-card,
+#panel-localup .en-card{
             background: var(--panel); border: 1px solid var(--border);
             border-radius: 8px; padding: 8px 10px; flex: 0 0 auto;
         }#panel-upscale .en-card-head,
-#panel-localsub .en-card-head{
+#panel-localsub .en-card-head,
+#panel-localup .en-card-head{
             display: flex; align-items: center; gap: 6px;
             font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 6px;
         }#panel-upscale .en-act-hint,
-#panel-localsub .en-act-hint{
+#panel-localsub .en-act-hint,
+#panel-localup .en-act-hint{
             margin-top: 4px; font-size: 10px; color: var(--muted);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        /* 序列多选：紧凑多列 chips */#panel-upscale .en-seqs,
-#panel-localsub .en-seqs{
+        }/* 序列多选：紧凑多列 chips */#panel-upscale .en-seqs,
+#panel-localsub .en-seqs,
+#panel-localup .en-seqs{
             display: flex; flex-wrap: wrap; gap: 4px;
             max-height: 84px; overflow-y: auto;
         }#panel-upscale .en-seq-item,
-#panel-localsub .en-seq-item{
+#panel-localsub .en-seq-item,
+#panel-localup .en-seq-item{
             display: flex; align-items: center; gap: 4px;
             padding: 2px 7px; border: 1px solid var(--border); border-radius: 10px;
             font-size: 11px; cursor: pointer; max-width: 100%;
             background: var(--panel2); color: var(--text);
             transition: background .15s, border-color .15s;
         }#panel-upscale .en-seq-item.checked,
-#panel-localsub .en-seq-item.checked{
+#panel-localsub .en-seq-item.checked,
+#panel-localup .en-seq-item.checked{
             background: #3a2e52; border-color: var(--purple-upscale); color: #e6d9ff;
         }#panel-upscale .en-seq-item input,
-#panel-localsub .en-seq-item input{ width: 13px; height: 13px; accent-color: var(--purple-upscale); }#panel-upscale .en-seq-item span,
-#panel-localsub .en-seq-item span{
+#panel-localsub .en-seq-item input,
+#panel-localup .en-seq-item input{ width: 13px; height: 13px; accent-color: var(--purple-upscale); }#panel-upscale .en-seq-item span,
+#panel-localsub .en-seq-item span,
+#panel-localup .en-seq-item span{
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;
-        }
-        /* 设置 3 列 grid */#panel-upscale .en-f span,
-#panel-localsub .en-f span{ font-size: 10px; color: var(--muted); }#panel-upscale .en-f select,
-#panel-localsub .en-f select{
+        }/* 设置 3 列 grid */#panel-upscale .en-f span,
+#panel-localsub .en-f span,
+#panel-localup .en-f span{ font-size: 10px; color: var(--muted); }#panel-upscale .en-f select,
+#panel-localsub .en-f select,
+#panel-localup .en-f select{
             width: 100%; background: var(--panel2); color: var(--text);
             border: 1px solid var(--border); border-radius: 4px;
             font-size: 11px; padding: 3px 2px; cursor: pointer;
         }#panel-upscale .en-actions,
-#panel-localsub .en-actions{ display: flex; gap: 8px; align-items: center; }
-        /* 时间轴选中片段快捷行 */#panel-upscale .en-clip-row,
-#panel-localsub .en-clip-row{
+#panel-localsub .en-actions,
+#panel-localup .en-actions{ display: flex; gap: 8px; align-items: center; }/* 时间轴选中片段快捷行 */#panel-upscale .en-clip-row,
+#panel-localsub .en-clip-row,
+#panel-localup .en-clip-row{
             display: flex; align-items: center; gap: 8px;
             margin-top: 6px; padding: 4px 6px;
             background: var(--panel2); border: 1px dashed var(--border); border-radius: 5px;
         }#panel-upscale .en-clip-info,
-#panel-localsub .en-clip-info{
+#panel-localsub .en-clip-info,
+#panel-localup .en-clip-info{
             flex: 1; min-width: 0; font-size: 11px; color: var(--muted);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }#panel-upscale .en-clip-info.has,
-#panel-localsub .en-clip-info.has{
+#panel-localsub .en-clip-info.has,
+#panel-localup .en-clip-info.has{
             color: #7fd68b; font-weight: 600;
         }#panel-upscale .en-go,
-#panel-localsub .en-go{
+#panel-localsub .en-go,
+#panel-localup .en-go{
             flex: 1; background: linear-gradient(135deg, var(--purple-upscale), #9c6ee0);
             color: var(--white); border: none; border-radius: 6px;
             padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
         }#panel-upscale .en-go:hover,
-#panel-localsub .en-go:hover{ filter: brightness(1.1); }#panel-upscale .en-go:disabled,
-#panel-localsub .en-go:disabled{ filter: grayscale(.6); cursor: not-allowed; }
-        /* 进度 */#panel-upscale .en-prog,
-#panel-localsub .en-prog{ margin-top: 8px; }#panel-upscale .en-prog-bar,
-#panel-localsub .en-prog-bar{
+#panel-localsub .en-go:hover,
+#panel-localup .en-go:hover{ filter: brightness(1.1); }#panel-upscale .en-go:disabled,
+#panel-localsub .en-go:disabled,
+#panel-localup .en-go:disabled{ filter: grayscale(.6); cursor: not-allowed; }/* 进度 */#panel-upscale .en-prog,
+#panel-localsub .en-prog,
+#panel-localup .en-prog{ margin-top: 8px; }#panel-upscale .en-prog-bar,
+#panel-localsub .en-prog-bar,
+#panel-localup .en-prog-bar{
             height: 8px; background: var(--gray-deep); border-radius: 4px; overflow: hidden;
         }#panel-upscale .en-prog-fill,
-#panel-localsub .en-prog-fill{
+#panel-localsub .en-prog-fill,
+#panel-localup .en-prog-fill{
             height: 100%; width: 0%;
             background: linear-gradient(90deg, var(--purple-upscale), #b39ddb);
             border-radius: 4px; transition: width .4s;
         }#panel-upscale .en-prog-meta,
-#panel-localsub .en-prog-meta{
+#panel-localsub .en-prog-meta,
+#panel-localup .en-prog-meta{
             display: flex; justify-content: space-between; margin-top: 3px;
             font-size: 10px; color: var(--muted);
-        }
-        /* 日志：默认折叠 */#panel-upscale .en-log .ok,
-#panel-localsub .en-log .ok{ color: var(--fg-ok-soft); }#panel-upscale .en-log .err,
-#panel-localsub .en-log .err{ color: var(--fg-err-soft); }#panel-upscale .en-log .warn,
-#panel-localsub .en-log .warn{ color: #ffd76a; }
-        /* 任务记录 */
+        }/* 日志：默认折叠 */#panel-upscale .en-log .ok,
+#panel-localsub .en-log .ok,
+#panel-localup .en-log .ok{ color: var(--fg-ok-soft); }#panel-upscale .en-log .err,
+#panel-localsub .en-log .err,
+#panel-localup .en-log .err{ color: var(--fg-err-soft); }#panel-upscale .en-log .warn,
+#panel-localsub .en-log .warn,
+#panel-localup .en-log .warn{ color: #ffd76a; }/* 任务记录 */
         /* 设置一行（预设/文件夹/分辨率）紧凑 */#panel-upscale .en-row2,
-#panel-localsub .en-row2{
+#panel-localsub .en-row2,
+#panel-localup .en-row2{
             display: flex; gap: 6px; margin-top: 6px; align-items: flex-end;
         }#panel-upscale .en-row2 .en-f,
-#panel-localsub .en-row2 .en-f{ flex: 1; min-width: 0; }
-        /* 任务 + 日志 左右并排，弹性占满 */#panel-upscale .en-split,
+#panel-localsub .en-row2 .en-f,
+#panel-localup .en-row2 .en-f{ flex: 1; min-width: 0; }/* 任务 + 日志 左右并排，弹性占满 */#panel-upscale .en-split,
 #panel-localsub .en-split{
             display: flex; gap: 6px; flex: 1 1 auto; min-height: 0;
         }#panel-upscale .en-split .en-col,
@@ -1768,18 +1787,19 @@ select{
             flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
         }#panel-upscale .en-split .en-col .en-card-head,
 #panel-localsub .en-split .en-col .en-card-head{ flex: 0 0 auto; }#panel-upscale .en-tasks,
-#panel-localsub .en-tasks{
+#panel-localsub .en-tasks,
+#panel-localup .en-tasks{
             flex: 1 1 auto; min-height: 0; overflow-y: auto;
             background: var(--panel2); border-radius: 6px; padding: 4px;
         }#panel-upscale .en-log,
-#panel-localsub .en-log{
+#panel-localsub .en-log,
+#panel-localup .en-log{
             flex: 1 1 auto; min-height: 0; overflow-y: auto;
             font: 11px/1.5 Consolas, monospace; background: #141414;
             border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
             color: var(--muted); user-select: text; -webkit-user-select: text;
             white-space: pre-wrap; word-break: break-all;
-        }
-        /* 后台任务队列状态条 */#panel-upscale .en-bgqueue,
+        }/* 后台任务队列状态条 */#panel-upscale .en-bgqueue,
 #panel-localsub .en-bgqueue{
             flex: 0 0 auto; margin-bottom: 4px;
             background: #1b1b22; border: 1px solid #33334a; border-radius: 5px;
@@ -1795,9 +1815,9 @@ select{
             width: 46px; height: 3px; border-radius: 2px;
             background: var(--border);
             transition: background .15s, width .15s;
-        }.en-splitter:hover .en-splitter-grip{ background: var(--accent); width: 70px; }
-        /* 展开态：操作区收起，内嵌站占满整个面板 */#panel-upscale.en-expanded .en-scroll,
-#panel-localsub.en-expanded .en-scroll{ display: none; }#panel-upscale.en-expanded .en-splitter,
+        }.en-splitter:hover .en-splitter-grip{ background: var(--accent); width: 70px; }/* 展开态：操作区收起，内嵌站占满整个面板 */#panel-upscale.en-expanded .en-scroll,
+#panel-localsub.en-expanded .en-scroll,
+#panel-localup.en-expanded .en-scroll{ display: none; }#panel-upscale.en-expanded .en-splitter,
 #panel-localsub.en-expanded .en-splitter{ display: none; }#panel-upscale.en-expanded #upscaleFrame,
 #panel-localsub.en-expanded #upscaleFrame{ flex: 1 1 auto !important; }
 
@@ -2154,28 +2174,33 @@ select{
             padding: 2px 8px; cursor: pointer; font-size: 10.5px;
         }:is(#panel-sep,
 #panel-clone) .sep-res-btn:hover{ color: var(--accent); border-color: var(--accent); }:is(#panel-sep,
-#panel-clone) .sep-res-del:hover{ color: var(--fg-err-soft); border-color: var(--fg-err-soft); }
-
-        /* ===== 超分面板：任务卡 / 日志卡 展开态 + 批量下载勾选 ===== */#panel-upscale .en-card-head,
-#panel-localsub .en-card-head{ display: flex; align-items: center; gap: 6px; }#panel-upscale .en-card-exp,
-#panel-localsub .en-card-exp{
+#panel-clone) .sep-res-del:hover{ color: var(--fg-err-soft); border-color: var(--fg-err-soft); }/* ===== 超分面板：任务卡 / 日志卡 展开态 + 批量下载勾选 ===== */#panel-upscale .en-card-head,
+#panel-localsub .en-card-head,
+#panel-localup .en-card-head{ display: flex; align-items: center; gap: 6px; }#panel-upscale .en-card-exp,
+#panel-localsub .en-card-exp,
+#panel-localup .en-card-exp{
             flex: 0 0 auto; height: 20px; min-width: 22px; padding: 0 4px;
             font-size: 11px; color: var(--muted);
         }#panel-upscale .en-card-exp:hover,
-#panel-localsub .en-card-exp:hover{ color: var(--accent); border-color: var(--accent); }#panel-upscale .en-pickall,
-#panel-localsub .en-pickall{
+#panel-localsub .en-card-exp:hover,
+#panel-localup .en-card-exp:hover{ color: var(--accent); border-color: var(--accent); }#panel-upscale .en-pickall,
+#panel-localsub .en-pickall,
+#panel-localup .en-pickall{
             display: inline-flex; align-items: center; gap: 4px;
             font-size: 10.5px; color: var(--muted); cursor: pointer;
             user-select: none; -webkit-user-select: none;
         }#panel-upscale .en-pickall input,
-#panel-localsub .en-pickall input{ cursor: pointer; }#panel-upscale .en-task-cb,
-#panel-localsub .en-task-cb{ flex: 0 0 auto; cursor: pointer; margin: 0; }#panel-upscale .en-task-cb-space,
-#panel-localsub .en-task-cb-space{ flex: 0 0 auto; width: 13px; }
-
-        /* 任务卡展开：占满整个面板滚动区，隐藏日志卡与内嵌站 */#panel-upscale.en-exp-task .en-scroll,
+#panel-localsub .en-pickall input,
+#panel-localup .en-pickall input{ cursor: pointer; }#panel-upscale .en-task-cb,
+#panel-localsub .en-task-cb,
+#panel-localup .en-task-cb{ flex: 0 0 auto; cursor: pointer; margin: 0; }#panel-upscale .en-task-cb-space,
+#panel-localsub .en-task-cb-space,
+#panel-localup .en-task-cb-space{ flex: 0 0 auto; width: 13px; }/* 任务卡展开：占满整个面板滚动区，隐藏日志卡与内嵌站 */#panel-upscale.en-exp-task .en-scroll,
 #panel-localsub.en-exp-task .en-scroll,
+#panel-localup.en-exp-task .en-scroll,
 #panel-upscale.en-exp-log .en-scroll,
-#panel-localsub.en-exp-log .en-scroll{ overflow: hidden; }#panel-upscale.en-exp-task .en-card:not(#enTaskCard),
+#panel-localsub.en-exp-log .en-scroll,
+#panel-localup.en-exp-log .en-scroll{ overflow: hidden; }#panel-upscale.en-exp-task .en-card:not(#enTaskCard),
 #panel-localsub.en-exp-task .en-card:not(#enTaskCard),
 #panel-upscale.en-exp-task #enLogCard,
 #panel-localsub.en-exp-task #enLogCard,
@@ -2187,9 +2212,7 @@ select{
 #panel-localsub.en-exp-task #upscaleFrame{ display: none !important; }#panel-upscale.en-exp-task .en-split,
 #panel-localsub.en-exp-task .en-split{ height: 100%; min-height: 0; }#panel-upscale.en-exp-task #enTaskCard,
 #panel-localsub.en-exp-task #enTaskCard{ flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }#panel-upscale.en-exp-task #enTaskList,
-#panel-localsub.en-exp-task #enTaskList{ flex: 1 1 auto; max-height: none; overflow-y: auto; }
-
-        /* 日志卡展开：同理 */#panel-upscale.en-exp-log .en-card:not(#enLogCard),
+#panel-localsub.en-exp-task #enTaskList{ flex: 1 1 auto; max-height: none; overflow-y: auto; }/* 日志卡展开：同理 */#panel-upscale.en-exp-log .en-card:not(#enLogCard),
 #panel-localsub.en-exp-log .en-card:not(#enLogCard),
 #panel-upscale.en-exp-log #enTaskCard,
 #panel-localsub.en-exp-log #enTaskCard,
@@ -4169,72 +4192,164 @@ button.danger{ background: var(--btn-danger-bg); color: #ffd9d9; border-color: t
     background: #fff; border: 2px solid var(--accent);
     box-shadow: 0 1px 4px rgba(0,0,0,.45);
 }
-/* 静音按钮：与其它图标同规格，静音态用强调色提示 */#btnMv2Mute{ display: inline-flex; align-items: center; }#btnMv2Mute.on{ color: #f6a1b1; background: rgba(246,161,177,.14); }
-/* ===== 本地去字幕面板：排版微调 ===== */
-/* 按钮不换行（窄面板下「处理选中区间」曾被挤成两行） */
-#panel-localsub .en-actions .en-go,
-#panel-localsub .en-actions .secondary { white-space: nowrap; }
-
-/* 操作区分两行：两个主按钮一行，辅助按钮另起一行 */
-#panel-localsub .en-actions { flex-wrap: wrap; row-gap: 6px; }
-#panel-localsub .en-actions .en-go { flex: 1 1 calc(50% - 4px); min-width: 130px; }
-/* 辅助按钮排在主按钮之后、靠左，不要被 flex:1 拉宽 */
-#panel-localsub .en-actions .secondary.mini { flex: 0 0 auto; }
-
-/* 序列区：稍高一点，长名字可换行截断更易读 */
-#panel-localsub .en-seqs { max-height: 96px; }
-#panel-localsub .en-seq-item { max-width: 100%; }
-#panel-localsub .en-seq-item span { max-width: 200px; }
-
-/* 区间信息行：保证不被压扁 */
-#panel-localsub .en-clip-info { min-height: 16px; }
-
-/* 卡片内各行间距统一 */
-#panel-localsub .en-card .en-row2 { margin-top: 6px; }
-
-/* ===== 本地去字幕：截帧框选 ===== */
-#panel-localsub .ls-pick-wrap { display:flex; flex-direction:column; gap:6px; }
-#panel-localsub .ls-pick-stage {
+/* 静音按钮：与其它图标同规格，静音态用强调色提示 */#btnMv2Mute{ display: inline-flex; align-items: center; }#btnMv2Mute.on{ color: #f6a1b1; background: rgba(246,161,177,.14); }/* ===== 本地去字幕面板：排版微调 ===== */
+/* 按钮不换行（窄面板下「处理选中区间」曾被挤成两行） */#panel-localsub .en-actions .en-go,
+#panel-localup .en-actions .en-go,
+#panel-localsub .en-actions .secondary,
+#panel-localup .en-actions .secondary{ white-space: nowrap; }/* 操作区分两行：两个主按钮一行，辅助按钮另起一行 */#panel-localsub .en-actions,
+#panel-localup .en-actions{ flex-wrap: wrap; row-gap: 6px; }#panel-localsub .en-actions .en-go,
+#panel-localup .en-actions .en-go{ flex: 1 1 calc(50% - 4px); min-width: 130px; }/* 辅助按钮排在主按钮之后、靠左，不要被 flex:1 拉宽 */#panel-localsub .en-actions .secondary.mini,
+#panel-localup .en-actions .secondary.mini{ flex: 0 0 auto; }/* 序列区：稍高一点，长名字可换行截断更易读 */#panel-localsub .en-seqs,
+#panel-localup .en-seqs{ max-height: 96px; }#panel-localsub .en-seq-item,
+#panel-localup .en-seq-item{ max-width: 100%; }#panel-localsub .en-seq-item span,
+#panel-localup .en-seq-item span{ max-width: 200px; }/* 区间信息行：保证不被压扁 */#panel-localsub .en-clip-info,
+#panel-localup .en-clip-info{ min-height: 16px; }/* 卡片内各行间距统一 */#panel-localsub .en-card .en-row2,
+#panel-localup .en-card .en-row2{ margin-top: 6px; }/* ===== 本地去字幕：截帧框选 ===== */#panel-localsub .ls-pick-wrap,
+#panel-localup .ls-pick-wrap{ display:flex; flex-direction:column; gap:6px; }#panel-localsub .ls-pick-stage,
+#panel-localup .ls-pick-stage{
     position:relative; line-height:0;
     /* 贴合图片：stage 尺寸 == 图片显示尺寸，框选比例换算才准确
        （若用 object-fit:contain 加留白，stage 与图片不等大，比例会算错） */
     width:fit-content; max-width:100%; margin:0 auto;
     background:#111; border:1px solid var(--border); border-radius:6px;
     overflow:hidden; user-select:none; touch-action:none; cursor:crosshair;
-}
-#panel-localsub .ls-pick-img {
+}#panel-localsub .ls-pick-img,
+#panel-localup .ls-pick-img{
     display:block; width:auto; height:auto;
     max-width:100%; max-height:340px;      /* 竖屏帧不必撑满整屏，一眼看全 */
     pointer-events:none;
-}
-#panel-localsub .ls-pick-box {
+}#panel-localsub .ls-pick-box,
+#panel-localup .ls-pick-box{
     position:absolute; left:0; top:0; width:0; height:0;
     border:2px solid #7fd68b; border-radius:2px;
     background:rgba(127,214,139,.16);
     box-shadow:0 0 0 9999px rgba(0,0,0,.42);
     cursor:move; display:none;
-}
-#panel-localsub .ls-pick-box.on { display:block; }
-#panel-localsub .ls-ph {
+}#panel-localsub .ls-pick-box.on,
+#panel-localup .ls-pick-box.on{ display:block; }#panel-localsub .ls-ph,
+#panel-localup .ls-ph{
     position:absolute; width:11px; height:11px; background:#7fd68b;
     border:1px solid #12331a; border-radius:2px; display:block;
-}
-#panel-localsub .ls-ph-nw { left:-6px; top:-6px; cursor:nwse-resize; }
-#panel-localsub .ls-ph-ne { right:-6px; top:-6px; cursor:nesw-resize; }
-#panel-localsub .ls-ph-sw { left:-6px; bottom:-6px; cursor:nesw-resize; }
-#panel-localsub .ls-ph-se { right:-6px; bottom:-6px; cursor:nwse-resize; }
-#panel-localsub .ls-pick-meta {
+}#panel-localsub .ls-ph-nw,
+#panel-localup .ls-ph-nw{ left:-6px; top:-6px; cursor:nwse-resize; }#panel-localsub .ls-ph-ne,
+#panel-localup .ls-ph-ne{ right:-6px; top:-6px; cursor:nesw-resize; }#panel-localsub .ls-ph-sw,
+#panel-localup .ls-ph-sw{ left:-6px; bottom:-6px; cursor:nesw-resize; }#panel-localsub .ls-ph-se,
+#panel-localup .ls-ph-se{ right:-6px; bottom:-6px; cursor:nwse-resize; }#panel-localsub .ls-pick-meta,
+#panel-localup .ls-pick-meta{
     display:flex; align-items:center; gap:6px;
     font-size:10.5px; color:var(--muted);
-}
-#panel-localsub .ls-pick-read { flex:1; min-width:0; color:#7fd68b; }
+}#panel-localsub .ls-pick-read,
+#panel-localup .ls-pick-read{ flex:1; min-width:0; color:#7fd68b; }/* ===== 本地去字幕：区域预设 + 折叠 ===== */#panel-localsub #lsAreaPresetRow,
+#panel-localup #lsAreaPresetRow{ align-items:flex-end; }#panel-localsub #lsAreaPresetRow .en-f,
+#panel-localup #lsAreaPresetRow .en-f{ flex:1; min-width:0; }#panel-localsub #lsAreaPresetRow select,
+#panel-localup #lsAreaPresetRow select{ width:100%; }#panel-localsub #lsAreaPresetSave,
+#panel-localup #lsAreaPresetSave,
+#panel-localsub #lsAreaPresetDel,
+#panel-localup #lsAreaPresetDel{ flex:0 0 auto; white-space:nowrap; }#panel-localsub #lsPickToggle,
+#panel-localup #lsPickToggle{ flex:0 0 auto; white-space:nowrap; }#panel-localsub #lsAppliedBadge,
+#panel-localup #lsAppliedBadge{ flex:1; min-width:0; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }/* ===== 本地去字幕：历史记录 ===== */#panel-localsub .ls-hist-row,
+#panel-localup .ls-hist-row{
+    display:flex; flex-direction:column; gap:3px;
+    padding:6px 6px; border-bottom:1px dashed var(--border);
+}#panel-localsub .ls-hist-row.missing,
+#panel-localup .ls-hist-row.missing{ opacity:.5; }#panel-localsub .ls-hist-main,
+#panel-localup .ls-hist-main{ display:flex; align-items:center; gap:6px; min-width:0; }#panel-localsub .ls-hist-name,
+#panel-localup .ls-hist-name{
+    flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-size:11.5px; color:var(--text);
+}#panel-localsub .ls-hist-miss,
+#panel-localup .ls-hist-miss{ flex:0 0 auto; font-size:10px; color:#ffb84d; }#panel-localsub .ls-hist-meta,
+#panel-localup .ls-hist-meta{ font-size:10px; color:var(--muted); overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }#panel-localsub .ls-hist-ops,
+#panel-localup .ls-hist-ops{ display:flex; gap:5px; flex-wrap:wrap; }#panel-localsub .ls-hist-ops .secondary.mini,
+#panel-localup .ls-hist-ops .secondary.mini{ padding:1px 7px; font-size:10.5px; }#panel-localsub .ls-hist-del,
+#panel-localup .ls-hist-del{ color:#ff9a9a; }/* 卡片最大化：历史 / 日志 占满面板 */#panel-localsub.en-exp-hist #lsHistCard,
+#panel-localup.en-exp-hist #lupHistCard{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }#panel-localsub.en-exp-hist #lsHistList,
+#panel-localup.en-exp-hist #lupHistList{ flex:1 1 auto; max-height:none; overflow-y:auto; }#panel-localsub.en-exp-hist .en-card:not(#lsHistCard),
+#panel-localup.en-exp-hist .en-card:not(#lupHistCard){ display:none !important; }#panel-localsub.en-exp-log #lsLogCard,
+#panel-localup.en-exp-log #lupLogCard{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }#panel-localsub.en-exp-log #vLocalLog,
+#panel-localup.en-exp-log #lupLog{ flex:1 1 auto; max-height:none !important; }#panel-localsub.en-exp-log .en-card:not(#lsLogCard),
+#panel-localup.en-exp-log .en-card:not(#lupLogCard){ display:none !important; }/* ===== 本地超分面板：历史/日志展开 ===== */#panel-localup.en-exp-hist #lupHistCard{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }#panel-localup.en-exp-hist #lupHistList{ flex:1 1 auto; max-height:none; overflow-y:auto; }#panel-localup.en-exp-hist .en-card:not(#lupHistCard){ display:none !important; }#panel-localup.en-exp-log #lupLogCard{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; }#panel-localup.en-exp-log #lupLog{ flex:1 1 auto; max-height:none !important; }#panel-localup.en-exp-log .en-card:not(#lupLogCard){ display:none !important; }#panel-localup .ls-hist-row{ display:flex; flex-direction:column; gap:3px; padding:6px; border-bottom:1px dashed var(--border); }#panel-localup .ls-hist-row.missing{ opacity:.5; }#panel-localup .ls-hist-main{ display:flex; align-items:center; gap:6px; min-width:0; }#panel-localup .ls-hist-name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; font-size:11.5px; color:var(--text); }#panel-localup .ls-hist-miss{ flex:0 0 auto; font-size:10px; color:#ffb84d; }#panel-localup .ls-hist-meta{ font-size:10px; color:var(--muted); overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }#panel-localup .ls-hist-ops{ display:flex; gap:5px; flex-wrap:wrap; }#panel-localup .ls-hist-ops .secondary.mini{ padding:1px 7px; font-size:10.5px; }#panel-localup .ls-hist-del{ color:#ff9a9a; }
 
-/* ===== 本地去字幕：区域预设 + 折叠 ===== */
-#panel-localsub #lsAreaPresetRow { align-items:flex-end; }
-#panel-localsub #lsAreaPresetRow .en-f { flex:1; min-width:0; }
-#panel-localsub #lsAreaPresetRow select { width:100%; }
-#panel-localsub #lsAreaPresetSave,
-#panel-localsub #lsAreaPresetDel { flex:0 0 auto; white-space:nowrap; }
-#panel-localsub #lsPickToggle { flex:0 0 auto; white-space:nowrap; }
-#panel-localsub #lsAppliedBadge { flex:1; min-width:0; overflow:hidden;
-    text-overflow:ellipsis; white-space:nowrap; }
+/* ===== 恢复：素材/网盘面板布局（上轮 CSS 重建时误删）===== */
+/* ===== 素材库面板 ===== */
+        :is(#panel-media,#panel-netdisk) .md-bar { display: flex; gap: 6px; align-items: center; }
+        :is(#panel-media,#panel-netdisk) .md-bar select, :is(#panel-media,#panel-netdisk) .md-bar input { padding: 4px 6px; }
+        :is(#panel-media,#panel-netdisk) .md-tree {
+            flex: 0 0 45%; min-width: 0; overflow-y: auto;
+            background: var(--panel2); border: 1px solid var(--border);
+            border-radius: 6px; padding: 4px;
+        }
+        :is(#panel-media,#panel-netdisk) .md-files {
+            flex: 1; min-width: 0; display: flex; flex-direction: column;
+            background: var(--panel2); border: 1px solid var(--border);
+            border-radius: 6px; padding: 4px;
+        }
+        :is(#panel-media,#panel-netdisk) .md-crumb { font-size: 11px; color: var(--accent); padding: 3px 4px; word-break: break-all; line-height: 1.5; }
+        :is(#panel-media,#panel-netdisk) .md-crumb-item { cursor: pointer; }
+        :is(#panel-media,#panel-netdisk) .md-crumb-item:hover { text-decoration: underline; }
+        :is(#panel-media,#panel-netdisk) .md-crumb-item.cur { color: var(--muted); cursor: default; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item { font-size: 12px; padding: 4px 6px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 2px; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item .caret:hover { background: #3d3d3d; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item .caret { user-select: none; -webkit-user-select: none; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item:hover { background: var(--gray-card); }
+        :is(#panel-media,#panel-netdisk) .md-tree-item.md-up { color: var(--accent); }
+        :is(#panel-media,#panel-netdisk) .md-fcap { font-size: 10px; color: var(--muted); padding: 2px 4px 6px; }
+        :is(#panel-media,#panel-netdisk) .md-file { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 12px; cursor: pointer; border-bottom: 1px dashed #2e2e2e; border-radius: 3px; }
+        :is(#panel-media,#panel-netdisk) .md-file:hover { background: #333; }
+        :is(#panel-media,#panel-netdisk) .md-file.sel { background: #23415e; box-shadow: inset 2px 0 0 var(--fg-link); }
+        :is(#panel-media,#panel-netdisk) .md-file .md-ic { flex: 0 0 auto; }
+        :is(#panel-media,#panel-netdisk) .md-file .md-fn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+        :is(#panel-media,#panel-netdisk) .md-file .md-check { flex: 0 0 14px; text-align: center; color: var(--fg-link); font-size: 11px; }
+        :is(#panel-media,#panel-netdisk) .md-file.sel .md-check::after { content: '✓'; }
+        /* 素材库 v3：左目录树（纯文件夹）+ 右文件列表 */
+        :is(#panel-media,#panel-netdisk) .md-tree { flex: 0 0 38%; min-width: 100px; max-width: 55%; overflow: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; user-select: none; -webkit-user-select: none; }
+        :is(#panel-media,#panel-netdisk) .md-files { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 4px; }
+        :is(#panel-media,#panel-netdisk) .md-fhead { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 4px 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+        :is(#panel-media,#panel-netdisk) .md-fhead .md-fcap { flex: 0 1 auto; font-size: 12px; font-weight: 600; color: var(--text); padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+        :is(#panel-media,#panel-netdisk) .md-fhead .md-finfo { flex: 0 0 auto; font-size: 10px; color: var(--muted); }
+        :is(#panel-media,#panel-netdisk) .md-flist { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+        :is(#panel-media,#panel-netdisk) .md-flist .md-file { border-bottom: 1px dashed #2e2e2e; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item.sel { background: #23415e; box-shadow: inset 2px 0 0 var(--fg-link); }
+        :is(#panel-media,#panel-netdisk) .md-tree-body { padding-top: 2px; }
+        :is(#panel-media,#panel-netdisk) .md-detail { flex: 0 0 30%; min-width: 120px; max-width: 40%; overflow-y: auto; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 6px; user-select: text !important; -webkit-user-select: text !important; cursor: text; }
+        :is(#panel-media,#panel-netdisk) .md-detail .md-file { user-select: none; -webkit-user-select: none; }
+        :is(#panel-media,#panel-netdisk) .md-detail *, :is(#panel-media,#panel-netdisk) .md-detail div, :is(#panel-media,#panel-netdisk) .md-detail span, :is(#panel-media,#panel-netdisk) .md-detail button { user-select: text !important; -webkit-user-select: text !important; }
+        :is(#panel-media,#panel-netdisk) .md-leaf { padding: 3px 6px; }
+        :is(#panel-media,#panel-netdisk) .md-leaf .md-fn { font-size: 11.5px; }
+        :is(#panel-media,#panel-netdisk) .md-tree-item.md-up, :is(#panel-media,#panel-netdisk) .md-subdir { padding: 4px 6px; }
+
+/* ===== 恢复：上轮 CSS 重建时误删的网盘/克隆面板规则 ===== */
+/* ===== 网盘面板：工具条排版 ===== */
+/* md-bar 是 flex 无换行，按钮多了会互相挤压；这里给网盘面板的 bar 允许换行 */
+#panel-netdisk .md-bar { flex-wrap: wrap; row-gap: 4px; }
+/* ===== 人声分离：结果列表（试听 / 拖拽 / 导入）===== */
+        :is(#panel-sep, #panel-clone) .sep-res-head {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+        }
+
+/* ===== 恢复：网盘面板排版段（上轮 CSS 重建时误删）===== */
+/* ---- 网盘树形版：补 md-sz / md-root / md-dirleaf ---- */
+.md-file .md-sz {
+    flex: 0 0 auto; font-size: 10px; color: var(--muted);
+    font-family: Consolas, monospace; margin-left: 8px;
+}
+.md-file.md-dirleaf .md-fn { color: #e8d9a0; }
+.md-tree-item.md-root { font-weight: 600; }
+.nd-prev-actions .tbtn { cursor: pointer; }
+
+/* ===== 网盘面板：工具条排版 ===== */
+/* md-bar 是 flex 无换行，按钮多了会互相挤压；这里给网盘面板的 bar 允许换行 */
+#panel-netdisk .md-bar { flex-wrap: wrap; row-gap: 4px; }
+#panel-netdisk .md-bar > button { flex: 0 0 auto; white-space: nowrap; }
+/* 底部工具条的提示文字：占剩余宽度但可换行收缩，不挤按钮 */
+#panel-netdisk .nd-hint {
+    flex: 1 1 120px; min-width: 0;
+    font-size: 10px; color: var(--muted); line-height: 1.35;
+}
+/* 树区/文件区在窄面板下的最小宽度保护 */
+#panel-netdisk .md-tree { min-width: 90px; }
+#panel-netdisk .md-files { min-width: 140px; }

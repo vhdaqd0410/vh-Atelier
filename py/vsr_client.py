@@ -152,6 +152,82 @@ def _norm_area(area, W, H):
     return (int(ymin), int(ymax), int(xmin), int(xmax))
 
 
+def find_ffmpeg(root=''):
+    """找 ffmpeg：环境变量 > VSR 自带 > PATH"""
+    env = (os.environ.get('VH_FFMPEG') or '').strip()
+    if env and os.path.isfile(env):
+        return env
+    if root:
+        for sub in (os.path.join(root, 'backend', 'ffmpeg', 'win_x64', 'ffmpeg.exe'),
+                    os.path.join(root, 'backend', 'ffmpeg', 'ffmpeg.exe')):
+            if os.path.isfile(sub):
+                return sub
+    import shutil as _sh
+    return _sh.which('ffmpeg') or ''
+
+
+def composite_back(ff, src, erased, out_path, coords, W, H):
+    """把 erased 的「字幕区」贴回 src 的其余部分，写出 out_path。
+
+    VSR 的 STTN 会重绘整帧，非字幕区也跟着变 → 按字幕区间出现画面跳变（抽搐）。
+    这里只取 erased 的字幕区域，其余像素 100% 取自 src，彻底消除该跳变。
+
+    coords: [(ymin, ymax, xmin, xmax), ...] 像素坐标（VSR 的 -c 参数顺序）
+    返回 (ok, err)
+    """
+    if not ff or not os.path.isfile(ff):
+        return False, '未找到 ffmpeg'
+    if not coords:
+        return False, '没有可回贴的区域（未指定字幕区）'
+    import tempfile
+
+    parts = []
+    use = []
+    # 多个区域：逐个 crop 再 overlay
+    for idx, (ymin, ymax, xmin, xmax) in enumerate(coords):
+        # 偶偶对齐，避免奇数坐标导致部分编码器报错
+        cy = max(0, int(round(ymin))); cy -= cy % 2
+        cy2 = max(cy + 2, int(round(ymax))); cy2 -= cy2 % 2
+        cx = max(0, int(round(xmin))); cx -= cx % 2
+        cx2 = max(cx + 2, int(round(xmax))); cx2 -= cx2 % 2
+        if H:
+            cy2 = min(cy2, H - (H % 2))
+        if W:
+            cx2 = min(cx2, W - (W % 2))
+        cw, ch = cx2 - cx, cy2 - cy
+        if cw <= 0 or ch <= 0:
+            continue
+        use.append((cy, cx, cw, ch))
+    if not use:
+        return False, '区域尺寸无效'
+
+    # 说明：输入流 0 = src（只提供非字幕区底），输入流 1 = erased（提供字幕区）
+    src_ref = '[0:v]'
+    for i, (cy, cx, cw, ch) in enumerate(use):
+        parts.append('[1:v]crop=%d:%d:%d:%d[c%d]' % (cw, ch, cx, cy, i))
+    cur = src_ref
+    for i, (cy, cx, cw, ch) in enumerate(use):
+        lab = '[o%d]' % i if i < len(use) - 1 else '[outv]'
+        parts.append('%s[c%d]overlay=%d:%d:format=auto%s' % (cur, i, cx, cy, lab))
+        cur = lab
+
+    cmd = [ff, '-y', '-hide_banner', '-loglevel', 'error',
+           '-i', src, '-i', erased,
+           '-filter_complex', ';'.join(parts),
+           '-map', '[outv]', '-map', '0:a?',
+           '-c:v', 'libx264', '-crf', '16', '-preset', 'medium',
+           '-pix_fmt', 'yuv420p', '-c:a', 'copy',
+           '-movflags', '+faststart', out_path]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           encoding='utf-8', errors='replace', timeout=7200)
+        if r.returncode != 0 or not os.path.isfile(out_path):
+            return False, (r.stderr or '')[-300:]
+    except Exception as e:
+        return False, str(e)[:200]
+    return True, ''
+
+
 def cmd_run(args):
     root = find_vsr_root()
     vp = venv_python(root) if root else ''
@@ -209,12 +285,48 @@ def cmd_run(args):
     rc = proc.wait()
 
     ok = (rc == 0) and os.path.isfile(out_path)
-    emit({'ok': ok, 'stage': 'done',
-          'output': out_path if ok else '',
+    if not ok:
+        emit({'ok': False, 'stage': 'done', 'output': '',
+              'returncode': rc, 'elapsed': round(time.time() - t0, 1),
+              'size': 0, 'tail': tail[-8:]})
+        return 4
+
+    # ---- 区域回贴：非字幕区强制取自源片，消除整帧重绘造成的画面跳变（抽搐）----
+    ff = find_ffmpeg(root)
+    if coords and ff:
+        emit({'ok': True, 'stage': 'log',
+              'line': '回贴中（非字幕区取自原片，消除画面跳变）…'})
+        tmp_out = out_path + '.vhpaste.mp4'
+        try:
+            ok2, err2 = composite_back(ff, args.input, out_path, tmp_out, coords, W, H)
+        except Exception as e:
+            ok2, err2 = False, str(e)[:200]
+        if ok2 and os.path.isfile(tmp_out) and os.path.getsize(tmp_out) > 0:
+            try:
+                os.replace(tmp_out, out_path)
+                emit({'ok': True, 'stage': 'log', 'line': '已回贴（非字幕区与原片一致）'})
+            except Exception as e:
+                emit({'ok': True, 'stage': 'log', 'line': '回贴文件替换失败：%s' % str(e)[:120]})
+                try: os.remove(tmp_out)
+                except Exception: pass
+        else:
+            emit({'ok': True, 'stage': 'log',
+                  'line': '回贴未执行（%s），保留原去字幕结果' % (err2 or '未知')})
+            try:
+                if os.path.isfile(tmp_out): os.remove(tmp_out)
+            except Exception: pass
+    elif not ff:
+        emit({'ok': True, 'stage': 'log', 'line': '未找到 ffmpeg，跳过区域回贴'})
+    elif not coords:
+        emit({'ok': True, 'stage': 'log', 'line': '未指定字幕区域，跳过区域回贴'})
+
+    emit({'ok': True, 'stage': 'done',
+          'output': out_path,
           'returncode': rc, 'elapsed': round(time.time() - t0, 1),
-          'size': (os.path.getsize(out_path) if ok else 0),
-          'tail': [] if ok else tail[-8:]})
-    return 0 if ok else 4
+          'size': os.path.getsize(out_path),
+          'composited': bool(coords and ff),
+          'tail': []})
+    return 0
 
 
 def main():

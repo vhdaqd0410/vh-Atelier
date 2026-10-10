@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.74.0",
-  "buildTime": "2026-10-10 11:51:59",
+  "version": "1.75.0",
+  "buildTime": "2026-10-10 13:37:41",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修超分面板整体消失 + AME 真入队(等就绪/预检/本地渲染告警) + 字幕区预设与折叠"
+  "notes": "修去字幕抽搐(区域回贴) + 新增本地超分(Real-ESRGAN) + 本地历史记录"
 }

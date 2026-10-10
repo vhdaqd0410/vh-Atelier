@@ -52,6 +52,7 @@ JOBS = [
     ("test-en-shared.js", "node", True, "公共模块：序列选择 + 时间轴区间读取（两面板共用）", None),
     ("test-localsub.js", "node", True, "本地去字幕：处理完导入素材箱 + 截帧框选区域", None),
     ("test-ame-channel.js", "node", True, "AME 队列通道：选了 AME 必须真入队（防误走 PR 直渲）", None),
+    ("test-localup.js", "node", True, "本地超分：引擎/面板/历史/样式作用域", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）

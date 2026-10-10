@@ -22,8 +22,7 @@ ok('有 importResult 统一收尾', /function importResult\s*\(/.test(ui));
 ok('素材箱名为「去字幕」', /'去字幕'/.test(ui));
 ok('处理勾选序列完成后调用 importResult', /importResult\(produced, '去字幕', next\)/.test(ui));
 ok('处理选中区间完成后调用 importResult', /importResult\(produced, '去字幕', null\)/.test(ui));
-ok('选文件处理完成后调用 importResult',
-   /runOne\(v, path\.join\(dir, base \+ '_erased\.mp4'\)[\s\S]{0,200}importResult\(produced/.test(ui));
+ok('选文件处理完成后调用 importResult', /runOne\(v, out,[\s\S]{0,200}importResult\(produced/.test(ui) && /uniqueOutPath\(dir, base/.test(ui));
 ok('runOne 成功时回传产出路径', /onDone\(null, ev\.output\)/.test(ui));
 ok('宿主确有 meImportFilesToBinStr', /function meImportFilesToBinStr/.test(host));
 
@@ -74,6 +73,21 @@ ok('折叠状态被记忆', /vh_vsr_pick_open/.test(ui));
 ok('展开后重摆默认框（stage 尺寸问题）', /展开后 stage 才有尺寸/.test(ui));
 ok('徽标随框选更新', /updateAppliedBadge\(\)/.test(ui));
 ok('预设行绑定 change 即应用', /applyAreaPreset\(ps\.value\)/.test(ui));
+
+
+// ---------- D) 区域回贴（消除整帧重绘造成的画面跳变/抽搐）----------
+const vc = (function(){ try { return fs.readFileSync(path.join(ROOT,'py','vsr_client.py'),'utf8'); } catch(e){ return ''; } })();
+ok('有 composite_back 实现', /def composite_back\s*\(/.test(vc));
+ok('有 find_ffmpeg', /def find_ffmpeg\s*\(/.test(vc));
+ok('回贴用 crop+overlay', /crop=.*overlay=|overlay=%d:%d/.test(vc));
+ok('回贴后音频从源片 copy', /'-c:a',\s*'copy'/.test(vc));
+ok('cmd_run 成功后调用回贴', /composite_back\(ff,\s*args\.input/.test(vc));
+ok('回贴结果替换原输出', /os\.replace\(tmp_out,\s*out_path\)/.test(vc));
+ok('回贴失败保留原结果（不阻断）', /回贴未执行/.test(vc));
+ok('回贴进度有日志提示', /回贴中/.test(vc) && /已回贴/.test(vc));
+ok('done 事件带 composited 标志', /'composited':\s*bool\(coords and ff\)/.test(vc));
+ok('无 ffmpeg 时跳过回贴并说明', /未找到 ffmpeg，跳过区域回贴/.test(vc));
+ok('无区域时跳过回贴', /未指定字幕区域，跳过区域回贴/.test(vc));
 
 // ---------- 宿主截帧 ----------
 ok('宿主有 lsGrabFrameStr', /function lsGrabFrameStr/.test(host));

@@ -139,6 +139,212 @@
 
 
 
+
+    // ==================== 历史记录 ====================
+    // 存 collect/：与区域预设同策略，升级不丢、拷到别的电脑也能带走。
+    // 记录的是「本地产出」——视频就在磁盘上，所以除了导入素材箱，
+    // 还能直接拖进时间轴 / 在资源管理器里定位。
+    var HIST_FILE = '';
+    var HIST_MAX = 300;      // 最多保留条数，防无限增长
+    function histFile() {
+        if (HIST_FILE) return HIST_FILE;
+        var ext = '';
+        try { ext = csInterface.getSystemPath('extension'); } catch (e) {}
+        HIST_FILE = ext ? path.join(ext, 'collect', 'vsr_history.json') : '';
+        return HIST_FILE;
+    }
+    function loadHistory() {
+        var f = histFile();
+        if (!f) return [];
+        try {
+            if (!fs.existsSync(f)) return [];
+            var arr = JSON.parse(fs.readFileSync(f, 'utf8'));
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+    function saveHistory(arr) {
+        var f = histFile();
+        if (!f) return false;
+        try {
+            var d = path.dirname(f);
+            if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+            fs.writeFileSync(f, JSON.stringify((arr || []).slice(0, HIST_MAX), null, 2), 'utf8');
+            return true;
+        } catch (e) { return false; }
+    }
+    // 处理完成后追加一条
+    function addHistory(rec) {
+        try {
+            var arr = loadHistory();
+            arr.unshift(rec);
+            if (arr.length > HIST_MAX) arr = arr.slice(0, HIST_MAX);
+            if (saveHistory(arr)) { renderHistory(); }
+        } catch (e) {}
+    }
+    function delHistory(id) {
+        var arr = loadHistory().filter(function (r) { return String(r.id) !== String(id); });
+        if (saveHistory(arr)) renderHistory();
+    }
+    function clearHistory() {
+        if (!window.confirm('清空历史记录？（只清列表，不删除磁盘上的视频文件）')) return;
+        if (saveHistory([])) { renderHistory(); hint('历史记录已清空', 'ok'); }
+    }
+
+    function fmtSize2(n) {
+        n = Number(n) || 0;
+        if (n <= 0) return '';
+        if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+        if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+        return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+    }
+    function fmtDur2(s) {
+        s = Math.round(Number(s) || 0);
+        var m = Math.floor(s / 60);
+        return m > 0 ? (m + '分' + (s % 60) + '秒') : (s + '秒');
+    }
+
+    // 在资源管理器里打开一个目录（Win）
+    function openDir(d) {
+        try {
+            var cp = require('child_process');
+            cp.exec('explorer "' + String(d).replace(/\//g, '\\') + '"', { windowsHide: true });
+        } catch (e) { hint('打开目录失败：' + e.message, 'err'); }
+    }
+
+    // 在资源管理器里定位文件（Win）
+    function revealFile(p) {
+        try {
+            var cp = require('child_process');
+            if (fs.existsSync(p)) cp.exec('explorer /select,"' + String(p).replace(/\//g, '\\') + '"', { windowsHide: true });
+            else cp.exec('explorer "' + String(path.dirname(p)).replace(/\//g, '\\') + '"', { windowsHide: true });
+        } catch (e) { hint('打开位置失败：' + e.message, 'err'); }
+    }
+
+    function renderHistory() {
+        var box = $('lsHistList');
+        if (!box) return;
+        var arr = loadHistory();
+        var cnt = $('lsHistCount');
+        var hintEl = $('lsHistHint');
+        if (cnt) cnt.textContent = arr.length ? ('共 ' + arr.length + ' 条') : '';
+        if (hintEl) {
+            hintEl.textContent = arr.length
+                ? '可直接把文件名拖到时间轴；也可点「导入」放进素材箱'
+                : '';
+        }
+        if (!arr.length) {
+            box.innerHTML = '<div class="hint" style="padding:6px;">还没有处理记录</div>';
+            return;
+        }
+        box.innerHTML = '';
+        arr.forEach(function (r) {
+            var row = document.createElement('div');
+            row.className = 'ls-hist-row';
+            var exists = false;
+            try { exists = fs.existsSync(r.out); } catch (e) {}
+            if (!exists) row.classList.add('missing');
+
+            // 主行：文件名（可拖）+ 状态
+            var main = document.createElement('div');
+            main.className = 'ls-hist-main';
+            var nm = document.createElement('span');
+            nm.className = 'ls-hist-name';
+            nm.textContent = path.basename(r.out || '(未知)');
+            nm.title = r.out || '';
+            // 拖拽到时间轴：PR 认 com.adobe.cep.dnd.file.N
+            if (exists) {
+                nm.setAttribute('draggable', 'true');
+                nm.addEventListener('dragstart', function (ev) {
+                    try {
+                        ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', r.out);
+                        ev.dataTransfer.setData('text/plain', r.out);
+                        ev.dataTransfer.effectAllowed = 'copy';
+                    } catch (e) {}
+                });
+                nm.style.cursor = 'grab';
+            }
+            main.appendChild(nm);
+            if (!exists) {
+                var miss = document.createElement('span');
+                miss.className = 'ls-hist-miss';
+                miss.textContent = '文件已不在';
+                main.appendChild(miss);
+            }
+            row.appendChild(main);
+
+            // 次行：时间 / 算法 / 区域 / 耗时 / 大小
+            var meta = document.createElement('div');
+            meta.className = 'ls-hist-meta';
+            var bits = [];
+            if (r.at) bits.push(String(r.at).replace('T', ' ').slice(0, 16));
+            if (r.mode) bits.push(r.mode);
+            if (r.area) bits.push('区域 y' + r.area.y0 + '-' + r.area.y1);
+            if (r.elapsed) bits.push(fmtDur2(r.elapsed));
+            if (r.size) bits.push(fmtSize2(r.size));
+            meta.textContent = bits.join(' · ');
+            row.appendChild(meta);
+
+            // 操作行
+            var ops = document.createElement('div');
+            ops.className = 'ls-hist-ops';
+            function mkBtn(label, title, fn, cls) {
+                var b = document.createElement('button');
+                b.className = 'secondary mini' + (cls ? ' ' + cls : '');
+                b.textContent = label;
+                b.title = title || '';
+                b.addEventListener('click', fn);
+                return b;
+            }
+            ops.appendChild(mkBtn('⬆ 导入', '导入 PR「去字幕」素材箱', function () {
+                if (!exists) { hint('文件已不在：' + r.out, 'err'); return; }
+                log('📥 正在导入素材箱「去字幕」…');
+                importToBin([r.out], '去字幕').then(function (res) {
+                    if (res && res.ok && (res.imported || []).length)
+                        hint('✅ 已导入素材箱：' + (res.imported || []).join('、'), 'ok');
+                    else hint('⚠ 导入失败：' + ((res && (res.error || JSON.stringify(res))) || '未知'), 'warn');
+                });
+            }));
+            ops.appendChild(mkBtn('📂 位置', '在资源管理器里定位', function () {
+                revealFile(r.out);
+            }));
+            ops.appendChild(mkBtn('▶ 打开', '用系统默认播放器打开', function () {
+                if (!exists) { hint('文件已不在', 'err'); return; }
+                try { require('child_process').exec('start "" "' + String(r.out).replace(/\//g, '\\') + '"'); } catch (e) {}
+            }));
+            ops.appendChild(mkBtn('✕', '从列表删除（不删文件）', function () {
+                delHistory(r.id);
+            }, 'ls-hist-del'));
+            row.appendChild(ops);
+
+            box.appendChild(row);
+        });
+    }
+
+    // 卡片最大化：历史 / 日志 各占满面板（复用超分面板那套 class）
+    var LOCAL_EXP_KEY = 'vh_vsr_card_exp';   // '' | 'hist' | 'log'
+    function setLocalCardExpanded(which, save) {
+        var panel = $('panel-localsub');
+        if (!panel) return;
+        panel.classList.remove('en-exp-hist');
+        panel.classList.remove('en-exp-log');
+        var hx = $('lsHistExpand'), lx = $('lsLogExpand');
+        [hx, lx].forEach(function (b) { if (b) { b.textContent = '⤢'; b.title = '展开：占满面板（再点还原）'; } });
+        if (!which) {
+            if (save) { try { localStorage.setItem(LOCAL_EXP_KEY, ''); } catch (e) {} }
+            return;
+        }
+        panel.classList.add('en-exp-' + which);
+        var btn = (which === 'hist') ? hx : lx;
+        if (btn) { btn.textContent = '⤡'; btn.title = '还原：恢复布局'; }
+        if (save) { try { localStorage.setItem(LOCAL_EXP_KEY, which); } catch (e) {} }
+    }
+    function toggleLocalCard(which) {
+        var panel = $('panel-localsub');
+        if (!panel) return;
+        var on = panel.classList.contains('en-exp-' + which);
+        setLocalCardExpanded(on ? '' : which, true);
+    }
+
     // ==================== 字幕区域预设 ====================
     // 存到 collect/：该目录被 sync-to-pr 与在线更新器双重排除，
     // 升级不会覆盖；拷到别的电脑也能一起带走（字幕位置一般全剧通用）。
@@ -502,6 +708,29 @@
         });
     }
 
+
+    // 生成不覆盖的输出路径：目标已存在时依次尝试 _2 / _3 …（绝不覆盖上一次结果）
+    function uniqueOutPath(dir, baseName, ext) {
+        ext = ext || '.mp4';
+        var cand = path.join(dir, baseName + ext);
+        if (!fs.existsSync(cand)) return cand;
+        for (var n = 2; n <= 999; n++) {
+            cand = path.join(dir, baseName + '_' + n + ext);
+            if (!fs.existsSync(cand)) return cand;
+        }
+        // 极端情况（999 个同名）：退到时间戳，保证唯一
+        var ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+        return path.join(dir, baseName + '_' + ts + ext);
+    }
+
+    // 由中间导出文件推导「干净、可读」的输出基名
+    // 中间名形如 <序列名>_nosub_full.mp4 / <序列名>_nosub_clip.mp4，
+    // 这里剥掉中间标记，只留 <序列名>，避免交付名里带一堆内部字样。
+    function outBaseFrom(file) {
+        var b = path.basename(String(file)).replace(/\.[^.]+$/, '');
+        return b.replace(/_nosub(_full|_clip)?$/i, '').replace(/_(full|clip)$/i, '') || b;
+    }
+
     // ---------- 导入 PR「去字幕」素材箱（对齐超分面板）----------
     // 宿主通道：meImportFilesToBinStr，入参经全局 meImportPayload 传入
     // （JS window 变量传不进 ExtendScript，必须先在 ExtendScript 里赋值）
@@ -577,6 +806,20 @@
                     hint('✅ 完成：' + ev.output + '（' + Math.round((ev.size || 0) / 1024 / 1024) +
                          ' MB，用时 ' + ev.elapsed + 's）', 'ok');
                     log('✅ 完成，用时 ' + ev.elapsed + 's');
+                    // 记入历史（视频已在磁盘上，可拖进时间轴/导入素材箱/定位）
+                    try {
+                        var ca = (opts.area && opts.area[0]) || null;
+                        addHistory({
+                            id: 'h' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                            input: input,
+                            out: ev.output,
+                            at: new Date().toISOString(),
+                            mode: opts.mode,
+                            area: ca ? { y0: ca[0], y1: ca[1], x0: ca[2], x1: ca[3] } : null,
+                            elapsed: ev.elapsed || 0,
+                            size: ev.size || 0
+                        });
+                    } catch (e) {}
                     if (onDone) onDone(null, ev.output);
                 } else {
                     setProg(null, '');
@@ -658,9 +901,12 @@
                         next();
                         return;
                     }
-                    var base = path.basename(file).replace(/\.[^.]+$/, '');
-                    var out = path.join(dir, base + '_erased.mp4');
+                    var base = outBaseFrom(file);
                     try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+                    var out = uniqueOutPath(dir, base + '_erased', '.mp4');
+                    if (path.basename(out) !== base + '_erased.mp4') {
+                        log('  ℹ 同名已存在，本次输出为：' + path.basename(out));
+                    }
                     runOne(file, out, function (e2, produced) {
                         // 处理完成 → 导入 PR「去字幕」素材箱，再继续下一个
                         if (e2) { next(); return; }
@@ -702,9 +948,12 @@
                 // 早前误塞进 range 对象里，导致「导出预设不存在：[object Object]」。
                 window.__vhEnhanceExportForLocal(function (err, file) {
                     if (err || !file) { hint('区间导出失败：' + ((err && err.message) || '未知'), 'err'); return; }
-                    var base = path.basename(file).replace(/\.[^.]+$/, '');
-                    var out = path.join(dir, base + '_erased.mp4');
+                    var base = outBaseFrom(file);
                     try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+                    var out = uniqueOutPath(dir, base + '_erased', '.mp4');
+                    if (path.basename(out) !== base + '_erased.mp4') {
+                        log('  ℹ 同名已存在，本次输出为：' + path.basename(out));
+                    }
                     runOne(file, out, function (e2, produced) {
                         if (e2) return;
                         importResult(produced, '去字幕', null);
@@ -724,7 +973,9 @@
             var v = window.prompt('请输入要处理的视频完整路径：', dir + '\\');
             if (!v) { hint('已取消', ''); return; }
             var base = path.basename(v).replace(/\.[^.]+$/, '');
-            runOne(v, path.join(dir, base + '_erased.mp4'), function (e2, produced) {
+            try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+            var out = uniqueOutPath(dir, base + '_erased', '.mp4');
+            runOne(v, out, function (e2, produced) {
                 if (e2) return;
                 importResult(produced, '去字幕', null);
             });
@@ -754,6 +1005,24 @@
         refreshAreaUI();
 
         var ck = $('lsCheck'); if (ck) ck.addEventListener('click', doCheck);
+
+        // 历史记录
+        renderHistory();
+        var hcl = $('lsHistClear'); if (hcl) hcl.addEventListener('click', clearHistory);
+        var hloc = $('lsHistLoc'); if (hloc) hloc.addEventListener('click', function () {
+            openDir(defaultOutDir());
+        });
+        var hex = $('lsHistExpand'); if (hex) hex.addEventListener('click', function () { toggleLocalCard('hist'); });
+        var lex = $('lsLogExpand'); if (lex) lex.addEventListener('click', function () { toggleLocalCard('log'); });
+        var lcl = $('lsLogClear'); if (lcl) lcl.addEventListener('click', function () {
+            var el = $('vLocalLog'); if (el) el.innerHTML = '';
+        });
+        // 恢复上次的展开状态
+        (function () {
+            var s = '';
+            try { s = localStorage.getItem(LOCAL_EXP_KEY) || ''; } catch (e) {}
+            if (s === 'hist' || s === 'log') setLocalCardExpanded(s, false);
+        })();
 
         // 区域预设
         renderAreaPresets();
