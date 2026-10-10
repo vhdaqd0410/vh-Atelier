@@ -3,7 +3,7 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.75.2",
+  "version": "1.75.3",
   "buildTime": "2026-10-10 14:26:07",
   "skipDirs": [
     "collect",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "测试：补公共模块接线完整性断言（防引用未定义 loc）"
+  "notes": "docs: 重写 README + 新增使用说明"
 }

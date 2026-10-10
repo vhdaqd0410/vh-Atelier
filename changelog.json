@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.75.3",
+      "date": "2026-10-10",
+      "title": "docs: 重写 README + 新增使用说明",
+      "items": [
+        {
+          "kind": "note",
+          "text": "README 全面重写（从 v1.5.0 更新到现状）：11 组工作台总览、核心能力、AI 引擎清单、共享模块、已知边界"
+        },
+        {
+          "kind": "note",
+          "text": "新增《使用说明.md》：安装、各面板操作步骤、常见问题（面向组员）"
+        },
+        {
+          "kind": "note",
+          "text": "文档内容逐项核对过按钮 ID，确保描述与实际功能一致"
+        }
+      ]
+    },
+    {
       "version": "1.75.2",
       "date": "2026-10-10",
       "title": "测试：补公共模块接线完整性断言（防引用未定义 loc）",
