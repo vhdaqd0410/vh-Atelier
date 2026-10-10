@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <ExtensionManifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     ExtensionBundleId="com.vh.atelier"
-    ExtensionBundleVersion="1.75.1"
+    ExtensionBundleVersion="1.75.2"
     Version="6.0">
 
     <ExtensionList>

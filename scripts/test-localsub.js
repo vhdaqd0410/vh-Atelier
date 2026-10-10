@@ -90,6 +90,23 @@ ok('done 事件带 composited 标志', /'composited':\s*bool\(coords and ff\)/.t
 ok('无 ffmpeg 时跳过回贴并说明', /未找到 ffmpeg，跳过区域回贴/.test(vc));
 ok('无区域时跳过回贴', /未指定字幕区域，跳过区域回贴/.test(vc));
 
+
+// ---------- E) 公共模块接线完整性（防「引用了未定义的 loc」这类漏改）----------
+(function () {
+  const src = read('js/en-local.js');
+  ok('en-local.js 存在且导出 mount', /window\.__vhLocal\s*=\s*\{\s*mount/.test(src));
+  ok('en-local.js 收拢了历史能力', /function loadHistory/.test(src) && /function renderHistory/.test(src));
+  ok('en-local.js 收拢了导入能力', /meImportFilesToBinStr/.test(src));
+  ok('en-local.js 收拢了唯一输出路径', /function uniqueOutPath/.test(src));
+  ok('en-local.js 支持 logId 配置', /function logEl/.test(src));
+  // 面板侧：有引用就必须有定义
+  const def = /var loc = \(window\.__vhLocal/.test(ui);
+  const nUse = (ui.match(/loc \? loc\./g) || []).length;
+  ok('面板引用了 loc 就必须定义 loc（定义=' + def + ' 引用=' + nUse + '）',
+     (nUse === 0 && !def) || (nUse > 0 && def));
+  ok('面板已接入公共模块（引用数 > 0）', nUse > 0, nUse);
+})();
+
 // ---------- 宿主截帧 ----------
 ok('宿主有 lsGrabFrameStr', /function lsGrabFrameStr/.test(host));
 ok('截帧用官方 QE 通道', /app\.enableQE\(\)/.test(host) && /exportFramePNG\(/.test(host));

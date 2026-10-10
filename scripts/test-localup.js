@@ -62,5 +62,22 @@ ok('无连续逗号', !/,\s*,/.test(clean));
 try { new vm.Script(ui); ok('upscale-local.js 可解析', true); }
 catch (e) { ok('upscale-local.js 可解析', false, e.message); }
 
+
+// ---------- E) 公共模块接线完整性（防「引用了未定义的 loc」这类漏改）----------
+(function () {
+  const src = read('js/en-local.js');
+  ok('en-local.js 存在且导出 mount', /window\.__vhLocal\s*=\s*\{\s*mount/.test(src));
+  ok('en-local.js 收拢了历史能力', /function loadHistory/.test(src) && /function renderHistory/.test(src));
+  ok('en-local.js 收拢了导入能力', /meImportFilesToBinStr/.test(src));
+  ok('en-local.js 收拢了唯一输出路径', /function uniqueOutPath/.test(src));
+  ok('en-local.js 支持 logId 配置', /function logEl/.test(src));
+  // 面板侧：有引用就必须有定义
+  const def = /var loc = \(window\.__vhLocal/.test(ui);
+  const nUse = (ui.match(/loc \? loc\./g) || []).length;
+  ok('面板引用了 loc 就必须定义 loc（定义=' + def + ' 引用=' + nUse + '）',
+     (nUse === 0 && !def) || (nUse > 0 && def));
+  ok('面板已接入公共模块（引用数 > 0）', nUse > 0, nUse);
+})();
+
 console.log('\n通过 ' + pass + ' / 失败 ' + fail);
 process.exit(fail === 0 ? 0 : 1);
