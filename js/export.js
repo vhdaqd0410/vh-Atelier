@@ -81,6 +81,8 @@
   var uidSeq = 0;
   var manifest = [];    // 交付清单（运行期收集，导出完生成 CSV）  
   var lastOutputDir = '';  // 最近一次成功导出的输出目录（供「打开输出目录」按钮用）
+  var preflightResult = null;   // 最近一次 AME 预检结果
+  var _amePreflightDone = false; // 本轮预检是否已跑过（每个序列复用）
   var ameJobs = [];        // 本轮 AME 队列已入队任务 [{jobId, file, version, out}]
   var amePendings = [];    // 待渲染完成后收尾的版本（清单/字幕）
   // ── 交付模板状态 ──
@@ -1047,6 +1049,7 @@
         if (!d) return;
         var w = ameWaiters[String(d.jobId)];
         if (!w) return;
+        ameCallbackSeen = true;    // 收到任一 AME 回调 → 说明任务确实被 ME 接走了
         if (d.kind === 'complete') { w.done = true; w.resolve({ via: 'callback', out: d.payload }); }
         else if (d.kind === 'error') { w.done = true; w.resolve({ via: 'callback', err: d.payload || 'AME 渲染出错' }); }
         else if (d.kind === 'canceled') { w.done = true; w.resolve({ via: 'callback', err: '__CANCELED__' }); }
@@ -1082,7 +1085,10 @@
                 try { if (fs.existsSync(filePath)) sz2 = fs.statSync(filePath).size; } catch (_) {}
                 if (sz2 === sz && sz2 > 0) {
                   clearInterval(poll); delete ameWaiters[key];
-                  resolve({ via: 'file' });
+                  // 若直到文件落地都没收到过任何 AME 回调，说明这个任务很可能
+                  // 是 PR 本地渲染完成的（版本不配套 / ME 未就绪），不是 ME 渲的。
+                  if (!ameCallbackSeen) resolve({ via: 'file', suspectLocal: true });
+                  else resolve({ via: 'file' });
                 }
               }, 2000);
               return;
@@ -1113,8 +1119,32 @@
       var act = await evalHost('meActivateSequence(' + JSON.stringify(seqName) + ')');
       if (act.indexOf('OK:') !== 0) return { ok: false, err: '激活序列失败：' + act };
 
-      // AME 通道：先确认 app.encoder 可用，并提前拉起 ME（首次启动慢）
+      // AME 通道：预检 → 拉起 ME → 等就绪 → 再入队
       if (isAme) {
+        // 预检（每个序列只查一次）：PR 与 ME 版本必须配套，否则任务会被 PR 本地渲染
+        if (!_amePreflightDone) {
+          _amePreflightDone = true;
+          var pf = await evalHost('mePreflight()');
+          try {
+            var pj = JSON.parse(pf);
+            preflightResult = pj;
+            setLog('── AME 预检 ──');
+            setLog('  PR ' + (pj.pr && pj.pr.version ? pj.pr.version : '?') +
+                   ' ｜ 本机 ME 年份 [' + ((pj.me && pj.me.years) || []).join('/') + ']');
+            (pj.warnings || []).forEach(function (w) { setLog('  ⚠ ' + w, 'warn'); });
+            if (pj.reason === 'VERSION_MISMATCH') {
+              setLog('  ✗ PR 与 ME 版本不配套：队列任务会由 PR 本地渲染（占用 PR，且 ME 队列里看不到）', 'error');
+              setLog('  → 建议装与 PR 同版本的 Media Encoder；或把渲染通道切到「PR 直渲」以免误解', 'error');
+            } else if (!pj.ok) {
+              setLog('  ⚠ 预检未通过（' + (pj.reason || '未知') + '），AME 队列可能不可用', 'warn');
+            } else {
+              setLog('  ✓ 预检通过：PR 与 ME 配套', 'ok');
+            }
+          } catch (e) {
+            setLog('  ⚠ 预检结果解析失败：' + (e && e.message), 'warn');
+          }
+        }
+
         var chk = await evalHost('meEncoderAvailable()');
         if (chk.indexOf('OK:') === 0) {
           var cj = {};
@@ -1128,6 +1158,16 @@
         rep(1, '拉起 Media Encoder…');
         setLog('  ⏳ 正在拉起 Media Encoder（首次较慢）…');
         await evalHost('meLaunchEncoder()');
+        // 关键：必须等 ME 真的起来再入队，否则任务会落到 PR 本地渲染
+        var ready = await waitAmeProcessReady(90000);
+        if (ready.already) {
+          setLog('  ✓ Media Encoder 已在运行');
+        } else if (ready.ok) {
+          setLog('  ✓ Media Encoder 已就绪（等待 ' + Math.round(ready.waitedMs / 1000) + 's）', 'ok');
+        } else {
+          setLog('  ⚠ 等待 Media Encoder 启动超时（' + Math.round(ready.waitedMs / 1000) +
+                 's）：任务可能由 PR 本地渲染，请留意 ME 队列里是否有任务', 'warn');
+        }
       }
 
       // 获取序列时长/尺寸，供交付清单记录
@@ -1168,6 +1208,7 @@
           var rq = await evalHost('meEnqueueAME(' + JSON.stringify(f) + ', ' + JSON.stringify(v.preset) + ', 0)');
           if (rq.indexOf('OK:') !== 0) { await unmute(); return { ok: false, err: '「' + v.name + '」入队失败：' + rq }; }
           var jobId = rq.slice(3);
+          ameEnqueuedAt = Date.now();
           setLog('  ✓ 已入队（job ' + jobId + '）');
           ameJobs.push({ jobId: jobId, file: f, version: v.name, out: o });
           // 入队后立即恢复轨道，避免影响下一个版本/后续手动操作
@@ -1222,6 +1263,42 @@
     }
   }
 
+
+  // ── 等 Media Encoder 真正起来（拉起是异步的，冷启动要十几到几十秒）──
+  // 为什么需要：meLaunchEncoder() 返回成功只表示"已请求拉起"，不代表 ME 已就绪。
+  // 原来拉起后立刻 encodeSequence，冷启动机器上 ME 还没起来，任务就会由 PR
+  // 自己的编码器接手 —— 表象是「ME 被拉起来了，但任务没进队列，PR 自己渲了」。
+  function ameProcessRunning() {
+    try {
+      var cp = require('child_process');
+      var r = cp.spawnSync('tasklist', ['/FI', 'IMAGENAME eq Adobe Media Encoder.exe', '/NH'],
+                           { windowsHide: true, timeout: 8000, encoding: 'utf8' });
+      var out = String((r && r.stdout) || '');
+      return /Adobe Media Encoder\.exe/i.test(out);
+    } catch (e) { return false; }   // 非 Windows 或取不到 → 视为未知，不阻塞
+  }
+  function waitAmeProcessReady(maxMs) {
+    return new Promise(function (resolve) {
+      var t0 = Date.now();
+      if (ameProcessRunning()) { resolve({ ok: true, waitedMs: 0, already: true }); return; }
+      var iv = setInterval(function () {
+        if (ameProcessRunning()) {
+          clearInterval(iv);
+          // 进程起来后再给一小段初始化时间（队列通道建立需要一点时间）
+          setTimeout(function () { resolve({ ok: true, waitedMs: Date.now() - t0 }); }, 3000);
+          return;
+        }
+        if (Date.now() - t0 > maxMs) { clearInterval(iv); resolve({ ok: false, waitedMs: Date.now() - t0 }); }
+      }, 1500);
+    });
+  }
+
+  // ── AME 回调健康度：判断任务是否真的被 ME 接走 ──
+  // 若入队后迟迟收不到任何 AME 回调，却看到输出文件开始增长，那多半是
+  // PR 本地渲染在跑（版本不配套 / ME 没就绪）。这时必须明确告知，不能当成功。
+  var ameCallbackSeen = false;    // 本轮是否收到过任一 AME 回调（progress/complete/…）
+  var ameEnqueuedAt = 0;
+
   // ── AME 模式：逐版本入队 + 统一开渲 + 等全部完成 + 收尾 ──────────
   // 关键：插件照你手动流程走——
   //   版本A（禁用某轨 → 选预设 → 入队）→ 版本B（改轨道 → 入队）…
@@ -1230,6 +1307,9 @@
   async function exportSequencesViaAme(seqs, onProgress) {
     ameJobs = [];
     amePendings = [];
+    ameCallbackSeen = false;
+    ameEnqueuedAt = 0;
+    _amePreflightDone = false;
     var totalSeq = seqs.length;
     var totalJobs = 0;
     // 开始时快照字幕开关与目录：批量跑很久，期间用户可能改界面，
@@ -1309,6 +1389,11 @@
         };
         setLog('⏳ 渲染「' + job.version + '」…');
         var rr = await waitAmeJob(job.jobId, job.file, 60 * 60 * 1000, function () { return stopRequested; }, sub);
+        if (rr && rr.suspectLocal) {
+          // 全程没收到任何 AME 回调，文件却出来了 → 几乎可以断定是 PR 本地渲染
+          setLog('  ⚠ 未收到 ME 的任何回调，但文件已生成：该任务很可能由 PR 本地渲染完成', 'warn');
+          setLog('    （原因通常是 PR 与 Media Encoder 版本不配套，或 ME 未就绪）', 'warn');
+        }
         if (rr && rr.err) {
           if (rr.err === '__CANCELED__') { setLog('⏹「' + job.version + '」被取消', 'warn'); }
           else { setLog('✗「' + job.version + '」渲染失败：' + rr.err, 'error'); }

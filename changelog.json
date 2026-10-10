@@ -4,6 +4,41 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.74.0",
+      "date": "2026-10-10",
+      "title": "修超分面板整体消失 + AME 通道不再静默走 PR 渲染 + 字幕区预设",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修「超分/云端面板没内容」：上版为让共享样式覆盖新面板，展开选择器时在复合选择器中间插了逗号，把 `#panel-upscale.en-expanded .en-scroll { display:none }` 切成了 `#panel-upscale.en-expanded` 独立规则 —— 面板一进展开态就整体隐藏。现按整项复制再替换的正确算法重建，隐藏只作用于内部滚动区"
+        },
+        {
+          "kind": "fix",
+          "text": "ME 通道：拉起 Media Encoder 后必须等它就绪再入队。原先 launch 完立刻入队，冷启动机器上 ME 还没起来，任务会落到 PR 本地渲染 —— 即「调起了 ME 但任务没进队列，PR 自己渲了」"
+        },
+        {
+          "kind": "feat",
+          "text": "导出前新增 AME 预检：报出 PR 版本、本机 Media Encoder 年份，版本不配套时明确告警（PR 与 ME 主版本必须一致才能走队列），不再静默"
+        },
+        {
+          "kind": "feat",
+          "text": "任务全程没收到任何 ME 回调却看到文件生成时，明确提示「该任务很可能由 PR 本地渲染完成」，不让它伪装成成功"
+        },
+        {
+          "kind": "feat",
+          "text": "本地去字幕新增「区域预设」：框一次存成预设（存 collect/，升级不丢、可随插件拷到别的电脑），所有剧通用，下拉即套用；支持「全画面」与删除"
+        },
+        {
+          "kind": "impr",
+          "text": "截帧框选区默认折叠，需要重新框选时再展开；折叠时右上角仍显示当前生效区域"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-ame-channel.js（32 项）与 scripts/test-css-scope.js（12 项），分别锁「AME 必须真入队」与「双面板选择器不得畸变」"
+        }
+      ]
+    },
+    {
       "version": "1.73.0",
       "date": "2026-10-09",
       "title": "本地去字幕：处理完自动导入素材箱 + 截帧可视化框选字幕区",

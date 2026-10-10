@@ -1344,6 +1344,93 @@ function meStartBatch() {
 // 绑定 AME 任务事件 → 转发给 CEP 面板（供面板等待渲染完成）
 // CEP 侧在 window.__vhAmeHooks 里放好回调，这里把它们接到 AME 事件上。
 var _ameHooksBound = false;
+
+// ==================== AME 预检：PR 与 Media Encoder 是否配套 ====================
+// 为什么需要：PR 与 AME 必须主版本一致才能通过队列通信。不配套时
+// app.encoder.encodeSequence 仍可能返回一个 jobId（不报错），但任务不会真的
+// 进 ME 队列，而是由 PR 本地渲染 —— 表象就是「ME 被拉起来了，但任务没送出去」。
+// 所以在入队前先查清楚并明确告知，而不是静默地让 PR 本地渲。
+function mePreflight() {
+    var out = { ok: false, pr: {}, me: {}, pairs: [], warnings: [] };
+    try {
+        try { out.pr.version = String(app.version || ''); } catch (e) {}
+        try { out.pr.build = String(app.build || ''); } catch (e) {}
+        var prMajor = '';
+        var mv = /^(\d+)/.exec(out.pr.version);
+        if (mv) prMajor = mv[1];
+        out.pr.major = prMajor;
+
+        try { out.pr.encoderObject = !!app.encoder; } catch (e) { out.pr.encoderObject = false; }
+        // 新版 PR（25.6+）的 EncoderManager 有 isAMEInstalled；老旧 ExtendScript
+        // 的 app.encoder 没有该属性，所以「有就读，没有不报错」。
+        var hasInstalledFlag = false, installedFlag = null;
+        try {
+            if (app.encoder && app.encoder.isAMEInstalled !== undefined) {
+                hasInstalledFlag = true;
+                installedFlag = !!app.encoder.isAMEInstalled;
+            }
+        } catch (e) {}
+        out.pr.hasAmeInstalledFlag = hasInstalledFlag;
+        out.pr.ameInstalled = installedFlag;
+
+        // 扫描本机 Adobe 安装目录，取目录名末尾年份
+        var roots = ['/c/Program Files/Adobe', '/c/Program Files (x86)/Adobe'];
+        var meYears = [], prYears = [];
+        function scan(rootPath, list, prefix) {
+            try {
+                var f = new Folder(rootPath);
+                if (!f.exists) return;
+                var subs = f.getFiles();
+                for (var i = 0; i < subs.length; i++) {
+                    var nm = String(subs[i].displayName || subs[i].name || '');
+                    if (nm.indexOf(prefix) !== 0) continue;
+                    var ym = /(20\d\d)\s*$/.exec(nm);
+                    if (ym && list.join(',').indexOf(ym[1]) < 0) list.push(ym[1]);
+                }
+            } catch (e) {}
+        }
+        for (var r = 0; r < roots.length; r++) {
+            scan(roots[r], meYears, 'Adobe Media Encoder');
+            scan(roots[r], prYears, 'Adobe Premiere Pro');
+        }
+        out.me.years = meYears;
+        out.pr.years = prYears;
+
+        if (!meYears.length) {
+            out.match = false; out.ok = false; out.reason = 'NO_ME';
+            out.warnings.push('本机未找到 Adobe Media Encoder 安装（PR 与 ME 需配套安装才能走队列）');
+            return JSON.stringify(out);
+        }
+        var matched = [];
+        for (var a = 0; a < prYears.length; a++) {
+            for (var b = 0; b < meYears.length; b++) {
+                if (prYears[a] === meYears[b]) matched.push(prYears[a]);
+            }
+        }
+        out.pairs = matched;
+        out.match = matched.length > 0;
+        out.ok = out.match && out.pr.encoderObject;
+        if (!out.match) {
+            out.reason = 'VERSION_MISMATCH';
+            out.warnings.push('PR 年份 [' + prYears.join('/') + '] 与 Media Encoder [' +
+                              meYears.join('/') + '] 无交集：版本不配套，队列任务会落到 PR 本地渲染');
+        }
+        if (!out.pr.encoderObject) {
+            out.reason = 'NO_ENCODER_API';
+            out.warnings.push('app.encoder 不可用');
+        }
+        if (hasInstalledFlag && installedFlag === false) {
+            out.ok = false; out.reason = 'AME_NOT_INSTALLED';
+            out.warnings.push('PR 自报未检测到配套的 Media Encoder（isAMEInstalled=false）');
+        }
+        return JSON.stringify(out);
+    } catch (e) {
+        out.reason = 'ERROR';
+        out.warnings.push('预检异常: ' + e.toString());
+        return JSON.stringify(out);
+    }
+}
+
 function meBindAmeCallbacks() {
     try {
         if (!app.encoder) return "ERR:app.encoder 不可用";
