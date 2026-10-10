@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.72.1",
-  "buildTime": "2026-10-10 10:05:03",
+  "version": "1.73.0",
+  "buildTime": "2026-10-10 10:57:16",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修序列名乱码/预设传参/时间格式 + 本地面板样式匹配"
+  "notes": "本地去字幕处理完自动导入素材箱 + 截帧可视化框选字幕区"
 }

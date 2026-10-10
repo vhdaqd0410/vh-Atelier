@@ -1065,6 +1065,109 @@ function ckGetSelectedSrt() {
 }
 
 // 定位播放头：把指定序列的播放头跳到指定秒数（供字幕校对差异项点击定位）
+
+// 按序列名取 id（截帧需要精确定位到用户勾选的那条序列）
+function lsSeqIdByNameStr(seqName) {
+    try {
+        var name = String(seqName || '');
+        if (!name) return JSON.stringify({ error: '缺序列名' });
+        var proj = app.project;
+        for (var i = 0; i < proj.sequences.numSequences; i++) {
+            var s = proj.sequences[i];
+            try { if (s.name === name) return JSON.stringify({ ok: true, id: s.sequenceID, name: s.name }); } catch (e) {}
+        }
+        return JSON.stringify({ error: '找不到序列: ' + name });
+    } catch (e) {
+        return JSON.stringify({ error: e.toString() });
+    }
+}
+
+
+// ==================== 截帧：导出当前播放头所在帧为 PNG ====================
+// 供「本地去字幕」面板做可视化框选：截一帧 → 面板里画框 → 换算成像素区域。
+// 官方 API（Adobe PProPanel 示例）：先 app.enableQE()，再
+//   qe.project.getActiveSequence().exportFramePNG(timecode, outputPathWithoutExt)
+// 参数：
+//   seqId  序列 id（为空则用当前活动序列）
+//   seconds 秒数（为空则用当前播放头位置）
+//   outPathNoExt 输出路径（不带扩展名，PR 会补 .png）
+function lsGrabFrameStr(seqId, seconds, outPathNoExt) {
+    try {
+        if (!outPathNoExt) return JSON.stringify({ error: '缺输出路径' });
+        var seq = null;
+        if (seqId !== undefined && seqId !== null && seqId !== '') {
+            seq = wsFindSequence(seqId);
+        }
+        if (!seq) seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: '没有可用序列（请先打开一个序列）' });
+
+        // 让目标序列成为活动序列（截帧走 QE 的活动序列）
+        var wasSeq = app.project.activeSequence;
+        try {
+            if (seq && wasSeq && seq.sequenceID !== wasSeq.sequenceID) {
+                app.project.activeSequence = seq;
+            }
+        } catch (e0) {}
+
+        // 定位播放头（给定秒数时）
+        var sec = parseFloat(seconds);
+        if (isFinite(sec) && sec >= 0) {
+            try { seq.setPlayerPosition(String(Math.round(sec * 254016000000))); } catch (e1) {}
+        }
+
+        var timecode = '';
+        try {
+            app.enableQE();
+            var qeSeq = qe.project.getActiveSequence();
+            if (!qeSeq) return JSON.stringify({ error: 'QE 拿不到活动序列' });
+            timecode = qeSeq.CTI.timecode;   // 当前时间指示器的时间码
+            qeSeq.exportFramePNG(timecode, outPathNoExt);
+        } catch (e2) {
+            return JSON.stringify({ error: '截帧失败: ' + e2.toString() });
+        }
+
+        var pngPath = outPathNoExt;
+        var f = new File(outPathNoExt + '.png');
+        if (f.exists) pngPath = f.fsName;
+        else {
+            var f2 = new File(outPathNoExt);
+            if (f2.exists) pngPath = f2.fsName;
+        }
+
+        var info = { ok: true, path: pngPath, timecode: timecode, seconds: (isFinite(sec) ? sec : -1) };
+        // 帧尺寸（供面板把框选比例换算成像素）
+        try {
+            var fs2 = seq.frameSizeHorizontal;
+            var fs3 = seq.frameSizeVertical;
+            if (fs2 && fs3) { info.width = fs2; info.height = fs3; }
+        } catch (e3) {}
+        if (!info.width) {
+            try { info.width = seq.videoFrameWidth; info.height = seq.videoFrameHeight; } catch (e4) {}
+        }
+        info.seqName = seq.name;
+        return JSON.stringify(info);
+    } catch (e) {
+        return JSON.stringify({ error: '截帧异常: ' + e.toString() });
+    }
+}
+
+// 读取序列帧尺寸（无帧可截时面板也能换算比例）
+function lsSeqFrameSizeStr(seqId) {
+    try {
+        var seq = null;
+        if (seqId !== undefined && seqId !== null && seqId !== '') seq = wsFindSequence(seqId);
+        if (!seq) seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: '没有可用序列' });
+        var w = 0, h = 0;
+        try { w = seq.frameSizeHorizontal; h = seq.frameSizeVertical; } catch (e) {}
+        if (!w || !h) { try { w = seq.videoFrameWidth; h = seq.videoFrameHeight; } catch (e2) {} }
+        return JSON.stringify({ ok: true, width: w, height: h, seqName: seq.name });
+    } catch (e) {
+        return JSON.stringify({ error: e.toString() });
+    }
+}
+
+
 // 参数：seqId（序列 ID）、seconds（秒，浮点）。PR 播放头是 ticks 字符串，254016000000 ticks = 1 秒。
 function ckSeekToStr(seqId, seconds) {
     try {

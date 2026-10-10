@@ -50,6 +50,7 @@ JOBS = [
     ("test-musicagg-layout.py", "python", True, "真实渲染验证：浮层定位与多宽度布局（需 Chrome）", None),
     ("test-srt-sidecar.js", "node", True, "字幕侧车归位：AMA/PR 命名差异、晚到、批量兜底、作用域防回归", None),
     ("test-en-shared.js", "node", True, "公共模块：序列选择 + 时间轴区间读取（两面板共用）", None),
+    ("test-localsub.js", "node", True, "本地去字幕：处理完导入素材箱 + 截帧框选区域", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）
