@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.45.0",
+      "date": "2026-10-09",
+      "title": "本地去字幕：处理完自动导入素材箱 + 截帧可视化框选字幕区",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "处理完成后自动导入 PR「去字幕」素材箱（三条入口全覆盖）"
+        },
+        {
+          "kind": "feat",
+          "text": "新增截帧框选字幕区：截当前帧 → 图上拖框 → 应用比例（替代手填数字），并支持用本地图片框选"
+        },
+        {
+          "kind": "impr",
+          "text": "框选为默认；未框选先截帧引导；截帧限高 340px 便于竖屏"
+        },
+        {
+          "kind": "note",
+          "text": "宿主新增 lsGrabFrameStr / lsSeqIdByNameStr / lsSeqFrameSizeStr；新增 test-localsub.js"
+        }
+      ]
+    },
+    {
       "version": "1.44.1",
       "date": "2026-10-09",
       "title": "修本地去字幕：序列名乱码、预设传参、时间格式、面板样式",

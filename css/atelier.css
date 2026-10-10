@@ -5936,3 +5936,40 @@ button.primary:hover { background: var(--btn-primary-hover); }
 
 /* 卡片内各行间距统一 */
 #panel-localsub .en-card .en-row2 { margin-top: 6px; }
+
+/* ===== 本地去字幕：截帧框选 ===== */
+#panel-localsub .ls-pick-wrap { display:flex; flex-direction:column; gap:6px; }
+#panel-localsub .ls-pick-stage {
+    position:relative; line-height:0;
+    /* 贴合图片：stage 尺寸 == 图片显示尺寸，框选比例换算才准确
+       （若用 object-fit:contain 加留白，stage 与图片不等大，比例会算错） */
+    width:fit-content; max-width:100%; margin:0 auto;
+    background:#111; border:1px solid var(--border); border-radius:6px;
+    overflow:hidden; user-select:none; touch-action:none; cursor:crosshair;
+}
+#panel-localsub .ls-pick-img {
+    display:block; width:auto; height:auto;
+    max-width:100%; max-height:340px;      /* 竖屏帧不必撑满整屏，一眼看全 */
+    pointer-events:none;
+}
+#panel-localsub .ls-pick-box {
+    position:absolute; left:0; top:0; width:0; height:0;
+    border:2px solid #7fd68b; border-radius:2px;
+    background:rgba(127,214,139,.16);
+    box-shadow:0 0 0 9999px rgba(0,0,0,.42);
+    cursor:move; display:none;
+}
+#panel-localsub .ls-pick-box.on { display:block; }
+#panel-localsub .ls-ph {
+    position:absolute; width:11px; height:11px; background:#7fd68b;
+    border:1px solid #12331a; border-radius:2px; display:block;
+}
+#panel-localsub .ls-ph-nw { left:-6px; top:-6px; cursor:nwse-resize; }
+#panel-localsub .ls-ph-ne { right:-6px; top:-6px; cursor:nesw-resize; }
+#panel-localsub .ls-ph-sw { left:-6px; bottom:-6px; cursor:nesw-resize; }
+#panel-localsub .ls-ph-se { right:-6px; bottom:-6px; cursor:nwse-resize; }
+#panel-localsub .ls-pick-meta {
+    display:flex; align-items:center; gap:6px;
+    font-size:10.5px; color:var(--muted);
+}
+#panel-localsub .ls-pick-read { flex:1; min-width:0; color:#7fd68b; }

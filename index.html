@@ -1515,12 +1515,40 @@
                     </label>
                     <label class="en-f"><span>字幕区域</span>
                         <select id="lsArea">
-                            <option value="preset-bottom" selected>底部固定区（短剧/漫剧）</option>
-                            <option value="manual">自定义比例</option>
+                            <option value="pick" selected>框选（截帧选区域）</option>
+                            <option value="preset-bottom">底部固定区（短剧/漫剧）</option>
                             <option value="auto">区域内自动检测</option>
+                            <option value="manual">自定义比例（手动填）</option>
                         </select>
                     </label>
                 </div>
+
+                <!-- 框选：截一帧 → 在图上拖框 → 换算比例 -->
+                <div class="en-row2" id="lsPickRow" style="flex-direction:column;align-items:stretch;gap:6px;">
+                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                        <button id="lsGrabFrame" class="secondary mini">📷 截取节目窗口当前帧</button>
+                        <button id="lsPickFromFile" class="secondary mini" title="用本地已有的图片框选">🖼 用图片…</button>
+                        <span id="lsPickDim" style="font-size:10px;color:#8a8a8a;"></span>
+                    </div>
+                    <div id="lsPickWrap" class="ls-pick-wrap" style="display:none;">
+                        <div class="ls-pick-stage" id="lsPickStage">
+                            <img id="lsPickImg" class="ls-pick-img" alt="截帧">
+                            <div class="ls-pick-box" id="lsPickBox">
+                                <i class="ls-ph ls-ph-nw" data-h="nw"></i><i class="ls-ph ls-ph-ne" data-h="ne"></i>
+                                <i class="ls-ph ls-ph-sw" data-h="sw"></i><i class="ls-ph ls-ph-se" data-h="se"></i>
+                            </div>
+                        </div>
+                        <div class="ls-pick-meta">
+                            <span id="lsPickRead" class="ls-pick-read">在图上拖出一个框，圈住字幕</span>
+                            <span style="margin-left:auto;"></span>
+                            <button id="lsPickFull" class="secondary mini">全画面</button>
+                            <button id="lsPickApply" class="secondary mini">✓ 用这块区域</button>
+                        </div>
+                    </div>
+                    <span id="lsPickApplied" style="font-size:10px;color:#7fd68b;display:none;"></span>
+                </div>
+
+                <!-- 自定义比例（手动填） -->
                 <div class="en-row2" id="lsAreaRow" style="display:none;">
                     <label class="en-f"><span>y 起点</span><input type="number" id="lsY0" value="0.78" step="0.01" min="0" max="1" style="width:64px;"></label>
                     <label class="en-f"><span>y 终点</span><input type="number" id="lsY1" value="1" step="0.01" min="0" max="1" style="width:64px;"></label>

@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.44.1",
-  "buildTime": "2026-10-10 10:05:03",
+  "version": "1.45.0",
+  "buildTime": "2026-10-10 10:57:16",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修本地去字幕序列名/预设/时间格式/样式"
+  "notes": "本地去字幕处理完自动导入素材箱 + 截帧框选字幕区"
 }
