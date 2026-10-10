@@ -138,10 +138,7 @@
     // 处理完成后追加一条
     function addHistory(rec) { return loc ? loc.addHistory(rec) : null; }
     function delHistory(id) { return loc ? loc.delHistory(id) : null; }
-    function clearHistory() {
-        if (!window.confirm('清空历史记录？（只清列表，不删除磁盘上的视频文件）')) return;
-        if (saveHistory([])) { renderHistory(); hint('历史记录已清空', 'ok'); }
-    }
+    function clearHistory() { return loc ? loc.clearHistory() : null; }
 
     function fmtSize2(n) {
         n = Number(n) || 0;
