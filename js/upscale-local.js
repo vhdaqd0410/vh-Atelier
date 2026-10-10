@@ -20,53 +20,29 @@
     var APP = 'lup';
     var HIST_KEY = 'vh_localup_hist_dir';
 
+    // 公共模块：历史/输出目录/进度提示等（与「本地去字幕」共用一份实现）
+    var loc = (window.__vhLocal && window.__vhLocal.mount) ? window.__vhLocal.mount({
+        prefix: 'lup',
+        hintSuffix: 'HintLine',
+        histFile: 'localup_history.json',
+        dirKey: HIST_KEY,
+        resultDir: 'localup_results',
+        importBin: '超分',
+        presetAuto: '自动（无字幕）',
+        presetPrefer: /无字幕|no.?sub/i,
+        histTip: '可直接把文件名拖到时间轴；也可点「导入」放进素材箱',
+        busyIds: ['lupGoSeq', 'lupGoClip', 'lupPick']
+    }) : null;
+
     // ---------- 小工具 ----------
-    function hint(msg, cls) {
-        var el = $(APP + 'HintLine');
-        if (!el) return;
-        el.textContent = msg || '';
-        el.className = 'en-act-hint' + (cls ? ' ' + cls : '');
-    }
-    function log(msg, cls) {
-        var el = $(APP + 'Log');
-        if (!el) return;
-        var line = document.createElement('div');
-        line.className = 'en-log-line ' + (cls || '');
-        line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
-        el.appendChild(line);
-        el.scrollTop = el.scrollHeight;
-    }
-    function setProg(pct, text) {
-        var w = $(APP + 'ProgWrap');
-        if (w) w.style.display = (pct === null) ? 'none' : '';
-        if (pct !== null) {
-            var f = $(APP + 'ProgFill'); if (f) f.style.width = Math.max(0, Math.min(100, pct)) + '%';
-            var p = $(APP + 'ProgPct'); if (p) p.textContent = Math.round(pct) + '%';
-        }
-        if (text !== undefined) { var t = $(APP + 'ProgText'); if (t) t.textContent = text; }
-    }
-    function setBusy(on) {
-        ['lupGoSeq', 'lupGoClip', 'lupPick'].forEach(function (id) {
-            var b = $(id); if (b) b.disabled = !!on;
-        });
-        var s = $(APP + 'Stop'); if (s) s.disabled = !on;
-    }
-    function extRoot() {
-        try { return csInterface.getSystemPath('extension'); } catch (e) { return ''; }
-    }
-    function getOutDir() {
-        try { return localStorage.getItem(HIST_KEY) || ''; } catch (e) { return ''; }
-    }
-    function setOutDir(d) { try { localStorage.setItem(HIST_KEY, d || ''); } catch (e) {} }
-    function defaultOutDir() {
-        var saved = getOutDir();
-        if (saved && fs.existsSync(saved)) return saved;
-        var ext = extRoot();
-        var d = ext ? path.join(ext, 'collect', 'localup_results')
-                    : path.join(os.homedir(), 'vhAtelier_localup');
-        try { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); } catch (e) {}
-        return d;
-    }
+    function hint(msg, cls) { return loc ? loc.hint(msg, cls) : null; }
+    function log(msg, cls) { return loc ? loc.log(msg, cls) : null; }
+    function setProg(pct, text) { return loc ? loc.setProg(pct, text) : null; }
+    function setBusy(on) { return loc ? loc.setBusy(on) : null; }
+    function extRoot() { return loc ? loc.extRoot() : ''; }
+    function getOutDir() { return loc ? loc.getOutDir() : ''; }
+    function setOutDir(d) { return loc ? loc.setOutDir(d) : null; }
+    function defaultOutDir() { return loc ? loc.defaultOutDir() : ''; }
     function pyScript() {
         var ext = extRoot();
         var p = ext ? path.join(ext, 'py', 'upscale_client.py') : '';
@@ -80,50 +56,15 @@
         return cands.filter(function (x) { return x; })[0] || 'python';
     }
     // 生成不覆盖的输出路径（与去字幕同一策略）
-    function uniqueOutPath(dir, baseName, ext) {
-        ext = ext || '.mp4';
-        var cand = path.join(dir, baseName + ext);
-        if (!fs.existsSync(cand)) return cand;
-        for (var n = 2; n <= 999; n++) {
-            cand = path.join(dir, baseName + '_' + n + ext);
-            if (!fs.existsSync(cand)) return cand;
-        }
-        var ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-        return path.join(dir, baseName + '_' + ts + ext);
-    }
+    function uniqueOutPath(dir, baseName, ext) { return loc ? loc.uniqueOutPath(dir, baseName, ext) : ''; }
 
     // ---------- 历史记录 ----------
     var HIST_MAX = 300;
-    function histFile() {
-        var ext = extRoot();
-        return ext ? path.join(ext, 'collect', 'localup_history.json') : '';
-    }
-    function loadHistory() {
-        var f = histFile();
-        if (!f) return [];
-        try {
-            if (!fs.existsSync(f)) return [];
-            var a = JSON.parse(fs.readFileSync(f, 'utf8'));
-            return Array.isArray(a) ? a : [];
-        } catch (e) { return []; }
-    }
-    function saveHistory(a) {
-        var f = histFile();
-        if (!f) return false;
-        try {
-            var d = path.dirname(f);
-            if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-            fs.writeFileSync(f, JSON.stringify((a || []).slice(0, HIST_MAX), null, 2), 'utf8');
-            return true;
-        } catch (e) { return false; }
-    }
-    function addHistory(rec) {
-        var a = loadHistory(); a.unshift(rec);
-        if (saveHistory(a)) renderHistory();
-    }
-    function delHistory(id) {
-        if (saveHistory(loadHistory().filter(function (r) { return String(r.id) !== String(id); }))) renderHistory();
-    }
+    function histFile() { return loc ? loc.histFile() : ''; }
+    function loadHistory() { return loc ? loc.loadHistory() : []; }
+    function saveHistory(a) { return loc ? loc.saveHistory(a) : false; }
+    function addHistory(rec) { return loc ? loc.addHistory(rec) : null; }
+    function delHistory(id) { return loc ? loc.delHistory(id) : null; }
     function fmtSize(n) {
         n = Number(n) || 0;
         if (n <= 0) return '';
@@ -136,127 +77,12 @@
         var m = Math.floor(s / 60);
         return m > 0 ? (m + '分' + (s % 60) + '秒') : (s + '秒');
     }
-    function revealFile(p) {
-        try {
-            if (fs.existsSync(p)) cp.exec('explorer /select,"' + String(p).replace(/\//g, '\\') + '"', { windowsHide: true });
-            else cp.exec('explorer "' + String(path.dirname(p)).replace(/\//g, '\\') + '"', { windowsHide: true });
-        } catch (e) {}
-    }
-    function openDir(d) {
-        try { cp.exec('explorer "' + String(d).replace(/\//g, '\\') + '"', { windowsHide: true }); } catch (e) {}
-    }
+    function revealFile(p) { return loc ? loc.revealFile(p) : null; }
+    function openDir(d) { return loc ? loc.openDir(d) : null; }
     // 宿主各函数返回格式不统一（有的带 OK: 前缀有的不带），统一容错解析
-    function parseHostJson(s) {
-        if (s === null || s === undefined) return null;
-        var t = String(s).trim();
-        if (t.indexOf('OK:') === 0) t = t.slice(3).trim();
-        if (t.indexOf('ERR:') === 0) return { error: t.slice(4).trim() };
-        try { return JSON.parse(t); } catch (e) { return null; }
-    }
+    function importToBin(files, binName) { return loc ? loc.importToBin(files, binName) : Promise.resolve({ ok: false, error: 'en-local 未加载' }); }
 
-    function importToBin(files, binName) {
-        return new Promise(function (resolve) {
-            try {
-                var list = (files || []).filter(Boolean);
-                if (!list.length) { resolve({ ok: false, error: '没有可导入的文件' }); return; }
-                if (!csInterface) { resolve({ ok: false, error: '宿主桥不可用' }); return; }
-                csInterface.evalScript('meImportPayload = ' +
-                    JSON.stringify({ files: list, binName: binName || '超分' }) + ';', function () {
-                    csInterface.evalScript('meImportFilesToBinStr()', function (r) {
-                        var d = parseHostJson(r);
-                        if (d) resolve(d);
-                        else resolve({ ok: false, error: String(r) });
-                    });
-                });
-            } catch (e) { resolve({ ok: false, error: e.message }); }
-        });
-    }
-
-    function renderHistory() {
-        var box = $(APP + 'HistList');
-        if (!box) return;
-        var arr = loadHistory();
-        var cnt = $(APP + 'HistCount');
-        var h = $(APP + 'HistHint');
-        if (cnt) cnt.textContent = arr.length ? ('共 ' + arr.length + ' 条') : '';
-        if (h) h.textContent = arr.length ? '可直接把文件名拖到时间轴；也可点「导入」放进素材箱' : '';
-        if (!arr.length) {
-            box.innerHTML = '<div class="hint" style="padding:6px;">还没有处理记录</div>';
-            return;
-        }
-        box.innerHTML = '';
-        arr.forEach(function (r) {
-            var row = document.createElement('div');
-            row.className = 'ls-hist-row';
-            var exists = false;
-            try { exists = fs.existsSync(r.out); } catch (e) {}
-            if (!exists) row.classList.add('missing');
-
-            var main = document.createElement('div');
-            main.className = 'ls-hist-main';
-            var nm = document.createElement('span');
-            nm.className = 'ls-hist-name';
-            nm.textContent = path.basename(r.out || '(未知)');
-            nm.title = r.out || '';
-            if (exists) {
-                nm.setAttribute('draggable', 'true');
-                nm.addEventListener('dragstart', function (ev) {
-                    try {
-                        ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', r.out);
-                        ev.dataTransfer.setData('text/plain', r.out);
-                        ev.dataTransfer.effectAllowed = 'copy';
-                    } catch (e) {}
-                });
-                nm.style.cursor = 'grab';
-            }
-            main.appendChild(nm);
-            if (!exists) {
-                var ms = document.createElement('span');
-                ms.className = 'ls-hist-miss';
-                ms.textContent = '文件已不在';
-                main.appendChild(ms);
-            }
-            row.appendChild(main);
-
-            var meta = document.createElement('div');
-            meta.className = 'ls-hist-meta';
-            var bits = [];
-            if (r.at) bits.push(String(r.at).replace('T', ' ').slice(0, 16));
-            if (r.model) bits.push(r.model);
-            if (r.scale) bits.push(r.scale + 'x');
-            if (r.outRes) bits.push(r.outRes);
-            if (r.elapsed) bits.push(fmtDur(r.elapsed));
-            if (r.size) bits.push(fmtSize(r.size));
-            meta.textContent = bits.join(' · ');
-            row.appendChild(meta);
-
-            var ops = document.createElement('div');
-            ops.className = 'ls-hist-ops';
-            function mk(label, title, fn, cls) {
-                var b = document.createElement('button');
-                b.className = 'secondary mini' + (cls ? ' ' + cls : '');
-                b.textContent = label; b.title = title || '';
-                b.addEventListener('click', fn);
-                return b;
-            }
-            ops.appendChild(mk('⬆ 导入', '导入 PR「超分」素材箱', function () {
-                if (!exists) { hint('文件已不在：' + r.out, 'err'); return; }
-                importToBin([r.out], '超分').then(function (res) {
-                    if (res && res.ok && (res.imported || []).length)
-                        hint('✅ 已导入素材箱：' + (res.imported || []).join('、'), 'ok');
-                    else hint('⚠ 导入失败：' + ((res && (res.error || JSON.stringify(res))) || '未知'), 'warn');
-                });
-            }));
-            ops.appendChild(mk('📂 位置', '在资源管理器里定位', function () { revealFile(r.out); }));
-            ops.appendChild(mk('▶ 打开', '用系统默认播放器打开', function () {
-                if (!exists) { hint('文件已不在', 'err'); return; }
-                try { cp.exec('start "" "' + String(r.out).replace(/\//g, '\\') + '"'); } catch (e) {}
-            }));
-            ops.appendChild(mk('✕', '从列表删除（不删文件）', function () { delHistory(r.id); }, 'ls-hist-del'));
-            row.appendChild(ops);
-            box.appendChild(row);
-        });
-    }
+    function renderHistory() { return loc ? loc.renderHistory() : null; }
 
     // 卡片最大化
     var EXP_KEY = 'vh_localup_card_exp';
@@ -492,24 +318,7 @@
     }
 
     // ---------- 预设填充 ----------
-    function fillPresets() {
-        var sel = $(APP + 'Preset');
-        if (!sel) return;
-        var hits = [];
-        try { if (typeof window.__vhListPresets === 'function') hits = window.__vhListPresets() || []; } catch (e) {}
-        var prev = sel.value;
-        sel.innerHTML = '<option value="">自动（无字幕）</option>';
-        hits.forEach(function (h) {
-            var o = document.createElement('option');
-            o.value = h.full; o.textContent = h.name;
-            sel.appendChild(o);
-        });
-        if (prev) sel.value = prev;
-        else {
-            var prefer = hits.filter(function (h) { return /无字幕|no.?sub/i.test(h.name); });
-            if (prefer.length) sel.value = prefer[0].full;
-        }
-    }
+    function fillPresets() { return loc ? loc.fillPresets() : null; }
 
     // ---------- 初始化 ----------
     function bind() {
