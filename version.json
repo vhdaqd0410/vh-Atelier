@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.80.0",
-  "buildTime": "2026-10-12 16:45:16",
+  "version": "1.80.1",
+  "buildTime": "2026-10-12 17:02:19",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "剧本面板：选中即弹复制菜单 + 按标点断句复制"
+  "notes": "修 A 版素材库目录不显示（补同步遗漏的 renderComputerNav）"
 }

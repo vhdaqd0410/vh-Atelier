@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.80.1",
+      "date": "2026-10-12",
+      "title": "补：面板函数完整性静态门禁",
+      "items": [
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-fn-integrity.py：检查面板是否调用了本文件未定义的函数，防「同步遗漏导致空白面板」这一类问题"
+        },
+        {
+          "kind": "note",
+          "text": "本轮实际发现并修复的是 A 版素材库缺失 renderComputerNav（A 版 1.48.3）"
+        }
+      ]
+    },
+    {
       "version": "1.80.0",
       "date": "2026-10-12",
       "title": "剧本面板：选中文字即弹复制菜单 + 按标点断句复制（为字幕替换提速）",
