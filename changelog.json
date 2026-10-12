@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.49.0",
+      "date": "2026-10-12",
+      "title": "同步：剧本→字幕快替",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "同步主版：素材→剧本的字幕快替（选中字幕块 → 剧本选台词 → 一键复制并定位）"
+        },
+        {
+          "kind": "note",
+          "text": "host.jsx 增加 ckGetSelectedCaptionBlock；script.js 增加目标字幕条与「替换这条字幕」菜单项"
+        },
+        {
+          "kind": "note",
+          "text": "附同一份 scripts/test-caption-replace.py"
+        }
+      ]
+    },
+    {
       "version": "1.48.3",
       "date": "2026-10-12",
       "title": "修：素材库目录不显示（补上未同步的 renderComputerNav）",

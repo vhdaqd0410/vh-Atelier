@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.48.3",
-  "buildTime": "2026-10-12 17:02:19",
+  "version": "1.49.0",
+  "buildTime": "2026-10-12 18:35:38",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修素材库目录不显示：补上缺失的 renderComputerNav"
+  "notes": "同步：剧本→字幕快替"
 }

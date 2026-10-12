@@ -1509,6 +1509,155 @@ function meGetSequenceInOut() {
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
+// ==================== 字幕快替（方案B）：读时间轴上选中的块 ====================
+// 目的：用户在时间轴点选某条字幕块后，把「这条块的位置信息」读出来，
+//       供剧本面板做「替换这条字幕」。
+//
+// 背景（已核实的事实）：ExtendScript 的 Sequence 只暴露 audioTracks / videoTracks，
+// 没有 captionTracks，官方也没有读写字幕条目文本的 API。所以：
+//   · 能拿到的是「选中块的起止时间」（getSelection 返回项的 start / outPoint）
+//   · 拿不到的是「这条字幕的原文」（PR 不暴露）
+// 本函数把两类信息都尽量取出来；captionTracks 存在与否也一并报告，便于确认真实能力。
+function ckGetSelectedCaptionBlock() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: '没有激活的序列' });
+
+        var out = {
+            seqName: String(seq.name || ''),
+            sequenceID: String(seq.sequenceID || ''),
+            hasCaptionTracks: false,
+            captionTrackCount: 0,
+            selectedCount: 0,
+            blocks: [],
+            notes: []
+        };
+
+        // 1) 尝试字幕轨（不同版本暴露情况不同，取到就用）
+        try {
+            if (seq.captionTracks) {
+                out.hasCaptionTracks = true;
+                try { out.captionTrackCount = seq.captionTracks.numTracks || 0; } catch (e1) {}
+            }
+        } catch (e0) {}
+
+        // 2) 读当前选中的块（时间轴点选）
+        var sel = null;
+        try { sel = seq.getSelection(); } catch (e2) { sel = null; }
+        if (!sel || sel.length === undefined) {
+            if (sel) sel = [sel]; else sel = [];
+        }
+        out.selectedCount = sel.length;
+
+        var i, n = 0;
+        for (i = 0; i < sel.length; i++) {
+            var it = sel[i];
+            var b = {};
+            // 基础时间信息
+            try { b.startSec = Math.round(it.start.seconds * 1000) / 1000; } catch (e3) { b.startSec = null; }
+            try { b.inPointSec = Math.round(it.inPoint.seconds * 1000) / 1000; } catch (e4) { b.inPointSec = null; }
+            try { b.outPointSec = Math.round(it.outPoint.seconds * 1000) / 1000; } catch (e5) { b.outPointSec = null; }
+            if (b.startSec !== null && b.inPointSec !== null && b.outPointSec !== null) {
+                b.endSec = Math.round((b.startSec + (b.outPointSec - b.inPointSec)) * 1000) / 1000;
+                b.durationSec = Math.round((b.outPointSec - b.inPointSec) * 1000) / 1000;
+            }
+            // 名称 / 类型（字幕块若能到这里，name 通常就是字幕文本或「字幕 x」）
+            try { b.name = String(it.name || ''); } catch (e6) { b.name = ''; }
+            try { b.type = String(it.type || ''); } catch (e7) { b.type = ''; }
+            try { b.mediaType = String(it.mediaType || ''); } catch (e8) { b.mediaType = ''; }
+            // 媒体路径（字幕块一般没有）
+            try {
+                var pi = it.projectItem;
+                if (pi) {
+                    if (pi.getMediaPath) b.mediaPath = pi.getMediaPath();
+                    else if (pi.mediaItem && pi.mediaItem.file) b.mediaPath = pi.mediaItem.file.fsName;
+                }
+            } catch (e9) {}
+            // 所属轨道（判断是否落在字幕轨）
+            try {
+                if (it.parentTrackIndex !== undefined) b.trackIndex = it.parentTrackIndex;
+            } catch (e10) {}
+            // 枚举所有属性名，帮助确认这个对象到底有什么
+            var keys = [];
+            try {
+                for (var k in it) { if (keys.length < 40) keys.push(k); }
+            } catch (e11) {}
+            b.keys = keys;
+
+            out.blocks.push(b);
+            n++;
+            if (n >= 8) break;
+        }
+
+        if (out.selectedCount === 0) {
+            out.notes.push('时间轴上没有选中的块，请先点选一条字幕块');
+        } else if (!out.hasCaptionTracks) {
+            out.notes.push('该 PR 版本的 Sequence 未暴露 captionTracks，字幕块无法与普通片段区分；已按选中块的时间范围处理');
+        }
+
+        return JSON.stringify({ ok: true, data: out });
+    } catch (e) {
+        return JSON.stringify({ error: '读取选中块失败: ' + e.toString() });
+    }
+}
+function ckGetSelectedCaptionBlockStr() { return ckGetSelectedCaptionBlock(); }
+
+function meGetSelectedClipInfo() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return "ERR:没有激活的序列";
+        var sel = seq.getSelection();
+        if (!sel || sel.length === 0) return "ERR:当前序列没有选中的片段，请先在时间轴选中片段";
+
+        // 视频轨片段起点 ticks 集合（仅用于统计「有几个选中块在视频轨」）
+        var vidTicks = {};
+        var vt, vk, vc;
+        for (vt = 0; vt < seq.videoTracks.numTracks; vt++) {
+            var tr = seq.videoTracks[vt];
+            for (vk = 0; vk < tr.clips.numItems; vk++) {
+                vc = tr.clips[vk];
+                try { vidTicks[String(vc.start.ticks)] = 1; } catch (e) {}
+            }
+        }
+
+        var startSec = -1, endSec = -1, n = 0, onVid = 0, seen = [];
+        for (var i = 0; i < sel.length; i++) {
+            var it = sel[i];
+            var st = 0, du = 0;
+            try { st = it.start.seconds; } catch (e4) { continue; }
+            try { du = it.outPoint.seconds - it.inPoint.seconds; } catch (e5) { du = 0; }
+            if (du <= 0) continue;
+            var en = st + du;
+            if (startSec < 0 || st < startSec) startSec = st;
+            if (endSec < 0 || en > endSec) endSec = en;
+            n++;
+            try {
+                var tk = String(it.start.ticks);
+                if (vidTicks[tk] === 1) onVid++;
+            } catch (e6) {}
+            if (seen.length < 6) {
+                var tp = '', mt = '';
+                try { tp = String(it.type || ''); } catch (e7) {}
+                try { mt = String(it.mediaType || ''); } catch (e8) {}
+                seen.push(tp + '/' + mt);
+            }
+        }
+        if (n === 0) {
+            return "ERR:选中项读不到有效时长（实测类型值：" + (seen.join(', ') || '无') + "）";
+        }
+        if (endSec <= startSec) return "ERR:片段时长无效";
+        return "OK:" + JSON.stringify({
+            seqName: seq.name,
+            startSec: Math.round(startSec * 1000) / 1000,
+            endSec: Math.round(endSec * 1000) / 1000,
+            durationSec: Math.round((endSec - startSec) * 1000) / 1000,
+            clipCount: n,
+            onVideoTracks: onVid,
+            types: seen
+        });
+    } catch (e) { return "ERR:" + e.toString(); }
+}
+
 function meGetSelectedClipInfo() {
     try {
         var seq = app.project.activeSequence;
