@@ -4,6 +4,33 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.79.1",
+      "date": "2026-10-12",
+      "title": "修：顶部提示行「素材 · 剧本 · 超分…八工作台」被吸顶栏切掉上半截",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修顶部副标题被压住：顶栏用 margin-top:-14px 把自己贴到面板顶端，副作用是把后面的元素整体上提 14px，导致这行提示钻进顶栏盒内（实测提示行顶=53、顶栏底=61，重叠 8px），被顶栏实心背景连字的上半截一起盖掉"
+        },
+        {
+          "kind": "impr",
+          "text": "提示行 margin-top 由 6px 改为 20px（6px 间距 + 14px 补偿），并加 position:relative + z-index 兜底，确保滚动时也不会被任何一层吸顶栏盖住"
+        },
+        {
+          "kind": "impr",
+          "text": "顺手合并了原本散成 3~4 条、互相覆盖导致静默丢属性的 .sub 规则（字号与 margin 现在只有一处定义）"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-header-layout.py：用 Chrome 真实渲染测三种面板宽度下提示行与顶栏的几何间隔（修复前为 -8px 重叠，会判 FAIL），纯静态检查抓不到这类问题"
+        },
+        {
+          "kind": "note",
+          "text": "A 版共用同一份 CSS，已同步修复并附同一测试"
+        }
+      ]
+    },
+    {
       "version": "1.79.0",
       "date": "2026-10-12",
       "title": "新增：语音克隆「停止」按钮 + 已用时间读秒",

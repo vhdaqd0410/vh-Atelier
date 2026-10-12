@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.79.0",
-  "buildTime": "2026-10-12 13:42:57",
+  "version": "1.79.1",
+  "buildTime": "2026-10-12 15:41:54",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "语音克隆加停止按钮与已用时间读秒"
+  "notes": "修顶部提示行被吸顶栏遮挡"
 }
