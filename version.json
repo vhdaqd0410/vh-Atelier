@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.48.1",
-  "buildTime": "2026-10-12 15:42:14",
+  "version": "1.48.2",
+  "buildTime": "2026-10-12 16:46:23",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "同步：修顶部提示行被吸顶栏遮挡"
+  "notes": "同步：剧本面板选中即弹复制菜单 + 按标点断句"
 }

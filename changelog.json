@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.48.2",
+      "date": "2026-10-12",
+      "title": "同步：剧本面板选中即弹复制菜单 + 按标点断句复制",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "同步主版：选中文字即弹复制菜单（复制选中 / 断句列表 / 前半后半 / 整句 / 整行），双击台词行直接复制整句"
+        },
+        {
+          "kind": "impr",
+          "text": "菜单三档避让定位，绝不盖住当前台词行；断句规则与主版一致"
+        },
+        {
+          "kind": "note",
+          "text": "附同一份 scripts/test-script-copy.py（31 项）"
+        }
+      ]
+    },
+    {
       "version": "1.48.1",
       "date": "2026-10-12",
       "title": "同步：修顶部提示行被吸顶栏遮挡",

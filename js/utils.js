@@ -130,6 +130,103 @@
         return null;
     }
 
+    // ---------- 文本断句（剧本台词复制用） ----------
+    // 主断句：句末标点（。！？；…及其英文对应），标点保留在前句末尾。
+    // 次级（fallback）：仅逗号/顿号时按逗号切，供「前半句/后半句」用。
+    // 返回 [{ text, start, end }]，start/end 是相对原串的下标，便于与选段拼接。
+    function splitSentences(text) {
+        var s = String(text == null ? '' : text);
+        var out = [];
+        if (!s) return out;
+        // 句末标点：中文句号/问号/叹号/分号/省略号 + 英文 ! ? ;
+        // 英文句点单列：只在「后面是空白或串尾」时算句末，避免把 3.5 / Dr. 之类误断
+        var END = /[。！？；…!?;]/;
+        var i = 0, n = s.length, segStart = 0;
+        // 英文句点：后面是空白/串尾才算句末（'3.5'、'Dr.' 不误断）
+        function isEnd(ch, idx) {
+            if (END.test(ch)) return true;
+            if (ch === '.') {
+                var nx = s.charAt(idx + 1);
+                return (idx + 1 >= n) || /\s/.test(nx);
+            }
+            return false;
+        }
+        while (i < n) {
+            if (isEnd(s.charAt(i), i)) {
+                // 连续标点（如「？！」）并到一个句子末尾
+                var j = i;
+                while (j + 1 < n && isEnd(s.charAt(j + 1), j + 1)) j++;
+                var piece = s.slice(segStart, j + 1);
+                if (piece.trim()) out.push({ text: piece.trim(), start: segStart, end: j + 1 });
+                segStart = j + 1;
+                i = j + 1;
+            } else i++;
+        }
+        if (segStart < n) {
+            var tail = s.slice(segStart);
+            if (tail.trim()) out.push({ text: tail.trim(), start: segStart, end: n });
+        }
+        // 只有一段且内部有逗号 → 按逗号再切（供取前半/后半）
+        if (out.length <= 1) {
+            var byComma = splitByComma(s);
+            if (byComma.length > 1) return byComma;
+        }
+        return out;
+    }
+
+    // 按逗号/顿号切（保留标点），仅用于「前半句/后半句」这种次级切分
+    function splitByComma(text) {
+        var s = String(text == null ? '' : text);
+        var out = [];
+        if (!s) return out;
+        var COMMA = /[，,、]/;
+        var i = 0, n = s.length, segStart = 0;
+        while (i < n) {
+            if (COMMA.test(s.charAt(i))) {
+                var j = i;
+                while (j + 1 < n && COMMA.test(s.charAt(j + 1))) j++;
+                var piece = s.slice(segStart, j + 1);
+                if (piece.trim()) out.push({ text: piece.trim(), start: segStart, end: j + 1 });
+                segStart = j + 1;
+                i = j + 1;
+            } else i++;
+        }
+        if (segStart < n) {
+            var tail = s.slice(segStart);
+            if (tail.trim()) out.push({ text: tail.trim(), start: segStart, end: n });
+        }
+        return out;
+    }
+
+    // 在一个文本里，取「以 at（相对下标）为界的上半句 / 下半句」——
+    // 用于用户选中了某个片段后，还想只要它前面/后面那半句
+    function halfAround(text, at) {
+        var s = String(text == null ? '' : text);
+        if (!s) return null;
+        var pivots = '，,、。！？；…!?;';
+        var a = Number(at);
+        if (!(a >= 0 && a <= s.length)) a = Math.floor(s.length / 2);
+        // 找分界标点：先看 at 本身，再向右找第一个，再退而向左找最后一个。
+        // （原来从 a-1 往左、从 a 往右找，标点恰在 a 时两边都落空 → 前半永远为空）
+        var cut = -1;
+        if (pivots.indexOf(s.charAt(a)) >= 0) cut = a;
+        if (cut < 0) {
+            for (var k = a; k < s.length; k++) { if (pivots.indexOf(s.charAt(k)) >= 0) { cut = k; break; } }
+        }
+        if (cut < 0) {
+            for (var i = a - 1; i >= 0; i--) { if (pivots.indexOf(s.charAt(i)) >= 0) { cut = i; break; } }
+        }
+        if (cut < 0) return { head: '', tail: '', hasHead: false, hasTail: false };
+        // head 含分界标点本身；tail 是标点之后
+        var head = s.slice(0, cut + 1), tail = s.slice(cut + 1);
+        return {
+            head: head.trim(),
+            tail: tail.trim(),
+            hasHead: !!head.trim(),
+            hasTail: !!tail.trim()
+        };
+    }
+
     window.__vhUtils = {
         parseTime: parseTime,
         parseSRT: parseSRT,
@@ -141,6 +238,9 @@
         detectPython: detectPython,
         getTranslateEmail: getTranslateEmail,
         setTranslateEmail: setTranslateEmail,
-        myMemoryUrl: myMemoryUrl
+        myMemoryUrl: myMemoryUrl,
+        splitSentences: splitSentences,
+        splitByComma: splitByComma,
+        halfAround: halfAround
     };
 })();
