@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.48.0",
+      "date": "2026-10-12",
+      "title": "同步：音乐库/音效库可排除子文件夹",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "A 版音乐库与音效库同步支持右键子文件夹「排除此文件夹」（扫描跳过、可取消），行为与主版一致"
+        },
+        {
+          "kind": "note",
+          "text": "同步公共模块 js/library-exclude.js 与 scripts/test-lib-exclude.py，45 项断言全过"
+        }
+      ]
+    },
+    {
       "version": "1.47.4",
       "date": "2026-10-10",
       "title": "docs: 重写 README + 新增使用说明",

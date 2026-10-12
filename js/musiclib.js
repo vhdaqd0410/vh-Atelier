@@ -12,6 +12,10 @@
     var collectDir = path.join(extRoot, 'collect');
     var favsFile = path.join(collectDir, 'musiclib_favs.json');
     var treeCacheFile = path.join(collectDir, 'musiclib_tree.json');   // 目录结构+文件列表
+
+    // 排除目录：右键子文件夹可排除，扫描时跳过（存 collect/，升级不丢）
+    var excl = (window.__vhExclude && window.__vhExclude.mount)
+        ? window.__vhExclude.mount({ scope: 'musiclib', collectDir: collectDir }) : null;
     var peaksFile = path.join(collectDir, 'musiclib_peaks.json');      // 波形峰值索引 {path: {dur, peaks, ext, mtime}}
 
     var AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'aiff', 'aif', 'wma'];
@@ -133,7 +137,9 @@
                     var dn = path.join(node.abs, it.name);
                     var child = { abs: dn, name: it.name, depth: node.depth + 1, children: [], parent: node, dirs: 0, files: 0 };
                     node.children.push(child);
-                    stack.push(child);
+                    // 被排除的目录：保留节点可见（便于右键取消排除），但不递归、不计文件
+                    if (excl && excl.isDirectly(dn)) child.__excluded = true;
+                    else stack.push(child);
                 } else if (it.isFile() && isMusicFile(it.name)) {
                     var fp = path.join(node.abs, it.name);
                     var st = null;
@@ -234,6 +240,8 @@
                 n.music.push(f);
                 byPath[full] = f;
             });
+            // 应用「排除目录」：缓存可能是排除之前生成的，这里清空被排除的子树
+            try { if (excl) excl.applyToTree(rootNode); } catch (e) {}
             // 计数
             (function count(n) {
                 n.files = (n.music || []).length;
@@ -264,7 +272,7 @@
         if (!treeRoot) return;
         (function walk(n) {
             var row = document.createElement('div');
-            row.className = 'tnode';
+            row.className = 'tnode' + (n.__excluded ? ' excluded' : '');
             row.style.paddingLeft = (6 + n.depth * 14) + 'px';
             var hasKids = n.children.length > 0;
             var caret = document.createElement('span');
@@ -272,7 +280,7 @@
             caret.textContent = hasKids ? '▶' : '';
             var ico = document.createElement('span');
             ico.className = 'tico';
-            ico.textContent = n.depth === 0 ? '📀' : (hasKids ? '📁' : '📂');
+            ico.textContent = n.__excluded ? '🚫' : (n.depth === 0 ? '📀' : (hasKids ? '📁' : '📂'));
             var lbl = document.createElement('span');
             lbl.className = 'tlabel';
             lbl.textContent = n.depth === 0 ? (path.basename(n.abs) || n.abs) : n.name;
@@ -294,6 +302,12 @@
                 if (n.children.length && !n.__open) n.__open = true;
                 collapseRender();
                 selectDir(n.abs);
+            });
+            // 右键：排除 / 取消排除该文件夹
+            row.addEventListener('contextmenu', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                showDirContextMenu(ev, n);
             });
             el.tree.appendChild(row);
             n.children.forEach(walk);
@@ -999,6 +1013,33 @@
         pathItem.style.cssText = 'color:var(--muted);cursor:default;font-size:10px;white-space:normal;word-break:break-all;';
         pathItem.textContent = f.fullPath;
         menu.appendChild(pathItem);
+        menu.style.display = 'block';
+        var mw = menu.offsetWidth, mh = menu.offsetHeight;
+        var x = ev.clientX, y = ev.clientY;
+        if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+        if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+        menu.style.left = x + 'px'; menu.style.top = y + 'px';
+    }
+    // 目录右键菜单：排除 / 取消排除该文件夹（扫描时跳过）
+    function showDirContextMenu(ev, node) {
+        if (!excl) return;
+        var menu = el.ctxMenu;
+        excl.buildMenu(menu, node.abs, function (nowExcluded) {
+            hideContextMenu();
+            try {
+                excl.applyToTree(treeRoot);
+                excl.recount(treeRoot);
+                flattenTree(treeRoot);
+                renderTree();
+                // 若当前选中目录被排除，退回根目录
+                if (curDir && excl.isExcluded(curDir)) selectDir(rootDir);
+            } catch (e) {}
+            setStatus(nowExcluded
+                ? ('已排除：' + node.abs + '（重新扫描后不再包含）')
+                : ('已取消排除：' + node.abs), 'ok');
+            // 后台重扫，刷新计数与缓存
+            if (rootDir) setTimeout(function () { scanAndCache(rootDir); }, 60);
+        });
         menu.style.display = 'block';
         var mw = menu.offsetWidth, mh = menu.offsetHeight;
         var x = ev.clientX, y = ev.clientY;

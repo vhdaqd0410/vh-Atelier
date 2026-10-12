@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.47.4",
-  "buildTime": "2026-10-10 14:26:07",
+  "version": "1.48.0",
+  "buildTime": "2026-10-12 10:09:35",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "docs: 重写 README + 新增使用说明"
+  "notes": "同步：音乐库/音效库支持右键排除子文件夹"
 }

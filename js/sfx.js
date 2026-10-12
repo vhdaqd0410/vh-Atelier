@@ -12,6 +12,10 @@
     var favsFile = path.join(collectDir, 'favs.json');
     var cacheFile = path.join(collectDir, 'index.json');
 
+    // 排除目录：右键子文件夹可排除，扫描时跳过（存 collect/，升级不丢）
+    var excl = (window.__vhExclude && window.__vhExclude.mount)
+        ? window.__vhExclude.mount({ scope: 'sfx', collectDir: collectDir }) : null;
+
     var AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'aiff', 'wma'];
     var MAX_FILES = 20000;
     var ITEM_H = 44;          // 每条高度，须与 CSS .sfx-item 一致
@@ -151,6 +155,8 @@
             var st;
             try { st = fs.statSync(full); } catch (e) { continue; }
             if (st.isDirectory()) {
+                // 被排除的目录：不递归，其下文件不计入扫描结果
+                if (excl && excl.isDirectly(full)) continue;
                 scanDir(full, root, out);
             } else {
                 var ext = path.extname(item).replace('.', '').toLowerCase();
@@ -181,10 +187,21 @@
             parent.children.push(n);
             return n;
         }
+        // 注入被排除的目录：它们不在扫描结果里，但要可见才能右键取消排除
+        try {
+            if (excl) {
+                excl.list().forEach(function (p) {
+                    var np = path.normalize(p);
+                    if (excl.isUnder(np, normRoot)) ensureNode(np);
+                });
+            }
+        } catch (e) {}
         allFiles.forEach(function (f) {
             var node = ensureNode(f.dir);
             node.music.push(f);
         });
+        // 应用「排除目录」：清空被排除节点的子树与文件（节点本身保留）
+        try { if (excl) excl.applyToTree(rootNode); } catch (e) {}
         function recount(n) {
             n.files = (n.music || []).length;
             n.dirs = 0;
@@ -232,7 +249,7 @@
         if (!sfxTreeRoot) return;
         (function walk(n) {
             var row = document.createElement('div');
-            row.className = 'tnode';
+            row.className = 'tnode' + (n.__excluded ? ' excluded' : '');
             row.style.paddingLeft = (6 + n.depth * 14) + 'px';
             var hasKids = n.children.length > 0;
             var caret = document.createElement('span');
@@ -240,7 +257,7 @@
             caret.textContent = hasKids ? '▶' : '';
             var ico = document.createElement('span');
             ico.className = 'tico';
-            ico.textContent = n.depth === 0 ? '🗂' : (hasKids ? '📁' : '📂');
+            ico.textContent = n.__excluded ? '🚫' : (n.depth === 0 ? '🗂' : (hasKids ? '📁' : '📂'));
             var lbl = document.createElement('span');
             lbl.className = 'tlabel';
             lbl.textContent = n.depth === 0 ? (path.basename(n.abs) || n.abs) : n.name;
@@ -264,6 +281,12 @@
                 if (n.children.length && !n.__open) n.__open = true;
                 collapseSfxTree();
                 applyView();
+            });
+            // 右键：排除 / 取消排除该文件夹
+            row.addEventListener('contextmenu', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                showDirContextMenu(ev, n);
             });
             el.tree.appendChild(row);
             n.children.forEach(walk);
@@ -959,6 +982,32 @@
         if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
         menu.style.left = x + 'px';
         menu.style.top = y + 'px';
+    }
+
+    // 目录右键菜单：排除 / 取消排除该文件夹（扫描时跳过）
+    function showDirContextMenu(ev, node) {
+        if (!excl) return;
+        var menu = el.ctxMenu;
+        excl.buildMenu(menu, node.abs, function (nowExcluded) {
+            hideContextMenu();
+            try {
+                // 音效库的树由扫描结果构建，这里直接重建（含注入的排除项）
+                sfxTreeRoot = buildSfxTree();
+                renderSfxTree();
+                if (curSfxDir && excl.isExcluded(curSfxDir)) curSfxDir = '';
+                applyView();
+            } catch (e) {}
+            setStatus(nowExcluded
+                ? ('已排除：' + node.abs + '（重新扫描后不再包含）')
+                : ('已取消排除：' + node.abs), 'ok');
+            if (rootDir) setTimeout(function () { fullScan(rootDir); }, 60);
+        });
+        menu.style.display = 'block';
+        var mw = menu.offsetWidth, mh = menu.offsetHeight;
+        var x = ev.clientX, y = ev.clientY;
+        if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+        if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+        menu.style.left = x + 'px'; menu.style.top = y + 'px';
     }
 
     function hideContextMenu() {
