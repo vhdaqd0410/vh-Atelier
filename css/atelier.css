@@ -51,7 +51,13 @@
 .md-file{
             user-select: none;
             -webkit-user-select: none;
-        }h1{ font-size: 15px; font-weight: 600; margin-bottom: 4px; }.sub{ color: var(--muted); font-size: 11px; margin-bottom: 12px; }
+        }h1{ font-size: 15px; font-weight: 600; margin-bottom: 4px; }/* 顶部副标题（工作台提示）。注意：.top-head 用 margin-top:-14px 把自己贴到面板顶端，
+   副作用是把后面的元素整体上提 14px，导致本行钻进顶栏盒内、被顶栏背景盖掉上半截。
+   所以 margin-top 取 20px（6px 间距 + 14px 补偿），并加 z-index 兜底。
+   （原来这里是 3~4 条同名规则互相覆盖、静默丢属性，一并合并。） */
+.sub{ color: var(--muted); font-size: 10px; margin: 20px 0 12px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      position: relative; z-index: 5; }
 
         /* ===== 运行日志入口与浮层 ===== */.top-head{
             display: flex;
@@ -575,7 +581,7 @@ select{
             border-radius: 4px;
             background: var(--panel);
             object-fit: cover;
-        }.music-item .info{ flex: 1; min-width: 0; }.music-item .title{ color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.music-item .sub{ color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.music-item .mbtn{
+        }.music-item .info{ flex: 1; min-width: 0; }.music-item .title{ color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.music-item /* .sub 其余属性已合并到上面的规则（原第2条） */.music-item .mbtn{
             flex: 0 0 auto;
             padding: 3px 8px;
             font-size: 11px;
@@ -2692,7 +2698,7 @@ select{
     margin-bottom: 12px;
     box-shadow: 0 4px 12px -6px rgba(0,0,0,.5);
 }
-/* 滚动时三层之间不留缝 */.sub{ margin-top: 6px; }
+/* 滚动时三层之间不留缝 *//* .sub margin-top 已合并（原第3条（及重复项）） */
 
 /* ===== 配色分层：区分「主操作 / 次级 / 危险 / 成功 / 特殊」===== */:root{
     --btn-primary-bg: #3d6ef5;      /* 主操作：蓝 */
@@ -3605,7 +3611,7 @@ button.danger{ background: var(--btn-danger-bg); color: #ffd9d9; border-color: t
     margin-bottom: 12px;
     box-shadow: 0 4px 12px -6px rgba(0,0,0,.5);
 }
-/* 滚动时三层之间不留缝 */.sub{ margin-top: 6px; }
+/* 滚动时三层之间不留缝 *//* .sub margin-top 已合并（原第3条（及重复项）） */
 
 /* ===== 配色分层：区分「主操作 / 次级 / 危险 / 成功 / 特殊」===== */:root{
     --btn-primary-bg: #3d6ef5;      /* 主操作：蓝 */

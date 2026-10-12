@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.48.1",
+      "date": "2026-10-12",
+      "title": "同步：修顶部提示行被吸顶栏遮挡",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "同步主版修复：顶栏 margin-top:-14px 把后续元素整体上提，导致「工作台提示行」钻进顶栏盒内、被背景盖掉上半截；A 版共用同一份 CSS，同样受影响"
+        },
+        {
+          "kind": "impr",
+          "text": "提示行 margin-top 6px → 20px 补偿，加 position:relative + z-index 兜底；并合并原本互相覆盖的 4 条 .sub 规则"
+        },
+        {
+          "kind": "note",
+          "text": "附同一份 scripts/test-header-layout.py（Chrome 真实渲染测几何）"
+        }
+      ]
+    },
+    {
       "version": "1.48.0",
       "date": "2026-10-12",
       "title": "同步：音乐库/音效库可排除子文件夹",
