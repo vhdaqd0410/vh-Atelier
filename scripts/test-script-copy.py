@@ -101,9 +101,7 @@ try{ try{fs.unlinkSync(COPYFILE);}catch(e){} }catch(e){}
 
 // 抽出 script.js 里与选中菜单有关的那一段（避免整包加载带来的 CEP 依赖）
 const sj=fs.readFileSync(path.join(ROOT,'js','script.js'),'utf8');
-const start=sj.indexOf('// ---------- 字幕快替（方案B）：时间轴上选中的字幕块 ----------');
-// 注意：段起点取「选中即弹复制菜单」处，不要往前扩到「字幕快替」段——
-// 那段含 new CSInterface()，页面里没有该构造会直接抛错、整段注入失败。
+const start=sj.indexOf('// ---------- 选中即弹复制菜单（台词复制增强） ----------');
 const end=sj.indexOf('// 事件委托：复制 + 单句翻译');
 if(start<0||end<=start){ console.log('  [FAIL] 取不到菜单代码段'); console.log('通过 '+pass+' / 失败 '+fail); process.exit(1); }
 const menuCode=sj.slice(start,end);
