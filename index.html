@@ -246,10 +246,15 @@
                         </select>
                         <button id="btnRefreshRefTrack" class="secondary mini">刷新</button>
                     </div>
+                    <div class="row" style="margin-top:6px;align-items:center;gap:6px;">
+                        <label style="margin:0;flex:0 0 auto;">导出预设</label>
+                        <select id="refPresetSel" style="flex:1;"><option value="">（未找到音频预设）</option></select>
+                        <button id="btnRefreshRefPreset" class="secondary mini">刷新</button>
+                    </div>
                     <div class="row" style="margin-top:6px;">
                         <button id="btnGrabInOut">从入点出点抓取</button>
                     </div>
-                    <div class="hint">先在时间轴按 I / O 设好起止（≤30 秒）。只截取所选轨道的源素材，<b>不会混入配乐和其他人声</b>。</div>
+                    <div class="hint">先在时间轴按 I / O 设好起止（≤30 秒）。抓取时<b>独奏所选轨</b>再渲染该区间，其他轨（配乐、其他人声）不会混进来；拿到的是这条轨经过时间轴处理后的声音。和「交付」里按轨静音是同一套逻辑。</div>
                     <div class="hint" id="refRangeInfo" style="display:none;"></div>
                 </div>
             </details>
@@ -2200,6 +2205,7 @@
     <script src="js/tmp-clean.js"></script>
     <script src="js/translate.js"></script>
     <script src="js/subtitle.js"></script>
+    <script src="js/audio-preset.js"></script>
     <script src="js/clone.js"></script>
     <script src="js/wavesurfer.js"></script>
     <script src="js/clip-select.js"></script>

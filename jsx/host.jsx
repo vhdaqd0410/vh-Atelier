@@ -1371,6 +1371,27 @@ function meMuteExcept(keepListStr) {
 }
 
 // 取消所有音频轨静音（逐个处理，单个失败不中断整体）
+// 按保存的状态还原各音频轨静音（供语音克隆「独奏该轨渲染」后还原用户自己的设置）
+// statesStr: "0:0,1:1" 形式（音频轨索引:是否静音）
+function meRestoreMuteStates(statesStr) {
+    try {
+        var s = app.project.activeSequence;
+        if (!s) return "ERR:没有活动序列";
+        var parts = String(statesStr == null ? "" : statesStr).split(',');
+        var n = s.audioTracks.numTracks;
+        var done = 0, failed = 0;
+        for (var k = 0; k < parts.length; k++) {
+            var seg = parts[k].split(':');
+            if (seg.length !== 2) continue;
+            var idx = parseInt(seg[0], 10);
+            var mu = parseInt(seg[1], 10) ? 1 : 0;
+            if (isNaN(idx) || idx < 0 || idx >= n) { failed++; continue; }
+            try { s.audioTracks[idx].setMute(mu); done++; } catch (e) { failed++; }
+        }
+        return "OK:" + JSON.stringify({ restored: done, failed: failed });
+    } catch (e) { return "ERR:" + e; }
+}
+
 function meUnmuteAll() {
     try {
         var s = app.project.activeSequence;

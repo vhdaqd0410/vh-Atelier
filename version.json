@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.77.0",
-  "buildTime": "2026-10-12 11:38:50",
+  "version": "1.78.0",
+  "buildTime": "2026-10-12 12:59:28",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "语音克隆支持用序列入点出点取参考音频"
+  "notes": "语音克隆入点出点改为独奏该轨渲染"
 }

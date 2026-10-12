@@ -173,6 +173,8 @@
         refSrcClip: document.getElementById('refSrcClip'),
         refSrcInOut: document.getElementById('refSrcInOut'),
         refTrackSel: document.getElementById('refTrackSel'),
+        refPresetSel: document.getElementById('refPresetSel'),
+        btnRefreshRefPreset: document.getElementById('btnRefreshRefPreset'),
         btnRefreshRefTrack: document.getElementById('btnRefreshRefTrack'),
         btnGrabInOut: document.getElementById('btnGrabInOut'),
         refRangeInfo: document.getElementById('refRangeInfo'),
@@ -222,6 +224,8 @@
         if (el.btnRefreshRefTrack) el.btnRefreshRefTrack.disabled = b;
         if (el.btnGrabInOut) el.btnGrabInOut.disabled = b;
         if (el.refTrackSel) el.refTrackSel.disabled = b;
+        if (el.refPresetSel) el.refPresetSel.disabled = b;
+        if (el.btnRefreshRefPreset) el.btnRefreshRefPreset.disabled = b;
         el.btnGrabFromMedia.disabled = b;
         el.projectMediaSel.disabled = b;
         if (el.btnSaveVoice) el.btnSaveVoice.disabled = b || !refWavPath;
@@ -278,6 +282,42 @@
 
 
     // ---------- 1b. 从序列入点出点抓取（按轨取纯净素材，不走序列混音） ----------
+    var LS_REF_PRESET = 'vh_clone_ref_preset';   // 记住上次选的导出预设
+
+    function refPresetLib() { return window.__vhAudioPreset || null; }
+
+    function currentRefPreset() {
+        var v = (el.refPresetSel && el.refPresetSel.value) || '';
+        if (v) { try { localStorage.setItem(LS_REF_PRESET, v); } catch (e) {} }
+        return v;
+    }
+
+    // 扫出音频类导出预设填进下拉，默认选中「上次用的」或名字像调音/人声的那个
+    function refreshRefPresets() {
+        if (!el.refPresetSel) return;
+        var lib = refPresetLib();
+        if (!lib) return;
+        var saved = '';
+        try { saved = localStorage.getItem(LS_REF_PRESET) || ''; } catch (e) {}
+        var list = lib.scanAudioPresets();
+        el.refPresetSel.innerHTML = '';
+        if (!list.length) {
+            var o0 = document.createElement('option');
+            o0.value = '';
+            o0.textContent = '（没找到音频预设，将直取原素材）';
+            el.refPresetSel.appendChild(o0);
+            return;
+        }
+        list.forEach(function (p) {
+            var o = document.createElement('option');
+            o.value = p.full;
+            o.textContent = p.name;
+            el.refPresetSel.appendChild(o);
+        });
+        var pick = lib.pickAudioPreset({ saved: saved, list: list });
+        if (pick && pick.full) el.refPresetSel.value = pick.full;
+    }
+
     function setRefSrc(s) {
         refSrc = (s === 'inout') ? 'inout' : 'clip';
         if (el.refSrcRow) {
@@ -287,7 +327,7 @@
         }
         if (el.refSrcClip) el.refSrcClip.style.display = (refSrc === 'clip') ? '' : 'none';
         if (el.refSrcInOut) el.refSrcInOut.style.display = (refSrc === 'inout') ? '' : 'none';
-        if (refSrc === 'inout') { refreshRefTracks(); refreshRefInfo(); }
+        if (refSrc === 'inout') { refreshRefTracks(); refreshRefPresets(); refreshRefInfo(); }
         else if (el.refRangeInfo) { el.refRangeInfo.style.display = 'none'; }
     }
 
@@ -329,6 +369,8 @@
         });
     }
 
+    // ---------- 1c. 入点出点抓取：独奏所选轨后渲染区间 ----------
+    // 与交付面板「静音非保留轨」同源：meMuteExcept 静音其余轨 → 导出 → 原样还原。
     function grabRefInOut() {
         if (busy) return;
         setStatus('正在读取入点出点…', '');
@@ -343,57 +385,168 @@
                 return;
             }
 
+            // 取哪条轨（独奏只能作用于音频轨，手动选择时只认音频轨）
             var track = null;
             var sel = el.refTrackSel ? el.refTrackSel.value : 'auto';
             if (sel && sel !== 'auto') {
                 var want = parseInt(sel, 10);
-                for (var i = 0; i < tracks.length; i++) if (tracks[i].index === want) { track = tracks[i]; break; }
-                if (!track) { setStatus('所选轨道在该区间内没有片段，换一条轨或改用「自动」', 'err'); return; }
+                for (var i = 0; i < tracks.length; i++) {
+                    if (tracks[i].index === want && tracks[i].type === 'audio') { track = tracks[i]; break; }
+                }
+                if (!track) { setStatus('所选音轨在该区间内没有片段，换一条轨或改用「自动」', 'err'); return; }
             } else {
                 track = window.__vhUtils.pickRefTrack(tracks);
             }
             if (!track) { setStatus('没有取到可用轨道', 'err'); return; }
 
+            refRange = d;
+            var span = Number(d.outSec) - Number(d.inSec);
+
+            var presetPath = currentRefPreset();
+            var lib = refPresetLib();
+            // 视频轨的内嵌音频没法用音轨静音隔离，只能直取；预设缺失时也退到直取
+            var canSolo = (track.type === 'audio') && !!presetPath && !!lib && lib.isAudioPreset(presetPath);
+
+            if (canSolo) {
+                // 渲染产出的是整个 I/O 区间（含区间内空白），所以按区间长度卡上限
+                if (span > 30) {
+                    setStatus('入点出点区间 ' + span.toFixed(1) + ' 秒，超过 CosyVoice3 的 30 秒上限（独奏渲染产出的是整个区间长度），请收紧 I / O', 'err');
+                    return;
+                }
+                setBusy(true);
+                setProgress(-1, '正在独奏 ' + (track.name || '') + ' 并渲染区间…');
+                soloRenderRange(track, d, presetPath, function (err, info) {
+                    finishGrab(err, info, track, d, 'solo');
+                });
+                return;
+            }
+
+            // 兜底：直取原素材（无可用音频预设，或选中的是视频轨）
             var segs = window.__vhUtils.buildRefSegments(track.clips, d.inSec, d.outSec);
             if (!segs.length) { setStatus('该轨道在区间内没有可截取的内容', 'err'); return; }
-
             var total = 0;
             segs.forEach(function (s) { total += s.take; });
             if (total > 30) {
                 setStatus('该轨道在区间内实取 ' + total.toFixed(1) + ' 秒，超过 CosyVoice3 的 30 秒上限，请收紧 I / O 或换一条轨', 'err');
                 return;
             }
-
-            refRange = d;
             setBusy(true);
             setProgress(-1, '正在截取参考音频…');
             extractSegments(segs, track, d, function (err, info) {
-                setBusy(false);
-                if (err) {
-                    var where = refRange
-                        ? ('（区间 ' + Number(refRange.inSec).toFixed(2) + 's ~ ' + Number(refRange.outSec).toFixed(2) + 's，轨 ' + (track.name || '') + '）')
-                        : '';
-                    setStatus(err + where, 'err');
-                    return;
-                }
-                refWavPath = info.wav;
-                refClipMeta = {
-                    clipName: (track.name || '') + '·' + info.segCount + '段',
-                    mediaPath: info.wav,
-                    inPoint: d.inSec,
-                    outPoint: d.outSec,
-                    seqName: d.seqName
-                };
-                var kind = (track.type === 'audio') ? '音轨' : '视频内嵌音频';
-                el.refInfo.textContent = '✓ ' + (track.name || '') + '（' + kind + '）'
-                    + '\n入点→出点 ' + Number(d.inSec).toFixed(2) + 's ~ ' + Number(d.outSec).toFixed(2) + 's'
-                    + '\n实取 ' + info.seconds.toFixed(1) + ' 秒'
-                    + (info.segCount > 1 ? '（' + info.segCount + ' 段拼接）' : '');
-                el.refInfo.classList.add('has');
-                setStatus('参考音色已就绪（取 ' + (track.name || '') + '，未混入其他轨道）。建议点「自动识别」填参考文字', 'ok');
-                autoRecognizeRef();
+                finishGrab(err, info, track, d, 'direct');
             });
         });
+    }
+
+    // 独奏所选音频轨 → 渲染区间 → 还原用户自己的静音设置 → 校验格式 → 转 24k 单声道
+    function soloRenderRange(track, range, presetPath, cb) {
+        var lib = refPresetLib();
+        var ffmpegPath = path.join(extRoot, 'bin', 'ffmpeg-win32-x64.exe');
+        if (!fs.existsSync(ffmpegPath)) return cb('FFmpeg 缺失: ' + ffmpegPath);
+
+        var tmpDir = path.join(os.tmpdir(), 'vc_clone');
+        try { if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true }); } catch (e) {}
+        var stamp = Date.now();
+        var rawOut = path.join(tmpDir, 'ref_solo_' + stamp + '.wav');
+
+        // 1) 先记下现有静音状态，导出后原样还原（不破坏用户自己的静音设置）
+        csInterface.evalScript('meListAudioTracks()', function (rt) {
+            var statesStr = '';
+            try {
+                var s = String(rt || '');
+                if (s.indexOf('OK:') === 0) {
+                    var info = JSON.parse(s.slice(3));
+                    statesStr = (info.tracks || []).map(function (t) {
+                        return t.index + ':' + (t.muted ? 1 : 0);
+                    }).join(',');
+                }
+            } catch (e) {}
+
+            function restore(then) {
+                if (!statesStr) { csInterface.evalScript('meUnmuteAll()', function () { then(); }); return; }
+                csInterface.evalScript('meRestoreMuteStates("' + statesStr + '")', function () { then(); });
+            }
+
+            // 2) 独奏：静音除该轨外的所有音频轨
+            csInterface.evalScript('meMuteExcept("' + track.index + '")', function (m) {
+                var ms = String(m || '');
+                if (ms.indexOf('OK:') !== 0) {
+                    restore(function () { cb('独奏轨道失败：' + ms.replace(/^ERR:/, '')); });
+                    return;
+                }
+                // 3) 渲染该区间（meExportRangeStr 会临时设入出点，导完还原）
+                var payload = {
+                    seqName: range.seqName || '',
+                    startSec: range.inSec,
+                    endSec: range.outSec,
+                    outPath: rawOut,
+                    presetPath: presetPath
+                };
+                csInterface.evalScript('meRangePayload = ' + JSON.stringify(payload) + ';', function () {
+                    csInterface.evalScript('meExportRangeStr()', function (e) {
+                        var es = String(e || '');
+                        // 4) 不管成败都还原静音
+                        restore(function () {
+                            if (es.indexOf('OK:') !== 0) {
+                                cb('区间渲染失败：' + (es.replace(/^ERR:/, '') || '无返回'));
+                                return;
+                            }
+                            // 5) 校验产出的确是真 wav（预设选错会输出视频容器）
+                            if (lib) {
+                                var chk = lib.verifyWav(rawOut);
+                                if (!chk.ok) { cb(chk.msg); return; }
+                            }
+                            // 6) 转 24k 单声道（CosyVoice3 参考音频要求）
+                            var finalWav = path.join(tmpDir, 'ref_' + stamp + '_24k.wav');
+                            setProgress(-1, '正在转 24k 单声道…');
+                            child_process.execFile(ffmpegPath,
+                                ['-i', rawOut, '-ar', '24000', '-ac', '1', '-y', finalWav],
+                                { timeout: 120000, maxBuffer: 10485760 },
+                                function (er2) {
+                                    if (er2 || !fs.existsSync(finalWav)) {
+                                        cb('参考音频转码失败：' + (er2 ? er2.message : '未生成 wav'));
+                                        return;
+                                    }
+                                    cb(null, {
+                                        wav: finalWav,
+                                        seconds: Number(range.outSec) - Number(range.inSec),
+                                        segCount: 1
+                                    });
+                                });
+                        });
+                    });
+                });
+            });
+        });
+    }
+
+    // 统一收尾：写参考音频、更新界面、自动识别参考文字
+    function finishGrab(err, info, track, range, mode) {
+        setBusy(false);
+        if (err) {
+            setStatus(err + '（区间 ' + Number(range.inSec).toFixed(2) + 's ~ '
+                + Number(range.outSec).toFixed(2) + 's，轨 ' + (track && track.name ? track.name : '') + '）', 'err');
+            return;
+        }
+        refWavPath = info.wav;
+        var kind = (track.type === 'audio') ? '音轨' : '视频内嵌音频';
+        var how = (mode === 'solo') ? '独奏渲染' : '直取原素材';
+        refClipMeta = {
+            clipName: (track.name || '') + '·' + how,
+            mediaPath: info.wav,
+            inPoint: range.inSec,
+            outPoint: range.outSec,
+            seqName: range.seqName
+        };
+        el.refInfo.textContent = '✓ ' + (track.name || '') + '（' + kind + '·' + how + '）'
+            + '\n入点→出点 ' + Number(range.inSec).toFixed(2) + 's ~ ' + Number(range.outSec).toFixed(2) + 's'
+            + '\n时长 ' + Number(info.seconds).toFixed(1) + ' 秒'
+            + (info.segCount > 1 ? '（' + info.segCount + ' 段拼接）' : '');
+        el.refInfo.classList.add('has');
+        setStatus(mode === 'solo'
+            ? ('参考音色已就绪（已独奏 ' + (track.name || '') + ' 渲染，未混入其他轨道）。建议点「自动识别」填参考文字')
+            : ('参考音色已就绪（直取 ' + (track.name || '') + ' 原素材，不含时间轴上的音频处理）。建议点「自动识别」填参考文字'), 'ok');
+        autoRecognizeRef();
     }
 
     // 逐段从源素材截取 → 多段则拼接。全程 ffmpeg，不触发 PR 渲染。
@@ -1167,6 +1320,7 @@
     if (el.btnRefreshRefTrack) el.btnRefreshRefTrack.addEventListener('click', function () {
         refreshRefTracks(); refreshRefInfo();
     });
+    if (el.btnRefreshRefPreset) el.btnRefreshRefPreset.addEventListener('click', refreshRefPresets);
     el.btnInsertTimeline.addEventListener('click', function () { insertTimeline(); });
 
     // 音色库
@@ -1204,6 +1358,7 @@
     // 初始化
     setMode('clone');
     setRefSrc('clip');
+    refreshRefPresets();
     renderVoiceLib();
     renderVcResults();
     updateCloneEnabled();
