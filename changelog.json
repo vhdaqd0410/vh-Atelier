@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.48.3",
+      "date": "2026-10-12",
+      "title": "修：素材库目录不显示（补上未同步的 renderComputerNav）",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修素材库「我的电脑」视图空白：A 版 media.js 调用了 renderComputerNav() 但该函数从未同步过来，一进入默认的「我的电脑」视图就抛异常，左侧目录树空白。已从主版完整移植该函数（74 行，逐行一致）"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-fn-integrity.py 静态门禁：检查面板是否调用了本文件未定义的函数（本 bug 在 HEAD 版上会被它判 FAIL，已验证有效）"
+        }
+      ]
+    },
+    {
       "version": "1.48.2",
       "date": "2026-10-12",
       "title": "同步：剧本面板选中即弹复制菜单 + 按标点断句复制",
