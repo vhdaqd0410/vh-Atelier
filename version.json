@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.49.0",
-  "buildTime": "2026-10-12 18:35:38",
+  "version": "1.49.1",
+  "buildTime": "2026-10-12 19:13:14",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "同步：剧本→字幕快替"
+  "notes": "移除字幕快替功能（方案未通过）"
 }

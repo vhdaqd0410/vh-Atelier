@@ -606,14 +606,6 @@
         title.textContent = '📖 ' + (projectName || '') + (docxPath ? ' · ' + path.basename(docxPath) : '');
         title.title = docxPath;
         head.appendChild(title);
-        // 字幕快替的目标条（方案B）
-        capBarEl = document.createElement('span');
-        capBarEl.className = 'scr-capbar';
-        capBarEl.textContent = '🎯 目标字幕：未选中';
-        capBarEl.title = '在时间轴点选一条字幕块 → 点这里刷新 → 在剧本里选中台词 → 菜单里点「替换这条字幕」';
-        capBarEl.style.cssText = 'cursor:pointer;';
-        capBarEl.addEventListener('click', function () { refreshCapBlock(); });
-        head.appendChild(capBarEl);
         // 搜索框
         var searchInp = document.createElement('input');
         searchInp.type = 'text';
@@ -1066,87 +1058,8 @@
 
         // 样式
         var st = document.createElement('style');
-        st.textContent = '.scr-dlg{margin:3px 0;padding:2px 4px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;} .scr-ept{margin:16px 0 8px;padding:5px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;} .scr-scene{margin:10px 0 3px;padding:2px 8px;color:#7fb3d9;font-weight:600;font-size:12.5px;} .scr-cast{color:#999;font-size:12px;padding:1px 8px;} .scr-action{color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 8px;border-left:2px solid #3a3a3a;margin:2px 0;} .scr-caption{color:#c9a86a;font-size:12px;padding:1px 8px;} .scr-plain{padding:1px 8px;} mark.scr-hl{background:#5a4a1e;color:#ffd76a;padding:0 1px;border-radius:2px;} mark.scr-hl-cur{background:#ffb347;color:#1a1a1a;outline:1px solid #ffd76a;}.scr-selmenu{position:fixed;z-index:10060;overflow-y:auto;background:#242428;border:1px solid #4a4a52;border-radius:7px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.6);min-width:110px;max-width:520px;}.scr-selmenu .it{display:block;width:100%;text-align:left;background:none;border:none;color:#ddd;font-size:12px;padding:5px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:inherit;}.scr-selmenu .it:hover{background:#3a3a44;color:#fff;}.scr-selmenu .it .k{color:#ffb347;font-weight:600;margin-right:5px;}.scr-selmenu .hd{font-size:10px;color:#8a8a95;padding:3px 8px 4px;border-bottom:1px solid #3a3a42;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.scr-selmenu .sp{height:1px;background:#3a3a42;margin:3px 0;}.scr-selmenu .it.long .t{color:#ffd0d0;}.scr-selmenu .t{color:#a9d3ff;}.scr-selmenu .subh{font-size:10.5px;color:#8a8a95;margin:0;}.scr-dlg .scr-copy{cursor:pointer;}.scr-capbar{font-size:10.5px;color:#8a8a95;border:1px solid #3a3a42;border-radius:4px;padding:2px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;cursor:pointer;}.scr-capbar:hover{border-color:#5a5a66;color:#b9b9c4;}.scr-capbar.ok{color:#9fe0a8;border-color:#2f5a3a;}.scr-selmenu .it.repl{background:rgba(127,214,139,.10);}.scr-selmenu .it.repl .t{color:#9fe0a8;font-weight:600;}.scr-selmenu .it.repl:hover{background:rgba(127,214,139,.20);}';
+        st.textContent = '.scr-dlg{margin:3px 0;padding:2px 4px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;} .scr-ept{margin:16px 0 8px;padding:5px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;} .scr-scene{margin:10px 0 3px;padding:2px 8px;color:#7fb3d9;font-weight:600;font-size:12.5px;} .scr-cast{color:#999;font-size:12px;padding:1px 8px;} .scr-action{color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 8px;border-left:2px solid #3a3a3a;margin:2px 0;} .scr-caption{color:#c9a86a;font-size:12px;padding:1px 8px;} .scr-plain{padding:1px 8px;} mark.scr-hl{background:#5a4a1e;color:#ffd76a;padding:0 1px;border-radius:2px;} mark.scr-hl-cur{background:#ffb347;color:#1a1a1a;outline:1px solid #ffd76a;}.scr-selmenu{position:fixed;z-index:10060;overflow-y:auto;background:#242428;border:1px solid #4a4a52;border-radius:7px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.6);min-width:110px;max-width:520px;}.scr-selmenu .it{display:block;width:100%;text-align:left;background:none;border:none;color:#ddd;font-size:12px;padding:5px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:inherit;}.scr-selmenu .it:hover{background:#3a3a44;color:#fff;}.scr-selmenu .it .k{color:#ffb347;font-weight:600;margin-right:5px;}.scr-selmenu .hd{font-size:10px;color:#8a8a95;padding:3px 8px 4px;border-bottom:1px solid #3a3a42;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.scr-selmenu .sp{height:1px;background:#3a3a42;margin:3px 0;}.scr-selmenu .it.long .t{color:#ffd0d0;}.scr-selmenu .t{color:#a9d3ff;}.scr-selmenu .subh{font-size:10.5px;color:#8a8a95;margin:0;}.scr-dlg .scr-copy{cursor:pointer;}';
         document.head.appendChild(st);
-
-    // ---------- 字幕快替（方案B）：时间轴上选中的字幕块 ----------
-    // PR 的 ExtendScript 没有读写字幕条目文本的 API（只暴露 audioTracks/videoTracks），
-    // 所以做不到「静默改写字幕」。这里做的是把两件事自动化：
-    //   ① 把剧本里选中的台词写进剪贴板  ② 把播放头跳到那条字幕的时间点
-    // 用户在 PR 里点一下粘贴即可。省掉「找位置 + 复制」这两步。
-    var capBlock = null;        // { startSec, endSec, durationSec, name, ... }
-    var capBarEl = null;        // 头部那个小条
-
-    function csScript(code, cb) {
-        try {
-            var cs = new CSInterface();
-            cs.evalScript(code, function (r) { if (cb) cb(r); });
-        } catch (e) { if (cb) cb(''); }
-    }
-
-    // 读时间轴上选中的块
-    function refreshCapBlock(cb) {
-        csScript('ckGetSelectedCaptionBlockStr()', function (r) {
-            var res = null;
-            try { res = JSON.parse(r); } catch (e) {}
-            if (!res || !res.ok) {
-                capBlock = null;
-                renderCapBar((res && res.error) || '读取失败');
-                if (cb) cb(null);
-                return;
-            }
-            var d = res.data;
-            // 取第一个有效块
-            var b = (d.blocks && d.blocks.length) ? d.blocks[0] : null;
-            if (!b || b.startSec === null) {
-                capBlock = null;
-                renderCapBar(d.notes && d.notes.length ? d.notes[0] : '时间轴上没有选中的块');
-                if (cb) cb(null);
-                return;
-            }
-            capBlock = {
-                startSec: b.startSec,
-                endSec: b.endSec,
-                durationSec: b.durationSec,
-                name: b.name || '',
-                seqName: d.seqName || '',
-                count: d.selectedCount || 1
-            };
-            renderCapBar('');
-            if (cb) cb(capBlock);
-        });
-    }
-
-    // 头部小条：显示/更新目标字幕
-    function renderCapBar(msg) {
-        if (!capBarEl) return;
-        var okCls = '';
-        var txt = '';
-        if (capBlock) {
-            txt = '🎯 目标字幕：' + fmtSec(capBlock.startSec) + ' → ' + fmtSec(capBlock.endSec)
-                + '（' + fmtSec(capBlock.durationSec) + '）'
-                + (capBlock.name ? '　' + capBlock.name.slice(0, 20) : '')
-                + (capBlock.count > 1 ? '　(共选 ' + capBlock.count + ' 个，取第 1 个)' : '');
-            okCls = ' ok';
-        } else {
-            txt = '🎯 目标字幕：' + (msg || '未选中（在时间轴点选一条字幕块后点刷新）');
-        }
-        capBarEl.className = 'scr-capbar' + okCls;
-        capBarEl.textContent = txt;
-    }
-
-    function fmtSec(s) {
-        s = Number(s) || 0;
-        var m = Math.floor(s / 60), sec = s - m * 60;
-        return (m > 0 ? m + ':' : '') + (m > 0 ? (sec < 10 ? '0' : '') : '') + sec.toFixed(2) + 's';
-    }
-
-    // 跳到目标字幕位置（复用 host 侧已有的 ckSeekToStr，它按秒定位并激活序列）
-    function jumpToCapBlock(cb) {
-        if (!capBlock) { if (cb) cb(false); return; }
-        var sec = Number(capBlock.startSec) || 0;
-        csScript('ckSeekToStr("", "' + sec + '")', function () { if (cb) cb(true); });
-    }
 
     // ---------- 选中即弹复制菜单（台词复制增强） ----------
     // 设计：选中剧本里的任意文字 → 在选区旁浮出菜单；
@@ -1221,35 +1134,6 @@
         hd.textContent = '复制：' + (sel.length > 26 ? sel.slice(0, 26) + '…' : sel);
         menu.appendChild(hd);
 
-        // 0) 字幕快替（放在最前，替换字幕是高频动作）
-        if (capBlock) {
-            var b0 = document.createElement('button');
-            b0.type = 'button';
-            b0.className = 'it repl';
-            var k0 = document.createElement('span');
-            k0.className = 'k';
-            k0.textContent = '🎯';
-            var t0 = document.createElement('span');
-            t0.className = 't';
-            t0.textContent = '替换这条字幕';
-            b0.appendChild(k0);
-            b0.appendChild(t0);
-            b0.title = '把选中的台词写进剪贴板，并跳到该字幕位置：在 PR 里按 Ctrl+V 覆盖';
-            b0.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
-            b0.addEventListener('click', function (ev) {
-                ev.preventDefault();
-                ev.stopPropagation();
-                doReplaceCaption(sel);
-            });
-            menu.appendChild(b0);
-            var hint0 = document.createElement('div');
-            hint0.className = 'hd subh';
-            hint0.textContent = fmtSec(capBlock.startSec) + ' → ' + fmtSec(capBlock.endSec)
-                + '　共 ' + sel.length + ' 字';
-            menu.appendChild(hint0);
-            menu.appendChild(divider());
-        }
-
         // 1) 复制选中（原样）
         menu.appendChild(item('复制选中', '⎘', sel));
 
@@ -1295,20 +1179,6 @@
             }
         }
         return menu;
-    }
-
-    // 执行「替换这条字幕」：复制到剪贴板 + 跳到该字幕 + 提示下一步
-    function doReplaceCaption(text) {
-        var txt = String(text || '').trim();
-        if (!txt) { window.__copyFlash && window.__copyFlash('没有可替换的文字'); return; }
-        if (!capBlock) { window.__copyFlash && window.__copyFlash('没有目标字幕'); return; }
-        // ① 写剪贴板
-        try { window.__copyText && window.__copyText(txt); } catch (e) {}
-        // ② 跳到该字幕（方便在 PR 里直接选中）
-        closeSelMenu();
-        jumpToCapBlock(function () {
-            window.__copyFlash && window.__copyFlash('已复制，已跳到 ' + fmtSec(capBlock.startSec) + '：在 PR 选中该字幕按 Ctrl+V');
-        });
     }
 
     function divider() {
@@ -1678,7 +1548,6 @@
             });
         }
         bindSelMenu();
-        refreshCapBlock();   // 打开时尝试读取当前选中的字幕块
 
         body.addEventListener('click', function (e) {
             var trn = e.target.closest ? e.target.closest('.scr-trn') : null;
