@@ -57,6 +57,7 @@ JOBS = [
     ("test-vc-inout.py", "python", True, "语音克隆：序列入点出点取参考音频（独奏渲染+兜底直取）", None),
     ("test-clone-stop.py", "python", True, "语音克隆：停止按钮（杀进程树+状态复位+读秒）", None),
     ("test-header-layout.py", "python", True, "顶部提示行不被吸顶栏遮挡（真实渲染测几何）", None),
+    ("test-script-copy.py", "python", True, "剧本：选中即弹复制菜单 + 按标点断句复制", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）

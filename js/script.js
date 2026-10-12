@@ -831,7 +831,13 @@
                 }
             }
             var en = extractEnglish(text);
-            return '<div class="scr-dlg"><span style="color:#ffb347;font-weight:700;">' + roleHtml + '</span><span style="color:#8a7a6a;"> : </span><span style="color:' + spColor + ';">' + speechHtml + '</span><span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词">⧉</span><span class="scr-trn" data-line="' + escHtml(text) + '" data-en="' + escHtml(en) + '" title="翻译本句">译</span>' + zhHtml + '</div>';
+            return '<div class="scr-dlg" data-role="' + escHtml(rolePart) + '" data-speech="' + escHtml(speech) + '">'
+                + '<span class="scr-role" style="color:#ffb347;font-weight:700;">' + roleHtml + '</span>'
+                + '<span style="color:#8a7a6a;"> : </span>'
+                + '<span class="scr-sp" style="color:' + spColor + ';">' + speechHtml + '</span>'
+                + '<span class="scr-copy" data-copy="' + escHtml(speech) + '" title="复制台词（也可直接选中文字）">⧉</span>'
+                + '<span class="scr-trn" data-line="' + escHtml(text) + '" data-en="' + escHtml(en) + '" title="翻译本句">译</span>'
+                + zhHtml + '</div>';
         }
         // 在已转义 HTML 上做关键词高亮（简单：大小写不敏感子串包 <mark>）—— 因 HTML 已含标签，仅在纯文本段操作有风险；改为渲染前对原文高亮。
         function hlText(escapedHtml, kw) { return escapedHtml; } // 占位，实际用 render 层高亮
@@ -1051,8 +1057,247 @@
 
         // 样式
         var st = document.createElement('style');
-        st.textContent = '.scr-dlg{margin:3px 0;padding:2px 4px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;} .scr-ept{margin:16px 0 8px;padding:5px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;} .scr-scene{margin:10px 0 3px;padding:2px 8px;color:#7fb3d9;font-weight:600;font-size:12.5px;} .scr-cast{color:#999;font-size:12px;padding:1px 8px;} .scr-action{color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 8px;border-left:2px solid #3a3a3a;margin:2px 0;} .scr-caption{color:#c9a86a;font-size:12px;padding:1px 8px;} .scr-plain{padding:1px 8px;} mark.scr-hl{background:#5a4a1e;color:#ffd76a;padding:0 1px;border-radius:2px;} mark.scr-hl-cur{background:#ffb347;color:#1a1a1a;outline:1px solid #ffd76a;}';
+        st.textContent = '.scr-dlg{margin:3px 0;padding:2px 4px;position:relative;} .scr-dlg:hover{background:#242020;} .scr-dlg .scr-copy,.scr-dlg .scr-trn{visibility:hidden;display:inline;color:#888;cursor:pointer;font-size:11px;padding:0 4px;margin-left:4px;border-radius:3px;vertical-align:middle;} .scr-dlg:hover .scr-copy,.scr-dlg:hover .scr-trn{visibility:visible;} .scr-dlg .scr-copy:hover{color:#ffb347;background:#2a2a2a;} .scr-dlg .scr-trn:hover{color:#7fd68b;background:#1e2a1e;} .scr-zh{margin-top:2px;padding-left:8px;border-left:2px solid #4a6b4a;color:#9fe0a8;font-size:12.5px;} .scr-ept{margin:16px 0 8px;padding:5px 12px;background:#22303c;border-left:4px solid #537d96;border-radius:3px;font-weight:700;font-size:14px;color:#8fc0e8;} .scr-scene{margin:10px 0 3px;padding:2px 8px;color:#7fb3d9;font-weight:600;font-size:12.5px;} .scr-cast{color:#999;font-size:12px;padding:1px 8px;} .scr-action{color:#9a9a9a;font-style:italic;font-size:12.5px;padding:1px 8px;border-left:2px solid #3a3a3a;margin:2px 0;} .scr-caption{color:#c9a86a;font-size:12px;padding:1px 8px;} .scr-plain{padding:1px 8px;} mark.scr-hl{background:#5a4a1e;color:#ffd76a;padding:0 1px;border-radius:2px;} mark.scr-hl-cur{background:#ffb347;color:#1a1a1a;outline:1px solid #ffd76a;}.scr-selmenu{position:fixed;z-index:10060;overflow-y:auto;background:#242428;border:1px solid #4a4a52;border-radius:7px;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,.6);min-width:110px;max-width:520px;}.scr-selmenu .it{display:block;width:100%;text-align:left;background:none;border:none;color:#ddd;font-size:12px;padding:5px 8px;border-radius:4px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:inherit;}.scr-selmenu .it:hover{background:#3a3a44;color:#fff;}.scr-selmenu .it .k{color:#ffb347;font-weight:600;margin-right:5px;}.scr-selmenu .hd{font-size:10px;color:#8a8a95;padding:3px 8px 4px;border-bottom:1px solid #3a3a42;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.scr-selmenu .sp{height:1px;background:#3a3a42;margin:3px 0;}.scr-selmenu .it.long .t{color:#ffd0d0;}.scr-selmenu .t{color:#a9d3ff;}.scr-selmenu .subh{font-size:10.5px;color:#8a8a95;margin:0;}.scr-dlg .scr-copy{cursor:pointer;}';
         document.head.appendChild(st);
+
+
+    // ---------- 选中即弹复制菜单（台词复制增强） ----------
+    // 设计：选中剧本里的任意文字 → 在选区旁浮出菜单；
+    //       菜单里既有「复制选中」，也把选段/整句按标点断好的句子列出来，点一下即复制。
+    var selMenuEl = null;
+
+    function closeSelMenu() {
+        if (selMenuEl && selMenuEl.parentNode) selMenuEl.parentNode.removeChild(selMenuEl);
+        selMenuEl = null;
+    }
+
+    // 取当前选择所在「台词行的 speech 文本」（不含角色名），以及选中的片段
+    function currentSelectionInfo() {
+        var sel = window.getSelection && window.getSelection();
+        if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+        var txt = String(sel.toString() || '');
+        if (!txt.trim()) return null;
+        var node = sel.anchorNode;
+        var el = node && (node.nodeType === 1 ? node : node.parentNode);
+        var dlg = el && el.closest ? el.closest('.scr-dlg') : null;
+        var speech = '';
+        var role = '';
+        if (dlg) {
+            speech = dlg.getAttribute('data-speech') || '';
+            role = dlg.getAttribute('data-role') || '';
+            // 没有带上 data 属性（旧渲染）时，从 DOM 兜底提取
+            if (!speech) {
+                var sp = dlg.querySelector('.scr-sp');
+                speech = sp ? String(sp.textContent || '') : '';
+            }
+            if (!role) {
+                var rl = dlg.querySelector('.scr-role');
+                role = rl ? String(rl.textContent || '') : '';
+            }
+        }
+        return { selected: txt, speech: speech, role: role, dlg: dlg };
+    }
+
+    function buildSelMenu(info) {
+        var menu = document.createElement('div');
+        menu.className = 'scr-selmenu';
+        var sel = String(info.selected || '').trim();
+        var speech = String(info.speech || '').trim();
+
+        function item(label, key, text, cls) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'it' + (cls ? ' ' + cls : '');
+            if (key) {
+                var kEl = document.createElement('span');
+                kEl.className = 'k';
+                kEl.textContent = key;
+                b.appendChild(kEl);
+            }
+            var tEl = document.createElement('span');
+            tEl.className = 't';
+            tEl.textContent = label;
+            b.appendChild(tEl);
+            b.title = text;
+            b.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+            b.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                window.__copyText && window.__copyText(text);
+                closeSelMenu();
+            });
+            return b;
+        }
+
+        var hd = document.createElement('div');
+        hd.className = 'hd';
+        hd.textContent = '复制：' + (sel.length > 26 ? sel.slice(0, 26) + '…' : sel);
+        menu.appendChild(hd);
+
+        // 1) 复制选中（原样）
+        menu.appendChild(item('复制选中', '⎘', sel));
+
+        // 2) 选中片段按标点断句
+        var U = window.__vhUtils;
+        var parts = (U && U.splitSentences) ? U.splitSentences(sel) : [];
+        if (parts.length > 1) {
+            menu.appendChild(divider());
+            var cap = document.createElement('div');
+            cap.className = 'hd subh';
+            cap.textContent = '选中的后半句 / 前半句（按标点断）';
+            menu.appendChild(cap);
+            parts.forEach(function (p, i) {
+                menu.appendChild(item(p.text, String(i + 1) + '.', p.text));
+            });
+        }
+
+        // 3) 以选中位置为界，取整句的前半/后半
+        if (speech && U && U.halfAround) {
+            var at = speech.indexOf(sel);
+            var half = U.halfAround(speech, at >= 0 ? at + Math.ceil(sel.length / 2) : -1);
+            if (half && (half.hasHead || half.hasTail)) {
+                menu.appendChild(divider());
+                var cap2 = document.createElement('div');
+                cap2.className = 'hd subh';
+                cap2.textContent = '整句的前半 / 后半';
+                menu.appendChild(cap2);
+                if (half.hasHead) menu.appendChild(item(shorten(half.head), '前半', half.head));
+                if (half.hasTail) menu.appendChild(item(shorten(half.tail), '后半', half.tail));
+            }
+        }
+
+        // 4) 整句（该行台词全部）
+        if (speech && speech !== sel) {
+            menu.appendChild(divider());
+            var cap3 = document.createElement('div');
+            cap3.className = 'hd subh';
+            cap3.textContent = '整句 / 整行';
+            menu.appendChild(cap3);
+            menu.appendChild(item(shorten(speech), '整句', speech));
+            if (info.role) {
+                menu.appendChild(item(shorten(info.role + '：' + speech), '整行', info.role + '：' + speech));
+            }
+        }
+        return menu;
+    }
+
+    function divider() {
+        var d = document.createElement('div');
+        d.className = 'sp';
+        return d;
+    }
+    function shorten(s) {
+        s = String(s || '');
+        return s.length > 34 ? s.slice(0, 34) + '…' : s;
+    }
+
+    // 在选区附近显示菜单
+    function showSelMenu() {
+        var info = currentSelectionInfo();
+        if (!info) { closeSelMenu(); return; }
+        closeSelMenu();
+        var menu = buildSelMenu(info);
+        menu.style.visibility = 'hidden';
+        document.body.appendChild(menu);
+        selMenuEl = menu;
+        var sel = window.getSelection();
+        var r = sel.getRangeAt(0).getBoundingClientRect();
+        // 关键：菜单挂到「整条台词行」外面（不是在选中的几个字旁边），
+        // 否则会把正在读的后半句盖住 —— 用户要复制的恰恰是没被选中的那部分。
+        var anchor = null;
+        var node = sel.anchorNode;
+        var el0 = node && (node.nodeType === 1 ? node : node.parentNode);
+        if (el0 && el0.closest) anchor = el0.closest('.scr-dlg');
+        var rect = anchor ? anchor.getBoundingClientRect() : r;
+        var W = window.innerWidth, H = window.innerHeight;
+        // 三档避让，目标只有一个：菜单绝不覆盖当前台词行（用户要看的就是这行）
+        //   ① 行下方有空间 → 挂该行下方
+        //   ② 行右侧有空间 → 挂该行右侧（同一水平带，落在那行文字之后）
+        //   ③ 都不够 → 挂视口内该行之外的最大空区，并限高滚动
+        var below = H - rect.bottom - 8;          // 下方可用高
+        var right = W - rect.right - 8;           // 行尾右侧可用宽
+        menu.style.overflowY = 'auto';
+        var mw0 = menu.offsetWidth;
+        var mh0 = menu.offsetHeight;
+        var x, y, maxH;
+
+        if (below >= Math.min(mh0, 90)) {
+            // ① 下方
+            maxH = below;
+            menu.style.maxHeight = Math.min(maxH, H - 24) + 'px';
+            x = rect.left;
+            y = rect.bottom + 6;
+        } else if (right >= mw0 + 8) {
+            // ② 行右侧（不压字）
+            menu.style.maxHeight = Math.min(H - 24, Math.max(160, H - 16)) + 'px';
+            x = rect.right + 10;
+            y = Math.max(8, rect.top);
+        } else {
+            // ③ 都不够：挑离该行最远的空区（上方或下方），并限高
+            var above = rect.top - 8;
+            if (above > below) {
+                maxH = above;
+                menu.style.maxHeight = Math.min(maxH, H - 24) + 'px';
+                var mh2 = Math.min(menu.offsetHeight, maxH);
+                y = Math.max(8, rect.top - mh2 - 6);
+            } else {
+                maxH = below;
+                menu.style.maxHeight = Math.min(maxH, H - 24) + 'px';
+                y = rect.bottom + 6;
+            }
+            x = rect.left;
+        }
+        if (x + menu.offsetWidth > W - 8) x = Math.max(8, W - menu.offsetWidth - 8);
+        if (x < 8) x = 8;
+        if (y < 8) y = 8;
+        menu.style.left = Math.round(x) + 'px';
+        menu.style.top = Math.round(y) + 'px';
+        menu.style.visibility = 'visible';
+    }
+
+    // 绑定：鼠标抬起 / 双击后若存在选区即弹菜单；点别处或按 Esc 关闭
+    // 双击台词行 → 直接复制该行台词（不经菜单，最快路径）
+    function bindDblCopy() {
+        if (window.__scrDblCopyBound) return;
+        window.__scrDblCopyBound = true;
+        document.addEventListener('dblclick', function (e) {
+            var el2 = e.target;
+            var dlg = el2 && el2.closest ? el2.closest('.scr-dlg') : null;
+            if (!dlg) return;
+            // 双击在复制/翻译按钮上时不接管
+            if (el2.closest && (el2.closest('.scr-copy') || el2.closest('.scr-trn'))) return;
+            var speech = String(dlg.getAttribute('data-speech') || '');
+            if (!speech) {
+                var sp = dlg.querySelector('.scr-sp');
+                speech = sp ? String(sp.textContent || '') : '';
+            }
+            if (!speech.trim()) return;
+            e.preventDefault();
+            closeSelMenu();
+            window.__copyText && window.__copyText(speech.trim());
+        });
+    }
+
+    function bindSelMenu() {
+        if (window.__scrSelMenuBound) return;
+        window.__scrSelMenuBound = true;
+        bindDblCopy();
+        document.addEventListener('mouseup', function (e) {
+            if (selMenuEl && selMenuEl.contains(e.target)) return;   // 点菜单本身不重开
+            setTimeout(function () {
+                var info = currentSelectionInfo();
+                if (info && info.dlg) showSelMenu();
+                else closeSelMenu();
+            }, 0);
+        });
+        document.addEventListener('mousedown', function (e) {
+            if (selMenuEl && !selMenuEl.contains(e.target)) closeSelMenu();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeSelMenu();
+        });
+        window.addEventListener('scroll', closeSelMenu, true);
+    }
 
         // 事件委托：复制 + 单句翻译
         if (!window.__copyDelegateBound) {
@@ -1062,6 +1307,8 @@
                 if (el2 && el2.getAttribute('data-copy')) window.__copyText(el2.getAttribute('data-copy'));
             });
         }
+        bindSelMenu();
+
         body.addEventListener('click', function (e) {
             var trn = e.target.closest ? e.target.closest('.scr-trn') : null;
             if (!trn) return;
