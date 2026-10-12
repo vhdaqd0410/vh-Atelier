@@ -4353,3 +4353,9 @@ button.danger{ background: var(--btn-danger-bg); color: #ffd9d9; border-color: t
 /* 树区/文件区在窄面板下的最小宽度保护 */
 #panel-netdisk .md-tree { min-width: 90px; }
 #panel-netdisk .md-files { min-width: 140px; }
+
+/* ===== 库面板：被排除的目录（右键可排除，扫描时跳过）===== */
+.tnode.excluded .tlabel { color: var(--muted); text-decoration: line-through; }
+.tnode.excluded .tico { opacity: .55; }
+.tnode.excluded .tcnt { opacity: .5; }
+.ctx-item.ctx-warn { color: #ffb84d; }

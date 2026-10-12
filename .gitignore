@@ -58,6 +58,8 @@ collect/backup/
 collect/*.log
 collect/index.json
 collect/searchIndex.json
+collect/musiclib_excludes.json
+collect/sfx_excludes.json
 collect/musiclib_tree.json
 collect/musiclib.log
 collect/opentab.json

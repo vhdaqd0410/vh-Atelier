@@ -4,6 +4,37 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.76.0",
+      "date": "2026-10-12",
+      "title": "新增：音乐库/音效库可排除子文件夹（右键排除，扫描跳过）",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "音乐库与音效库的目录树支持右键子文件夹 →「排除此文件夹」：被排除的目录仍留在树里可见（图标变 🚫、名称置灰加删除线、文件数归零），但扫描不再递归进去、其下文件不计入；再次右键可「取消排除」立即恢复"
+        },
+        {
+          "kind": "feat",
+          "text": "配套「在资源管理器中打开」，用系统资源管理器定位到该目录"
+        },
+        {
+          "kind": "impr",
+          "text": "排除项落在 collect/musiclib_excludes.json 与 collect/sfx_excludes.json，属用户数据：不入库、源码同步不覆盖、在线更新不动（与 replace_dict.json 同待遇）"
+        },
+        {
+          "kind": "impr",
+          "text": "抽出公共模块 js/library-exclude.js（路径归一与父子判定、树应用、重算计数、右键菜单项生成），音乐库与音效库共用一套实现，后续加面板可直接挂载"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-lib-exclude.py：真实临时目录树 + 真实 fs 驱动两面板，45 项断言覆盖落盘路径、树标记、缓存排除、取消恢复；已接入 scripts/run-tests.py 作为门禁"
+        },
+        {
+          "kind": "note",
+          "text": "缓存兼容：树缓存/音效索引若在排除之前生成，加载时会重新应用排除，无需手动重扫"
+        }
+      ]
+    },
+    {
       "version": "1.75.3",
       "date": "2026-10-10",
       "title": "docs: 重写 README + 新增使用说明",
