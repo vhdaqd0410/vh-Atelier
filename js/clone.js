@@ -18,6 +18,11 @@
     var mode = 'clone';         // 合成模式：clone | instruct | cross
     var refSrc = 'clip';        // 参考音色来源：clip=时间轴选中片段 | inout=序列入点出点
     var refRange = null;        // 最近一次读到的入点出点 {inSec, outSec, seqName}，用于失败时报出区间
+    var cloneProc = null;       // 当前合成进程（停止时要杀它的进程树，释放显存）
+    var stopRequested = false;  // 用户点了停止
+    var cloneTick = null;       // 「已用 N 秒」计时器
+    var cloneStartAt = 0;
+    var cloneStageLabel = '';   // 当前阶段文案（由 STAGE 输出更新，读秒接在它后面，避免互相覆盖）
 
     // 音色库：命名保存，下次直接复用
     // 存储：元数据存 localStorage；参考音频文件拷到插件目录 collect\voices\ 下，
@@ -200,6 +205,7 @@
         trackSel: document.getElementById('trackSel'),
         colorSel: document.getElementById('colorSel'),
         insertPos: document.getElementById('insertPos'),
+        btnCloneStop: document.getElementById('btnCloneStop'),
         progressWrap: document.getElementById('vcProgressWrap'),
         progressFill: document.getElementById('vcProgressFill'),
         progressText: document.getElementById('vcProgressText'),
@@ -215,8 +221,10 @@
 
     function setBusy(b) {
         busy = b;
+        if (!b) stopCloneTick();
         el.btnGrab.disabled = b;
         el.btnClone.disabled = b || !refWavPath;
+        if (el.btnCloneStop) el.btnCloneStop.disabled = !b;
         if (el.btnInsertTimeline) el.btnInsertTimeline.disabled = b;
         el.btnAutoRef.disabled = b || !refWavPath;
         el.btnRefreshTrack.disabled = b;
@@ -895,6 +903,56 @@
     }
 
     // ---------- 2. 合成（克隆 / 情绪指令 / 跨语言）----------
+    // ---------- 合成计时 ----------
+    // 显示「已用 N 秒」：模型卡在超慢推理时看不出是在算还是死了，有读秒至少能判断还活着
+    function startCloneTick(label) {
+        stopCloneTick();
+        cloneStartAt = Date.now();
+        cloneStageLabel = label || '';
+        cloneTick = setInterval(function () {
+            var s = Math.round((Date.now() - cloneStartAt) / 1000);
+            // 与 STAGE 文案拼接（不能直接覆盖，否则阶段提示会被秒数冲掉）
+            var txt = (cloneStageLabel ? cloneStageLabel + '　' : '') + '已用 ' + s + ' 秒';
+            setProgress(-1, txt);
+            if (s === 5 || s % 15 === 0) {
+                // 状态栏同步一份，方便主视线停在状态栏时也能判断还在推进
+                setStatus('合成中（' + s + ' 秒）。卡太久可点「停止」。', '');
+            }
+        }, 1000);
+    }
+    function stopCloneTick() {
+        if (cloneTick) { try { clearInterval(cloneTick); } catch (e) {} cloneTick = null; }
+    }
+
+    // ---------- 停止合成 ----------
+    // 关键点是释放 python 占住的显存：只 kill 父进程不够，用 taskkill /T 把进程树一起清掉
+    function stopClone() {
+        if (!busy) return;
+        if (!cloneProc) { setStatus('当前没有正在运行的合成任务', 'warn'); return; }
+        stopRequested = true;
+        setStatus('正在停止…', 'warn');
+        var p = cloneProc;
+        try {
+            if (process.platform === 'win32' && p.pid) {
+                child_process.execFile('taskkill', ['/PID', String(p.pid), '/T', '/F'],
+                    { windowsHide: true }, function () {});
+            } else if (p.kill) {
+                p.kill('SIGKILL');
+            }
+        } catch (e) {
+            try { if (p.kill) p.kill(); } catch (e2) {}
+        }
+        // 兜底：万一 kill 没触发回调，界面也不能一直锁着
+        setTimeout(function () {
+            if (busy && stopRequested) {
+                cloneProc = null;
+                setBusy(false);
+                setProgress(0, '');
+                setStatus('已停止（未能确认子进程退出，若显存仍被占用请重启 PR）', 'warn');
+            }
+        }, 15000);
+    }
+
     function clone() {
         if (busy) return;
         if (!refWavPath) { setStatus('请先抓取参考音色', 'err'); return; }
@@ -931,14 +989,25 @@
         fs.writeFileSync(cfgPath, JSON.stringify(cfg), 'utf8');
 
         var modeName = { clone: '克隆', instruct: '情绪指令', cross: '跨语言' }[mode] || '克隆';
+        stopRequested = false;
         setBusy(true);
         setProgress(-1, '正在加载模型（约 15 秒）...');
         setStatus('CosyVoice3 ' + modeName + '中（首次含模型加载，请稍候）...', '');
+        startCloneTick('加载/合成中');
 
-        var proc = child_process.execFile(pythonExe, [cliPath, cfgPath], {
+        var proc = cloneProc = child_process.execFile(pythonExe, [cliPath, cfgPath], {
             timeout: 1800000,
             maxBuffer: 1024 * 1024 * 50
         }, function (error, stdout, stderr) {
+            cloneProc = null;
+            stopCloneTick();
+            if (stopRequested) {
+                stopRequested = false;
+                setBusy(false);
+                setProgress(0, '');
+                setStatus('已停止（用户中止）', 'warn');
+                return;
+            }
             if (error) {
                 var detail = (stderr || stdout || '').substring(0, 800);
                 setBusy(false);
@@ -1007,6 +1076,7 @@
                         'gen': modeName + '中...',
                         'save': '保存音频...'
                     }[stage] || stage;
+                    cloneStageLabel = label;
                     setProgress(pct, label);
                 }
             }
@@ -1328,6 +1398,7 @@
     el.btnRefreshMedia.addEventListener('click', refreshProjectMedia);
     el.btnGrabFromMedia.addEventListener('click', grabFromMedia);
     el.btnClone.addEventListener('click', clone);
+    if (el.btnCloneStop) el.btnCloneStop.addEventListener('click', stopClone);
     el.btnRefreshTrack.addEventListener('click', refreshTracks);
     if (el.refSrcRow) {
         Array.prototype.forEach.call(el.refSrcRow.querySelectorAll('.vc-mode'), function (b) {

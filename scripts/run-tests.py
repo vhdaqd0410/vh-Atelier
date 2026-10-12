@@ -54,7 +54,8 @@ JOBS = [
     ("test-ame-channel.js", "node", True, "AME 队列通道：选了 AME 必须真入队（防误走 PR 直渲）", None),
     ("test-localup.js", "node", True, "本地超分：引擎/面板/历史/样式作用域", None),
     ("test-lib-exclude.py", "python", True, "音乐库/音效库：右键排除子文件夹（扫描跳过+可取消）", None),
-    ("test-vc-inout.py", "python", True, "语音克隆：序列入点出点取参考音频（按轨取纯净素材+多段拼接）", None),
+    ("test-vc-inout.py", "python", True, "语音克隆：序列入点出点取参考音频（独奏渲染+兜底直取）", None),
+    ("test-clone-stop.py", "python", True, "语音克隆：停止按钮（杀进程树+状态复位+读秒）", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）

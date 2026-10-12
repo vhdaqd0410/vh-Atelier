@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.78.1",
-  "buildTime": "2026-10-12 13:04:08",
+  "version": "1.79.0",
+  "buildTime": "2026-10-12 13:42:57",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "语音克隆入点出点：渲染区间按轨内容自动收紧"
+  "notes": "语音克隆加停止按钮与已用时间读秒"
 }
