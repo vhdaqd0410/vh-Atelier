@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.76.0",
-  "buildTime": "2026-10-12 10:09:34",
+  "version": "1.77.0",
+  "buildTime": "2026-10-12 11:38:50",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "音乐库/音效库支持右键排除子文件夹"
+  "notes": "语音克隆支持用序列入点出点取参考音频"
 }

@@ -473,6 +473,78 @@ function vcImportToBinStr(binName) {
 function vcGetAllSequencesStr() { return vcGetAllSequences(); }
 function vcGetSelectedClipStr() { return vcGetSelectedClip(); }
 
+// 读取序列入点出点区间内「各轨道」的片段（语音克隆用：按轨取源素材，避开序列混音）
+function vcGetInOutRange() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: '没有激活的序列' });
+
+        var inSec = -1, outSec = -1;
+        try { inSec = seq.getInPoint(); } catch (e) { inSec = -1; }
+        if (typeof inSec !== 'number' || inSec < 0) {
+            try { var ipt = seq.getInPointAsTime(); if (ipt && ipt.seconds !== undefined) inSec = ipt.seconds; } catch (e2) {}
+        }
+        try { outSec = seq.getOutPoint(); } catch (e3) { outSec = -1; }
+        if (typeof outSec !== 'number' || outSec < 0) {
+            try { var opt = seq.getOutPointAsTime(); if (opt && opt.seconds !== undefined) outSec = opt.seconds; } catch (e4) {}
+        }
+        if (typeof inSec !== 'number' || inSec < 0 || typeof outSec !== 'number' || outSec <= inSec) {
+            return JSON.stringify({ error: '序列未设置有效入点出点（in=' + inSec + ', out=' + outSec + '），请先在时间轴按 I / O 设置' });
+        }
+
+        function collect(track, idx, type, label) {
+            var out = [], k;
+            var muted = false;
+            try { muted = !!track.isMuted(); } catch (em) {}
+            for (k = 0; k < track.clips.numItems; k++) {
+                var c = track.clips[k];
+                var mp = getClipMediaPath(c);
+                if (!mp) continue;
+                var st = c.start.seconds;
+                var ci = c.inPoint.seconds, co = c.outPoint.seconds;
+                var en = st + (co - ci);
+                var ovS = Math.max(st, inSec), ovE = Math.min(en, outSec);
+                if (!(ovE - ovS > 0.001)) continue;
+                out.push({
+                    mediaPath: mp,
+                    clipName: c.name || '',
+                    seqStart: st,
+                    mediaIn: ci,
+                    mediaOut: co,
+                    ovStart: ovS,
+                    ovEnd: ovE,
+                    ovDur: ovE - ovS
+                });
+            }
+            if (!out.length) return null;
+            out.sort(function (a, b) { return a.ovStart - b.ovStart; });
+            return {
+                index: idx, name: track.name || label, type: type, muted: muted, clips: out
+            };
+        }
+
+        var tracks = [], i, r;
+        for (i = 0; i < seq.audioTracks.numTracks; i++) {
+            r = collect(seq.audioTracks[i], i, 'audio', 'A' + (i + 1));
+            if (r) tracks.push(r);
+        }
+        for (i = 0; i < seq.videoTracks.numTracks; i++) {
+            r = collect(seq.videoTracks[i], i, 'video', 'V' + (i + 1));
+            if (r) tracks.push(r);
+        }
+
+        return JSON.stringify({
+            inSec: inSec,
+            outSec: outSec,
+            durationSec: outSec - inSec,
+            seqName: seq.name,
+            tracks: tracks
+        });
+    } catch (e) { return JSON.stringify({ error: '读取入点出点失败: ' + e.toString() }); }
+}
+function vcGetInOutRangeStr() { return vcGetInOutRange(); }
+
+
 // ---------- 获取当前序列音轨列表（供导入时间线选择目标轨）----------
 function vcGetAudioTracks() {
     try {

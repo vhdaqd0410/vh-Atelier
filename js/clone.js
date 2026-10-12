@@ -16,6 +16,8 @@
     var audioTracks = [];       // 当前序列音轨列表 [{ index, name, clips }]
     var projectMedia = [];      // 项目素材列表 [{ name, mediaPath, binPath, duration, ext }]
     var mode = 'clone';         // 合成模式：clone | instruct | cross
+    var refSrc = 'clip';        // 参考音色来源：clip=时间轴选中片段 | inout=序列入点出点
+    var refRange = null;        // 最近一次读到的入点出点 {inSec, outSec, seqName}，用于失败时报出区间
 
     // 音色库：命名保存，下次直接复用
     // 存储：元数据存 localStorage；参考音频文件拷到插件目录 collect\voices\ 下，
@@ -167,6 +169,13 @@
         btnUseVoice: document.getElementById('btnUseVoice'),
         btnDelVoice: document.getElementById('btnDelVoice'),
         voiceLibHint: document.getElementById('voiceLibHint'),
+        refSrcRow: document.getElementById('refSrcRow'),
+        refSrcClip: document.getElementById('refSrcClip'),
+        refSrcInOut: document.getElementById('refSrcInOut'),
+        refTrackSel: document.getElementById('refTrackSel'),
+        btnRefreshRefTrack: document.getElementById('btnRefreshRefTrack'),
+        btnGrabInOut: document.getElementById('btnGrabInOut'),
+        refRangeInfo: document.getElementById('refRangeInfo'),
         modeRow: document.getElementById('modeRow'),
         modeHint: document.getElementById('modeHint'),
         instructWrap: document.getElementById('instructWrap'),
@@ -210,6 +219,9 @@
         el.btnAutoRef.disabled = b || !refWavPath;
         el.btnRefreshTrack.disabled = b;
         el.btnRefreshMedia.disabled = b;
+        if (el.btnRefreshRefTrack) el.btnRefreshRefTrack.disabled = b;
+        if (el.btnGrabInOut) el.btnGrabInOut.disabled = b;
+        if (el.refTrackSel) el.refTrackSel.disabled = b;
         el.btnGrabFromMedia.disabled = b;
         el.projectMediaSel.disabled = b;
         if (el.btnSaveVoice) el.btnSaveVoice.disabled = b || !refWavPath;
@@ -262,6 +274,186 @@
             }
         }
         return null;
+    }
+
+
+    // ---------- 1b. 从序列入点出点抓取（按轨取纯净素材，不走序列混音） ----------
+    function setRefSrc(s) {
+        refSrc = (s === 'inout') ? 'inout' : 'clip';
+        if (el.refSrcRow) {
+            Array.prototype.forEach.call(el.refSrcRow.querySelectorAll('.vc-mode'), function (b) {
+                b.classList.toggle('active', b.dataset.src === refSrc);
+            });
+        }
+        if (el.refSrcClip) el.refSrcClip.style.display = (refSrc === 'clip') ? '' : 'none';
+        if (el.refSrcInOut) el.refSrcInOut.style.display = (refSrc === 'inout') ? '' : 'none';
+        if (refSrc === 'inout') { refreshRefTracks(); refreshRefInfo(); }
+        else if (el.refRangeInfo) { el.refRangeInfo.style.display = 'none'; }
+    }
+
+    function refreshRefTracks() {
+        csInterface.evalScript('vcGetAudioTracks()', function (r) {
+            var d;
+            try { d = JSON.parse(r); } catch (e) { return; }
+            if (d.error || !el.refTrackSel) return;
+            var cur = el.refTrackSel.value;
+            el.refTrackSel.innerHTML = '';
+            var o = document.createElement('option');
+            o.value = 'auto';
+            o.textContent = '自动（覆盖最完整的一条）';
+            el.refTrackSel.appendChild(o);
+            (d.tracks || []).forEach(function (t) {
+                var op = document.createElement('option');
+                op.value = String(t.index);
+                op.textContent = (t.name || ('A' + (t.index + 1))) + '（' + t.clips + ' 个片段）';
+                el.refTrackSel.appendChild(op);
+            });
+            if (cur) el.refTrackSel.value = cur;
+        });
+    }
+
+    // 只读一下当前 I/O，把时长和轨道数显示出来，便于点「抓取」前判断是否超 30 秒
+    function refreshRefInfo() {
+        if (!el.refRangeInfo || refSrc !== 'inout') return;
+        el.refRangeInfo.style.display = '';
+        el.refRangeInfo.textContent = '正在读取入点出点…';
+        csInterface.evalScript('vcGetInOutRangeStr()', function (r) {
+            var d;
+            try { d = JSON.parse(r); } catch (e) { el.refRangeInfo.textContent = '读取失败'; return; }
+            if (d.error) { el.refRangeInfo.textContent = d.error; return; }
+            var dur = Number(d.durationSec) || 0;
+            var nt = (d.tracks || []).length;
+            el.refRangeInfo.textContent = '入点出点 ' + dur.toFixed(2) + ' 秒（'
+                + d.inSec.toFixed(2) + 's ~ ' + d.outSec.toFixed(2) + 's）· 有内容的轨道 ' + nt + ' 条'
+                + (dur > 30 ? '　⚠ 超过 30 秒上限，请收紧 I / O' : '');
+        });
+    }
+
+    function grabRefInOut() {
+        if (busy) return;
+        setStatus('正在读取入点出点…', '');
+        csInterface.evalScript('vcGetInOutRangeStr()', function (res) {
+            var d;
+            try { d = JSON.parse(res); } catch (e) { setStatus('解析失败: ' + res, 'err'); return; }
+            if (d.error) { setStatus(d.error, 'err'); return; }
+
+            var tracks = d.tracks || [];
+            if (!tracks.length) {
+                setStatus('入点出点区间内没有任何音视频片段，请检查 I / O 位置', 'err');
+                return;
+            }
+
+            var track = null;
+            var sel = el.refTrackSel ? el.refTrackSel.value : 'auto';
+            if (sel && sel !== 'auto') {
+                var want = parseInt(sel, 10);
+                for (var i = 0; i < tracks.length; i++) if (tracks[i].index === want) { track = tracks[i]; break; }
+                if (!track) { setStatus('所选轨道在该区间内没有片段，换一条轨或改用「自动」', 'err'); return; }
+            } else {
+                track = window.__vhUtils.pickRefTrack(tracks);
+            }
+            if (!track) { setStatus('没有取到可用轨道', 'err'); return; }
+
+            var segs = window.__vhUtils.buildRefSegments(track.clips, d.inSec, d.outSec);
+            if (!segs.length) { setStatus('该轨道在区间内没有可截取的内容', 'err'); return; }
+
+            var total = 0;
+            segs.forEach(function (s) { total += s.take; });
+            if (total > 30) {
+                setStatus('该轨道在区间内实取 ' + total.toFixed(1) + ' 秒，超过 CosyVoice3 的 30 秒上限，请收紧 I / O 或换一条轨', 'err');
+                return;
+            }
+
+            refRange = d;
+            setBusy(true);
+            setProgress(-1, '正在截取参考音频…');
+            extractSegments(segs, track, d, function (err, info) {
+                setBusy(false);
+                if (err) {
+                    var where = refRange
+                        ? ('（区间 ' + Number(refRange.inSec).toFixed(2) + 's ~ ' + Number(refRange.outSec).toFixed(2) + 's，轨 ' + (track.name || '') + '）')
+                        : '';
+                    setStatus(err + where, 'err');
+                    return;
+                }
+                refWavPath = info.wav;
+                refClipMeta = {
+                    clipName: (track.name || '') + '·' + info.segCount + '段',
+                    mediaPath: info.wav,
+                    inPoint: d.inSec,
+                    outPoint: d.outSec,
+                    seqName: d.seqName
+                };
+                var kind = (track.type === 'audio') ? '音轨' : '视频内嵌音频';
+                el.refInfo.textContent = '✓ ' + (track.name || '') + '（' + kind + '）'
+                    + '\n入点→出点 ' + Number(d.inSec).toFixed(2) + 's ~ ' + Number(d.outSec).toFixed(2) + 's'
+                    + '\n实取 ' + info.seconds.toFixed(1) + ' 秒'
+                    + (info.segCount > 1 ? '（' + info.segCount + ' 段拼接）' : '');
+                el.refInfo.classList.add('has');
+                setStatus('参考音色已就绪（取 ' + (track.name || '') + '，未混入其他轨道）。建议点「自动识别」填参考文字', 'ok');
+                autoRecognizeRef();
+            });
+        });
+    }
+
+    // 逐段从源素材截取 → 多段则拼接。全程 ffmpeg，不触发 PR 渲染。
+    function extractSegments(segs, track, range, cb) {
+        var ffmpegPath = path.join(extRoot, 'bin', 'ffmpeg-win32-x64.exe');
+        if (!fs.existsSync(ffmpegPath)) return cb('FFmpeg 缺失: ' + ffmpegPath);
+
+        var tmpDir = path.join(os.tmpdir(), 'vc_clone');
+        try { if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true }); } catch (e) {}
+
+        var stamp = Date.now();
+        var parts = [];
+        var i = 0;
+
+        function start() {
+            var s = segs[i];
+            var out = path.join(tmpDir, 'ref_' + stamp + '_' + i + '.wav');
+            var args = [
+                '-ss', s.srcStart.toFixed(3),
+                '-t', s.take.toFixed(3),
+                '-i', s.mediaPath,
+                '-map', '0:a',
+                '-ar', '24000', '-ac', '1',
+                '-y', out
+            ];
+            setProgress(-1, '正在截取第 ' + (i + 1) + '/' + segs.length + ' 段…');
+            child_process.execFile(ffmpegPath, args, { timeout: 120000, maxBuffer: 10485760 }, function (err) {
+                if (err || !fs.existsSync(out)) {
+                    return cb('第 ' + (i + 1) + ' 段截取失败：' + (err ? err.message : '未生成 wav')
+                        + '（若该片段本身无音轨，请换一条轨）');
+                }
+                parts.push(out);
+                i++;
+                if (i < segs.length) return start();
+                finish();
+            });
+        }
+
+        function finish() {
+            var total = 0;
+            segs.forEach(function (s) { total += s.take; });
+            if (parts.length === 1) return cb(null, { wav: parts[0], segCount: 1, seconds: total });
+
+            var listPath = path.join(tmpDir, 'ref_' + stamp + '_list.txt');
+            var body = parts.map(function (p) {
+                return "file '" + p.replace(/\\/g, '/').replace(/'/g, "'\\''") + "'";
+            }).join('\n') + '\n';
+            try { fs.writeFileSync(listPath, body, 'utf8'); }
+            catch (e) { return cb('写拼接清单失败: ' + e.message); }
+
+            var cat = path.join(tmpDir, 'ref_' + stamp + '_cat.wav');
+            setProgress(-1, '正在拼接 ' + parts.length + ' 段…');
+            var args2 = ['-f', 'concat', '-safe', '0', '-i', listPath, '-ar', '24000', '-ac', '1', '-y', cat];
+            child_process.execFile(ffmpegPath, args2, { timeout: 120000, maxBuffer: 10485760 }, function (err) {
+                if (err || !fs.existsSync(cat)) return cb('拼接失败：' + (err ? err.message : '未生成 wav'));
+                cb(null, { wav: cat, segCount: parts.length, seconds: total });
+            });
+        }
+
+        start();
     }
 
     // ---------- 1. 抓取参考音色 ----------
@@ -966,6 +1158,15 @@
     el.btnGrabFromMedia.addEventListener('click', grabFromMedia);
     el.btnClone.addEventListener('click', clone);
     el.btnRefreshTrack.addEventListener('click', refreshTracks);
+    if (el.refSrcRow) {
+        Array.prototype.forEach.call(el.refSrcRow.querySelectorAll('.vc-mode'), function (b) {
+            b.addEventListener('click', function () { setRefSrc(b.dataset.src); });
+        });
+    }
+    if (el.btnGrabInOut) el.btnGrabInOut.addEventListener('click', grabRefInOut);
+    if (el.btnRefreshRefTrack) el.btnRefreshRefTrack.addEventListener('click', function () {
+        refreshRefTracks(); refreshRefInfo();
+    });
     el.btnInsertTimeline.addEventListener('click', function () { insertTimeline(); });
 
     // 音色库
@@ -1002,6 +1203,7 @@
 
     // 初始化
     setMode('clone');
+    setRefSrc('clip');
     renderVoiceLib();
     renderVcResults();
     updateCloneEnabled();

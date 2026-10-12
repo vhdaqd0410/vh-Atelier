@@ -130,6 +130,66 @@
         return null;
     }
 
+
+    // ---------- 语音克隆：入点出点 → 按轨取纯净素材 ----------
+    // tracks: [{index, name, type:'audio'|'video', muted, clips:[{mediaPath, clipName,
+    //           seqStart, mediaIn, mediaOut, ovStart, ovEnd, ovDur}]}]
+    // 选轨优先级：非静音音频轨（覆盖时长最大）→ 任意音频轨 → 非静音视频轨 → 任意视频轨
+    function pickRefTrack(tracks) {
+        if (!tracks || !tracks.length) return null;
+        function coverage(t) {
+            var c = 0, cs = t.clips || [];
+            for (var i = 0; i < cs.length; i++) c += Number(cs[i].ovDur) || 0;
+            return c;
+        }
+        function best(list) {
+            var b = null;
+            for (var i = 0; i < list.length; i++) {
+                var cov = coverage(list[i]);
+                if (!b || cov > b.cov) b = { t: list[i], cov: cov };
+            }
+            return b ? b.t : null;
+        }
+        function pick(pred) {
+            var out = [];
+            for (var i = 0; i < tracks.length; i++) if (pred(tracks[i])) out.push(tracks[i]);
+            return out;
+        }
+        var audio = pick(function (t) { return t.type === 'audio'; });
+        var video = pick(function (t) { return t.type !== 'audio'; });
+        var live = function (t) { return !t.muted; };
+        return best(pick(function (t) { return t.type === 'audio' && !t.muted; }))
+            || best(audio)
+            || best(pick(function (t) { return t.type !== 'audio' && !t.muted; }))
+            || best(video);
+    }
+
+    // 把某轨在 [inSec,outSec] 内的片段换算为截取段：
+    //   srcStart = 素材内偏移 = mediaIn + (重叠起点 - 片段在序列上的起点)
+    //   take     = 该段实际取多长
+    // 段按时间排序；段间空白直接略过（拼接后变短，由调用方告知用户）
+    function buildRefSegments(clips, inSec, outSec) {
+        var segs = [];
+        for (var i = 0; i < (clips || []).length; i++) {
+            var c = clips[i];
+            var ovS = Math.max(Number(c.ovStart), Number(inSec));
+            var ovE = Math.min(Number(c.ovEnd), Number(outSec));
+            if (!(ovE - ovS > 0.001)) continue;
+            var srcStart = Number(c.mediaIn) + (ovS - Number(c.seqStart));
+            if (!(srcStart >= 0)) srcStart = 0;
+            segs.push({
+                mediaPath: c.mediaPath,
+                clipName: c.clipName || '',
+                srcStart: Math.round(srcStart * 1000) / 1000,
+                take: Math.round((ovE - ovS) * 1000) / 1000,
+                ovStart: ovS,
+                ovEnd: ovE
+            });
+        }
+        segs.sort(function (a, b) { return a.ovStart - b.ovStart; });
+        return segs;
+    }
+
     window.__vhUtils = {
         parseTime: parseTime,
         parseSRT: parseSRT,
@@ -141,6 +201,8 @@
         detectPython: detectPython,
         getTranslateEmail: getTranslateEmail,
         setTranslateEmail: setTranslateEmail,
-        myMemoryUrl: myMemoryUrl
+        myMemoryUrl: myMemoryUrl,
+        pickRefTrack: pickRefTrack,
+        buildRefSegments: buildRefSegments
     };
 })();

@@ -224,10 +224,34 @@
 
             <details class="vc-fold">
                 <summary>从时间轴抓取</summary>
-                <div class="row" style="margin-top:8px;">
-                    <button id="btnGrab">从时间轴选中片段抓取</button>
+                <div class="vc-modes" id="refSrcRow" style="margin-top:8px;">
+                    <button class="vc-mode active" data-src="clip">选中片段</button>
+                    <button class="vc-mode" data-src="inout">入点出点</button>
                 </div>
-                <div class="hint">先在时间轴选中一段人声（≤30 秒），再点上面按钮。</div>
+
+                <!-- 来源：选中片段 -->
+                <div id="refSrcClip">
+                    <div class="row" style="margin-top:8px;">
+                        <button id="btnGrab">从时间轴选中片段抓取</button>
+                    </div>
+                    <div class="hint">先在时间轴选中一段人声（≤30 秒），再点上面按钮。</div>
+                </div>
+
+                <!-- 来源：序列入点出点（按轨取，不混入配乐/其他轨） -->
+                <div id="refSrcInOut" style="display:none;">
+                    <div class="row" style="margin-top:8px;align-items:center;gap:6px;">
+                        <label style="margin:0;flex:0 0 auto;">取哪条轨</label>
+                        <select id="refTrackSel" style="flex:1;">
+                            <option value="auto">自动（覆盖最完整的一条）</option>
+                        </select>
+                        <button id="btnRefreshRefTrack" class="secondary mini">刷新</button>
+                    </div>
+                    <div class="row" style="margin-top:6px;">
+                        <button id="btnGrabInOut">从入点出点抓取</button>
+                    </div>
+                    <div class="hint">先在时间轴按 I / O 设好起止（≤30 秒）。只截取所选轨道的源素材，<b>不会混入配乐和其他人声</b>。</div>
+                    <div class="hint" id="refRangeInfo" style="display:none;"></div>
+                </div>
             </details>
 
             <details class="vc-fold">
