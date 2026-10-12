@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.80.1",
-  "buildTime": "2026-10-12 17:02:19",
+  "version": "1.81.0",
+  "buildTime": "2026-10-12 18:35:38",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修 A 版素材库目录不显示（补同步遗漏的 renderComputerNav）"
+  "notes": "新增：剧本→字幕快替（选中字幕块，一键复制台词并定位）"
 }

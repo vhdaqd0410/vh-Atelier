@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.81.0",
+      "date": "2026-10-12",
+      "title": "新增：剧本→字幕快替（选中字幕块，一键复制台词并定位）",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "剧本面板新增「替换这条字幕」：在时间轴点选一条字幕块，剧本里选中要换上的台词，菜单里点一下即把台词写入剪贴板、播放头跳到该字幕位置，在 PR 按 Ctrl+V 覆盖"
+        },
+        {
+          "kind": "note",
+          "text": "为什么不直接改字幕：官方 ExtendScript 只提供 Sequence.createCaptionTrack()，Track/ProjectItem/Project 上均无读写字幕条目文本的成员（已核对官方脚本指南全文），静默改写做不到"
+        },
+        {
+          "kind": "feat",
+          "text": "剧本阅读器头部新增「目标字幕」条：显示当前选中字幕块的时间范围，点击即可刷新"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-caption-replace.py（静态：host 函数存在性+调用是否都有定义；真实渲染：读块→菜单→点击后剪贴板与定位调用）"
+        }
+      ]
+    },
+    {
       "version": "1.80.1",
       "date": "2026-10-12",
       "title": "补：面板函数完整性静态门禁",
