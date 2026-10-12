@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.78.1",
+      "date": "2026-10-12",
+      "title": "补：语音克隆入点出点的渲染区间按轨内容自动收紧",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修 1.78.0 引入的行为回退：换成渲染路径后，产出长度等于整个 I/O 区间，I/O 拉宽就会被 30 秒上限拦下（哪怕该轨只有十几秒人声）。现在渲染前先把区间收紧到该轨真正有声音的首尾范围，I/O 宽了也不再误拦"
+        },
+        {
+          "kind": "impr",
+          "text": "界面会注明「（I/O x ~ y，已按该轨内容收紧）」，让你一眼看出实际渲染的是哪一段"
+        },
+        {
+          "kind": "note",
+          "text": "纯函数 window.__vhUtils.trackSpan(clips, inSec, outSec) 返回该轨有内容的首尾范围；scripts/test-vc-inout.py 扩到 61 项"
+        }
+      ]
+    },
+    {
       "version": "1.78.0",
       "date": "2026-10-12",
       "title": "改进：语音克隆入点出点改为「独奏该轨渲染」（并修掉直取路径的变速隐患）",

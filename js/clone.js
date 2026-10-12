@@ -408,15 +408,25 @@
             var canSolo = (track.type === 'audio') && !!presetPath && !!lib && lib.isAudioPreset(presetPath);
 
             if (canSolo) {
-                // 渲染产出的是整个 I/O 区间（含区间内空白），所以按区间长度卡上限
-                if (span > 30) {
-                    setStatus('入点出点区间 ' + span.toFixed(1) + ' 秒，超过 CosyVoice3 的 30 秒上限（独奏渲染产出的是整个区间长度），请收紧 I / O', 'err');
+                // 把渲染区间收紧到该轨真正有声音的范围：I/O 拉宽时不会把空白也渲进去，
+                // 也就不会白撞 30 秒上限（渲染产出长度 = 渲染区间长度）
+                var spanObj = window.__vhUtils.trackSpan(track.clips, d.inSec, d.outSec);
+                if (!spanObj) { setStatus('该轨道在区间内没有可截取的内容', 'err'); return; }
+                if (spanObj.seconds > 30) {
+                    setStatus('该轨道在区间内有 ' + spanObj.seconds.toFixed(1) + ' 秒声音，超过 CosyVoice3 的 30 秒上限，请收紧 I / O', 'err');
                     return;
                 }
+                var render = {
+                    seqName: d.seqName,
+                    inSec: spanObj.start,
+                    outSec: spanObj.end,
+                    ioInSec: Number(d.inSec),
+                    ioOutSec: Number(d.outSec)
+                };
                 setBusy(true);
                 setProgress(-1, '正在独奏 ' + (track.name || '') + ' 并渲染区间…');
-                soloRenderRange(track, d, presetPath, function (err, info) {
-                    finishGrab(err, info, track, d, 'solo');
+                soloRenderRange(track, render, presetPath, function (err, info) {
+                    finishGrab(err, info, track, render, 'solo');
                 });
                 return;
             }
@@ -538,10 +548,18 @@
             outPoint: range.outSec,
             seqName: range.seqName
         };
+        var tight = '';
+        if (range.ioInSec !== undefined &&
+            (Math.abs(Number(range.ioInSec) - Number(range.inSec)) > 0.05 ||
+             Math.abs(Number(range.ioOutSec) - Number(range.outSec)) > 0.05)) {
+            tight = '\n（I/O ' + Number(range.ioInSec).toFixed(2) + 's ~ ' + Number(range.ioOutSec).toFixed(2)
+                + 's，已按该轨内容收紧）';
+        }
         el.refInfo.textContent = '✓ ' + (track.name || '') + '（' + kind + '·' + how + '）'
             + '\n入点→出点 ' + Number(range.inSec).toFixed(2) + 's ~ ' + Number(range.outSec).toFixed(2) + 's'
             + '\n时长 ' + Number(info.seconds).toFixed(1) + ' 秒'
-            + (info.segCount > 1 ? '（' + info.segCount + ' 段拼接）' : '');
+            + (info.segCount > 1 ? '（' + info.segCount + ' 段拼接）' : '')
+            + tight;
         el.refInfo.classList.add('has');
         setStatus(mode === 'solo'
             ? ('参考音色已就绪（已独奏 ' + (track.name || '') + ' 渲染，未混入其他轨道）。建议点「自动识别」填参考文字')

@@ -228,6 +228,9 @@ console.log('=== A. 区间→段换算 ===');
       {index:0,name:'A1',type:'audio',muted:false,clips:[{ovDur:4}]},
       {index:1,name:'A2',type:'audio',muted:true,clips:[{ovDur:8}]}]).name==='A1');
   ok('选轨：无音频轨退视频轨', U.pickRefTrack([{index:0,name:'V1',type:'video',muted:false,clips:[{ovDur:6}]}]).name==='V1');
+  const sp=U.trackSpan([{ovStart:110,ovEnd:118},{ovStart:120,ovEnd:122}],100,145);
+  ok('trackSpan：取该轨有内容的首尾范围', sp && sp.start===110 && sp.end===122 && sp.seconds===12, JSON.stringify(sp));
+  ok('trackSpan：无内容返回 null', U.trackSpan([],100,145)===null);
 }
 
 // ================= B. 预设模块 =================
@@ -389,6 +392,18 @@ SOLO.length=0; FF.length=0;
 GE('btnGrabInOut').click();
 ok('渲染路径：45 秒被拦（哪怕整轨都有内容）', SOLO.length===0 && EL['vcStatus'].textContent.indexOf('30 秒上限')>=0,
    EL['vcStatus'].textContent);
+
+// 渲染路径：I/O 宽但该轨内容少 → 收紧区间后放行，payload 用收紧后的范围
+GE('refPresetSel').value=path.join(PRESET_DIR,'调音输出.epr');
+RANGE.data={inSec:100,outSec:145,durationSec:45,seqName:'EP1',
+  tracks:[{index:0,name:'A1',type:'audio',muted:false,clips:[
+    {mediaPath:'m',clipName:'a',seqStart:110,mediaIn:0,ovStart:110,ovEnd:122,ovDur:12}]}]};
+SOLO.length=0; PAYLOAD.length=0; FF.length=0;
+GE('btnGrabInOut').click();
+ok('渲染路径：I/O 45 秒但该轨仅 12 秒 → 放行', SOLO.length===1, JSON.stringify(SOLO));
+ok('渲染区间收紧到该轨内容（110~122）', PAYLOAD[0] && PAYLOAD[0].startSec===110 && PAYLOAD[0].endSec===122,
+   JSON.stringify(PAYLOAD[0]));
+ok('界面说明已按内容收紧', EL['refInfo'].textContent.indexOf('已按该轨内容收紧')>=0, EL['refInfo'].textContent);
 
 // 直取路径：按该轨实际覆盖算（区间宽但内容少 → 放行）
 GE('refPresetSel').value='';

@@ -190,6 +190,23 @@
         return segs;
     }
 
+
+    // 某轨在 [inSec,outSec] 内「真正有声音」的范围（用于把渲染区间收紧到内容本身，
+    // 避免 I/O 拉宽时把区间内的空白也渲进来、撞上 30 秒上限）
+    function trackSpan(clips, inSec, outSec) {
+        var s = null, e = null;
+        for (var i = 0; i < (clips || []).length; i++) {
+            var c = clips[i];
+            var a = Math.max(Number(c.ovStart), Number(inSec));
+            var b = Math.min(Number(c.ovEnd), Number(outSec));
+            if (!(b - a > 0.001)) continue;
+            if (s === null || a < s) s = a;
+            if (e === null || b > e) e = b;
+        }
+        if (s === null) return null;
+        return { start: s, end: e, seconds: e - s };
+    }
+
     window.__vhUtils = {
         parseTime: parseTime,
         parseSRT: parseSRT,
@@ -203,6 +220,7 @@
         setTranslateEmail: setTranslateEmail,
         myMemoryUrl: myMemoryUrl,
         pickRefTrack: pickRefTrack,
-        buildRefSegments: buildRefSegments
+        buildRefSegments: buildRefSegments,
+        trackSpan: trackSpan
     };
 })();
