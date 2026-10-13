@@ -57,6 +57,8 @@
                 parts.push('I/O ' + (d.inSec >= 0 ? d.inSec.toFixed(2) : '—') + ' ~ '
                     + (d.outSec >= 0 ? d.outSec.toFixed(2) : '—'));
             }
+            // QE 不可用时，删效果/位置互换/清 I/O 会失效，这里明确提示
+            if (d.qe === false) parts.push('⚠ QE 不可用（删效果/互换将失效）');
             st.textContent = parts.join(' · ');
         });
     }
@@ -114,11 +116,9 @@
         });
         bar.appendChild(sel);
 
-        // 删关键帧（下拉式：删当前 / 删全部）—— 用两个按钮更直观
-        btn('tlDelKeyCur', '删当前关键帧', '删除播放头所在位置的关键帧（需选中片段且播放头在片段内）',
-            function () { run('tlDeleteKeyframes("current")', '已删当前关键帧'); });
-        btn('tlDelKeyAll', '删全部关键帧', '删除选中片段所有参数上的全部关键帧',
-            function () { run('tlDeleteKeyframes("all")', '已删全部关键帧'); });
+        // 删全部关键帧（一次清空 + 关掉秒表开关 + 强制刷新界面）
+        btn('tlDelKeyAll', '删全部关键帧', '删除选中片段所有关键帧，并关掉秒表开关',
+            function () { run('tlDeleteKeyframes()', '已删全部关键帧'); });
         btn('tlDelFx', '删全部效果', '删除选中片段上的全部效果',
             function () { run('tlDeleteEffects()', '已删全部效果'); });
         btn('tlUnnest', '解除嵌套', '把嵌套序列里的内容展开，替换掉嵌套片段',

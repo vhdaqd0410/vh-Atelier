@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.50.1",
+      "date": "2026-10-13",
+      "title": "同步：时间线工具条改用 QE DOM 重写",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "同步主版四个修复：删全部关键帧（removeKeyRange 一次清空 + 关秒表 + 强制刷新 UI）、删全部效果（走 QE 的 getComponentAt+remove）、位置互换（临时位三步避免覆盖）、清除出入点（QE 优先，退化重置）"
+        },
+        {
+          "kind": "note",
+          "text": "去掉「删当前关键帧」按钮；状态行显示 QE 可用性"
+        },
+        {
+          "kind": "note",
+          "text": "依赖提示：删效果/互换/清I-O 依赖 QE DOM（未公开接口，跨版本可能失效）"
+        }
+      ]
+    },
+    {
       "version": "1.50.0",
       "date": "2026-10-13",
       "title": "同步：时间线工具条（8 个常用动作常驻面板）",

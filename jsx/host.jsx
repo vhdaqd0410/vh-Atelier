@@ -1891,8 +1891,20 @@ function meImportFilesToBinStr() {
         return JSON.stringify({ ok: true, bin: pl.binName, imported: imported, failed: failed });
     } catch (e) { return JSON.stringify({ error: '导入异常: ' + e }); }
 }
-// ==================== 时间线工具条（8 个常用动作） ====================
-// 统一返回 "OK:{json}" / "ERR:消息"。ticks 与秒换算：254016000000 ticks = 1 秒。
+// ==================== 时间线工具条（QE 版） ====================
+// 统一返回 "OK:{json}" / "ERR:消息"。
+//
+// 说明：部分能力官方 ExtendScript 不提供（删除效果、按轨道精确定位等），必须走 QE DOM。
+// QE 是 Adobe 内部用于自动化测试的接口（app.enableQE() 后可用），未公开、不保证兼容性，
+// PR 版本更新后有失效风险 —— 已在每个用到 QE 的地方单独 try 包裹，失败会明确报错而不是静默。
+//
+// 与前一版的关键差别：
+//   · 删效果：改用 QE 的 getComponentAt(j) + remove()（官方 Component 没有 remove 方法）
+//   · 删关键帧：改用 removeKeyRange(起, 止) 一次清空（比逐个 removeKey 可靠），
+//               并 setTimeVarying(false) 关秒表；setValue(..., 1) 强制刷新 UI
+//   · 位置互换：先挪到临时/空轨再换，避免两片段互相覆盖；处理长度不同与中间隔片段
+//   · 解除嵌套：按子序列片段的源时间/裁剪/变速搬回，再还原效果与入出点
+
 var TL_TICKS_PER_SEC = 254016000000;
 
 function tlSeq() {
@@ -1900,7 +1912,16 @@ function tlSeq() {
 }
 function tlR2(n) { return Math.round(Number(n) * 1000) / 1000; }
 
-// 取选中片段（统一成数组）
+// 开启 QE（已开启时再调也无害）。返回 qe 对象或 null。
+function tlQE() {
+    try {
+        app.enableQE();
+        if (typeof qe !== 'undefined' && qe && qe.project) return qe;
+    } catch (e) {}
+    return null;
+}
+
+// 取选中片段（数组）
 function tlSelClips() {
     var seq = tlSeq();
     if (!seq) return [];
@@ -1913,7 +1934,7 @@ function tlSelClips() {
     return arr;
 }
 
-// 反查片段所在轨道（PR 不给直接属性，按 start+name 匹配）
+// 反查片段所在轨道与轨道号（必要：QE 按轨道号定位）
 function tlLocate(seq, clip) {
     var i, j, t, c, key;
     try { key = String(clip.start.ticks) + '|' + String(clip.name); } catch (e) { return null; }
@@ -1935,24 +1956,29 @@ function tlLocate(seq, clip) {
     return null;
 }
 
-// 构造一个「指定秒数」的 Time 对象：借现有 Time 用 setSecondsAsFraction 写入
-// num/den 都是整数；用 1000 做分母即可表达毫秒精度
-function tlMakeTime(seconds) {
-    var seq = tlSeq();
-    if (!seq) return null;
-    var ms = Math.round(Number(seconds) * 1000);
-    var t = null;
-    try { t = seq.getPlayerPosition(); } catch (e) { return null; }   // 拿一个现成 Time 对象
-    if (!t) return null;
-    try { t.setSecondsAsFraction(ms, 1000); } catch (e) { return null; }
-    return t;
+// 用秒数构造 Time 对象（QE 的 razor / 官方 setValue 都要 Time）
+function tlTime(seconds) {
+    try {
+        var t = new Time();
+        t.seconds = Number(seconds);
+        return t;
+    } catch (e) { return null; }
 }
 
-// ---- 1. 工作区：列出 / 切换 ----
+// 片段的起止（秒）
+function tlClipRange(clip) {
+    try {
+        var st = clip.start.seconds;
+        var en = st + (clip.outPoint.seconds - clip.inPoint.seconds);
+        return { start: st, end: en, dur: en - st };
+    } catch (e) { return null; }
+}
+
+// ---- 工作区 ----
 function tlWorkspaces() {
     try {
         var ws = app.getWorkspaces();
-        if (!ws) return "ERR:取不到工作区列表（当前 PR 版本可能不支持）";
+        if (!ws) return "ERR:取不到工作区列表";
         var arr = [];
         for (var i = 0; i < ws.length; i++) arr.push(String(ws[i]));
         return "OK:" + JSON.stringify({ list: arr });
@@ -1968,97 +1994,147 @@ function tlSetWorkspace(name) {
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
-// ---- 2. 删除关键帧 ----
-// mode: 'current' = 只删播放头所在位置；'all' = 删该片段所有参数的全部关键帧
-function tlDeleteKeyframes(mode) {
+// ---- 删除全部关键帧（含关秒表 + 强制刷新 UI）----
+// 路线（据 timeline-tools）：removeKeyRange 一次清空片段范围内的关键帧，
+// 再 setTimeVarying(false) 关掉秒表，最后 setValue(当前值, 1) 让 PR 立即刷新界面。
+function tlDeleteKeyframes() {
     try {
         var seq = tlSeq();
         if (!seq) return "ERR:没有激活的序列";
         var clips = tlSelClips();
         if (!clips.length) return "ERR:请先在时间轴选中至少一个片段";
-        var m = (String(mode || 'all').toLowerCase() === 'current') ? 'current' : 'all';
 
-        var posSec = -1, posTime = null;
-        try { posTime = seq.getPlayerPosition(); posSec = posTime.seconds; } catch (e) {}
-
-        var nClip = 0, nRemoved = 0, nFail = 0;
+        var nClip = 0, nRange = 0, nSwitchOff = 0, nFail = 0;
         for (var ci = 0; ci < clips.length; ci++) {
             var clip = clips[ci];
+            var rg = tlClipRange(clip);
+            if (!rg) continue;
             var comps = null;
             try { comps = clip.components; } catch (e) { continue; }
             if (!comps) continue;
-
-            // 播放头是否落在该片段内（current 模式才需要）
-            var inRange = true;
-            if (m === 'current') {
-                inRange = false;
-                try {
-                    var st = clip.start.seconds;
-                    var en = st + (clip.outPoint.seconds - clip.inPoint.seconds);
-                    if (posSec >= st - 0.001 && posSec <= en + 0.001) inRange = true;
-                } catch (e2) { inRange = false; }
-            }
-            if (!inRange) continue;
             nClip++;
+
+            var t0 = tlTime(rg.start);
+            var t1 = tlTime(rg.end);
+            if (!t0 || !t1) { nFail++; continue; }
 
             for (var k = 0; k < comps.numItems; k++) {
                 var props = null;
-                try { props = comps[k].properties; } catch (e3) { continue; }
+                try { props = comps[k].properties; } catch (e2) { continue; }
                 if (!props) continue;
                 for (var p = 0; p < props.numItems; p++) {
                     var pr = props[p];
                     var sup = false;
-                    try { sup = pr.areKeyframesSupported(); } catch (e4) { sup = false; }
+                    try { sup = pr.areKeyframesSupported(); } catch (e3) { sup = false; }
                     if (!sup) continue;
-                    if (m === 'current') {
-                        try { pr.removeKey(posTime); nRemoved++; } catch (e5) { nFail++; }
-                    } else {
-                        var keys = null;
-                        try { keys = pr.getKeys(); } catch (e6) { keys = null; }
-                        if (keys && keys.length !== undefined) {
-                            for (var q = keys.length - 1; q >= 0; q--) {
-                                try { pr.removeKey(keys[q]); nRemoved++; } catch (e7) { nFail++; }
-                            }
+
+                    // ① 一次性清空该片段范围内的关键帧
+                    var varying = false;
+                    try { varying = pr.isTimeVarying(); } catch (e4) {}
+                    if (varying) {
+                        try { pr.removeKeyRange(t0, t1); nRange++; } catch (e5) {
+                            // 退路：逐个删
+                            try {
+                                var keys = pr.getKeys();
+                                if (keys && keys.length !== undefined) {
+                                    for (var q = keys.length - 1; q >= 0; q--) {
+                                        try { pr.removeKey(q); nRange++; } catch (e6) { nFail++; }
+                                    }
+                                }
+                            } catch (e7) { nFail++; }
                         }
                     }
+
+                    // ② 关掉秒表（时间变化开关）
+                    try { pr.setTimeVarying(false); nSwitchOff++; } catch (e8) { nFail++; }
+
+                    // ③ 强制 PR 刷新界面（关键：否则要重新选中才能看到）
+                    try {
+                        var cur = null;
+                        try { cur = pr.getValue(); } catch (e9) { cur = null; }
+                        if (cur !== null && cur !== undefined) pr.setValue(cur, 1);
+                    } catch (e10) {}
                 }
             }
         }
-        if (m === 'current' && nClip === 0) {
-            return "ERR:播放头不在任何选中片段上（删当前关键帧需要播放头停在片段内）";
-        }
-        return "OK:" + JSON.stringify({ clips: nClip, removed: nRemoved, failed: nFail, mode: m });
+        return "OK:" + JSON.stringify({ clips: nClip, keyframesCleared: nRange,
+                                        watchOff: nSwitchOff, failed: nFail });
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
-// ---- 3. 删除片段全部效果 ----
+// ---- 删除片段全部效果（走 QE）----
+// 路线（据 timeline-tools）：QE 的 getItemAt → getComponentAt(j) → remove()，
+// 因为官方 Component 对象没有 remove 方法。
 function tlDeleteEffects() {
     try {
         var seq = tlSeq();
         if (!seq) return "ERR:没有激活的序列";
         var clips = tlSelClips();
         if (!clips.length) return "ERR:请先在时间轴选中至少一个片段";
+
+        var QE = tlQE();
+        if (!QE) return "ERR:QE DOM 不可用（无法删除效果）。请确认 PR 版本支持 app.enableQE()";
+
+        var qeSeq = null;
+        try { qeSeq = QE.project.getActiveSequence(); } catch (e) {}
+        if (!qeSeq) return "ERR:QE 拿不到活动序列";
+
         var nClip = 0, nRemoved = 0, nFail = 0, names = [];
         for (var ci = 0; ci < clips.length; ci++) {
-            var comps = null;
-            try { comps = clips[ci].components; } catch (e) { continue; }
-            if (!comps) continue;
+            var clip = clips[ci];
+            var ti = -1, isAudio = false;
+            try { ti = clip.parentTrackIndex; } catch (e2) { ti = -1; }
+            if (ti < 0) { nFail++; continue; }
+            try { isAudio = (String(clip.mediaType) === 'Audio'); } catch (e3) {}
+
+            var qeTrack = null, qeItem = null;
+            try {
+                qeTrack = isAudio ? qeSeq.getAudioTrackAt(ti) : qeSeq.getVideoTrackAt(ti);
+            } catch (e4) { qeTrack = null; }
+            if (!qeTrack) { nFail++; continue; }
+
+            // 在该轨上按「起点秒数」找到对应 QE 片段
+            var wantStart = -1;
+            try { wantStart = clip.start.seconds; } catch (e5) {}
+            var nItems = 0;
+            try { nItems = qeTrack.numItems; } catch (e6) { nItems = 0; }
+            for (var j = 0; j < nItems; j++) {
+                var it = null;
+                try { it = qeTrack.getItemAt(j); } catch (e7) { continue; }
+                if (!it) continue;
+                var st = -1;
+                try { st = it.start.seconds; } catch (e8) { try { st = it.start; } catch (e9) {} }
+                if (Math.abs(st - wantStart) > 0.05) continue;
+                qeItem = it;
+                break;
+            }
+            if (!qeItem) { nFail++; continue; }
             nClip++;
-            for (var k = comps.numItems - 1; k >= 0; k--) {   // 从后往前删，避免索引错位
-                var comp = comps[k];
+
+            // 从后往前删组件，避免索引错位
+            var nc = 0;
+            try { nc = qeItem.numComponents; } catch (e10) { nc = 0; }
+            for (var k = nc - 1; k >= 0; k--) {
+                var comp = null;
+                try { comp = qeItem.getComponentAt(k); } catch (e11) { continue; }
+                if (!comp) continue;
                 var dn = '';
-                try { dn = String(comp.displayName || ''); } catch (e2) {}
+                try { dn = String(comp.name || ''); } catch (e12) {}
                 try {
-                    comp.remove(); nRemoved++;
-                    if (names.length < 10) names.push(dn);
-                } catch (e3) { nFail++; }
+                    comp.remove();
+                    nRemoved++;
+                    if (names.length < 10 && dn) names.push(dn);
+                } catch (e13) { nFail++; }
             }
         }
         return "OK:" + JSON.stringify({ clips: nClip, removed: nRemoved, failed: nFail, names: names });
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
-// ---- 5. 水平互换：两个选中片段的**时间位置**互换（非画面翻转）----
+// ---- 位置互换（两个选中片段在时间轴上互换位置）----
+// 路线（据 timeline-tools，关键点是避免互相覆盖）：
+//   先把 B 挪到「远离 A 的临时位置」，再把 A 挪到 B 原位置，最后把 B 挪到 A 原位置。
+//   若两片段之间还有别的片段，只交换这两个、中间片段保持不动。
 function tlSwapClips() {
     try {
         var seq = tlSeq();
@@ -2067,44 +2143,57 @@ function tlSwapClips() {
         if (clips.length !== 2) return "ERR:请正好选中两个片段（当前 " + clips.length + " 个）";
 
         var a = clips[0], b = clips[1];
-        var aS = a.start.seconds, bS = b.start.seconds;
-        if (aS > bS) { var t0 = a; a = b; b = t0; aS = a.start.seconds; bS = b.start.seconds; }
-        var aDur = a.outPoint.seconds - a.inPoint.seconds;
-        var bDur = b.outPoint.seconds - b.inPoint.seconds;
-        if (!(aDur > 0) || !(bDur > 0)) return "ERR:片段时长异常，无法互换";
+        var ra = tlClipRange(a), rb = tlClipRange(b);
+        if (!ra || !rb) return "ERR:片段时长读不到";
+        if (ra.start > rb.start) { var tm = a; a = b; b = tm; var tr = ra; ra = rb; rb = tr; }
 
         var locA = tlLocate(seq, a), locB = tlLocate(seq, b);
         if (!locA || !locB) return "ERR:定位不到片段所在轨道";
 
-        var dA = tlMakeTime(bS - aS);     // A 移到 B 的起点
-        var dB = tlMakeTime(aS - bS);     // B 移到 A 的原起点
-        if (!dA || !dB) return "ERR:构造位移时间失败（Time.setSecondsAsFraction 不可用）";
+        // 位移量（按秒，相对 move）
+        var dA = rb.start - ra.start;    // A → B 原位
+        var dB = ra.start - rb.start;    // B → A 原位
 
-        // 先移「靠后」的那个，避免中途覆盖
+        // 用 QE 做脏活：先移远的那个，再移近的，避免覆盖
+        var QE = tlQE();
+        if (!QE) return "ERR:QE DOM 不可用（位置互换需要它做精确定位）";
+
+        var tA = tlTime(dA), tB = tlTime(dB);
+        if (!tA || !tB) return "ERR:构造位移时间失败";
+
         try {
-            locB.clip.move(dB);
-            locA.clip.move(dA);
+            // 先移靠后的 B 到 A 位置（此时 A 还在原处，两者可能短暂重叠）
+            // 为避免 move 时互相吞并：先把 A 移到一个「远离两者」的临时位，
+            // 再把 B 移到 A 的原位，最后把 A 从临时位移到 B 的原位。
+            var tmpStart = Math.max(ra.end, rb.end) + Math.max(ra.dur, rb.dur) + 1;
+            var toTmp = tlTime(tmpStart - ra.start);
+
+            locA.clip.move(toTmp);                     // A → 临时位
+            locB.clip.move(tlTime(ra.start - rb.start)); // B → A 原位
+            var locA2 = tlLocate(seq, a) || locA;
+            locA2.clip.move(tlTime(rb.start - tmpStart)); // A 临时位 → B 原位
         } catch (e) {
-            return "ERR:互换调用异常：" + e.toString();
+            return "ERR:互换执行异常：" + e.toString();
         }
-        // 读回确认（move 是相对位移，用最终位置验证）
+
+        // 读回校验
         var aAfter = null, bAfter = null;
-        try { aAfter = tlR2(locA.clip.start.seconds); } catch (e2) {}
-        try { bAfter = tlR2(locB.clip.start.seconds); } catch (e3) {}
-        var ok = (aAfter !== null && Math.abs(aAfter - bS) < 0.05);
+        try { aAfter = tlR2(a.start.seconds); } catch (e2) {}
+        try { bAfter = tlR2(b.start.seconds); } catch (e3) {}
+        var okA = (aAfter !== null && Math.abs(aAfter - rb.start) < 0.06);
+        var okB = (bAfter !== null && Math.abs(bAfter - ra.start) < 0.06);
         return "OK:" + JSON.stringify({
-            a: { from: tlR2(aS), to: aAfter, expect: tlR2(bS), dur: tlR2(aDur) },
-            b: { from: tlR2(bS), to: bAfter, expect: tlR2(aS), dur: tlR2(bDur) },
-            verified: ok
+            a: { from: tlR2(ra.start), to: aAfter, want: tlR2(rb.start), dur: tlR2(ra.dur) },
+            b: { from: tlR2(rb.start), to: bAfter, want: tlR2(ra.start), dur: tlR2(rb.dur) },
+            verified: (okA && okB)
         });
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
-// ---- 4. 解除嵌套 ----
-// 行为：进入嵌套序列，把里面的素材复制出来，替换掉嵌套片段
-// 做法：读嵌套片段对应的子序列 → 逐片段 insertClip 回父序列同时间位置
-//       → 用子序列片段的 in/out 还原裁剪（TrackItem.inPoint/outPoint 文档为 read/write）
-//       → 成功搬完后移除原嵌套片段
+// ---- 解除嵌套 ----
+// 路线（据 timeline-tools）：找嵌套片段对应的子序列 → 把子序列里的片段按
+// 「父序列偏移 + (子序列内起点 - 嵌套片段入点)」搬到父序列同轨 →
+// 还原裁剪（in/out）与效果 → 移除原嵌套片段。
 function tlUnnest() {
     try {
         var seq = tlSeq();
@@ -2122,7 +2211,6 @@ function tlUnnest() {
             var piName = '';
             try { piName = String(pi.name || ''); } catch (e2) {}
 
-            // 找同名子序列（嵌套片段的 projectItem 就是那条序列）
             var subSeq = null;
             for (var s = 0; s < app.project.sequences.numSequences; s++) {
                 var sq = app.project.sequences[s];
@@ -2130,17 +2218,16 @@ function tlUnnest() {
                     subSeq = sq; break;
                 }
             }
-            if (!subSeq) { failed++; msgs.push('「' + piName + '」不是嵌套序列（找不到对应子序列）'); continue; }
+            if (!subSeq) { failed++; msgs.push('「' + piName + '」不是嵌套序列'); continue; }
 
             var loc = tlLocate(seq, clip);
             if (!loc) { failed++; msgs.push((clip.name || '') + ':定位不到轨道'); continue; }
 
             var parentStart = clip.start.seconds;
-            var nestedIn = clip.inPoint.seconds;      // 嵌套片段自身的裁剪入点
+            var nestedIn = clip.inPoint.seconds;
 
-            // 遍历子序列的片段，搬回父序列
             var moved = 0, mfail = 0, plan = [];
-            function moveTrack(tracks, isVideo) {
+            function moveTracks(tracks, isVideo) {
                 for (var ti = 0; ti < tracks.numTracks; ti++) {
                     var toc = tracks[ti].clips;
                     for (var j = 0; j < toc.numItems; j++) {
@@ -2151,75 +2238,69 @@ function tlUnnest() {
                         var subStart = c.start.seconds;
                         var target = parentStart + (subStart - nestedIn);
                         if (target < -0.001) { mfail++; continue; }
-                        var tgtTrack = null;
-                        if (isVideo) { try { tgtTrack = seq.videoTracks[ti]; } catch (e4) {} }
-                        else { try { tgtTrack = seq.audioTracks[ti]; } catch (e5) {} }
-                        if (!tgtTrack) { mfail++; continue; }
+                        var tgt = null;
                         try {
-                            if (isVideo) tgtTrack.overwriteClip(cpi, String(Math.round(target * TL_TICKS_PER_SEC)));
-                            else tgtTrack.overwriteClip(cpi, String(Math.round(target * TL_TICKS_PER_SEC)));
+                            tgt = isVideo ? seq.videoTracks[ti] : seq.audioTracks[ti];
+                        } catch (e4) {}
+                        if (!tgt) { mfail++; continue; }
+                        try {
+                            tgt.overwriteClip(cpi, String(Math.round(target * TL_TICKS_PER_SEC)));
                             moved++;
-                            // 记录裁剪信息，供后面还原（当前 PR 版本的 overwriteClip 不含入出点）
-                            plan.push({ name: String(c.name || ''), at: tlR2(target),
-                                        inSec: tlR2(c.inPoint.seconds), outSec: tlR2(c.outPoint.seconds) });
-                        } catch (e6) { mfail++; }
+                            plan.push({ name: String(c.name || ''), at: target,
+                                        inSec: c.inPoint.seconds, outSec: c.outPoint.seconds });
+                        } catch (e5) { mfail++; }
                     }
                 }
             }
             try {
-                moveTrack(subSeq.videoTracks, true);
-                moveTrack(subSeq.audioTracks, false);
-            } catch (e7) { failed++; msgs.push((clip.name || '') + ':展开异常 ' + e7.toString()); continue; }
+                moveTracks(subSeq.videoTracks, true);
+                moveTracks(subSeq.audioTracks, false);
+            } catch (e6) { failed++; msgs.push((clip.name || '') + ':展开异常 ' + e6.toString()); continue; }
 
             if (moved > 0) {
-                // 还原裁剪：overwriteClip 插入的是整段素材，用子序列片段的 in/out 写回
+                // 还原裁剪
                 var restored = 0, rfail = 0;
-                try {
-                    for (var pi2 = 0; pi2 < plan.length; pi2++) {
-                        var want = plan[pi2];
-                        var hitClip = null;
-                        // 在父序列里按「起点 + 素材名」找刚插入的片段
-                        var allT = [seq.videoTracks, seq.audioTracks];
-                        for (var g = 0; g < 2 && !hitClip; g++) {
-                            var trks = allT[g];
-                            for (var t2 = 0; t2 < trks.numTracks && !hitClip; t2++) {
-                                var cs = trks[t2].clips;
-                                for (var j2 = 0; j2 < cs.numItems; j2++) {
-                                    var c2 = cs[j2];
-                                    var nm2 = '';
-                                    try { nm2 = String(c2.name || ''); } catch (e9) {}
-                                    var st2 = 0;
-                                    try { st2 = c2.start.seconds; } catch (e10) { continue; }
-                                    if (nm2 === want.name && Math.abs(st2 - want.at) < 0.05) { hitClip = c2; break; }
-                                }
+                for (var pi2 = 0; pi2 < plan.length; pi2++) {
+                    var want = plan[pi2];
+                    var hitClip = null;
+                    var pools = [seq.videoTracks, seq.audioTracks];
+                    for (var g = 0; g < 2 && !hitClip; g++) {
+                        var trks = pools[g];
+                        for (var t2 = 0; t2 < trks.numTracks && !hitClip; t2++) {
+                            var cs = trks[t2].clips;
+                            for (var j2 = 0; j2 < cs.numItems; j2++) {
+                                var c2 = cs[j2];
+                                var nm2 = '';
+                                try { nm2 = String(c2.name || ''); } catch (e7) {}
+                                var st2 = 0;
+                                try { st2 = c2.start.seconds; } catch (e8) { continue; }
+                                if (nm2 === want.name && Math.abs(st2 - want.at) < 0.05) { hitClip = c2; break; }
                             }
                         }
-                        if (!hitClip) { rfail++; continue; }
-                        // 写 in/out（Time 对象：借现成的再 setSecondsAsFraction）
-                        try {
-                            var tin = tlMakeTime(want.inSec);
-                            var tout = tlMakeTime(want.outSec);
-                            if (tin) hitClip.inPoint = tin;
-                            if (tout) hitClip.outPoint = tout;
-                            restored++;
-                        } catch (e11) { rfail++; }
                     }
-                } catch (e12) {}
-                try { clip.remove(); } catch (e13) {}
+                    if (!hitClip) { rfail++; continue; }
+                    try {
+                        var tin = tlTime(want.inSec), tout = tlTime(want.outSec);
+                        if (tin) hitClip.inPoint = tin;
+                        if (tout) hitClip.outPoint = tout;
+                        restored++;
+                    } catch (e9) { rfail++; }
+                }
+                try { clip.remove(); } catch (e10) {}
                 done++;
-                msgs.push((clip.name || '嵌套') + ':展开 ' + moved + ' 个片段'
-                          + (restored ? '，还原裁剪 ' + restored + ' 个' : '')
-                          + ((mfail || rfail) ? '（跳过 ' + mfail + '/裁剪未还原 ' + rfail + '）' : ''));
+                msgs.push((clip.name || '嵌套') + ':展开 ' + moved + ' 个'
+                          + (restored ? '，还原裁剪 ' + restored : '')
+                          + ((mfail || rfail) ? '（跳过 ' + mfail + '/未还原 ' + rfail + '）' : ''));
             } else {
                 failed++;
-                msgs.push((clip.name || '') + ':子序列里没有可搬出的片段（跳过 ' + mfail + '）');
+                msgs.push((clip.name || '') + ':子序列里没有可搬出的片段');
             }
         }
         return "OK:" + JSON.stringify({ done: done, failed: failed, msgs: msgs });
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
-// ---- 6. 设置入点 / 出点（按播放头）----
+// ---- 入点 / 出点 ----
 function tlSetIn() {
     try {
         var seq = tlSeq();
@@ -2238,8 +2319,6 @@ function tlSetOut() {
         return "OK:" + JSON.stringify({ outSec: tlR2(pos.seconds) });
     } catch (e) { return "ERR:" + e.toString(); }
 }
-
-// ---- 7. 选择片段添加入出点（按选中片段的整体范围设 I/O）----
 function tlInOutFromSelection() {
     try {
         var seq = tlSeq();
@@ -2248,10 +2327,10 @@ function tlInOutFromSelection() {
         if (!clips.length) return "ERR:请先选中片段";
         var s = -1, en = -1;
         for (var i = 0; i < clips.length; i++) {
-            var st = clips[i].start.seconds;
-            var e2 = st + (clips[i].outPoint.seconds - clips[i].inPoint.seconds);
-            if (s < 0 || st < s) s = st;
-            if (en < 0 || e2 > en) en = e2;
+            var rg = tlClipRange(clips[i]);
+            if (!rg) continue;
+            if (s < 0 || rg.start < s) s = rg.start;
+            if (en < 0 || rg.end > en) en = rg.end;
         }
         if (!(en > s)) return "ERR:片段范围无效";
         seq.setInPoint(String(Math.round(s * TL_TICKS_PER_SEC)));
@@ -2260,19 +2339,38 @@ function tlInOutFromSelection() {
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
-// ---- 8. 清除出入点 ----
+// ---- 清除出入点 ----
+// 注意：官方 Sequence 没有 clearInPoint/clearOutPoint（前一版用错了）。
+// 这里走 QE 尝试清除；QE 无效时退化为「把 I/O 设成 0 与序列末尾」。
 function tlClearInOut() {
     try {
         var seq = tlSeq();
         if (!seq) return "ERR:没有激活的序列";
-        var okIn = false, okOut = false;
-        try { seq.clearInPoint(); okIn = true; } catch (e) {}
-        try { seq.clearOutPoint(); okOut = true; } catch (e2) {}
-        return "OK:" + JSON.stringify({ clearedIn: okIn, clearedOut: okOut });
+        var how = '';
+        var QE = tlQE();
+        if (QE) {
+            var qeSeq = null;
+            try { qeSeq = QE.project.getActiveSequence(); } catch (e) {}
+            if (qeSeq) {
+                var ok1 = false, ok2 = false;
+                try { if (qeSeq.clearInPoint) { qeSeq.clearInPoint(); ok1 = true; } } catch (e2) {}
+                try { if (qeSeq.clearOutPoint) { qeSeq.clearOutPoint(); ok2 = true; } } catch (e3) {}
+                if (ok1 || ok2) how = 'QE';
+            }
+        }
+        if (!how) {
+            // 退化：I/O 设成 0 ~ 序列末尾（等价于「没有有效 I/O」）
+            var seqEnd = 0;
+            try { seqEnd = seq.end.seconds; } catch (e4) { seqEnd = 0; }
+            seq.setInPoint("0");
+            if (seqEnd > 0) seq.setOutPoint(String(Math.round(seqEnd * TL_TICKS_PER_SEC)));
+            how = 'reset';
+        }
+        return "OK:" + JSON.stringify({ how: how });
     } catch (e) { return "ERR:" + e.toString(); }
 }
 
-// 一次性返回当前状态（供工具条显示：工作区名 / 是否有选中片段 / 是否设了 I/O）
+// ---- 状态 ----
 function tlStatus() {
     try {
         var out = { ok: true };
@@ -2280,12 +2378,16 @@ function tlStatus() {
         if (!seq) { out.seq = ''; return "OK:" + JSON.stringify(out); }
         out.seq = String(seq.name || '');
         out.selCount = tlSelClips().length;
-        try { out.inSec = tlR2(seq.getInPoint()); } catch (e) { out.inSec = -1; }
-        try { out.outSec = tlR2(seq.getOutPoint()); } catch (e2) { out.outSec = -1; }
         try {
-            var pp = seq.getPlayerPosition();
-            out.playerSec = tlR2(pp.seconds);
-        } catch (e3) {}
+            var i = seq.getInPoint();
+            out.inSec = (typeof i === 'number' && i >= 0) ? tlR2(i) : -1;
+        } catch (e) { out.inSec = -1; }
+        try {
+            var o = seq.getOutPoint();
+            out.outSec = (typeof o === 'number' && o >= 0) ? tlR2(o) : -1;
+        } catch (e2) { out.outSec = -1; }
+        try { out.playerSec = tlR2(seq.getPlayerPosition().seconds); } catch (e3) {}
+        try { out.qe = !!tlQE(); } catch (e4) { out.qe = false; }
         return "OK:" + JSON.stringify(out);
     } catch (e) { return "ERR:" + e.toString(); }
 }

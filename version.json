@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.50.0",
-  "buildTime": "2026-10-13 11:31:54",
+  "version": "1.50.1",
+  "buildTime": "2026-10-13 13:21:08",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "同步：时间线工具条"
+  "notes": "同步：时间线工具条改用 QE 重写"
 }

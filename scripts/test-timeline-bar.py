@@ -32,7 +32,7 @@ print('=== A. host 侧函数齐全 ===')
 host = open(os.path.join(D, 'jsx', 'host.jsx'), encoding='utf-8', errors='replace').read()
 NEED = ['tlWorkspaces', 'tlSetWorkspace', 'tlDeleteKeyframes', 'tlDeleteEffects',
         'tlUnnest', 'tlSwapClips', 'tlSetIn', 'tlSetOut', 'tlInOutFromSelection',
-        'tlClearInOut', 'tlStatus', 'tlMakeTime', 'tlLocate', 'tlSelClips', 'tlSeq']
+        'tlClearInOut', 'tlStatus', 'tlTime', 'tlLocate', 'tlSelClips', 'tlSeq']
 for n in NEED:
     chk('host.jsx 有 %s()' % n, ('function %s(' % n) in host)
 
@@ -44,6 +44,23 @@ for c in called:
     chk('调用 %s 在 host 有定义' % c, ('function %s(' % c) in host)
 chk('前端没有中文函数名残留', not re.search(r'function\s*[\u4e00-\u9fff]\w*\s*\(', js),
     str([x.group(0) for x in re.finditer(r'function\s*[\u4e00-\u9fff]\w*\s*\(', js)][:3]))
+
+print()
+print('=== A2b. QE 关键 API 用法（据 timeline-tools 路线）===')
+for k, why in [('tlQE', 'QE 开启封装'),
+               ('removeKeyRange', '删关键帧一次清空'),
+               ('setTimeVarying', '关秒表开关'),
+               ('getComponentAt', 'QE 删效果取组件'),
+               ('numComponents', 'QE 组件数'),
+               ('parentTrackIndex', 'QE 按轨道号定位')]:
+    chk('host 用到 %s（%s）' % (k, why), k in host)
+chk('删效果的组件删除调用 remove()', re.search(r'comp\.remove\(\)', host) is not None)
+chk('删关键帧带强制刷新 setValue(..., 1)', re.search(r'setValue\([^)]*,\s*1\)', host) is not None)
+# tl 段内不允许「无 if 保护的直调 seq.clearInPoint()」——官方 Sequence 没这个方法。
+# （插件别处已有的 `if (seq.clearInPoint) seq.clearInPoint()` 属存在性判断，安全，不计）
+tl_seg = host[host.find('// ==================== 时间线工具条（QE 版）'):]
+chk('tl 段内无裸调 seq.clearInPoint()',
+    not re.search(r'(?<!if \()\bseq\.clearInPoint\(\)', tl_seg))
 
 print()
 print('=== A3. index.html 接线 ===')
@@ -125,17 +142,17 @@ window.addEventListener('load',function(){setTimeout(function(){
             d = json.loads(m.group(1))
             if data is None:
                 data = d
-                chk('工具条有 9 个按钮', len(d['btns']) == 9, str(len(d['btns'])))
-                for want in ['删当前关键帧', '删全部关键帧', '删全部效果', '解除嵌套',
+                chk('工具条有 8 个按钮', len(d['btns']) == 8, str(len(d['btns'])))
+                for want in ['删全部关键帧', '删全部效果', '解除嵌套',
                              '位置互换', '入点', '出点', '片段→I/O', '清 I/O']:
                     chk('有按钮「%s」' % want, want in d['btns'])
+                chk('已去掉「删当前关键帧」', '删当前关键帧' not in d['btns'])
                 chk('工作区下拉已填充', d['wsOpts'] >= 5, str(d['wsOpts']))
                 chk('状态行显示序列/选中/I-O', ('EP1' in d['status']) and ('选中 2' in d['status'])
                     and ('1.50' in d['status']), d['status'][:60])
                 # 点击发出的脚本
                 joined = ' | '.join(d['calls'])
-                for fn, label in [('tlDeleteKeyframes("current")', '删当前关键帧'),
-                                  ('tlDeleteKeyframes("all")', '删全部关键帧'),
+                for fn, label in [('tlDeleteKeyframes()', '删全部关键帧'),
                                   ('tlDeleteEffects()', '删全部效果'),
                                   ('tlUnnest()', '解除嵌套'),
                                   ('tlSwapClips()', '位置互换'),
