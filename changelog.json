@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.50.0",
+      "date": "2026-10-13",
+      "title": "同步：时间线工具条（8 个常用动作常驻面板）",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "同步主版：面板顶部常驻工具条 —— 删当前/全部关键帧、删全部效果、解除嵌套、位置互换、入点/出点、片段→I/O、清 I/O，另加工作区下拉与状态显示"
+        },
+        {
+          "kind": "note",
+          "text": "附同一份 scripts/test-timeline-bar.py（静态接线+点击行为+四宽度布局）"
+        }
+      ]
+    },
+    {
       "version": "1.49.1",
       "date": "2026-10-12",
       "title": "移除：字幕快替（剧本→字幕）",
