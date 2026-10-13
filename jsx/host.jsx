@@ -2391,3 +2391,114 @@ function tlStatus() {
         return "OK:" + JSON.stringify(out);
     } catch (e) { return "ERR:" + e.toString(); }
 }
+
+// ---- 诊断探测（只读，不改动工程）----
+// 用途：把 PR 实际暴露的结构打出来，用于定位「删效果/互换/解嵌套为何无效」。
+// 不修改任何内容，可安全反复运行。
+function tlProbe() {
+    var out = { pr: String(app.version || ''), steps: [] };
+    function log(k, v) { out.steps.push(k + '=' + v); }
+
+    var seq = tlSeq();
+    if (!seq) return "OK:" + JSON.stringify({ err: '没有激活的序列' });
+    log('seq', String(seq.name));
+    log('vTracks', seq.videoTracks.numTracks);
+    log('aTracks', seq.audioTracks.numTracks);
+
+    // A. QE 是否可用
+    var QE = tlQE();
+    log('QE可用', !!QE);
+    var qeSeq = null;
+    if (QE) { try { qeSeq = QE.project.getActiveSequence(); } catch (e) {} }
+    log('qeSeq', !!qeSeq);
+
+    // B. 选中片段
+    var clips = tlSelClips();
+    log('选中数', clips.length);
+    if (!clips.length) return "OK:" + JSON.stringify(out);
+
+    var clip = clips[0];
+    try { log('clip.name', String(clip.name || '')); } catch (e) {}
+    try { log('mediaType', String(clip.mediaType || '')); } catch (e) {}
+    try { log('parentTrackIndex', clip.parentTrackIndex); } catch (e) { log('parentTrackIndex', 'ERR'); }
+    try { log('start', tlR2(clip.start.seconds)); } catch (e) {}
+
+    // C. 官方 components（有几条、名字）
+    try {
+        var comps = clip.components;
+        log('官方组件数', comps ? comps.numItems : 'null');
+        var names = [];
+        if (comps) for (var i = 0; i < comps.numItems; i++) {
+            var s = '';
+            try { s = String(comps[i].displayName || ''); } catch (e) {}
+            var m = '';
+            try { m = String(comps[i].matchName || ''); } catch (e) {}
+            var np = 0;
+            try { np = comps[i].properties.numItems; } catch (e) {}
+            names.push(i + ':' + s + '[' + m + ']参' + np);
+        }
+        log('官方组件', names.join(' | '));
+    } catch (e) { log('官方组件', 'ERR ' + e.toString()); }
+
+    // D. QE 侧：能否拿到同轨片段、能看到几个组件
+    if (qeSeq) {
+        var ti = -1, isAudio = false;
+        try { ti = clip.parentTrackIndex; } catch (e) {}
+        try { isAudio = (String(clip.mediaType) === 'Audio'); } catch (e) {}
+        log('QE轨道号', ti + (isAudio ? ' (Audio)' : ' (Video)'));
+        var qeTrack = null;
+        try { qeTrack = isAudio ? qeSeq.getAudioTrackAt(ti) : qeSeq.getVideoTrackAt(ti); } catch (e) {}
+        log('qeTrack', !!qeTrack);
+        if (qeTrack) {
+            var n = 0;
+            try { n = qeTrack.numItems; } catch (e) { log('qeTrack.numItems', 'ERR'); }
+            log('qeTrack片段数', n);
+            var wantStart = -1;
+            try { wantStart = clip.start.seconds; } catch (e) {}
+            log('要找的起点', tlR2(wantStart));
+            var found = null, list = [];
+            for (var j = 0; j < n; j++) {
+                var it = null;
+                try { it = qeTrack.getItemAt(j); } catch (e) { continue; }
+                if (!it) continue;
+                var st = -1;
+                try { st = it.start.seconds; } catch (e) {
+                    try { st = (typeof it.start === 'number') ? it.start : -1; } catch (e2) {}
+                }
+                list.push(j + '@' + (st === -1 ? '?' : tlR2(st)));
+                if (Math.abs(st - wantStart) < 0.05) found = it;
+            }
+            log('qeTrack各片段起点', list.join(' , '));
+            log('匹配到qeItem', !!found);
+            if (found) {
+                try { log('qeItem.numComponents', found.numComponents); } catch (e) { log('qeItem.numComponents', 'ERR'); }
+                try { log('qeItem有getComponentAt', typeof found.getComponentAt); } catch (e) {}
+                try { log('qeItem有remove', typeof found.remove); } catch (e) {}
+                var cnames = [];
+                var nc = 0;
+                try { nc = found.numComponents; } catch (e) {}
+                for (var k = 0; k < nc; k++) {
+                    var c = null;
+                    try { c = found.getComponentAt(k); } catch (e) { cnames.push(k + ':取组件异常'); continue; }
+                    if (!c) { cnames.push(k + ':null'); continue; }
+                    var cn = '';
+                    try { cn = String(c.name || ''); } catch (e) {}
+                    var hasRm = false;
+                    try { hasRm = (typeof c.remove === 'function'); } catch (e) {}
+                    cnames.push(k + ':' + cn + (hasRm ? '(有remove)' : '(无remove)'));
+                }
+                log('QE各组件', cnames.join(' | '));
+            }
+        }
+    }
+
+    // E. 序列 I/O 现状
+    try { log('seqInPoint', seq.getInPoint()); } catch (e) { log('seqInPoint', 'ERR'); }
+    try { log('seqOutPoint', seq.getOutPoint()); } catch (e) { log('seqOutPoint', 'ERR'); }
+    if (qeSeq) {
+        try { log('qeSeq.clearInPoint型', typeof qeSeq.clearInPoint); } catch (e) {}
+        try { log('qeSeq.clearOutPoint型', typeof qeSeq.clearOutPoint); } catch (e) {}
+    }
+
+    return "OK:" + JSON.stringify(out);
+}

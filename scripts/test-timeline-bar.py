@@ -142,7 +142,7 @@ window.addEventListener('load',function(){setTimeout(function(){
             d = json.loads(m.group(1))
             if data is None:
                 data = d
-                chk('工具条有 8 个按钮', len(d['btns']) == 8, str(len(d['btns'])))
+                chk('工具条有 9 个按钮（8 功能 + 诊断）', len(d['btns']) == 9, str(len(d['btns'])))
                 for want in ['删全部关键帧', '删全部效果', '解除嵌套',
                              '位置互换', '入点', '出点', '片段→I/O', '清 I/O']:
                     chk('有按钮「%s」' % want, want in d['btns'])
