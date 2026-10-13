@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.50.4",
-  "buildTime": "2026-10-13 14:31:34",
+  "version": "1.50.5",
+  "buildTime": "2026-10-13 16:50:54",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "同步：时间线工具条收尾"
+  "notes": "同步：修短剧扒歌设备风控"
 }
