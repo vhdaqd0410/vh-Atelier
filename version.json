@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.2",
-  "buildTime": "2026-10-13 13:33:42",
+  "version": "1.82.3",
+  "buildTime": "2026-10-13 13:42:22",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "时间线工具条：加诊断与返回数据日志"
+  "notes": "修：顶栏运行日志按钮点了没反应"
 }

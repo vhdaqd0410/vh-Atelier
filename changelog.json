@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.3",
+      "date": "2026-10-13",
+      "title": "修：顶栏「运行日志」按钮点了没反应（浮层从未接线）",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修顶栏 📄 运行日志按钮无效：日志浮层的 HTML（logOverlay/logHead/logBody/logFoot）一直存在，但从来没有一行 JS 绑定它——按钮、关闭、刷新、打开文件、清空全是死的。已补 js/log-overlay.js 接上全部交互"
+        },
+        {
+          "kind": "feat",
+          "text": "日志浮层功能：点击打开（自动滚到最新并标记已读）、✕/Esc/点遮罩关闭、「刷新」重读、「打开文件」用系统程序打开日志、「清空」清空日志、底部显示日志文件路径"
+        },
+        {
+          "kind": "note",
+          "text": "为何重要：此前各面板的失败原因都写不进日志（__vhLog 是对象不是函数，误当函数调用），加上浮层打不开，等于排障信息全被吞掉。现在能看到了"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-log-overlay.py（HTML 结构 / 脚本引入 / 绑定逻辑确实调用 addEventListener / 引用的 __vhLog 方法都存在），已接入 run-tests.py 门禁"
+        }
+      ]
+    },
+    {
       "version": "1.82.2",
       "date": "2026-10-13",
       "title": "时间线工具条：加「诊断」与返回数据日志（为定位功能无效）",
