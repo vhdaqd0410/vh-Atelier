@@ -29,12 +29,21 @@
             if (!ok) {
                 var m = String(r || '').replace(/^ERR:/, '') || '未知错误';
                 toast('✗ ' + m, true);
+                try {
+                    if (window.__vhLog && window.__vhLog.err) window.__vhLog.err('[timeline] 失败：' + m + ' ｜ 原始返回：' + String(r));
+                } catch (e2) {}
                 if (cb) cb(null, m);
                 return;
             }
             var data = null;
             try { data = JSON.parse(r.slice(3)); } catch (e) { data = {}; }
             if (okMsg) toast('✓ ' + okMsg);
+            // 关键：把 host 返回的完整数据写进运行日志，便于排查「点了没效果」
+            try {
+                if (window.__vhLog && window.__vhLog.info) {
+                    window.__vhLog.info('[timeline] ' + okMsg + ' → ' + JSON.stringify(data));
+                }
+            } catch (e2) {}
             if (cb) cb(data, null);
             refresh();
         });
@@ -139,6 +148,17 @@
             function () { run('tlInOutFromSelection()', '已按片段设 I/O'); });
         btn('tlClearIo', '清 I/O', '清除序列的入点和出点',
             function () { run('tlClearInOut()', '已清除 I/O'); });
+        btn('tlDiag', '诊断', '只读探测：打印 PR 实际暴露的结构（QE/组件/轨道），用于排查功能无效',
+            function () {
+                toast('正在诊断…');
+                call('tlProbe()', function (r) {
+                    try {
+                        if (window.__vhLog && window.__vhLog.info) window.__vhLog.info('[timeline-诊断] ' + String(r));
+                        console.log('[timeline-诊断]', String(r));
+                    } catch (e) {}
+                    toast('诊断完成，请打开「运行日志」查看');
+                });
+            });
 
         host.appendChild(bar);
 

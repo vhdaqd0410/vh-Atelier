@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.1",
-  "buildTime": "2026-10-13 13:19:53",
+  "version": "1.82.2",
+  "buildTime": "2026-10-13 13:33:42",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "时间线工具条改用 QE DOM 重写（修四个功能）"
+  "notes": "时间线工具条：加诊断与返回数据日志"
 }

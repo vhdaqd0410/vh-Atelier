@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.2",
+      "date": "2026-10-13",
+      "title": "时间线工具条：加「诊断」与返回数据日志（为定位功能无效）",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "工具条加「诊断」按钮：只读探测，把 PR 实际暴露的结构打进运行日志 —— 包括 QE 是否可用、选中片段的 parentTrackIndex、官方 components 有几条及各叫什么、QE 侧同轨片段列表与匹配情况、qeItem.numComponents 与每个组件是否有 remove 方法。用于定位删效果/互换/解嵌套为何无效，不改动工程"
+        },
+        {
+          "kind": "fix",
+          "text": "修日志写入失效：__vhLog 是对象（.info/.warn/.err），此前误写成可调函数 window.__vhLog('timeline', ...)，日志实际写不进去"
+        },
+        {
+          "kind": "impr",
+          "text": "每个动作执行后把 host 返回的完整数据写进运行日志（成功与失败都写），不再只弹一句「已XX」——之前失败原因全被吞掉，导致只能靠猜"
+        },
+        {
+          "kind": "note",
+          "text": "已知待查（等诊断数据）：① 高斯模糊删不掉，需确认 QE 的 getComponentAt/remove 在该 PR 版本是否真存在 ② 位置互换结果不对，需确认片段起点匹配是否命中了正确的 qeItem ③ 解除嵌套未处理变速与效果迁移"
+        }
+      ]
+    },
+    {
       "version": "1.82.1",
       "date": "2026-10-13",
       "title": "修：时间线工具条四个功能（改用 QE DOM 重写）",
