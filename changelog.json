@@ -4,6 +4,45 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.4",
+      "date": "2026-10-13",
+      "title": "时间线工具条收尾：只保留官方 API 可靠支持的功能",
+      "items": [
+        {
+          "kind": "note",
+          "text": "经过四轮实测，确认「删全部效果 / 位置互换 / 解除嵌套 / 清 I/O」无法在合理成本内做到与第三方插件同等效果，按决定移除，避免误点改动时间线"
+        },
+        {
+          "kind": "note",
+          "text": "移除原因（均有实测依据）：① 删效果依赖 QE DOM，而 QE 片段的 start.seconds 在本机 PR 25.5.0 上取不到（NaN），按起点匹配必然失败；② 位置互换需 QE 的 moveToTrack + 新建轨道，同轨移动会被当作覆盖；③ 解除嵌套需同时处理变速、逐属性关键帧复制、效果复制、加轨，缺口过大；④ 官方 Sequence 无 clearInPoint/clearOutPoint，QE 也没有"
+        },
+        {
+          "kind": "note",
+          "text": "反编译路线已试尽：jsxer 需 C++ 工具链（本机无）；Adobe 官方扩展只提供正向编译（esdCompileToJSXBin），无反向工具；符号表可解出调用的 API 与算法骨架，但恢复不了逐行逻辑与算式"
+        },
+        {
+          "kind": "impr",
+          "text": "保留「删全部关键帧」：改用 removeKeyRange 一次清空 + setTimeVarying(false) 关秒表 + setValue(...,1) 强制刷新界面（修「需重新选中才看到」的问题）"
+        },
+        {
+          "kind": "impr",
+          "text": "保留「入点 / 出点 / 片段→I/O / 切换工作区」，均为官方 API 直接支持"
+        },
+        {
+          "kind": "impr",
+          "text": "保留「诊断」（只读）：打印序列 / QE 能力 / 官方组件 / 关键帧的真实结构，便于以后排查"
+        },
+        {
+          "kind": "fix",
+          "text": "修收尾过程中误删的 host.appendChild(bar)，该错误曾导致整个工具条不可见（由测试发现）"
+        },
+        {
+          "kind": "note",
+          "text": "顺带修复：顶栏「运行日志」按钮此前无任何 JS 绑定（点了没反应），已补 js/log-overlay.js"
+        }
+      ]
+    },
+    {
       "version": "1.82.3",
       "date": "2026-10-13",
       "title": "修：顶栏「运行日志」按钮点了没反应（浮层从未接线）",
