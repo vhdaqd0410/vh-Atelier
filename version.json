@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.0",
-  "buildTime": "2026-10-13 11:26:44",
+  "version": "1.82.1",
+  "buildTime": "2026-10-13 13:19:53",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "新增时间线工具条（8 个常用动作常驻面板）"
+  "notes": "时间线工具条改用 QE DOM 重写（修四个功能）"
 }
