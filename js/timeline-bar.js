@@ -125,40 +125,48 @@
         });
         bar.appendChild(sel);
 
-        // 删全部关键帧（一次清空 + 关掉秒表开关 + 强制刷新界面）
+        // ---- 保留的功能（均为官方 API 可靠支持）----
+        // 删全部关键帧：一次清空 + 关掉秒表开关 + 强制刷新界面
         btn('tlDelKeyAll', '删全部关键帧', '删除选中片段所有关键帧，并关掉秒表开关',
             function () { run('tlDeleteKeyframes()', '已删全部关键帧'); });
-        btn('tlDelFx', '删全部效果', '删除选中片段上的全部效果',
-            function () { run('tlDeleteEffects()', '已删全部效果'); });
-        btn('tlUnnest', '解除嵌套', '把嵌套序列里的内容展开，替换掉嵌套片段',
-            function () { run('tlUnnest()', '已解除嵌套'); });
-        btn('tlSwap', '位置互换', '两个选中的片段在时间轴上互换位置（不是画面翻转）',
-            function () { run('tlSwapClips()', '已互换位置'); });
 
-        // 分隔
         var sp = document.createElement('span');
         sp.className = 'tl-sep';
         bar.appendChild(sp);
 
+        // 入点 / 出点：按播放头设置
         btn('tlIn', '入点', '把当前播放头位置设为序列入点',
             function () { run('tlSetIn()', '已设入点'); });
         btn('tlOut', '出点', '把当前播放头位置设为序列出点',
             function () { run('tlSetOut()', '已设出点'); });
+        // 按选中片段的整体范围设 I/O
         btn('tlInOutSel', '片段→I/O', '按选中片段的整体范围设置入点出点',
             function () { run('tlInOutFromSelection()', '已按片段设 I/O'); });
-        btn('tlClearIo', '清 I/O', '清除序列的入点和出点',
-            function () { run('tlClearInOut()', '已清除 I/O'); });
-        btn('tlDiag', '诊断', '只读探测：打印 PR 实际暴露的结构（QE/组件/轨道），用于排查功能无效',
+
+        var sp2 = document.createElement('span');
+        sp2.className = 'tl-sep';
+        bar.appendChild(sp2);
+
+        // 诊断：只读探测，排查用
+        btn('tlDiag', '诊断', '只读探测：打印序列/QE/组件/关键帧的真实结构，用于排查',
             function () {
                 toast('正在诊断…');
                 call('tlProbe()', function (r) {
                     try {
-                        if (window.__vhLog && window.__vhLog.info) window.__vhLog.info('[timeline-诊断] ' + String(r));
-                        console.log('[timeline-诊断]', String(r));
-                    } catch (e) {}
-                    toast('诊断完成，请打开「运行日志」查看');
+                        var d = null;
+                        try { d = JSON.parse(String(r || '').slice(3)); } catch (e) {}
+                        if (d && d.lines) {
+                            d.lines.forEach(function (ln) {
+                                if (window.__vhLog && window.__vhLog.info) window.__vhLog.info('[诊断] ' + ln);
+                            });
+                        } else if (window.__vhLog && window.__vhLog.info) {
+                            window.__vhLog.info('[诊断] ' + String(r));
+                        }
+                    } catch (e2) {}
+                    toast('诊断完成，请看运行日志');
                 });
             });
+
 
         host.appendChild(bar);
 
