@@ -4365,3 +4365,20 @@ button.danger{ background: var(--btn-danger-bg); color: #ffd9d9; border-color: t
 .tnode.excluded .tico { opacity: .55; }
 .tnode.excluded .tcnt { opacity: .5; }
 .ctx-item.ctx-warn { color: #ffb84d; }
+
+/* ===== 时间线工具条 ===== */
+#tlBar{ margin: 0 0 10px; }
+.tl-bar{ display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+.tl-btn{ background: var(--panel2, #242424); color: var(--text, #ddd);
+         border:1px solid var(--border, #3a3a3a); border-radius:6px;
+         font-size:11px; padding:4px 9px; cursor:pointer; white-space:nowrap;
+         font-family:inherit; line-height:1.3; }
+.tl-btn:hover{ border-color: var(--accent, #8b7cf6); color:#fff; }
+.tl-btn:active{ transform: translateY(1px); }
+.tl-sel{ background: var(--panel2, #242424); color: var(--text, #ddd);
+         border:1px solid var(--border, #3a3a3a); border-radius:6px;
+         font-size:11px; padding:4px 6px; max-width:130px; font-family:inherit; }
+.tl-sep{ width:1px; height:18px; background: var(--border,#3a3a3a); margin:0 3px; }
+.tl-status{ margin-top:4px; font-size:10px; color: var(--muted,#8a8a95);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+.tl-status:hover{ color: var(--text,#ddd); }

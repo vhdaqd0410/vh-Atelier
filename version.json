@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.81.1",
-  "buildTime": "2026-10-12 19:13:14",
+  "version": "1.82.0",
+  "buildTime": "2026-10-13 11:26:44",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "移除字幕快替功能（方案未通过）"
+  "notes": "新增时间线工具条（8 个常用动作常驻面板）"
 }

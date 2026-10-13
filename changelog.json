@@ -4,6 +4,41 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.0",
+      "date": "2026-10-12",
+      "title": "新增：时间线工具条（8 个常用动作常驻面板）",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "面板顶部新增常驻工具条，把 8 个高频时间线动作做成按钮，切到任何工作台都能用：删当前关键帧 / 删全部关键帧 / 删全部效果 / 解除嵌套 / 位置互换 / 入点 / 出点 / 片段→I/O / 清 I/O，另加工作区下拉"
+        },
+        {
+          "kind": "feat",
+          "text": "「位置互换」是让时间轴上两个选中片段互换位置（非画面翻转）：用 TrackItem.move 的相对位移实现，先移靠后的那个避免中途覆盖，移完读回位置校验"
+        },
+        {
+          "kind": "feat",
+          "text": "「解除嵌套」按你的观察实现：读嵌套片段对应的子序列 → 把里面片段逐个搬回父序列同时间位置 → 用子序列片段的 in/out 还原裁剪 → 搬完移除原嵌套片段"
+        },
+        {
+          "kind": "impr",
+          "text": "工具条右侧常显当前状态（序列名 / 选中片段数 / 入出点），点击即可刷新；每 5 秒自动刷新一次"
+        },
+        {
+          "kind": "note",
+          "text": "实现依据全部来自官方脚本指南实测核对：app.getWorkspaces/setWorkspace、ComponentParam.getKeys/removeKey/areKeyframesSupported、Component.remove、Track.insertClip/overwriteClip、TrackItem.move/inPoint/outPoint、Sequence.setInPoint/setOutPoint/clearInPoint/clearOutPoint、Time.setSecondsAsFraction"
+        },
+        {
+          "kind": "note",
+          "text": "本功能为自行实现，未使用第三方脚本的反编译代码；第三方「时间线小助手」的 jsxbin 未做改动"
+        },
+        {
+          "kind": "note",
+          "text": "新增 scripts/test-timeline-bar.py（静态接线 + 真实渲染点击行为 + 四种宽度布局不重叠），已接入 run-tests.py 门禁"
+        }
+      ]
+    },
+    {
       "version": "1.81.1",
       "date": "2026-10-12",
       "title": "移除：字幕快替（剧本→字幕）",

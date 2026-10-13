@@ -59,6 +59,7 @@ JOBS = [
     ("test-header-layout.py", "python", True, "顶部提示行不被吸顶栏遮挡（真实渲染测几何）", None),
     ("test-script-copy.py", "python", True, "剧本：选中即弹复制菜单 + 按标点断句复制", None),
     ("test-fn-integrity.py", "python", True, "面板函数完整性（调用未定义函数会致空白面板）", None),
+    ("test-timeline-bar.py", "python", True, "时间线工具条（8 动作接线+点击行为+布局不重叠）", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）
