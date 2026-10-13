@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.4",
-  "buildTime": "2026-10-13 14:31:32",
+  "version": "1.82.5",
+  "buildTime": "2026-10-13 16:50:54",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "时间线工具条收尾：只保留可靠功能"
+  "notes": "修短剧扒歌「下载失败：接口异常」"
 }

@@ -243,7 +243,11 @@ def fetch_video(dev, vid):
     d = json.loads(urllib.request.urlopen(req, context=CTX, timeout=30).read())
     code = d.get("Code", d.get("code"))
     if code != 0:
-        raise RuntimeError(f"接口返回 {code} {d.get('Message') or d.get('message')}")
+        # 110001 = 设备被风控/异常（实测：换新设备号即恢复），用特定前缀便于上层识别
+        msg = d.get('Message') or d.get('message') or ''
+        if str(code) == "110001":
+            raise DeviceBlockedError(f"设备号被风控（{code} {msg}）")
+        raise RuntimeError(f"接口返回 {code} {msg}")
     vm = list(d["data"].values())[0]["video_model"]
     if isinstance(vm, str):
         vm = json.loads(vm)
@@ -278,11 +282,35 @@ def pick_best(vlist):
     return max(vlist, key=lambda x: int(x.get("video_meta", {}).get("vheight", 0) or 0))
 
 
-def download(vid, out_path, dev, retries=2):
+class DeviceBlockedError(RuntimeError):
+    """设备号被风控（接口返回 110001）。实测换新设备号即恢复。"""
+    pass
+
+
+def is_device_blocked(err):
+    """判断是否「设备被风控」类错误（可用换设备解决）"""
+    s = str(err or "")
+    return ("110001" in s) or isinstance(err, DeviceBlockedError)
+
+
+def refresh_device(old_dev):
+    """注册一个新设备号并落盘，返回新设备；失败返回 None"""
+    try:
+        d = register_device()
+        if d and d.get("device_id"):
+            emit({"event": "progress", "percent": 3, "msg": "设备号被风控，已自动更换"})
+            return d
+    except Exception as e:
+        emit({"event": "progress", "percent": 3, "msg": "更换设备号失败：" + str(e)})
+    return None
+
+
+def download(vid, out_path, dev, retries=3):
     last = None
+    cur_dev = dev
     for attempt in range(retries + 1):
         try:
-            vm = fetch_video(dev, vid)
+            vm = fetch_video(cur_dev, vid)
             item = pick_best(vm.get("video_list") or [])
             meta = item.get("video_meta", {})
             enc = item.get("encrypt_info", {}) or {}
@@ -297,9 +325,27 @@ def download(vid, out_path, dev, retries=2):
             last = (r.stderr or b"").decode("utf-8", "replace")[-200:]
         except Exception as e:
             last = str(e)
+            # 设备被风控 → 换新设备号重试（实测有效）
+            if is_device_blocked(e):
+                nd = refresh_device(cur_dev)
+                if nd:
+                    cur_dev = nd
+                    persist_new_device(nd)
+                    continue
         if attempt < retries:
-            time.sleep(1.5)
+            # 轻微退避，避免连环请求再次触发风控
+            time.sleep(2.0 + attempt * 1.5)
     raise RuntimeError(f"下载失败: {last}")
+
+
+def persist_new_device(d):
+    """把新设备号落盘，后续集数复用（避免每集都重新注册）"""
+    try:
+        if d:
+            save_device(d)
+        return True
+    except Exception:
+        return False
 
 
 def safe_name(s):
