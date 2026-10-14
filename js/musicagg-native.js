@@ -60,6 +60,7 @@
     var curType = 'song';
     // 歌单检索能力：实测只有网易云的音源提供 searchPlaylist，
     // 其余平台服务端直接返回 500 "does not support playlist search"。
+    // 在这里显式标注，避免用户切到别的平台搜歌单只看到一句"搜索失败"。
     var PLAYLIST_OK = { wy: true };
     function platformSupportsPlaylist(pf) {
         if (!pf) return true;   // 全部平台：由网易云出结果
@@ -68,9 +69,10 @@
 
     // ---------- 歌单分享链接解析 ----------
     // 需求：把网易云歌单的分享链接直接粘进输入框就能打开歌单。
-    // 服务端各音源的 getListDetail 本身已能吃「链接或 ID」并自行提取，
-    // 但需先告诉它这是哪个平台的链接（跨源打不开），故这里只做：
-    //   1) 按域名判断来源平台  2) 确认输入是歌单链接 / 歌单 ID
+    // 服务端各音源的 getListDetail 本身已经能吃「链接或 ID」并自行提取，
+    // 但需要先告诉它这是哪个平台的链接（跨源打不开），所以这里只做两件事：
+    //   1) 按域名判断来源平台
+    //   2) 确认输入确实是一个歌单链接 / 歌单 ID（避免把普通搜索词误当链接）
     var LINK_SOURCE_RULES = [
         { re: /(?:music\.163\.com|y\.music\.163\.com|163cn\.tv|music\.126\.net)/i, src: 'wy' },
         { re: /(?:y\.qq\.com|c\.y\.qq\.com|i\.y\.qq\.com|qq\.com\/n\/ryqq)/i,        src: 'tx' },
@@ -78,21 +80,24 @@
         { re: /(?:kuwo\.cn|m\.kuwo\.cn)/i,                                              src: 'kw' },
         { re: /(?:migu\.cn|music\.migu\.cn|h5\.nf\.migu\.cn)/i,                       src: 'mg' }
     ];
+    // 从链接里提取歌单 id（各平台路径形式不同，逐一覆盖）
     function extractPlaylistId(text) {
         var s = String(text || '').trim();
         var m;
-        if ((m = s.match(/[?&]id=(\w+)/))) return m[1];
-        if ((m = s.match(/global_collection_id=(\w+)/))) return m[1];
-        if ((m = s.match(/\/playlist\/(\d+)/))) return m[1];
-        if ((m = s.match(/\/playsquare\/([\w.]+)\.html/))) return m[1];
-        if ((m = s.match(/special\/single\/(\d+)/))) return m[1];
-        if ((m = s.match(/dissid=(\w+)/))) return m[1];
+        if ((m = s.match(/[?&]id=(\w+)/))) return m[1];                       // ?id=xxx（网易云/咪咕等）
+        if ((m = s.match(/global_collection_id=(\w+)/))) return m[1];         // 酷狗收藏歌单
+        if ((m = s.match(/\/playlist\/(\d+)/))) return m[1];                  // /playlist/12345
+        if ((m = s.match(/\/playsquare\/([\w.]+)\.html/))) return m[1];       // QQ /playsquare/xxx.html
+        if ((m = s.match(/special\/single\/(\d+)/))) return m[1];            // 酷狗 /special/single/123.html
+        if ((m = s.match(/dissid=(\w+)/))) return m[1];                       // QQ disstid
         return '';
     }
+    // 判断输入是不是「歌单链接或纯歌单 ID」；是则返回 {source, id, raw}
     function parsePlaylistInput(text) {
         var s = String(text || '').trim();
         if (!s) return null;
         var isLink = /^https?:\/\//i.test(s);
+        // 分享文案里夹着链接也很常见（「分享歌单 《xxx》 https://... (来自@网易云音乐)」）
         if (!isLink) {
             var um = s.match(/https?:\/\/[^\s]+/i);
             if (um) { s = um[0]; isLink = true; }
@@ -104,8 +109,10 @@
             }
             var id = extractPlaylistId(s);
             if (!id) return null;
+            // 认不出平台时，退到当前选中平台（与网页端「不支持跨源」的提示口径一致）
             return { source: src || curPlatform || 'wy', id: id, raw: s };
         }
+        // 纯 ID：只认纯数字/字母数字，且长度像 id，避免把普通歌名当 id
         if (/^[A-Za-z0-9_-]{5,}$/.test(s) && /\d/.test(s) && !/\s/.test(s)) {
             return { source: curPlatform || 'wy', id: s, raw: s };
         }
@@ -171,6 +178,103 @@
         if (!agg) return realUrl;
         return agg.base() + '/api/music/download?url=' + encodeURIComponent(realUrl)
             + '&filename=' + encodeURIComponent(filename || 'download.mp3');
+    }
+
+    // ============ 取可用播放地址（多档位降级） ============
+    // 背景：第三方音源脚本会老化。某个档位（如 320k）看似"成功"，返回的却是死链，
+    //       浏览器 audio 拿到 HTML 错误页就报 "no supported source was found"。
+    // 做法：按档位依次请求，并对直链做真实探测（取头部判音频魔数），第一个真能播的才用。
+    var QUALITY_CHAIN = ['128k', '320k', 'flac'];
+
+    function sniffAudio(buf) {
+        if (!buf || buf.byteLength < 4) return false;
+        var u = new Uint8Array(buf, 0, Math.min(buf.byteLength, 12));
+        var h = '';
+        for (var i = 0; i < u.length; i++) h += String.fromCharCode(u[i]);
+        if (h.slice(0, 3) === 'ID3') return true;                  // MP3(ID3)
+        if (u[0] === 0xFF && (u[1] & 0xE0) === 0xE0) return true;   // MP3 帧同步
+        if (h.slice(0, 4) === 'fLaC') return true;                  // FLAC
+        if (h.slice(0, 4) === 'OggS') return true;                  // OGG
+        if (h.slice(0, 4) === 'RIFF') return true;                  // WAV
+        if (h.slice(4, 8) === 'ftyp') return true;                  // M4A/MP4
+        return false;
+    }
+
+    // 探测直链是否真能取到音频（走本地代理，与播放同路径，结论才一致）
+    function probeAudioUrl(realUrl, cb) {
+        var xhr = new XMLHttpRequest();
+        var done = false;
+        function finish(ok) { if (done) return; done = true; cb(ok); }
+        try {
+            xhr.open('GET', proxyUrl(realUrl), true);
+            xhr.responseType = 'arraybuffer';
+            xhr.setRequestHeader('Range', 'bytes=0-8191');
+            xhr.timeout = 20000;
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 400) finish(sniffAudio(xhr.response));
+                else finish(false);
+            };
+            xhr.onerror = function () { finish(false); };
+            xhr.ontimeout = function () { finish(false); };
+            xhr.send(null);
+        } catch (e) { finish(false); }
+    }
+
+    // 取得「确定可播」的地址；cb(url, info)，info={quality, source, tried}
+    // 两级降级：先换音源（服务端优选常选到失效源），再换音质档；每次都对直链做真实探测。
+    function fetchPlayUrl(s, cb) {
+        var tried = [];
+        var exclude = [];          // 已判定失效的音源（服务端支持按此排除）
+        var maxPerQuality = 4;     // 每个音质档最多换 4 个音源
+        var qi = 0, attempt = 0;
+
+        function nextQuality() {
+            qi++;
+            attempt = 0;
+            step();
+        }
+
+        function step() {
+            if (qi >= QUALITY_CHAIN.length) {
+                cb(null, { tried: tried, error: '各音质档、各音源都取不到可用音频（音源可能已失效）' });
+                return;
+            }
+            var q = QUALITY_CHAIN[qi];
+            if (attempt >= maxPerQuality) { nextQuality(); return; }
+            attempt++;
+
+            var body = { songInfo: s, quality: q };
+            if (exclude.length) body.excludeApiSources = exclude.slice();
+
+            api('/api/music/url', { method: 'POST', body: body, timeout: 60000 })
+                .then(function (r) {
+                    var url = (r && r.url) || ((r && r.data) || {}).url;
+                    if (!url) {
+                        tried.push({ quality: q, ok: false, reason: '未返回地址' });
+                        nextQuality();
+                        return;
+                    }
+                    var srcName = (r && (r.sourceName || r.sourceId)) || '';
+                    var srcId = (r && r.sourceId) || srcName;
+                    probeAudioUrl(url, function (ok) {
+                        tried.push({ quality: q, ok: ok, source: srcName,
+                                     reason: ok ? 'ok' : '地址不可用' });
+                        if (ok) {
+                            cb(url, { quality: q, source: srcName, tried: tried });
+                            return;
+                        }
+                        // 该源不可用 → 排除它，再问服务端换下一个源
+                        if (srcId && exclude.indexOf(srcId) < 0) exclude.push(srcId);
+                        if (srcName && exclude.indexOf(srcName) < 0) exclude.push(srcName);
+                        step();
+                    });
+                })
+                .catch(function (e) {
+                    tried.push({ quality: q, ok: false, reason: (e && e.message) || '请求失败' });
+                    nextQuality();
+                });
+        }
+        step();
     }
 
     // ==================== 首页：推荐歌单 + 榜单 ====================
@@ -416,6 +520,7 @@
         var kw = (typeof kwArg === 'string' ? kwArg : ($('mv2Query').value || '')).trim();
         if (!kw) { flash('请输入关键词'); return; }
         // 类型选「歌单」时，粘贴的歌单链接 / 歌单 ID 直接打开歌单，不当作关键词去搜。
+        // （分享文案里夹着链接也能识别，见 parsePlaylistInput）
         var asList = ($('mv2Type') && $('mv2Type').value) === 'playlist';
         if (asList) {
             var parsed = parsePlaylistInput(kw);
@@ -494,6 +599,95 @@
         updatePickCount();
     }
 
+    // ---------- 播放栏歌词：开关 + 当前句 ----------
+    // 默认开。用户可在播放控件栏用按钮切换，选择记在 localStorage。
+    var BAR_LYRIC_KEY = 'vh_musicagg_barlyric';
+    var barLyricOn = true;
+    try { barLyricOn = (localStorage.getItem(BAR_LYRIC_KEY) !== '0'); } catch (e) {}
+    function setBarLyric(on) {
+        barLyricOn = !!on;
+        try { localStorage.setItem(BAR_LYRIC_KEY, barLyricOn ? '1' : '0'); } catch (e) {}
+        var el = $('mv2BarLyric');
+        if (el) {
+            el.style.display = barLyricOn ? '' : 'none';
+            if (!barLyricOn) { el.textContent = ''; el.classList.remove('show', 'swap'); }
+        }
+        var btn = $('btnMv2BarLyric');
+        if (btn) btn.classList.toggle('on', barLyricOn);
+        if (barLyricOn) renderBarLyric(lastLyricIdx);
+    }
+    var lastLyricIdx = -1;
+    // 播放栏只显示当前句（双行歌词取第一行，避免高度跳动）
+    function renderBarLyric(idx) {
+        var prev = lastLyricIdx;
+        lastLyricIdx = (typeof idx === 'number') ? idx : lastLyricIdx;
+        var el = $('mv2BarLyric');
+        if (!el || !barLyricOn) return;
+        var line = (lastLyricIdx >= 0 && lyricLines[lastLyricIdx]) ? lyricLines[lastLyricIdx] : null;
+        var text = line ? String(line.text || '').split('\n')[0] : '';
+        var changed = (text !== el.textContent);
+        el.textContent = text;
+        if (!text) { el.classList.remove('show', 'swap'); return; }
+        el.classList.add('show');
+        // 换句时重放一次动画（先摘掉再挂上，强制重启动画；不能每帧都播）
+        if (changed && el.classList) {
+            el.classList.remove('swap');
+            try {
+                void el.offsetWidth;
+            } catch (e) {}
+            el.classList.add('swap');
+            // 歌词行从「空」变「有内容」会让播放器变高（反之变矮），
+            // 浮层开着时必须跟着重排，否则底部会与播放器错开。
+            // 不能只依赖 ResizeObserver（个别环境不调度回调），这里显式补一次。
+            var f = $('mv2LyricFloat');
+            if (f && f.style.display !== 'none') {
+                try { layoutLyricFloat(); } catch (e2) {}
+            }
+        }
+        // 回退到开头（用户拖进度条回到第 0 秒）时也算一次变化
+        if (prev !== lastLyricIdx && !changed) { /* 文本相同就不重播，避免闪烁 */ }
+    }
+
+    // 已下载文件映射：key = 歌名|歌手|songmid → 本地路径
+    // 行创建时就带上 draggable，拖拽时实时查表，不再靠事后补事件（重渲染就丢）。
+    function songKey(s) {
+        return [s.name || '', s.singer || s.artist || '', s.songmid || ''].join('|');
+    }
+    function localPathOf(s) {
+        try { return downloadedMap[songKey(s)] || ''; } catch (e) { return ''; }
+    }
+    var downloadedMap = {};
+    try { downloadedMap = JSON.parse(localStorage.getItem('vh_musicagg_dl') || '{}'); } catch (e) { downloadedMap = {}; }
+    function saveDlMap() {
+        try { localStorage.setItem('vh_musicagg_dl', JSON.stringify(downloadedMap)); } catch (e) {}
+    }
+
+    // 给行挂上拖拽（不管有没有下载过，拖时再判断）
+    function attachRowDrag(row, s) {
+        row.setAttribute('draggable', 'true');
+        row.addEventListener('dragstart', function (ev) {
+            var p = localPathOf(s);
+            if (!p || !/^[a-zA-Z]:[\\/]/.test(p)) {
+                // 还没下载：阻止拖拽并提示
+                ev.preventDefault();
+                flash('先点「⤓」下载这首，下载完就能拖进 PR 了');
+                return;
+            }
+            try {
+                ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', p);
+                ev.dataTransfer.setData('text/plain', p);
+                ev.dataTransfer.effectAllowed = 'copy';
+            } catch (e) {}
+        });
+        // 右键菜单（已下载才有内容）
+        row.addEventListener('contextmenu', function (ev) {
+            var p = localPathOf(s);
+            if (!p) return;
+            ev.preventDefault();
+            showRowMenu(ev, p);
+        });
+    }
+
     // ==================== 歌曲行渲染 ====================
     // 容器显式传入（修过「搜过歌单后点歌单一直加载中」的 bug）。
     // options.pickable=true 时行前带勾选框（歌单详情用）。
@@ -553,8 +747,9 @@
             ops.className = 'mv2-ops';
             ops.appendChild(mkBtn('▶', 'mv2-btn-play', '播放', function () { playListAt(idx); }));
             var dlBtn = mkBtn('⤓', 'mv2-btn', '下载（可选目录）', function () { download(s); });
+            var prBtn = mkBtn('→PR', 'mv2-btn', '下载并插入当前时间线', function () { insertToTimeline(s); });
             ops.appendChild(dlBtn);
-            ops.appendChild(mkBtn('→PR', 'mv2-btn', '下载并插入当前时间线', function () { insertToTimeline(s); }));
+            ops.appendChild(prBtn);
             row.appendChild(ops);
 
             // 已下载过的：按钮变✔、行可拖；未下载也能拖（拖时提示先下载）
@@ -627,21 +822,20 @@
         playIdx = idx;
         var s = playlist[idx];
         setState('正在取播放地址…', '');
-        api('/api/music/url', { method: 'POST', body: { songInfo: s, quality: '320k' }, timeout: 60000 })
-            .then(function (r) {
-                var url = (r && r.url) || ((r && r.data) || {}).url;
-                if (!url) throw new Error('取不到播放地址（该平台可能无可播源）');
-                var a = getAudio();
-                if (!a) throw new Error('播放器元素缺失');
-                a.src = proxyUrl(url);
-                updateNow(s);
-                a.play().catch(function (e) { setState('播放失败：' + (e.message || '被浏览器拦截'), 'err'); });
-                setState('播放中', 'ok');
-            })
-            .catch(function (e) {
-                setState('播放失败：' + e.message, 'err');
-                flash(e.message, 'err');
-            });
+        fetchPlayUrl(s, function (url, info) {
+            if (!url) {
+                var why = '播放失败：' + ((info && info.error) || '取不到可用音频');
+                setState(why, 'err');
+                flash(why, 'err');
+                return;
+            }
+            var a = getAudio();
+            if (!a) { setState('播放失败：播放器元素缺失', 'err'); return; }
+            a.src = proxyUrl(url);
+            updateNow(s);
+            a.play().catch(function (e) { setState('播放失败：' + (e.message || '被浏览器拦截'), 'err'); });
+            setState('播放中' + (info && info.quality ? ('（' + info.quality + '）') : ''), 'ok');
+        });
     }
 
     function updateNow(s) {
@@ -664,7 +858,8 @@
         var bt = $('mv2BigTitle'); if (bt) bt.textContent = s.name || '';
         var bs = $('mv2BigSub'); if (bs) bs.textContent = (s.singer || '') + (s.albumName ? (' · ' + s.albumName) : '');
         // 同步刷新歌词与播放列表，并启动频谱。
-        // 歌词在切歌时就拉：播放栏那行也依赖它。loadLyric 内部有缓存。
+        // 歌词在切歌时就拉：播放栏那行也依赖它（若只在浮层打开时才拉，
+        // 开了开关但没开浮层时播放栏会一直空着）。loadLyric 内部有缓存。
         loadLyric(s);
         renderQueue();
         // 切歌会换歌名/专辑长度，标题可能换行 → 浮层开着时同步重排
@@ -732,6 +927,7 @@
         if (!body) return;
         if (!lyricLines.length) { body.innerHTML = '<div class="mv2-lyric-empty">暂无歌词</div>'; return; }
         body.innerHTML = '';
+        renderBarLyric(-1);
         lyricLines.forEach(function (x, i) {
             var d = document.createElement('div');
             d.className = 'mv2-lyric-line';
@@ -743,7 +939,8 @@
             });
             body.appendChild(d);
         });
-        // 歌词是异步拉回来的：渲染完立刻按当前播放位置定位一次
+        // 歌词是异步拉回来的：渲染完立刻按当前播放位置定位一次，
+        // 否则要等下一次 timeupdate 才出内容（播放栏会短暂空着）。
         try {
             var a0 = getAudio();
             if (a0 && isFinite(a0.currentTime)) syncLyric(a0.currentTime);
@@ -763,11 +960,13 @@
         for (var j = 0; j < lines.length; j++) {
             if (!lines[j].classList) continue;
             lines[j].classList.toggle('on', j === idx);
+            // 当前句±4 行稍亮，形成渐变层次
             lines[j].classList.toggle('near', j !== idx && Math.abs(j - idx) <= 4);
         }
         var curEl = lines[idx];
         if (curEl && typeof body.scrollTop === 'number') {
-            // 当前句定位在容器偏下（约 62% 处），上方保留已唱过的歌词作为上下文
+            // 当前句定位在容器偏下（约 62% 处），上方保留已唱过的歌词作为上下文。
+            // 以前居中，导致高亮句总在最上面、看不到前文。
             try {
                 var target = curEl.offsetTop - body.clientHeight * 0.62 + curEl.clientHeight / 2;
                 body.scrollTop = Math.max(0, target);
@@ -775,51 +974,9 @@
         }
     }
 
-    // ---------- 播放栏歌词：开关 + 当前句 ----------
-    var BAR_LYRIC_KEY = 'vh_musicagg_barlyric';
-    var barLyricOn = true;
-    try { barLyricOn = (localStorage.getItem(BAR_LYRIC_KEY) !== '0'); } catch (e) {}
-    var lastLyricIdx = -1;
-    function setBarLyric(on) {
-        barLyricOn = !!on;
-        try { localStorage.setItem(BAR_LYRIC_KEY, barLyricOn ? '1' : '0'); } catch (e) {}
-        var el = $('mv2BarLyric');
-        if (el) {
-            el.style.display = barLyricOn ? '' : 'none';
-            if (!barLyricOn) { el.textContent = ''; el.classList.remove('show', 'swap'); }
-        }
-        var btn = $('btnMv2BarLyric');
-        if (btn) btn.classList.toggle('on', barLyricOn);
-        if (barLyricOn) renderBarLyric(lastLyricIdx);
-    }
-    // 播放栏只显示当前句（双行歌词取第一行，避免高度跳动）
-    function renderBarLyric(idx) {
-        lastLyricIdx = (typeof idx === 'number') ? idx : lastLyricIdx;
-        var el = $('mv2BarLyric');
-        if (!el || !barLyricOn) return;
-        var line = (lastLyricIdx >= 0 && lyricLines[lastLyricIdx]) ? lyricLines[lastLyricIdx] : null;
-        var text = line ? String(line.text || '').split('\n')[0] : '';
-        var changed = (text !== el.textContent);
-        el.textContent = text;
-        if (!text) { el.classList.remove('show', 'swap'); return; }
-        el.classList.add('show');
-        // 换句时重放一次动画（先摘再挂，强制重启；不能每帧都播）
-        if (changed && el.classList) {
-            el.classList.remove('swap');
-            try { void el.offsetWidth; } catch (e) {}
-            el.classList.add('swap');
-            // 歌词行从「空」变「有内容」会让播放器变高（反之变矮），
-            // 浮层开着时必须跟着重排，否则底部会与播放器错开。
-            // 不能只依赖 ResizeObserver（个别环境不调度回调），这里显式补一次。
-            var f = $('mv2LyricFloat');
-            if (f && f.style.display !== 'none') {
-                try { layoutLyricFloat(); } catch (e2) {}
-            }
-        }
-    }
-
-    // 浮层占位：铺在「面板区域」上，底部精确让出播放控件高度。
-    // 播放器跟着内容流排版（位置随列表长度变化），固定留白猜不准会错位，故读实际几何。
+    // 浮层占位：铺在「面板区域」上，并在底部精确让出播放控件的高度。
+    // 之前用固定 padding 猜底部留白，而播放器是跟着内容流排版的（位置随列表长度变化），
+    // 猜不准就会错位。这里改为读实际几何：面板矩形 + 播放器高度。
     // 播放器高度会随内容变化（歌词行有无内容、是否换行），
     // 浮层开着时要跟着重排，否则底部会与播放器错开。
     function watchPlayerResize() {
@@ -847,8 +1004,9 @@
         var width = Math.round(r.width);
         var height = Math.round(r.height);
 
-        // 播放器若真的显示，底部让出它到面板底边的距离。
-        // 不能用行内 style.display 判断（可能被 CSS 覆盖），以渲染高度为准。
+        // 播放器若真的显示出来了，底部让出它的高度，保证控件完整可见。
+        // 注意：不能用行内 style.display 判断（可能被 CSS 覆盖），
+        // 以「实际渲染高度 + computed display」为准。
         var player = $('mv2Player');
         var reserve = 0;
         if (player) {
@@ -856,6 +1014,9 @@
             var pdisp = '';
             try { pdisp = window.getComputedStyle(player).display; } catch (e) {}
             if (pr.height > 0 && pdisp !== 'none') {
+                // 需要让出的高度 = 播放器上沿到面板底边的距离。
+                // 若播放器下方还有兄弟元素（比如播放列表折叠块），也要一并让出，
+                // 取「面板底 − 该元素之后第一个可见兄弟的顶」不可靠，这里直接取到面板底。
                 var gap = Math.round(r.bottom - pr.top);
                 if (gap > 0 && gap < height) reserve = gap;
                 else if (gap <= 0) reserve = Math.min(pr.height, height - 160);
@@ -863,11 +1024,15 @@
         }
         var availH = Math.max(160, height - reserve);
 
-        // 窄面板：左右分栏会把歌词挤到只剩一百余像素，改成上下布局
+        // 窄面板（CEP 里常是这个宽度）：左右分栏会把歌词挤到只剩一百来像素，
+        // 文字频繁换行。此时改用上下布局（左栏收到顶部一行），把宽度全让给歌词。
+        var card = box.querySelector ? box.querySelector('.mv2-lyric-card') : null;
         var needNarrow = width < 620;
         if (box.classList) {
             if (needNarrow) box.classList.add('narrow'); else box.classList.remove('narrow');
         }
+        // 注意：这里不能再改 availH。之前把卡片高度当占位高度，导致浮层只剩 144px，
+        // 歌词内容溢出到页面中间。占位高度恒定为「面板高度 − 播放器高度」。
 
         box.style.top = top + 'px';
         box.style.left = left + 'px';
@@ -876,15 +1041,18 @@
         box.style.right = 'auto';
         box.style.bottom = 'auto';
 
-        // 歌词区上下留白：为了「当前句落在偏下、上方保留已唱段」。
-        // CSS 百分比 padding 按宽度算（窄面板 382px 宽会得到 172px 留白，把歌词挤空），
-        // 所以这里按实际高度用像素精确设置。
+        // 歌词区的上下留白：为了「当前句落在偏下、上方保留已唱段」，
+        // 需要等于可视高度一定比例的上下空白。CSS 的百分比 padding 是按宽度算的
+        // （窄面板 382px 宽会得到 172px 上下留白，把歌词挤空），所以这里用像素精确设置。
         var lyr = $('mv2LyricBody');
         if (lyr) {
             var lh = lyr.clientHeight || 0;
             if (lh > 80) {
-                lyr.style.paddingTop = Math.round(lh * 0.42) + 'px';
-                lyr.style.paddingBottom = Math.round(lh * 0.58) + 'px';
+                var padTop = Math.round(lh * 0.42);
+                var padBottom = Math.round(lh * 0.58);
+                lyr.style.paddingTop = padTop + 'px';
+                lyr.style.paddingBottom = padBottom + 'px';
+                // 留白变了，当前句位置也要跟着校准
                 try {
                     var a1 = getAudio();
                     if (a1 && isFinite(a1.currentTime)) syncLyric(a1.currentTime);
@@ -894,8 +1062,8 @@
         return availH;
     }
 
-    // 浮层打开后的短时校准：ResizeObserver 在部分环境不调度回调，
-    // 而播放器高度会随歌词行内容变化，这里用几次定时校准做保险。
+    // 浮层打开后的短时校准：播放器高度会随歌词行内容变化，
+    // ResizeObserver 在部分环境不调度回调，这里用几次定时校准做保险。
     var floatCalTimers = [];
     function scheduleFloatCalibration() {
         while (floatCalTimers.length) clearTimeout(floatCalTimers.pop());
@@ -1413,30 +1581,27 @@
         var doIt = function (dir) {
             if (dir === null) return;   // 用户取消
             setState('正在取播放地址…', '');
-            api('/api/music/url', { method: 'POST', body: { songInfo: s, quality: '320k' }, timeout: 60000 })
-                .then(function (r) {
-                    var url = (r && r.url) || ((r && r.data) || {}).url;
-                    if (!url) throw new Error('取不到播放地址（该平台可能无可播源）');
-                    var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
-                    setState('正在下载…', '');
-                    return new Promise(function (resolve, reject) {
-                        fetchToFile(proxyUrl(url), dir, fname, function (err, saved) {
-                            if (err) reject(new Error(err)); else resolve(saved);
-                        });
-                    });
-                })
-                .then(function (saved) {
+            fetchPlayUrl(s, function (url, info) {
+                if (!url) {
+                    var why = '下载失败：' + ((info && info.error) || '取不到可用音频');
+                    setState(why, 'err'); flash(why, 'err');
+                    return;
+                }
+                var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
+                setState('正在下载…', '');
+                fetchToFile(proxyUrl(url), dir, fname, function (err, saved) {
+                    if (err) {
+                        setState('下载失败：' + err, 'err'); flash('下载失败：' + err, 'err');
+                        return;
+                    }
                     setState('已下载：' + saved, 'ok');
                     flash('已下载到：' + saved, 'ok');
                     // 写入映射表（行拖拽靠它查路径），并局部刷新该行按钮
                     downloadedMap[songKey(s)] = saved;
                     saveDlMap();
                     refreshRowState(s);
-                })
-                .catch(function (e) {
-                    setState('下载失败：' + e.message, 'err');
-                    flash('下载失败：' + e.message, 'err');
                 });
+            });
         };
         if (skipPick) { doIt(skipPick); return; }
         pickDir(function (dir) {
@@ -1467,61 +1632,24 @@
         } catch (e) { cb(e.message); }
     }
 
-    // 已下载文件映射：key = 歌名|歌手|songmid → 本地路径
-    // 行创建时就带上 draggable，拖拽时实时查表，不再靠事后补事件（重渲染就丢）。
-    function songKey(s) {
-        return [s.name || '', s.singer || s.artist || '', s.songmid || ''].join('|');
-    }
-    var downloadedMap = {};
-    try { downloadedMap = JSON.parse(localStorage.getItem('vh_musicagg_dl') || '{}'); } catch (e) { downloadedMap = {}; }
-    function saveDlMap() {
-        try { localStorage.setItem('vh_musicagg_dl', JSON.stringify(downloadedMap)); } catch (e) {}
-    }
-    function localPathOf(s) {
-        try { return downloadedMap[songKey(s)] || ''; } catch (e) { return ''; }
-    }
-
-    // 给行挂上拖拽（不管有没有下载过，拖时再判断）
-    function attachRowDrag(row, s) {
-        row.setAttribute('draggable', 'true');
-        row.addEventListener('dragstart', function (ev) {
-            var p = localPathOf(s);
-            if (!p || !/^[a-zA-Z]:[\\/]/.test(p)) {
-                ev.preventDefault();
-                flash('先点「⤓」下载这首，下载完就能拖进 PR 了');
-                return;
-            }
-            try {
-                ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', p);
-                ev.dataTransfer.setData('text/plain', p);
-                ev.dataTransfer.effectAllowed = 'copy';
-            } catch (e) {}
-        });
-        row.addEventListener('contextmenu', function (ev) {
-            var p = localPathOf(s);
-            if (!p) return;
-            ev.preventDefault();
-            showRowMenu(ev, p);
-        });
-    }
-
-    // 下载完成 → 刷新对应行按钮状态（按 songKey 匹配，不靠歌名文本）
+    // 下载完成 → 刷新对应行的按钮状态（按 songKey 匹配，不靠歌名文本）
     function refreshRowState(s) {
         var key = songKey(s);
         [$('mv2List'), $('mv2Sheet')].forEach(function (box) {
-            if (!box || !box.children) return;
+            if (!box) return;
+            var list = (lastRendered && lastRendered.targetEl === box) ? lastRendered.list : null;
             var rows = box.children;
             for (var i = 0; i < rows.length; i++) {
                 var r = rows[i];
                 if (!r.classList || r.className.indexOf('mv2-row') < 0) continue;
                 var idx = parseInt(r.getAttribute('data-idx'), 10);
-                var song = (lastRendered && lastRendered.list && isFinite(idx)) ? lastRendered.list[idx] : null;
-                if (!song || songKey(song) !== key) continue;
-                var ops = r.querySelector && r.querySelector('.mv2-ops');
-                if (ops && ops.children[1]) {
-                    var p = localPathOf(s);
-                    ops.children[1].textContent = p ? '✔' : '⤓';
-                    ops.children[1].title = p ? ('已下载：' + p + '（可拖进 PR；右键菜单）') : '下载（可选目录）';
+                var rowSong = list && list[idx];
+                if (!rowSong || songKey(rowSong) !== key) continue;
+                var lp = localPathOf(s);
+                var ops = r.querySelector('.mv2-ops');
+                if (ops && ops.children[1] && lp) {
+                    ops.children[1].textContent = '✔';
+                    ops.children[1].title = '已下载：' + lp + '（可拖进 PR，右键更多操作）';
                 }
                 break;
             }
@@ -1604,20 +1732,15 @@
                 var tip = label + '：' + (i + 1) + '/' + songs.length + ' · ' + (s.name || '');
                 setState(tip, '');
                 if (btnSel) btnSel.textContent = i + '/' + songs.length;
-                api('/api/music/url', { method: 'POST', body: { songInfo: s, quality: '320k' }, timeout: 60000 })
-                    .then(function (r) {
-                        var url = (r && r.url) || ((r && r.data) || {}).url;
-                        if (!url) throw new Error('无直链');
-                        var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
-                        return new Promise(function (res, rej) {
-                            fetchToFile(proxyUrl(url), dir, fname, function (err, saved) { if (err) rej(new Error(err)); else res(saved); });
-                        });
-                    })
-                    .then(function (saved) {
-                        if (saved) { downloadedMap[songKey(s)] = saved; saveDlMap(); }
-                        ok++; i++; setTimeout(tick, 120);
-                    })
-                    .catch(function () { fail++; i++; setTimeout(tick, 120); });
+                fetchPlayUrl(s, function (url) {
+                    if (!url) { fail++; i++; setTimeout(tick, 120); return; }
+                    var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
+                    fetchToFile(proxyUrl(url), dir, fname, function (err, saved) {
+                        if (err || !saved) { fail++; }
+                        else { ok++; downloadedMap[songKey(s)] = saved; saveDlMap(); }
+                        i++; setTimeout(tick, 120);
+                    });
+                });
             }
             tick();
         });
@@ -1680,6 +1803,7 @@
         });
 
         // 搜索类型由用户自己选，切平台不改它（要搜单曲由用户自己切）。
+        // 若当前是歌单而目标平台没有歌单检索，只在搜索失败时给提示，不强行改用户的选择。
         curType = ($('mv2Type') && $('mv2Type').value) || curType || 'song';
 
         // 输入框是用户的现场，不被回填覆盖：切平台时以「当前输入框内容」为准。
@@ -1705,7 +1829,8 @@
     }
 
     function restoreView(v) {
-        // 类型下拉是用户的设定，恢复现场时不动它
+        // 类型下拉是用户的设定，恢复现场时不动它（只用 v.type 决定内容怎么渲染）。
+        // 这样「选中的类型」在任何平台切换后都保持不变。
         var viewType = v.type || 'song';
         var ty0 = $('mv2Type');
         curType = (ty0 && ty0.value) || curType || 'song';
@@ -1797,6 +1922,7 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
     else bind();
 
+    // 面板尺寸变化（CEP 里拖窗口/切布局）时，浮层若开着要跟着重排
     try {
         window.addEventListener('resize', function () {
             var f = $('mv2LyricFloat');
