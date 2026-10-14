@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.6",
-  "buildTime": "2026-10-14 10:24:54",
+  "version": "1.82.7",
+  "buildTime": "2026-10-14 11:24:59",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修音乐聚合播放失败（音源老化）"
+  "notes": "语音克隆：参考音频波形+试听"
 }

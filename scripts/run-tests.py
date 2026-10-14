@@ -61,6 +61,7 @@ JOBS = [
     ("test-fn-integrity.py", "python", True, "面板函数完整性（调用未定义函数会致空白面板）", None),
     ("test-timeline-bar.py", "python", True, "时间线工具条（8 动作接线+点击行为+布局不重叠）", None),
     ("test-log-overlay.py", "python", True, "运行日志浮层接线（按钮/浮层/__vhLog 方法）", None),
+    ("test-ref-wave.py", "python", True, "语音克隆：参考音频波形+试听（真实渲染验绘制）", None),
 ]
 
 # 失败标志：输出里出现这些词则判失败（用于 gate=False 的脚本）

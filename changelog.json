@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.7",
+      "date": "2026-10-13",
+      "title": "语音克隆：抓取的参考片段支持波形与试听（对齐达芬奇版）",
+      "items": [
+        {
+          "kind": "feat",
+          "text": "语音克隆「参考音色」区新增波形 + 试听：抓取参考片段后立即显示波形，点圆形按钮试听、点波形任意位置定位播放进度，左侧同步显示「当前/总时长」。移植自达芬奇版（vh-Atelier-Resolve）的轻量波形组件"
+        },
+        {
+          "kind": "feat",
+          "text": "四处参考音频来源全部接入波形：时间轴选中片段抓取、入点出点抓取、项目素材截取、使用已保存音色"
+        },
+        {
+          "kind": "impr",
+          "text": "波形组件不依赖 WaveSurfer：纯 Web Audio 解码算峰值 + canvas 绘制，轻量无外部实例；PR 侧复用面板现有的 file:// 读取逻辑，未新增宿主接口"
+        },
+        {
+          "kind": "impr",
+          "text": "参考音频文件缺失时自动清空波形区，组件未加载时静默跳过，不影响原有流程"
+        }
+      ]
+    },
+    {
       "version": "1.82.6",
       "date": "2026-10-13",
       "title": "修：音乐聚合播放失败「Failed to load because no supported source was found」",

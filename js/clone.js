@@ -108,6 +108,7 @@
         if (!v) { setStatus('请选择一个音色', 'err'); return; }
         if (!v.wav || !fs.existsSync(v.wav)) { setStatus('该音色的音频文件已丢失，请重新保存', 'err'); return; }
         refWavPath = v.wav;
+        mountRefWave();
         refClipMeta = { clipName: v.name, mediaPath: v.wav };
         el.refInfo.textContent = '✓ 音色库「' + v.name + '」';
         el.refInfo.classList.add('has');
@@ -167,6 +168,7 @@
     var el = {
         btnGrab: document.getElementById('btnGrab'),
         refInfo: document.getElementById('refInfo'),
+        vcRefWave: document.getElementById('vcRefWave'),
         refText: document.getElementById('refText'),
         btnAutoRef: document.getElementById('btnAutoRef'),
         btnSaveVoice: document.getElementById('btnSaveVoice'),
@@ -547,6 +549,7 @@
             return;
         }
         refWavPath = info.wav;
+        mountRefWave();
         var kind = (track.type === 'audio') ? '音轨' : '视频内嵌音频';
         var how = (mode === 'solo') ? '独奏渲染' : '直取原素材';
         refClipMeta = {
@@ -687,6 +690,7 @@
                     return;
                 }
                 refWavPath = refOut;
+                mountRefWave();
                 el.refInfo.textContent = '✓ ' + (clip.clipName || clip.mediaPath) + '\n时长 ' + duration.toFixed(1) + ' 秒';
                 el.refInfo.classList.add('has');
                 setBusy(false);
@@ -767,6 +771,7 @@
                 return;
             }
             refWavPath = refOut;
+            mountRefWave();
             refClipMeta = { clipName: media.name, mediaPath: media.mediaPath, inPoint: start, outPoint: start + dur };
             el.refInfo.textContent = '✓ ' + media.name + '\n片段 ' + start.toFixed(1) + 's ~ ' + (start + dur).toFixed(1) + 's';
             el.refInfo.classList.add('has');
@@ -1218,6 +1223,28 @@
             xhr.send();
         } catch (e) { cb(e, null); }
     }
+
+    // ---------- 参考音频波形（移植自达芬奇版 wave-mini）----------
+    var refWaveInst = null;
+    function clearRefWave() {
+        if (refWaveInst) { try { refWaveInst.destroy(); } catch (e) {} refWaveInst = null; }
+        if (el.vcRefWave) { el.vcRefWave.style.display = 'none'; el.vcRefWave.innerHTML = ''; }
+    }
+    function mountRefWave() {
+        if (!el.vcRefWave) return;
+        if (!refWavPath || !fs.existsSync(refWavPath)) { clearRefWave(); return; }
+        if (!window.vhWave) return;   // 组件未加载（老版本），静默跳过
+        clearRefWave();
+        el.vcRefWave.style.display = '';
+        try {
+            refWaveInst = window.vhWave.mount(el.vcRefWave, refWavPath, { height: 48, color: '#a07bf7' });
+        } catch (e) {
+            console.warn('[clone] refWave', e);
+            el.vcRefWave.style.display = 'none';
+        }
+    }
+    // 供 wave-mini 复用读取逻辑（PR 侧走 XHR file://）
+    window.__vhReadAudioBlob = vcReadAsBlob;
 
     function toggleVcPlay(p, btn) {
         if (vcWsPath === p && vcWs && vcWsPlaying) { pauseVcPlay(btn); return; }
