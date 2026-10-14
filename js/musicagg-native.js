@@ -180,6 +180,103 @@
             + '&filename=' + encodeURIComponent(filename || 'download.mp3');
     }
 
+    // ============ 取可用播放地址（多档位降级） ============
+    // 背景：第三方音源脚本会老化。某个档位（如 320k）看似"成功"，返回的却是死链，
+    //       浏览器 audio 拿到 HTML 错误页就报 "no supported source was found"。
+    // 做法：按档位依次请求，并对直链做真实探测（取头部判音频魔数），第一个真能播的才用。
+    var QUALITY_CHAIN = ['128k', '320k', 'flac'];
+
+    function sniffAudio(buf) {
+        if (!buf || buf.byteLength < 4) return false;
+        var u = new Uint8Array(buf, 0, Math.min(buf.byteLength, 12));
+        var h = '';
+        for (var i = 0; i < u.length; i++) h += String.fromCharCode(u[i]);
+        if (h.slice(0, 3) === 'ID3') return true;                  // MP3(ID3)
+        if (u[0] === 0xFF && (u[1] & 0xE0) === 0xE0) return true;   // MP3 帧同步
+        if (h.slice(0, 4) === 'fLaC') return true;                  // FLAC
+        if (h.slice(0, 4) === 'OggS') return true;                  // OGG
+        if (h.slice(0, 4) === 'RIFF') return true;                  // WAV
+        if (h.slice(4, 8) === 'ftyp') return true;                  // M4A/MP4
+        return false;
+    }
+
+    // 探测直链是否真能取到音频（走本地代理，与播放同路径，结论才一致）
+    function probeAudioUrl(realUrl, cb) {
+        var xhr = new XMLHttpRequest();
+        var done = false;
+        function finish(ok) { if (done) return; done = true; cb(ok); }
+        try {
+            xhr.open('GET', proxyUrl(realUrl), true);
+            xhr.responseType = 'arraybuffer';
+            xhr.setRequestHeader('Range', 'bytes=0-8191');
+            xhr.timeout = 20000;
+            xhr.onload = function () {
+                if (xhr.status >= 200 && xhr.status < 400) finish(sniffAudio(xhr.response));
+                else finish(false);
+            };
+            xhr.onerror = function () { finish(false); };
+            xhr.ontimeout = function () { finish(false); };
+            xhr.send(null);
+        } catch (e) { finish(false); }
+    }
+
+    // 取得「确定可播」的地址；cb(url, info)，info={quality, source, tried}
+    // 两级降级：先换音源（服务端优选常选到失效源），再换音质档；每次都对直链做真实探测。
+    function fetchPlayUrl(s, cb) {
+        var tried = [];
+        var exclude = [];          // 已判定失效的音源（服务端支持按此排除）
+        var maxPerQuality = 4;     // 每个音质档最多换 4 个音源
+        var qi = 0, attempt = 0;
+
+        function nextQuality() {
+            qi++;
+            attempt = 0;
+            step();
+        }
+
+        function step() {
+            if (qi >= QUALITY_CHAIN.length) {
+                cb(null, { tried: tried, error: '各音质档、各音源都取不到可用音频（音源可能已失效）' });
+                return;
+            }
+            var q = QUALITY_CHAIN[qi];
+            if (attempt >= maxPerQuality) { nextQuality(); return; }
+            attempt++;
+
+            var body = { songInfo: s, quality: q };
+            if (exclude.length) body.excludeApiSources = exclude.slice();
+
+            api('/api/music/url', { method: 'POST', body: body, timeout: 60000 })
+                .then(function (r) {
+                    var url = (r && r.url) || ((r && r.data) || {}).url;
+                    if (!url) {
+                        tried.push({ quality: q, ok: false, reason: '未返回地址' });
+                        nextQuality();
+                        return;
+                    }
+                    var srcName = (r && (r.sourceName || r.sourceId)) || '';
+                    var srcId = (r && r.sourceId) || srcName;
+                    probeAudioUrl(url, function (ok) {
+                        tried.push({ quality: q, ok: ok, source: srcName,
+                                     reason: ok ? 'ok' : '地址不可用' });
+                        if (ok) {
+                            cb(url, { quality: q, source: srcName, tried: tried });
+                            return;
+                        }
+                        // 该源不可用 → 排除它，再问服务端换下一个源
+                        if (srcId && exclude.indexOf(srcId) < 0) exclude.push(srcId);
+                        if (srcName && exclude.indexOf(srcName) < 0) exclude.push(srcName);
+                        step();
+                    });
+                })
+                .catch(function (e) {
+                    tried.push({ quality: q, ok: false, reason: (e && e.message) || '请求失败' });
+                    nextQuality();
+                });
+        }
+        step();
+    }
+
     // ==================== 首页：推荐歌单 + 榜单 ====================
     function loadHome() {
         var box = $('mv2List');
@@ -725,21 +822,20 @@
         playIdx = idx;
         var s = playlist[idx];
         setState('正在取播放地址…', '');
-        api('/api/music/url', { method: 'POST', body: { songInfo: s, quality: '320k' }, timeout: 60000 })
-            .then(function (r) {
-                var url = (r && r.url) || ((r && r.data) || {}).url;
-                if (!url) throw new Error('取不到播放地址（该平台可能无可播源）');
-                var a = getAudio();
-                if (!a) throw new Error('播放器元素缺失');
-                a.src = proxyUrl(url);
-                updateNow(s);
-                a.play().catch(function (e) { setState('播放失败：' + (e.message || '被浏览器拦截'), 'err'); });
-                setState('播放中', 'ok');
-            })
-            .catch(function (e) {
-                setState('播放失败：' + e.message, 'err');
-                flash(e.message, 'err');
-            });
+        fetchPlayUrl(s, function (url, info) {
+            if (!url) {
+                var why = '播放失败：' + ((info && info.error) || '取不到可用音频');
+                setState(why, 'err');
+                flash(why, 'err');
+                return;
+            }
+            var a = getAudio();
+            if (!a) { setState('播放失败：播放器元素缺失', 'err'); return; }
+            a.src = proxyUrl(url);
+            updateNow(s);
+            a.play().catch(function (e) { setState('播放失败：' + (e.message || '被浏览器拦截'), 'err'); });
+            setState('播放中' + (info && info.quality ? ('（' + info.quality + '）') : ''), 'ok');
+        });
     }
 
     function updateNow(s) {
@@ -1485,30 +1581,27 @@
         var doIt = function (dir) {
             if (dir === null) return;   // 用户取消
             setState('正在取播放地址…', '');
-            api('/api/music/url', { method: 'POST', body: { songInfo: s, quality: '320k' }, timeout: 60000 })
-                .then(function (r) {
-                    var url = (r && r.url) || ((r && r.data) || {}).url;
-                    if (!url) throw new Error('取不到播放地址（该平台可能无可播源）');
-                    var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
-                    setState('正在下载…', '');
-                    return new Promise(function (resolve, reject) {
-                        fetchToFile(proxyUrl(url), dir, fname, function (err, saved) {
-                            if (err) reject(new Error(err)); else resolve(saved);
-                        });
-                    });
-                })
-                .then(function (saved) {
+            fetchPlayUrl(s, function (url, info) {
+                if (!url) {
+                    var why = '下载失败：' + ((info && info.error) || '取不到可用音频');
+                    setState(why, 'err'); flash(why, 'err');
+                    return;
+                }
+                var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
+                setState('正在下载…', '');
+                fetchToFile(proxyUrl(url), dir, fname, function (err, saved) {
+                    if (err) {
+                        setState('下载失败：' + err, 'err'); flash('下载失败：' + err, 'err');
+                        return;
+                    }
                     setState('已下载：' + saved, 'ok');
                     flash('已下载到：' + saved, 'ok');
                     // 写入映射表（行拖拽靠它查路径），并局部刷新该行按钮
                     downloadedMap[songKey(s)] = saved;
                     saveDlMap();
                     refreshRowState(s);
-                })
-                .catch(function (e) {
-                    setState('下载失败：' + e.message, 'err');
-                    flash('下载失败：' + e.message, 'err');
                 });
+            });
         };
         if (skipPick) { doIt(skipPick); return; }
         pickDir(function (dir) {
@@ -1639,20 +1732,15 @@
                 var tip = label + '：' + (i + 1) + '/' + songs.length + ' · ' + (s.name || '');
                 setState(tip, '');
                 if (btnSel) btnSel.textContent = i + '/' + songs.length;
-                api('/api/music/url', { method: 'POST', body: { songInfo: s, quality: '320k' }, timeout: 60000 })
-                    .then(function (r) {
-                        var url = (r && r.url) || ((r && r.data) || {}).url;
-                        if (!url) throw new Error('无直链');
-                        var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
-                        return new Promise(function (res, rej) {
-                            fetchToFile(proxyUrl(url), dir, fname, function (err, saved) { if (err) rej(new Error(err)); else res(saved); });
-                        });
-                    })
-                    .then(function (saved) {
-                        if (saved) { downloadedMap[songKey(s)] = saved; saveDlMap(); }
-                        ok++; i++; setTimeout(tick, 120);
-                    })
-                    .catch(function () { fail++; i++; setTimeout(tick, 120); });
+                fetchPlayUrl(s, function (url) {
+                    if (!url) { fail++; i++; setTimeout(tick, 120); return; }
+                    var fname = safeName((s.name || 'song') + ' - ' + (s.singer || s.artist || '')) + '.mp3';
+                    fetchToFile(proxyUrl(url), dir, fname, function (err, saved) {
+                        if (err || !saved) { fail++; }
+                        else { ok++; downloadedMap[songKey(s)] = saved; saveDlMap(); }
+                        i++; setTimeout(tick, 120);
+                    });
+                });
             }
             tick();
         });

@@ -1,0 +1,16 @@
+[2026-10-13T17:00:20.142] [INFO] startup - starting sync server in production
+[2026-10-13T17:00:20.143] [INFO] startup - Music SDK Proxy: Disabled
+[2026-10-13T17:00:20.144] [INFO] startup - musicSdk initialized
+[2026-10-13T17:00:23.324] [INFO] startup - Listening on 0.0.0.0 port 17899
+[2026-10-13T17:00:48.030] [INFO] startup - starting sync server in production
+[2026-10-13T17:00:48.031] [INFO] startup - Music SDK Proxy: Disabled
+[2026-10-13T17:00:48.033] [INFO] startup - musicSdk initialized
+[2026-10-13T17:00:51.195] [INFO] startup - Listening on 0.0.0.0 port 17899
+[2026-10-14T09:23:29.027] [INFO] startup - starting sync server in production
+[2026-10-14T09:23:29.027] [INFO] startup - Music SDK Proxy: Disabled
+[2026-10-14T09:23:29.029] [INFO] startup - musicSdk initialized
+[2026-10-14T09:23:32.186] [INFO] startup - Listening on 0.0.0.0 port 17899
+[2026-10-14T09:23:32.187] [INFO] sync - [任务调度] 后台任务调度器已启动
+[2026-10-14T09:25:07.058] [INFO] startup - starting sync server in production
+[2026-10-14T09:25:07.058] [INFO] startup - Music SDK Proxy: Disabled
+[2026-10-14T09:25:07.059] [INFO] startup - musicSdk initialized
