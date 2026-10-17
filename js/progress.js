@@ -346,6 +346,43 @@
         });
     }
 
+    // 缺集摘要行文案（首页卡片用）——同时给出「已完成」与「缺口分布」，两处渲染共用
+    //   有缺集：⚠️ 缺 26 集 · 已完成 52/78（67%）　张三 52-58　李四 73-78
+    //   全完成：✅ 已完成 78/78
+    //   无数据：返回 ''（调用方隐藏该行）
+    function missSummaryHtml(sc) {
+        if (!sc || !sc.ok) return '';
+        var total = parseInt(sc.total, 10) || 0;
+        var present = (sc.present || []).length;
+        var missing = sc.missing || [];
+        if (total <= 0) return '';
+        // present 可能含超出 total 的集号，用并集里的实际完成数兜底
+        if (!present) present = parseInt(sc.current_count, 10) || 0;
+        var pct = Math.round(present / total * 100);
+        if (!missing.length) {
+            return '✅ 已完成 ' + present + '/' + total;
+        }
+        var planMap = sc.editor_plan || {};
+        var mg = {};
+        missing.forEach(function (epn) {
+            var ed = planMap[String(epn)] || planMap[epn] || '未分配';
+            if (!mg[ed]) mg[ed] = [];
+            mg[ed].push(parseInt(epn, 10));
+        });
+        // 缺得多的剪辑师排前面，未分配垫底
+        var eds = Object.keys(mg).sort(function (a, b) {
+            if (a === '未分配') return 1;
+            if (b === '未分配') return -1;
+            return mg[b].length - mg[a].length || (a < b ? -1 : 1);
+        });
+        var parts = [];
+        eds.forEach(function (ed) {
+            parts.push(esc(ed) + ' ' + compactEpList(mg[ed]));
+        });
+        return '⚠️ 缺 ' + missing.length + ' 集 · 已完成 ' + present + '/' + total
+            + '（' + pct + '%）　' + parts.join('　');
+    }
+
     // 渲染概览
     function renderOverview(stats) {
         if (!stats) return;
@@ -551,23 +588,14 @@
             missRow.style.display = 'none';
             item.appendChild(missRow);
             // 缺集摘要也从缓存回填（否则每次切换筛选就消失）
-            if (_sc && _sc.ok && _sc.total > 0 && (_sc.missing || []).length) {
-                (function (mr, sc) {
-                    var planMap = sc.editor_plan || {};
-                    var mg = {};
-                    sc.missing.forEach(function (epn) {
-                        var ed = planMap[String(epn)] || planMap[epn] || '未分配';
-                        if (!mg[ed]) mg[ed] = [];
-                        mg[ed].push(parseInt(epn, 10));
-                    });
-                    var parts = [];
-                    Object.keys(mg).forEach(function (ed) {
-                        parts.push(esc(ed) + ' 缺 ' + compactEpList(mg[ed]));
-                    });
-                    mr.innerHTML = '⚠️ ' + parts.join('　');
-                    mr.style.display = 'block';
-                    mr.title = '点「📋 明细」看完整缺集 + 成片 + 修改';
-                })(missRow, _sc);
+            if (_sc && _sc.ok && _sc.total > 0) {
+                var _html0 = missSummaryHtml(_sc);
+                if (_html0) {
+                    missRow.innerHTML = _html0;
+                    missRow.className = 'prg-miss-row' + (_html0.indexOf('✅') === 0 ? ' is-done' : '');
+                    missRow.style.display = 'block';
+                    missRow.title = '点「📋 明细」看完整缺集 + 成片 + 修改';
+                }
             }
 
             // 操作区：主操作行（明细/查剪辑/刷新） + 辅助操作行（目录/素材/剧本/跳转）
@@ -875,23 +903,13 @@
                 epTxt.title = '缺 ' + missing + ' 集：' + (data.missing || []).join(', ');
             }
         }
-        // 缺集摘要行：谁缺哪几集（分组显示）
+        // 缺集摘要行：缺多少 + 已完成 + 谁缺哪几集（统一由 missSummaryHtml 生成）
         var missRow = item.querySelector('.prg-miss-row');
         if (missRow) {
-            var missArr = data.missing || [];
-            if (total > 0 && missArr.length > 0) {
-                var planMap = data.editor_plan || {};
-                var mgroups = {};
-                missArr.forEach(function (ep) {
-                    var ed = planMap[String(ep)] || planMap[ep] || '未分配';
-                    if (!mgroups[ed]) mgroups[ed] = [];
-                    mgroups[ed].push(parseInt(ep, 10));
-                });
-                var parts = [];
-                Object.keys(mgroups).forEach(function (ed) {
-                    parts.push(esc(ed) + ' 缺 ' + compactEpList(mgroups[ed]));
-                });
-                missRow.innerHTML = '⚠️ ' + parts.join('　');
+            var _html = missSummaryHtml(data);
+            if (_html) {
+                missRow.innerHTML = _html;
+                missRow.className = 'prg-miss-row' + (_html.indexOf('✅') === 0 ? ' is-done' : '');
                 missRow.style.display = 'block';
                 missRow.title = '点「📋 明细」看完整缺集 + 成片 + 修改';
             } else {

@@ -53,6 +53,19 @@ j = src.find('// ===== 行构建 =====', i)
 block = src[i:j] if j > i else ''
 chk('可抽取 renderMiss 代码块', len(block) > 800, 'len=%d' % len(block))
 
+
+print()
+print('=== A4. 首页卡片缺集摘要行（含已完成）===')
+chk('定义 missSummaryHtml', 'function missSummaryHtml' in src)
+chk('渲染时调用 missSummaryHtml', src.count('missSummaryHtml(') >= 3, 'count=%d' % src.count('missSummaryHtml('))
+chk('卡片行含「已完成」文案', "' · 已完成 '" in src or "'已完成 '" in src)
+chk('全完成文案以 ✅ 开头', "'✅ 已完成 '" in src)
+chk('卡片行按状态切 is-done', "'prg-miss-row' + (_html" in src or "prg-miss-row' + (" in src)
+# CSS 里要有配套的绿色样式
+_css = open(os.path.join(D, 'css', 'atelier.css'), encoding='utf-8', errors='replace').read()
+chk('CSS 有 .prg-miss-row.is-done 绿色样式', '.prg-miss-row.is-done' in _css)
+chk('is-done 用成功绿而非警告黄', 'var(--fg-ok-soft)' in _css.split('.prg-miss-row.is-done')[1][:200] if '.prg-miss-row.is-done' in _css else False)
+
 print()
 print('=== B. 真实数据渲染 ===')
 WB = None
@@ -153,6 +166,98 @@ else:
             chk('格子数 = present∪missing 并集', cells == union, 'cells=%d union=%d' % (cells, union))
             chk('绿格数 = present 数', done == nPresent, 'done=%d present=%d' % (done, nPresent))
             chk('红格数 = missing 数', miss == nMissing, 'miss=%d missing=%d' % (miss, nMissing))
+
+
+print()
+print('=== B2. 首页卡片缺集行渲染（真实数据）===')
+if not WB or not browser or len(src) < 100:
+    print('  [跳过] 缺工作台/浏览器')
+else:
+    def _grab_fn(s, name):
+        i = s.find('function ' + name)
+        if i < 0:
+            return ''
+        j = s.find('{', i)
+        depth = 0; k = j; in_s = None; esc_on = False
+        while k < len(s):
+            c = s[k]
+            if in_s:
+                if esc_on: esc_on = False
+                elif c == '\\': esc_on = True
+                elif c == in_s: in_s = None
+            else:
+                if c in '\'"`': in_s = c
+                elif c == '/' and k + 1 < len(s) and s[k + 1] == '/':
+                    nl_ = s.find('\n', k)
+                    if nl_ < 0: break
+                    k = nl_; continue
+                elif c == '{': depth += 1
+                elif c == '}':
+                    depth -= 1
+                    if depth == 0: return s[i:k + 1]
+            k += 1
+        return ''
+    # esc 用固定后锚点，避免正则里的括号干扰
+    _i = src.find('function esc(')
+    _j = src.find('// 缺集摘要行文案（首页卡片用）', _i)
+    f_esc = src[_i:_j].rstrip() if (_i >= 0 and _j > _i) else ''
+    f_miss = _grab_fn(src, 'missSummaryHtml(')
+    f_compact = _grab_fn(src, 'compactEpList(')
+    if min(len(f_esc), len(f_miss), len(f_compact)) < 50:
+        print('  [跳过] 函数抽取失败')
+    else:
+        # 取样：必须同时覆盖「有缺集」和「全完成」两种状态，否则测不到两条分支
+        samples = []
+        got_miss = got_done = False
+        for n in names[:20]:
+            r = api('/api/project/' + urllib.parse.quote(n) + '/episodes_status')
+            if not r.get('ok'):
+                continue
+            has_miss = bool(r.get('missing'))
+            if has_miss and not got_miss:
+                samples.append(r); got_miss = True
+            elif (not has_miss) and not got_done:
+                samples.append(r); got_done = True
+            if got_miss and got_done:
+                break
+        if not samples:
+            print('  [跳过] 取不到项目数据')
+        else:
+            html2 = ('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+                     '<div id="o"></div><div id="log"></div><script>'
+                     + f_esc + '\n' + f_compact + '\n' + f_miss +
+                     '\nvar DATA=' + json.dumps(samples, ensure_ascii=False) + ';'
+                     'var out=[];DATA.forEach(function(sc){'
+                     'var h=missSummaryHtml(sc);'
+                     'var cls=h.indexOf("\u2705")===0?"is-done":"warn";'
+                     'out.push(cls+"||"+h);});'
+                     'document.getElementById("log").textContent=out.join("\\n");'
+                     '</script></body></html>')
+            tp2 = os.path.join(tempfile.gettempdir(), 'card_gate.html')
+            open(tp2, 'w', encoding='utf-8').write(html2)
+            r2 = subprocess.run([browser, '--headless=new', '--disable-gpu', '--no-sandbox',
+                                 '--virtual-time-budget=6000', '--dump-dom',
+                                 'file:///' + tp2.replace('\\', '/')],
+                                capture_output=True, text=True, encoding='utf-8',
+                                errors='replace', timeout=150)
+            m2 = re.search(r'<div id="log">(.*?)</div>', r2.stdout or '', re.S)
+            log2 = m2.group(1).strip() if m2 else ''
+            lines = [l for l in log2.split('\n') if l.strip()]
+            print('    输出 %d 行:' % len(lines))
+            for l in lines[:3]:
+                print('      ' + l[:150])
+            hasDone = any('已完成' in l for l in lines)
+            chk('卡片行文案含「已完成」', hasDone, log2[:100])
+            # 有缺集的样本：应是 warn 类且含「缺 N 集」
+            if any((x.get('missing') or []) for x in samples):
+                chk('有缺集样本显示「缺 N 集 · 已完成」',
+                    any(('缺 ' in l and '已完成' in l) for l in lines), log2[:160])
+                chk('有缺集样本不判为 is-done',
+                    not any(l.startswith('is-done||') and '缺 ' in l for l in lines), log2[:160])
+            # 全完成的样本：应判定 is-done
+            if any(not (x.get('missing') or []) for x in samples):
+                chk('全完成样本判定为 is-done',
+                    any(l.startswith('is-done||') and '已完成' in l for l in lines), log2[:160])
 
 print()
 if fails:

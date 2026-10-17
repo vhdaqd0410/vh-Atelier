@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.8",
-  "buildTime": "2026-10-17 17:58:15",
+  "version": "1.82.9",
+  "buildTime": "2026-10-17 18:17:39",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "进度：缺集详情显示已完成+分色"
+  "notes": "首页缺集行补已完成"
 }
