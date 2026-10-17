@@ -1610,36 +1610,176 @@
         else renderDel(dom.body);
     }
 
-    // ===== 缺集 =====
+    // ===== 缺集（含已完成信息 + 分段分色）=====
+    // 每个剪辑师一组：头部显示「已完成 X/Y · Z%」+ 缺集区间，下方逐集方格两色区分：
+    //   绿 #7fd68b = 已有成片（present）  红 #ff8a8a = 缺集（missing）
+    //   「该集归谁」由分组体现，未分配者单列「未分配」组排最后。
+    function mkEpCell(ep, has, edName) {
+        var c = document.createElement('span');
+        var bg, fg, bd, label;
+        if (has) {
+            bg = 'rgba(127,214,139,.16)'; fg = '#7fd68b'; bd = 'rgba(127,214,139,.45)'; label = '已有成片';
+        } else {
+            bg = 'rgba(255,138,138,.14)'; fg = '#ff8a8a'; bd = 'rgba(255,138,138,.42)'; label = '缺集';
+        }
+        c.style.cssText = 'flex:0 0 auto;min-width:22px;padding:1px 4px;text-align:center;'
+            + 'border-radius:3px;border:1px solid ' + bd + ';background:' + bg + ';'
+            + 'color:' + fg + ';font-size:10.5px;font-variant-numeric:tabular-nums;line-height:1.5;';
+        c.textContent = String(ep);
+        c.title = '第 ' + ep + ' 集 · ' + label + (edName ? (' · ' + edName) : '');
+        return c;
+    }
+
     function renderMiss(container) {
         var epData = got.ep;
-        var missing = (epData && epData.missing) || [];
-        var editorPlan = (epData && epData.editor_plan) || {};
-        if (missing.length === 0) {
-            container.innerHTML = '<div style="padding:16px;text-align:center;color:#7fd68b;font-size:12px">✅ 已全部完成，无缺集</div>';
+        container.innerHTML = '';
+        if (!epData || epData.ok === false) {
+            container.innerHTML = '<div style="padding:16px;text-align:center;color:#ff9a9a;font-size:12px">读取失败（工作台未运行？）</div>';
             return;
         }
-        var groups = {};
+        var missing = epData.missing || [];
+        var present = epData.present || [];
+        var editorPlan = epData.editor_plan || {};
+        var total = parseInt(epData.total, 10) || 0;
+
+        // 总览条：无论有没有缺集都显示，让「已完成」一眼可见
+        var sum = document.createElement('div');
+        var doneN = present.length;
+        var pct = total > 0 ? Math.round(doneN / total * 100) : 0;
+        var allDone = (total > 0 && missing.length === 0);
+        sum.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:8px;'
+            + 'border-radius:6px;font-size:11.5px;background:var(--panel2,#2a2a2a);'
+            + 'border:1px solid var(--border,#3a3a3a);';
+        var sumTxt = document.createElement('span');
+        sumTxt.style.cssText = 'flex:1;color:' + (allDone ? '#7fd68b' : 'var(--text,#ddd)') + ';';
+        sumTxt.textContent = allDone
+            ? ('✅ 已全部完成　' + doneN + ' / ' + total + ' 集')
+            : ('已完成 ' + doneN + ' / ' + total + ' 集（' + pct + '%）　缺 ' + missing.length + ' 集');
+        sum.appendChild(sumTxt);
+        // 进度条
+        var barWrap = document.createElement('span');
+        barWrap.style.cssText = 'flex:0 0 90px;height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;';
+        var bar = document.createElement('span');
+        bar.style.cssText = 'display:block;height:100%;width:' + pct + '%;'
+            + 'background:' + (allDone ? '#7fd68b' : '#8b5cf6') + ';border-radius:3px;';
+        barWrap.appendChild(bar);
+        sum.appendChild(barWrap);
+        container.appendChild(sum);
+
+        if (missing.length === 0 && present.length === 0) {
+            var noData = document.createElement('div');
+            noData.style.cssText = 'padding:14px;text-align:center;color:var(--muted,#888);font-size:12px;';
+            noData.textContent = '未扫描到集数（检查项目输出目录是否已生成成片）';
+            container.appendChild(noData);
+            return;
+        }
+
+        // 按剪辑师分组；「未分配」恒排最后
+        var presentSet = {};
+        present.forEach(function (e) { presentSet[e] = 1; });
+        var groups = {};      // ed -> { done: [], miss: [], total: 0 }
+        function touch(ed) {
+            if (!groups[ed]) groups[ed] = { done: [], miss: [], total: 0 };
+            return groups[ed];
+        }
+        present.forEach(function (ep) {
+            var ed = editorPlan[String(ep)] || editorPlan[ep] || '未分配';
+            touch(ed).done.push(ep);
+            touch(ed).total++;
+        });
         missing.forEach(function (ep) {
             var ed = editorPlan[String(ep)] || editorPlan[ep] || '未分配';
-            if (!groups[ed]) groups[ed] = [];
-            groups[ed].push(parseInt(ep, 10));
+            touch(ed).miss.push(ep);
+            touch(ed).total++;
         });
-        var keys = Object.keys(groups);
-        container.innerHTML = '';
+        // 排序：有缺集的组排前面（缺得多更前），全完成的组垫后；「未分配」恒最后
+        var keys = Object.keys(groups).sort(function (a, b) {
+            if (a === '未分配') return 1;
+            if (b === '未分配') return -1;
+            var am = groups[a].miss.length, bm = groups[b].miss.length;
+            if (am !== bm) return bm - am;                      // 缺集多的在前
+            return groups[b].total - groups[a].total || (a < b ? -1 : 1);
+        });
+
         keys.forEach(function (ed) {
-            var row = document.createElement('div');
-            row.style.cssText = 'display:flex;align-items:baseline;gap:8px;padding:4px 2px;border-bottom:1px dashed var(--border,#2e2e2e);font-size:12px;';
+            var g = groups[ed];
+            g.done.sort(function (a, b) { return a - b; });
+            g.miss.sort(function (a, b) { return a - b; });
+            var hasMiss = g.miss.length > 0;
+
+            var card = document.createElement('div');
+            card.style.cssText = 'padding:6px 2px 8px;border-bottom:1px dashed var(--border,#2e2e2e);';
+
+            // 头部：剪辑师 + 已完成/总数 + 缺集数
+            var head = document.createElement('div');
+            head.style.cssText = 'display:flex;align-items:baseline;gap:8px;font-size:12px;margin-bottom:5px;';
             var name = document.createElement('span');
-            name.style.cssText = 'flex:0 0 auto;color:#7fd68b;font-weight:600;';
+            name.style.cssText = 'flex:0 0 auto;font-weight:600;color:'
+                + (ed === '未分配' ? 'var(--muted,#999)' : (hasMiss ? '#e0b96a' : '#7fd68b')) + ';';
             name.textContent = ed;
-            var eps = document.createElement('span');
-            eps.style.cssText = 'flex:1;color:var(--text,#ccc);word-break:break-all;';
-            eps.textContent = '缺 ' + compactEpList(groups[ed]);
-            row.appendChild(name);
-            row.appendChild(eps);
-            container.appendChild(row);
+            head.appendChild(name);
+
+            var stat = document.createElement('span');
+            stat.style.cssText = 'flex:1;color:var(--muted,#9a9a9a);font-size:11px;';
+            var gPct = g.total > 0 ? Math.round(g.done.length / g.total * 100) : 0;
+            stat.textContent = '已完成 ' + g.done.length + ' / ' + g.total
+                + '（' + gPct + '%）'
+                + (hasMiss ? ('　缺 ' + g.miss.length + ' 集：' + compactEpList(g.miss)) : '');
+            if (hasMiss) stat.title = '缺集：' + g.miss.join(', ');
+            head.appendChild(stat);
+
+            if (hasMiss) {
+                var missTag = document.createElement('button');
+                missTag.type = 'button';
+                missTag.textContent = '仅看缺集';
+                missTag.title = '只高亮缺集格子';
+                missTag.style.cssText = 'flex:0 0 auto;background:none;border:1px solid var(--border,#555);'
+                    + 'border-radius:3px;color:#e0b96a;font-size:10px;padding:1px 5px;cursor:pointer;';
+                missTag.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var on = card.dataset.onlyMiss === '1';
+                    card.dataset.onlyMiss = on ? '' : '1';
+                    var cells = card.querySelectorAll('[data-done]');
+                    for (var i = 0; i < cells.length; i++) {
+                        cells[i].style.display = (!on && cells[i].dataset.done === '1') ? 'none' : '';
+                    }
+                    missTag.textContent = on ? '仅看缺集' : '看全部';
+                });
+                head.appendChild(missTag);
+            }
+            card.appendChild(head);
+
+            // 集号方格：连贯编号，已有绿、缺集红
+            var grid = document.createElement('div');
+            grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;';
+            var all = g.done.concat(g.miss).sort(function (a, b) { return a - b; });
+            all.forEach(function (ep) {
+                var has = !!presentSet[ep];
+                var cell = mkEpCell(ep, has, ed);
+                cell.dataset.done = has ? '1' : '0';
+                grid.appendChild(cell);
+            });
+            card.appendChild(grid);
+            container.appendChild(card);
         });
+
+        // 图例
+        var legend = document.createElement('div');
+        legend.style.cssText = 'display:flex;gap:12px;padding:8px 2px 2px;font-size:10.5px;color:var(--muted,#8a8a8a);';
+        [['已有成片', 'rgba(127,214,139,.45)', '#7fd68b'],
+         ['缺集', 'rgba(255,138,138,.42)', '#ff8a8a']].forEach(function (it) {
+            var w = document.createElement('span');
+            w.style.cssText = 'display:inline-flex;align-items:center;gap:4px;';
+            var dot = document.createElement('span');
+            dot.style.cssText = 'width:9px;height:9px;border-radius:2px;border:1px solid '
+                + it[1] + ';background:' + it[1] + ';';
+            w.appendChild(dot);
+            var tx = document.createElement('span');
+            tx.textContent = it[0];
+            w.appendChild(tx);
+            legend.appendChild(w);
+        });
+        container.appendChild(legend);
     }
 
     // ===== 行构建 =====
