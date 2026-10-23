@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.50.8",
+      "date": "2026-10-23",
+      "title": "修复扒歌集数时长错误（有几集只有几秒）",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "官网 contentUrl 只提供约 10 秒预告片段，之前被当成整集下载，导致播放器显示「只有几秒」。现在下载后校验时长，过短自动改走 App 链路取完整剧集"
+        },
+        {
+          "kind": "fix",
+          "text": "上游页面字段改版：视频地址从 main_url 改为 contentUrl（旧字段已消失），已适配并保留旧字段兼容"
+        },
+        {
+          "kind": "impr",
+          "text": "时长优先取页面 JSON-LD 的 duration（如 PT2M6S=126 秒），不再用预览片段时长冒充整集"
+        },
+        {
+          "kind": "impr",
+          "text": "取不到直链时也返回时长与锁定标记，前端可显示真实集长"
+        }
+      ]
+    },
+    {
       "version": "1.50.7",
       "date": "2026-10-23",
       "title": "修复扒歌板块：搜索与榜单加载失败",

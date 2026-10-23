@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.50.7",
-  "buildTime": "2026-10-23 10:22:06",
+  "version": "1.50.8",
+  "buildTime": "2026-10-23 18:17:27",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修复扒歌板块：搜索改走红果真实 API（原页面已改为 SPA 抓不到数据），搜索支持翻页取 30 条，网络请求加自动重试解决上游间歇性断连"
+  "notes": "修复扒歌集数时长错误：官网 contentUrl 只给 10 秒预告片段却被当成整集下载，现增加时长校验，过短自动改走 App 链路取完整剧集；同时修复视频地址字段改版（main_url -> contentUrl）"
 }
