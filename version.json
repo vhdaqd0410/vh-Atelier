@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.50.6",
-  "buildTime": "2026-10-14 10:26:01",
+  "version": "1.50.7",
+  "buildTime": "2026-10-23 10:22:06",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "同步：修音乐聚合播放失败"
+  "notes": "修复扒歌板块：搜索改走红果真实 API（原页面已改为 SPA 抓不到数据），搜索支持翻页取 30 条，网络请求加自动重试解决上游间歇性断连"
 }

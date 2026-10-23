@@ -53,3 +53,7 @@ lxserver/debug.txt
 # 临时备份文件（不进仓库）
 *.bak-*
 *.bak
+
+# 发版前的临时备份
+*.bak_*
+

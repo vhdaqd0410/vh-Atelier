@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.50.7",
+      "date": "2026-10-23",
+      "title": "修复扒歌板块：搜索与榜单加载失败",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "搜索失效：红果搜索页已改为 SPA，原 HTML 解析抓不到数据；改用真实接口 /api/search/result/"
+        },
+        {
+          "kind": "fix",
+          "text": "搜索无结果：上游 TLS 握手有概率被重置，请求加了自动重试（最多 4 次），不再把「连不上」当成「没有结果」"
+        },
+        {
+          "kind": "impr",
+          "text": "搜索结果支持翻页，一次返回最多 30 条（原来只有 10 条）"
+        },
+        {
+          "kind": "impr",
+          "text": "所有上游请求统一走带重试的 fetchText，请求头补全 Referer / Accept-Language"
+        }
+      ]
+    },
+    {
       "version": "1.50.6",
       "date": "2026-10-13",
       "title": "同步：修音乐聚合播放失败",
