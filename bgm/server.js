@@ -384,8 +384,8 @@ async function getSeries(seriesId) {
   return { series_id: seriesId, name: nm ? nm[1] : seriesId, cover, intro, tags, vid_list: vids, count: vids.length }
 }
 
-// ── 从官网播放页 SSR 数据取 mp4 直链（免签名 / 免 cookie / 免设备号）──
-// 官网播放页 HTML 里直接内置 video_player_info.main_url，是明文 mp4（无 DRM）
+// ── 从官网播放页取 mp4 直链（免签名 / 免 cookie / 免设备号）──
+// 页面 JSON-LD 里内置 contentUrl，是明文 mp4（无 DRM）；旧版字段为 main_url
 async function resolveWebVideo(seriesId, vid) {
   const url = `https://hongguoduanju.com/player/${seriesId}/` + (vid ? `${vid}/` : '')
   const html = await fetchText(url)
@@ -393,16 +393,33 @@ async function resolveWebVideo(seriesId, vid) {
     const m = new RegExp('"' + key + '"\\s*:\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|([\\d.]+))').exec(html)
     return m ? (m[1] !== undefined ? m[1] : m[2]) : ''
   }
-  let main = pick('main_url')
+  // 上游页面 2025 改版：视频地址字段从 main_url 改为 contentUrl
+  // （实测新页面已无 main_url / video_player_info，只保留 JSON-LD 里的 contentUrl）
+  // 两个都取，兼容旧页面结构。
+  let main = pick('contentUrl') || pick('main_url') || pick('play_url')
   main = main.replace(/\\u002F/g, '/')
-  if (!main) throw new Error('该集未开放试看（官网只开放前 3 集，后续集需 App 登录）')
-  const nm = /"series_name"\s*:\s*"([^"]*)"/.exec(html)
-  const v = /"vid"\s*:\s*"(\d+)"/.exec(html)
+
+  // 时长以页面 JSON-LD 为准（如 PT2M6S = 126 秒）。
+  // 注意：video/public 下的 mp4 可能只是 10 秒预告片段，
+  // 不能用它的实际时长冒充整集长度，否则前端会显示成几秒。
   let dur = pick('duration') || ''
-  // ISO8601 时长（PT2M14S）转秒
   let durSec = 0
   const dm = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/.exec(dur)
   if (dm) durSec = (+dm[1] || 0) * 3600 + (+dm[2] || 0) * 60 + (parseFloat(dm[3]) || 0)
+
+  // 拿不到直链时仍然返回时长（前端可据此显示真实集长，不因缺链接而丢时长）
+  if (!main) {
+    return {
+      url: '',
+      name: (/"series_name"\s*:\s*"([^"]*)"/.exec(html) || [])[1] || '',
+      vid: vid || '',
+      frame: '',
+      duration: Math.round(durSec),
+      locked: true
+    }
+  }
+  const nm = /"series_name"\s*:\s*"([^"]*)"/.exec(html)
+  const v = /"vid"\s*:\s*"(\d+)"/.exec(html)
   return {
     url: main.replace(/&amp;/g, '&'),
     name: nm ? nm[1] : '',
@@ -974,6 +991,32 @@ function newJob(kind) {
 
 // 统一下载：官网优先（快、免签名）→ 失败用 App 链路（可下全剧）
 // 返回 { file, size, height }
+
+// 读取本地视频真实时长（秒）。用于识别「官网只给了预告片段」的情况。
+function probeDuration(file) {
+  return new Promise((resolve) => {
+    try {
+      const r = spawnSync(findFfmpegProbe(), ['-v', 'error', '-show_entries',
+        'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', file],
+        { encoding: 'utf8', timeout: 20000 })
+      const v = parseFloat(String(r.stdout || '').trim())
+      resolve(isFinite(v) ? v : 0)
+    } catch (e) { resolve(0) }
+  })
+}
+
+function findFfmpegProbe() {
+  const f = findFfmpeg()
+  if (!f) return 'ffprobe'
+  const dir = path.dirname(f)
+  const cands = ['ffprobe.exe', 'ffprobe-win32-x64.exe', 'ffprobe']
+  for (const c of cands) {
+    const p = path.join(dir, c)
+    if (fs.existsSync(p)) return p
+  }
+  return path.join(dir, 'ffprobe.exe')
+}
+
 async function downloadEpisodeAny(seriesId, vid, epNo, seriesName, onProgress) {
   const dir = videoDir()
   const fn = safeName(seriesName || seriesId) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
@@ -991,7 +1034,23 @@ async function downloadEpisodeAny(seriesId, vid, epNo, seriesName, onProgress) {
       if (onProgress) onProgress(12, `第 ${epNo} 集：官网下载（${info.frame || '?'}）`)
       const size = await downloadVideo(info.url, local)
       const h = parseInt(String(info.frame || '').split('x')[1], 10) || 0
-      return { file: local, size, height: h, via: 'web' }
+
+      // 关键校验：官网 contentUrl 有时只是 10 秒预告片段，
+      // 不能当整集用（否则前端会显示「只有几秒」）。
+      // 实测时长明显短于页面声明时长 → 删掉，改走 App 链路拿完整剧集。
+      let realDur = 0
+      try { realDur = await probeDuration(local) } catch (e) { realDur = 0 }
+      const expectDur = Number(info.duration || 0)
+      const tooShort = realDur > 0 && (
+        realDur < 20 ||
+        (expectDur > 30 && realDur < expectDur * 0.6)
+      )
+      if (tooShort) {
+        try { fs.unlinkSync(local) } catch (e) {}
+        if (onProgress) onProgress(16, `第 ${epNo} 集：官网只有预告片段，改走 App 链路`)
+      } else {
+        return { file: local, size, height: h, via: 'web', duration: realDur }
+      }
     }
   } catch (e) {
     // 官网未开放该集，转 App 链路
