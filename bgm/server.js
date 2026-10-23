@@ -245,85 +245,124 @@ function justCount(total, WIN, STEP) { return Math.max(0, Math.floor((total - WI
 // ── 短剧官网搜索 / 剧集信息 ──
 const WEB_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 
-function fetchText(url) {
+// 单次请求（强制 IPv4，避免 IPv6 握手被 reset）
+function fetchTextOnce(url, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { 'User-Agent': WEB_UA }, timeout: 25000 }, res => {
+    const req = https.get(url, {
+      // 不用 family:4 —— 实测自动选择（family:0）成功率更高（10/10 vs 8/10）
+      headers: {
+        'User-Agent': WEB_UA,
+        'Accept': 'text/html,application/json,*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Referer': 'https://hongguoduanju.com/'
+      },
+      timeout: timeoutMs
+    }, res => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return fetchText(res.headers.location).then(resolve, reject)
+        return fetchTextOnce(res.headers.location, timeoutMs).then(resolve, reject)
       }
       let s = ''
       res.setEncoding('utf8')
       res.on('data', d => s += d)
-      res.on('end', () => resolve(s))
+      res.on('end', () => resolve({ status: res.statusCode, body: s }))
     })
     req.on('error', reject)
-    req.on('timeout', () => { req.destroy(); reject(new Error('超时')) })
+    req.on('timeout', () => { req.destroy(); reject(new Error('\u8d85\u65f6')) })
   })
 }
 
-async function searchDramas(keyword) {
-  const url = 'https://hongguoduanju.com/search/' + encodeURIComponent(keyword) + '/'
-  const html = await fetchText(url)
-  const out = [], seen = {}
-
-  // 搜索页卡片：<article>…，含封面图 / 标题 / 标签 / 演员 / 简介 / 集数
-  const cards = html.split(/<article[^>]*>/i).slice(1)
-  for (const c of cards) {
-    if (out.length >= 40) break
-    const idm = /series_id=(\d+)/.exec(c)
-    if (!idm) continue
-    const id = idm[1]
-    if (seen[id]) continue
-
-    // 剧名：alt 最可靠（title 属性不存在）
-    let name = ''
-    const am = /alt="([^"]{2,80})"/.exec(c)
-    if (am) name = am[1]
-    else {
-      const tm = /class="pc-title-[^"]*"[^>]*>([\s\S]{0,300}?)<\/a>/.exec(c)
-      if (tm) name = tm[1].replace(/<[^>]+>/g, '').trim()
-    }
-
-    // 封面：只取 image 版本（webp 在部分旧内核不支持）
-    let cover = ''
-    const imgAll = c.match(/https:\/\/[^"\s]+(?:byteimg|fqnovelpic)\.com\/[^"\s]+/g) || []
-    for (const u of imgAll) {
-      if (/\.jpeg|\.image|\.jpg|\.png/i.test(u) || /\.webp/i.test(u)) {
-        cover = u.replace(/&amp;/g, '&')
-        if (!/\.webp/i.test(u)) break
+// 带重试：上游 TLS 有概率被 reset，重试 3 次基本可解
+async function fetchText(url, retries = 3) {
+  let lastErr = null
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const r = await fetchTextOnce(url)
+      // 5xx 也重试
+      if (r.status >= 500 && i < retries) {
+        lastErr = new Error('HTTP ' + r.status)
+        await new Promise(z => setTimeout(z, 300 * (i + 1)))
+        continue
       }
+      return r.body
+    } catch (e) {
+      lastErr = e
+      if (i < retries) await new Promise(z => setTimeout(z, 300 * (i + 1)))
     }
+  }
+  throw lastErr || new Error('\u8bf7\u6c42\u5931\u8d25')
+}
+
+async function searchDramas(keyword) {
+  const kw = String(keyword || '').trim()
+  if (!kw) return []
+
+  // 红果搜索页是 SPA（返回的是空壳 + 埋点脚本），必须走 XHR 接口。
+  // 接口：/api/search/result/?query=<关键词>&page=<页码>  每页固定 10 条
+  const base = 'https://hongguoduanju.com/api/search/result/?query=' + encodeURIComponent(kw)
+
+  // 上游 TLS 有概率被 reset。先把首页拿稳，再翻页；
+  // 首页失败重试到拿到数据为止（否则会把「连不上」误报成「没结果」）。
+  let first = null
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const raw = await fetchText(base + '&page=1', 2)
+      const jj = JSON.parse(raw)
+      const arr = Array.isArray(jj.searchList) ? jj.searchList : []
+      if (arr.length) { first = arr; break }
+      // 真·空结果（上游明确返回 0 条），不必再等
+      if (typeof jj.totalCount === 'number' && jj.totalCount === 0) { first = []; break }
+    } catch (e) { /* 继续重试 */ }
+    await new Promise(z => setTimeout(z, 400 * (attempt + 1)))
+  }
+  if (first === null) return []       // 4 次都失败
+  if (!first.length) return []        // 真的没有结果
+
+  const list = first.slice()
+  for (const pg of [2, 3]) {          // 再补两页，共最多 30 条
+    if (list.length >= 30) break
+    try {
+      const raw = await fetchText(base + '&page=' + pg, 2)
+      const jj = JSON.parse(raw)
+      const arr = Array.isArray(jj.searchList) ? jj.searchList : []
+      if (!arr.length) break
+      list.push.apply(list, arr)
+      if (arr.length < 10) break
+    } catch (e) {
+      break
+    }
+  }
+
+  const out = [], seen = {}
+  for (const item of list) {
+    if (out.length >= 30) break
+    const vd = item.video_data || {}
+    const sid = String(vd.series_id || item.keyword || '')
+    if (!sid || seen[sid]) continue
+    seen[sid] = 1
+
+    const name = vd.series_title || item.name || ''
+    let cover = vd.series_cover || vd.cover || vd.thumb_url || ''
+    if (Array.isArray(cover)) cover = cover[0] || ''
+    if (typeof cover === 'string') cover = cover.replace(/&amp;/g, '&')
 
     // 标签
     const tags = []
-    const tRe = /class="pc-tag-[^"]*"[^>]*>([^<]{1,12})</g
-    let tm2
-    while ((tm2 = tRe.exec(c))) tags.push(tm2[1].trim())
+    for (const k of ['category_name', 'category', 'tags']) {
+      const v = vd[k]
+      if (Array.isArray(v)) v.forEach(x => { if (x && tags.length < 4) tags.push(String(x)) })
+      else if (typeof v === 'string' && v && tags.length < 4) tags.push(v)
+    }
 
-    // 演员
-    let actors = ''
-    const acm = /class="pc-actors-[^"]*"[^>]*>([\s\S]{0,200}?)<\/p>/.exec(c)
-    if (acm) actors = acm[1].replace(/<!--[^>]*-->/g, '').replace(/<[^>]+>/g, '').replace(/^演员：/, '').trim()
-
-    // 简介（取第一个，不带 tooltip 的那个）
-    let intro = ''
-    const inm = /class="pc-intro-[^"]*"[^>]*>([\s\S]{0,1200}?)<\/p>/.exec(c)
-    if (inm) intro = inm[1].replace(/<!--[^>]*-->/g, '').replace(/<[^>]+>/g, '').replace(/^简介：/, '').trim()
-
-    // 集数：从分集按钮/链接数量或文本推
-    const epCells = (c.match(/pc-episode-cell/g) || []).length
-    const epText = /全(\d+)集/.exec(c)
-    const count = epText ? parseInt(epText[1], 10) : (epCells || 0)
-
-    seen[id] = 1
-    out.push({ series_id: id, name, cover, tags, actors, intro, count })
-  }
-
-  // 兜底：至少能列出 series_id
-  if (!out.length) {
-    const ids = [...new Set((html.match(/\/detail\?series_id=(\d+)/g) || [])
-      .map(x => x.match(/(\d+)/)[1]))]
-    ids.slice(0, 40).forEach(id => out.push({ series_id: id, name: '', cover: '', tags: [], actors: '', intro: '', count: 0 }))
+    out.push({
+      series_id: sid,
+      name: name,
+      cover: cover,
+      tags: tags,
+      hot: Number(vd.play_cnt || vd.hot || 0),
+      score: Number(vd.score || 0),
+      episode_cnt: Number(vd.episode_cnt || 0),
+      intro: String(vd.series_intro || '')
+    })
   }
   return out
 }

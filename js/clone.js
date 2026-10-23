@@ -28,6 +28,30 @@
     // 存储：元数据存 localStorage；参考音频文件拷到插件目录 collect\voices\ 下，
     //       以免临时目录被清理后音色失效。
     var VOICE_KEY = 'vh_clone_voices';
+    // 当前选中的合成引擎：cosyvoice = 本地克隆，volc2 = 火山豆包 2.0 云端
+    var currentEngine = 'cosyvoice';
+    var currentSpeaker = '';
+
+    // 内置音色库：collect/voices/builtin/builtin_voices.json
+    //   剪映复刻音色（engine=cosyvoice）+ 云端音色（engine=volc2）
+    var BUILTIN_FILE = path.join(extRoot, 'collect', 'voices', 'builtin', 'builtin_voices.json');
+    var builtinList = [];
+    function loadBuiltin() {
+        try {
+            if (!fs.existsSync(BUILTIN_FILE)) return [];
+            var arr = JSON.parse(fs.readFileSync(BUILTIN_FILE, 'utf8'));
+            if (!Array.isArray(arr)) return [];
+            arr.forEach(function (v) {
+                if (v.wav && !/^[A-Za-z]:/.test(v.wav) && v.wav.charAt(0) !== '/') {
+                    v.wavPath = path.join(extRoot, v.wav.split('/').join(path.sep));
+                } else {
+                    v.wavPath = v.wav || '';
+                }
+            });
+            return arr;
+        } catch (e) { return []; }
+    }
+
     function voicesDir() {
         var d = path.join(extRoot, 'collect', 'voices');
         try { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); } catch (e) {}
@@ -41,40 +65,86 @@
     }
     function renderVoiceLib() {
         if (!el.voiceLibSel) return;
+        builtinList = loadBuiltin();
         var list = loadVoices();
         el.voiceLibSel.innerHTML = '';
-        if (!list.length) {
-            var o = document.createElement('option');
-            o.value = ''; o.textContent = '（还没有保存的音色）';
-            el.voiceLibSel.appendChild(o);
+
+        // 1) 内置音色
+        if (builtinList.length) {
+            var og = document.createElement('optgroup');
+            og.label = '内置音色（' + builtinList.length + '）';
+            builtinList.forEach(function (v, i) {
+                var o = document.createElement('option');
+                o.value = String(i);
+                o.textContent = (v.engine === 'volc2' ? '☁ ' : '') + v.name;
+                og.appendChild(o);
+            });
+            el.voiceLibSel.appendChild(og);
+        }
+
+        // 2) 用户自存音色
+        if (list.length) {
+            var og2 = document.createElement('optgroup');
+            og2.label = '我的音色（' + list.length + '）';
+            list.forEach(function (v, i) {
+                var o = document.createElement('option');
+                o.value = 'u' + i;
+                var ok = v.wav && fs.existsSync(v.wav);
+                o.textContent = v.name + (ok ? '' : '（音频已丢失）');
+                og2.appendChild(o);
+            });
+            el.voiceLibSel.appendChild(og2);
+        }
+
+        if (!builtinList.length && !list.length) {
+            var o0 = document.createElement('option');
+            o0.value = ''; o0.textContent = '（还没有可用音色）';
+            el.voiceLibSel.appendChild(o0);
             el.btnUseVoice.disabled = true;
             el.btnDelVoice.disabled = true;
-            if (el.voiceLibHint) el.voiceLibHint.textContent = '音色 = 参考音频 + 参考文字，保存后下次直接选，不用重新抓。';
+            if (el.voiceLibHint) el.voiceLibHint.textContent = '音色 = 参考音频 + 参考文字，保存后下次直接选。';
             return;
         }
-        list.forEach(function (v, i) {
-            var o = document.createElement('option');
-            o.value = String(i);
-            var ok = v.wav && fs.existsSync(v.wav);
-            o.textContent = v.name + (ok ? '' : '（音频已丢失）');
-            el.voiceLibSel.appendChild(o);
-        });
         syncVoiceBtns();
     }
+
+    function selectedVoice() {
+        var raw = el.voiceLibSel.value;
+        if (raw === '' || raw === null || raw === undefined) return null;
+        if (raw.charAt(0) === 'u') {
+            var ui = parseInt(raw.slice(1), 10);
+            var ul = loadVoices();
+            return ul[ui] ? { item: ul[ui], builtin: false } : null;
+        }
+        var j = parseInt(raw, 10);
+        return builtinList[j] ? { item: builtinList[j], builtin: true } : null;
+    }
+
     function syncVoiceBtns() {
-        var idx = parseInt(el.voiceLibSel.value, 10);
-        var list = loadVoices();
-        var ok = !isNaN(idx) && list[idx];
-        el.btnUseVoice.disabled = !ok || busy;
-        el.btnDelVoice.disabled = !ok || busy;
+        var sel = selectedVoice();
+        var ok = !!sel;
         if (ok) {
-            var v = list[idx];
-            if (el.voiceLibHint) {
+            if (sel.builtin) {
+                var b = sel.item;
+                ok = (b.engine === 'volc2') ? true : (b.wavPath && fs.existsSync(b.wavPath));
+            } else {
+                ok = sel.item.wav && fs.existsSync(sel.item.wav);
+            }
+        }
+        el.btnUseVoice.disabled = !ok || busy;
+        el.btnDelVoice.disabled = !ok || busy || (sel && sel.builtin);
+        if (el.btnAudition) el.btnAudition.disabled = !ok || auditionBusy;
+        if (ok && el.voiceLibHint) {
+            var v = sel.item;
+            if (v.engine === 'volc2') {
+                el.voiceLibHint.textContent = '云端音色：直接输入文字即可合成，无需参考音频。';
+            } else {
                 el.voiceLibHint.textContent = '参考文字：' + (v.ref_text || '（无）').slice(0, 40)
                     + (v.ref_text && v.ref_text.length > 40 ? '…' : '');
             }
         }
     }
+
     function saveCurrentVoice() {
         if (!refWavPath || !fs.existsSync(refWavPath)) { setStatus('请先抓取参考音频', 'err'); return; }
         var text = el.refText.value.trim();
@@ -102,14 +172,37 @@
         }
     }
     function useVoice() {
-        var idx = parseInt(el.voiceLibSel.value, 10);
-        var list = loadVoices();
-        var v = !isNaN(idx) ? list[idx] : null;
-        if (!v) { setStatus('请选择一个音色', 'err'); return; }
-        if (!v.wav || !fs.existsSync(v.wav)) { setStatus('该音色的音频文件已丢失，请重新保存', 'err'); return; }
-        refWavPath = v.wav;
+        var sel = selectedVoice();
+        if (!sel) { setStatus('请选择一个音色', 'err'); return; }
+        var v = sel.item;
+
+        // 云端音色：不需要参考音频
+        if (v.engine === 'volc2') {
+            currentEngine = 'volc2';
+            currentSpeaker = v.speaker || '';
+            refWavPath = '';
+            refClipMeta = null;
+            el.refInfo.textContent = '☁ 云端音色「' + v.name + '」';
+            el.refInfo.classList.add('has');
+            el.refText.value = '';
+            if (el.vcRefWave) el.vcRefWave.style.display = 'none';
+            el.btnSaveVoice.disabled = true;
+            updateCloneEnabled();
+            setStatus('已选择云端音色「' + v.name + '」，直接填文字生成', 'ok');
+            return;
+        }
+
+        // 本地克隆音色
+        var wav = sel.builtin ? v.wavPath : v.wav;
+        if (!wav || !fs.existsSync(wav)) {
+            setStatus('该音色的音频文件已丢失，请重新保存', 'err');
+            return;
+        }
+        currentEngine = 'cosyvoice';
+        currentSpeaker = '';
+        refWavPath = wav;
         mountRefWave();
-        refClipMeta = { clipName: v.name, mediaPath: v.wav };
+        refClipMeta = { clipName: v.name, mediaPath: wav };
         el.refInfo.textContent = '✓ 音色库「' + v.name + '」';
         el.refInfo.classList.add('has');
         el.refText.value = v.ref_text || '';
@@ -117,11 +210,125 @@
         updateCloneEnabled();
         setStatus('已载入音色「' + v.name + '」，填好要说的文字即可生成', 'ok');
     }
+    // ---------- 音色试听 ----------
+    var auditionBusy = false;
+    var auditionAudio = null;
+    var auditionCache = {};     // 云端音色试听缓存：speaker -> wav 路径
+
+    function stopAudition() {
+        if (auditionAudio) {
+            try { auditionAudio.pause(); } catch (e) {}
+            auditionAudio = null;
+        }
+    }
+
+    function playWavFile(wav) {
+        stopAudition();
+        try {
+            var a = new Audio();
+            a.src = 'file:///' + String(wav).replace(/\\/g, '/');
+            a.onended = function () { auditionBusy = false; syncVoiceBtns(); };
+            a.onerror = function () {
+                auditionBusy = false;
+                syncVoiceBtns();
+                setStatus('试听失败：无法播放 ' + wav, 'err');
+            };
+            auditionAudio = a;
+            a.play();
+            return true;
+        } catch (e) {
+            auditionBusy = false;
+            syncVoiceBtns();
+            setStatus('试听失败: ' + e.message, 'err');
+            return false;
+        }
+    }
+
+    function auditionVoice() {
+        var sel = selectedVoice();
+        if (!sel || auditionBusy) return;
+        var v = sel.item;
+
+        // 本地音色：直接播参考音频
+        if (v.engine !== 'volc2') {
+            var wav = sel.builtin ? v.wavPath : v.wav;
+            if (!wav || !fs.existsSync(wav)) {
+                setStatus('该音色的音频文件已丢失', 'err');
+                return;
+            }
+            auditionBusy = true;
+            syncVoiceBtns();
+            setStatus('试听「' + v.name + '」...', '');
+            playWavFile(wav);
+            return;
+        }
+
+        // 云端音色：合成一段固定试听文本（首次生成后缓存）
+        var spk = v.speaker || '';
+        if (!spk) { setStatus('该云端音色缺少 speaker 标识', 'err'); return; }
+        var cached = auditionCache[spk];
+        if (cached && fs.existsSync(cached)) {
+            auditionBusy = true;
+            syncVoiceBtns();
+            setStatus('试听「' + v.name + '」...', '');
+            playWavFile(cached);
+            return;
+        }
+
+        var pythonExe = detectPython();
+        if (!pythonExe) { setStatus('未找到 Python 环境', 'err'); return; }
+        var cliPath = path.join(extRoot, 'py', 'volc_tts_cli.py');
+        if (!fs.existsSync(cliPath)) { setStatus('云端脚本缺失', 'err'); return; }
+
+        var cacheDir = path.join(extRoot, 'collect', 'voices', 'preview');
+        try { if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true }); } catch (e) {}
+        var outWav = path.join(cacheDir, spk + '.wav');
+        var cfgPath = path.join(os.tmpdir(), 'vc_preview_' + Date.now() + '.json');
+        fs.writeFileSync(cfgPath, JSON.stringify({
+            speaker: spk,
+            text: '你好，这是' + v.name + '的试听效果。',
+            out_wav: outWav,
+            speed: 0,
+            pitch: 0
+        }), 'utf8');
+
+        auditionBusy = true;
+        syncVoiceBtns();
+        setStatus('正在生成「' + v.name + '」试听...', '');
+        child_process.execFile(pythonExe, [cliPath, cfgPath], {
+            timeout: 120000, maxBuffer: 1024 * 1024 * 20
+        }, function (error, stdout, stderr) {
+            auditionBusy = false;
+            syncVoiceBtns();
+            if (error) {
+                setStatus('试听生成失败: ' + error.message + ' ' + String(stderr || '').slice(0, 200), 'err');
+                return;
+            }
+            var line = String(stdout || '').trim().split(/\r?\n/).filter(function (l) {
+                return l.trim().indexOf('{') === 0;
+            }).pop();
+            var res = null;
+            try { res = JSON.parse(line); } catch (e) {}
+            if (!res || !res.ok) {
+                setStatus('试听生成失败: ' + (res && res.error ? res.error : '无有效输出'), 'err');
+                return;
+            }
+            auditionCache[spk] = res.out;
+            setStatus('试听「' + v.name + '」...', '');
+            playWavFile(res.out);
+        });
+    }
+
     function delVoice() {
-        var idx = parseInt(el.voiceLibSel.value, 10);
+        var sel = selectedVoice();
+        if (!sel || sel.builtin) {
+            setStatus('内置音色不可删除', 'warn');
+            return;
+        }
         var list = loadVoices();
-        var v = !isNaN(idx) ? list[idx] : null;
-        if (!v) return;
+        var idx = list.indexOf(sel.item);
+        var v = sel.item;
+        if (!v || idx < 0) return;
         if (!confirm('删除音色「' + v.name + '」？此操作不可撤销。')) return;
         try { if (v.wav && fs.existsSync(v.wav)) fs.unlinkSync(v.wav); } catch (e) {}
         list.splice(idx, 1);
@@ -154,13 +361,15 @@
     // 合成按钮启用条件随模式变化
     function updateCloneEnabled() {
         if (busy) { el.btnClone.disabled = true; return; }
-        var hasVoice = refWavPath && fs.existsSync(refWavPath || '');
+        var isVolc = (currentEngine === 'volc2');
+        var hasVoice = isVolc ? !!currentSpeaker : (refWavPath && fs.existsSync(refWavPath || ''));
         var refText = (el.refText.value || '').trim();
         var tts = (el.ttsText.value || '').trim();
         var instr = (el.instructText && el.instructText.value || '').trim();
         var ok = hasVoice && tts;
-        if (mode !== 'cross') ok = ok && !!refText;
-        if (mode === 'instruct') ok = ok && !!instr;
+        // 云端音色不需要参考音频与参考文字；本地克隆才需要
+        if (!isVolc && mode !== 'cross') ok = ok && !!refText;
+        if (!isVolc && mode === 'instruct') ok = ok && !!instr;
         el.btnClone.disabled = !ok;
     }
 
@@ -174,6 +383,7 @@
         btnSaveVoice: document.getElementById('btnSaveVoice'),
         voiceLibSel: document.getElementById('voiceLibSel'),
         btnUseVoice: document.getElementById('btnUseVoice'),
+        btnAudition: document.getElementById('btnAudition'),
         btnDelVoice: document.getElementById('btnDelVoice'),
         voiceLibHint: document.getElementById('voiceLibHint'),
         refSrcRow: document.getElementById('refSrcRow'),
@@ -225,7 +435,9 @@
         busy = b;
         if (!b) stopCloneTick();
         el.btnGrab.disabled = b;
-        el.btnClone.disabled = b || !refWavPath;
+        el.btnClone.disabled = b || (currentEngine === 'volc2'
+            ? !currentSpeaker
+            : !refWavPath);
         if (el.btnCloneStop) el.btnCloneStop.disabled = !b;
         if (el.btnInsertTimeline) el.btnInsertTimeline.disabled = b;
         el.btnAutoRef.disabled = b || !refWavPath;
@@ -960,12 +1172,13 @@
 
     function clone() {
         if (busy) return;
-        if (!refWavPath) { setStatus('请先抓取参考音色', 'err'); return; }
+        var isVolc = (currentEngine === 'volc2');
+        if (!isVolc && !refWavPath) { setStatus('请先选择一个音色', 'err'); return; }
         var refText = el.refText.value.trim();
         var ttsText = el.ttsText.value.trim();
         var instructText = (el.instructText && el.instructText.value || '').trim();
         if (!ttsText) { setStatus('请填写要合成的文字', 'err'); return; }
-        if (mode !== 'cross' && !refText) { setStatus('请填写参考音频对应文字', 'err'); return; }
+        if (!isVolc && mode !== 'cross' && !refText) { setStatus('请填写参考音频对应文字', 'err'); return; }
         if (mode === 'instruct' && !instructText) { setStatus('情绪指令模式需要填写语气指令（或点下方词条）', 'err'); return; }
         var speed = parseFloat(el.speedRange.value) || 1.0;
         var modelVariant = el.modelSel.value || 'base';
@@ -973,32 +1186,50 @@
         var pythonExe = detectPython();
         if (!pythonExe) { setStatus('未找到 Python 环境', 'err'); return; }
 
-        var cliPath = path.join(extRoot, 'py', 'cosyvoice_cli.py');
-        if (!fs.existsSync(cliPath)) { setStatus('克隆脚本缺失: ' + cliPath, 'err'); return; }
+        var cliPath = path.join(extRoot, 'py', isVolc ? 'volc_tts_cli.py' : 'cosyvoice_cli.py');
+        if (!fs.existsSync(cliPath)) { setStatus('合成脚本缺失: ' + cliPath, 'err'); return; }
 
         var tmpDir = path.join(os.tmpdir(), 'vc_clone');
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
         var outWav = path.join(tmpDir, 'clone_' + Date.now() + '.wav');
         var cfgPath = path.join(tmpDir, 'clone_cfg.json');
 
-        var cfg = {
-            mode: mode,
-            ref_wav: refWavPath,
-            ref_text: (mode === 'cross') ? '' : refText,
-            tts_text: ttsText,
-            out_wav: outWav,
-            speed: speed,
-            model: modelVariant
-        };
-        if (mode === 'instruct') cfg.instruct_text = instructText;
+        var cfg;
+        if (isVolc) {
+            // 火山豆包 2.0：语速区间 [-50,100]，1.0 倍 = 0
+            cfg = {
+                speaker: currentSpeaker,
+                text: ttsText,
+                out_wav: outWav,
+                speed: Math.round((speed - 1) * 100),
+                pitch: 0
+            };
+        } else {
+            cfg = {
+                mode: mode,
+                ref_wav: refWavPath,
+                ref_text: (mode === 'cross') ? '' : refText,
+                tts_text: ttsText,
+                out_wav: outWav,
+                speed: speed,
+                model: modelVariant
+            };
+            if (mode === 'instruct') cfg.instruct_text = instructText;
+        }
         fs.writeFileSync(cfgPath, JSON.stringify(cfg), 'utf8');
 
         var modeName = { clone: '克隆', instruct: '情绪指令', cross: '跨语言' }[mode] || '克隆';
         stopRequested = false;
         setBusy(true);
-        setProgress(-1, '正在加载模型（约 15 秒）...');
-        setStatus('CosyVoice3 ' + modeName + '中（首次含模型加载，请稍候）...', '');
-        startCloneTick('加载/合成中');
+        if (isVolc) {
+            setProgress(-1, '正在请求云端合成...');
+            setStatus('云端合成中（通常 2-5 秒）...', '');
+            startCloneTick('云端合成中');
+        } else {
+            setProgress(-1, '正在加载模型（约 15 秒）...');
+            setStatus('CosyVoice3 ' + modeName + '中（首次含模型加载，请稍候）...', '');
+            startCloneTick('加载/合成中');
+        }
 
         var proc = cloneProc = child_process.execFile(pythonExe, [cliPath, cfgPath], {
             timeout: 1800000,
@@ -1043,9 +1274,10 @@
             vcResults = vcResults.filter(function (x) { return x.path !== res.out; });
             vcResults.unshift({
                 path: res.out,
-                name: (res.mode === 'cross' ? '跨语言' : (res.mode === 'instruct' ? '情绪指令' : '克隆'))
+                name: (res.engine === 'volc2' ? '云端' :
+                    (res.mode === 'cross' ? '跨语言' : (res.mode === 'instruct' ? '情绪指令' : '克隆')))
                     + '_' + new Date().toTimeString().slice(0, 5).replace(':', ''),
-                mode: res.mode || 'clone',
+                mode: res.engine === 'volc2' ? 'volc2' : (res.mode || 'clone'),
                 dur: res.duration,
                 at: Date.now(),
             });
@@ -1053,15 +1285,24 @@
             vcSelected = res.out;
             renderVcResults();
             el.btnInsertTimeline.disabled = false;
-            el.resultInfo.innerHTML =
-                '<span class="k">模式</span> ' + ({ clone: '零样本克隆', instruct: '情绪指令', cross: '跨语言' }[res.mode] || '克隆') + '<br>' +
-                '<span class="k">时长</span> ' + res.duration + ' 秒<br>' +
-                '<span class="k">语速</span> ' + res.speed + '×<br>' +
-                '<span class="k">模型</span> ' + (res.model === 'rl' ? 'RL 强化学习版' : '基础版') + '<br>' +
-                '<span class="k">模型加载</span> ' + res.load_sec + ' 秒<br>' +
-                '<span class="k">生成耗时</span> ' + res.gen_sec + ' 秒<br>' +
-                '<span class="k">RTF</span> ' + res.rtf + '<br>' +
-                '<span class="k">产物</span> ' + res.out;
+            if (res.engine === 'volc2') {
+                el.resultInfo.innerHTML =
+                    '<span class="k">引擎</span> 火山豆包语音 2.0<br>' +
+                    '<span class="k">音色</span> ' + (res.speaker || currentSpeaker) + '<br>' +
+                    '<span class="k">时长</span> ' + res.duration + ' 秒<br>' +
+                    '<span class="k">生成耗时</span> ' + res.gen_sec + ' 秒<br>' +
+                    '<span class="k">产物</span> ' + res.out;
+            } else {
+                el.resultInfo.innerHTML =
+                    '<span class="k">模式</span> ' + ({ clone: '零样本克隆', instruct: '情绪指令', cross: '跨语言' }[res.mode] || '克隆') + '<br>' +
+                    '<span class="k">时长</span> ' + res.duration + ' 秒<br>' +
+                    '<span class="k">语速</span> ' + res.speed + '×<br>' +
+                    '<span class="k">模型</span> ' + (res.model === 'rl' ? 'RL 强化学习版' : '基础版') + '<br>' +
+                    '<span class="k">模型加载</span> ' + res.load_sec + ' 秒<br>' +
+                    '<span class="k">生成耗时</span> ' + res.gen_sec + ' 秒<br>' +
+                    '<span class="k">RTF</span> ' + res.rtf + '<br>' +
+                    '<span class="k">产物</span> ' + res.out;
+            }
             setStatus(modeName + '完成 —— 可点结果行的 ▶ 试听，或直接拖进时间轴', 'ok');
         });
 
@@ -1443,7 +1684,18 @@
     if (el.btnSaveVoice) el.btnSaveVoice.addEventListener('click', saveCurrentVoice);
     if (el.btnUseVoice) el.btnUseVoice.addEventListener('click', useVoice);
     if (el.btnDelVoice) el.btnDelVoice.addEventListener('click', delVoice);
-    if (el.voiceLibSel) el.voiceLibSel.addEventListener('change', syncVoiceBtns);
+    if (el.btnAudition) el.btnAudition.addEventListener('click', auditionVoice);
+    if (el.voiceLibSel) el.voiceLibSel.addEventListener('change', function () {
+        syncVoiceBtns();
+        // 选中即自动载入，省去再点「使用」
+        var sel = selectedVoice();
+        if (!sel) return;
+        var exists = sel.builtin
+            ? (sel.item.engine === 'volc2' ||
+               (sel.item.wavPath && fs.existsSync(sel.item.wavPath)))
+            : (sel.item.wav && fs.existsSync(sel.item.wav));
+        if (exists) useVoice();
+    });
 
     // 模式切换
     if (el.modeRow) {

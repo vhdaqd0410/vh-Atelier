@@ -212,18 +212,19 @@
             <!-- 音色库优先 -->
             <div class="vc-lib">
                 <div class="row" style="align-items:center;gap:6px;">
-                    <label style="margin:0;flex:1;">音色库</label>
+                    <label style="margin:0;flex:1;">音色库（内置 + 我的）</label>
                     <button id="btnSaveVoice" class="secondary mini" disabled>💾 保存当前音色</button>
                 </div>
                 <div class="row" style="margin-top:6px;">
                     <select id="voiceLibSel" style="flex:1;"><option value="">（还没有保存的音色）</option></select>
+                    <button id="btnAudition" class="secondary mini" disabled>▶ 试听</button>
                     <button id="btnUseVoice" class="secondary mini" disabled>使用</button>
                     <button id="btnDelVoice" class="secondary mini" disabled>删除</button>
                 </div>
-                <div class="hint" id="voiceLibHint">保存后下次直接选，不用重新抓参考音频。</div>
+                <div class="hint" id="voiceLibHint">内置音色含剪映复刻音色（本地）和云端音色（☁ 标记）。选好后点「使用」。</div>
             </div>
 
-            <div class="vc-sep"><span>或新建音色</span></div>
+            <div class="vc-sep"><span>或从人声新建音色</span></div>
 
             <details class="vc-fold">
                 <summary>从时间轴抓取</summary>

@@ -91,3 +91,14 @@ _tmp/
 *.bak-*
 *.bak
 lxserver/logs/
+
+# 火山引擎语音合成凭据（用户密钥，绝不入仓）
+collect/volc_config.json
+collect/volc_config*.json
+
+# 语音预览缓存（运行时生成）
+collect/voices/preview/
+
+# 发版前的临时备份
+*.bak_*
+

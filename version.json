@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.9",
-  "buildTime": "2026-10-17 18:17:39",
+  "version": "1.82.10",
+  "buildTime": "2026-10-23 10:21:58",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "首页缺集行补已完成"
+  "notes": "修复扒歌板块：搜索改走红果真实 API（原页面已改为 SPA 抓不到数据），搜索支持翻页取 30 条，网络请求加自动重试解决上游间歇性断连"
 }
