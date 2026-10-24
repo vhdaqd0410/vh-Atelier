@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.50.8",
-  "buildTime": "2026-10-23 18:17:27",
+  "version": "1.50.9",
+  "buildTime": "2026-10-24 10:49:12",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修复扒歌集数时长错误：官网 contentUrl 只给 10 秒预告片段却被当成整集下载，现增加时长校验，过短自动改走 App 链路取完整剧集；同时修复视频地址字段改版（main_url -> contentUrl）"
+  "notes": "时间轴工具条新增「另存分集工程」：按指定集数复制当前工程为多份（命名 <项目ID>-第N集），并自动逐个打开、切到对应序列；与主插件 v1.82.12 同步"
 }
