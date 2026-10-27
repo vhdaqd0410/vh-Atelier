@@ -138,17 +138,8 @@
             try { window.__bgmOnShow(); } catch (e) {}
         }
         // 音乐聚合：切到时确保本地服务在跑并把播放器拉起来
-        if (name === 'musicagg' && window.__musicAggOnShow) {
-            try { window.__musicAggOnShow(); } catch (e) {}
-        }
-        if (name === 'video' && window.__videoOnShow) {
-            try { window.__videoOnShow(); } catch (e) {}
-        }
         if (name === 'sfx' && window.__sfxOnShow) {
             try { window.__sfxOnShow(); } catch (e) {}
-        }
-        if (name === 'progress' && window.__progressOnShow) {
-            try { window.__progressOnShow(); } catch (e) {}
         }
         // 待办：切到时刷新（跨天/外部改动后回来看到最新）
 
@@ -167,9 +158,6 @@
             try { window.__mediaOnShow(); } catch (e) {}
         }
         // 网盘：切到时加载列表（并保留 iframe 管理界面入口）
-        if (name === 'netdisk' && window.__netdiskOnShow) {
-            try { window.__netdiskOnShow(); } catch (e) {}
-        }
         // 超分：切到时自动加载去字幕/超分站
         if (name === 'upscale' && window.__upscaleAutoLoad) {
             try { window.__upscaleAutoLoad(); } catch (e) {}
@@ -178,20 +166,11 @@
         if (name === 'upscale' && window.__enhanceOnShow) {
             try { window.__enhanceOnShow(); } catch (e) {}
         }
-        if (name === 'localsub' && window.__localsubOnShow) {
-            try { window.__localsubOnShow(); } catch (e) {}
-        }
-        if (name === 'localup' && window.__localupOnShow) {
-            try { window.__localupOnShow(); } catch (e) {}
-        }
         // 反馈中心：切到时把 iframe 拉起来
         if (name === 'feedback' && window.__feedbackPanelOnShow) {
             try { window.__feedbackPanelOnShow(); } catch (e) {}
         }
         // 管理台：切到时把 iframe 拉起来并刷新待处理数
-        if (name === 'admin' && window.__adminPanelOnShow) {
-            try { window.__adminPanelOnShow(); } catch (e) {}
-        }
         if (name === 'prconv' && window.__prconvOnShow) {
             try { window.__prconvOnShow(); } catch (e) {}
         }
