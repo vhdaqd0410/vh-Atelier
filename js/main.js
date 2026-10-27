@@ -25,14 +25,14 @@
 
     // 组定义：组名 → { members: [tab名...], default: 默认tab }
     var groups = {
-        media: { members: ['media', 'netdisk'], default: 'media' },
+        media: { members: ['media'], default: 'media' },
         progress: { members: ['progress'], default: 'progress' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
-        audio: { members: ['separate', 'clone', 'breeze', 'sfx', 'musiclib', 'music', 'musicagg', 'bgm'], default: 'separate' },
-        deliver: { members: ['export', 'video'], default: 'export' },
+        audio: { members: ['separate', 'clone', 'breeze', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
+        deliver: { members: ['export'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
-        upscale: { members: ['upscale', 'localsub', 'localup'], default: 'upscale' },
+        upscale: { members: ['upscale'], default: 'upscale' },
         prconv: { members: ['prconv', 'colorxml'], default: 'prconv' },
         feedback: { members: ['feedback'], default: 'feedback' },
         admin: { members: ['admin'], default: 'admin' }
