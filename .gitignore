@@ -1,0 +1,111 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 大模型 / 引擎（不随仓库分发，运行时回退到旧字幕插件 CEP 目录或本机部署）
+models/*.bin
+models/funasr/
+models/spleeter/
+bin/whisper/
+bin/sherpa/
+
+# 大二进制（ffmpeg / yt-dlp 不入仓，部署时手动拷贝到 bin/）
+bin/ffmpeg-win32-x64.exe
+bin/yt-dlp.exe
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 网易云音乐服务依赖（ncm/node_modules 不入仓，部署时 npm install）
+ncm/node_modules/
+
+# 视频下载服务（cookie 凭证 + 下载产物不入仓）
+video/.video_cookie
+video/.video_cookies.txt
+collect/video/
+
+# 短剧扒歌：批量结果落盘目录（运行时数据，不提交）
+collect/bgm/
+
+# 语音克隆：音色库（用户保存的参考音频，运行时数据，绝不入仓）
+collect/voices/
+
+# 音乐聚合（lxserver）：依赖与运行时数据不入仓
+#   node_modules  首次运行 npm install（与 ncm 同模式）
+#   data          用户音源脚本与账号（六音音源等），绝不覆盖
+#   cache         试听缓存（本机实测可涨到 100MB+）
+#   music         下载目录
+#   其余运行日志
+lxserver/node_modules/
+lxserver/data/
+lxserver/cache/
+lxserver/music/
+lxserver/cover_cache/
+lxserver/*.log
+lxserver/debug.txt
+
+# 短剧 App 链路：设备号是运行时生成的本机标识，不入库
+py/hongguo_device.json
+
+
+# 用户运行时数据（替换字典/热键映射/备份等，绝不入仓，否则会覆盖用户真实数据）
+collect/replace_dict.json
+collect/hotkey.json
+collect/backup/
+collect/*.log
+collect/index.json
+collect/searchIndex.json
+collect/musiclib_excludes.json
+collect/sfx_excludes.json
+collect/musiclib_tree.json
+collect/musiclib.log
+collect/opentab.json
+collect/search.log
+collect/sfx.log
+collect/keyhook.log
+
+# 超分站登录 token（用户凭证，绝不入仓）
+collect/_enhance_*.json
+py/_enhance_*.json
+# 超分结果目录（运行时产物，入仓会撑大仓库）
+collect/enhance_results/
+
+# 在线反馈配置（含令牌，绝不入库）
+feedback.json
+collect/feedback.json
+!feedback.example.json
+
+# 备份文件不入库
+*.bak
+*.pregv.bak
+*.precache.bak
+*.v4bak
+
+# 测试临时产物
+_tmp/
+
+# 临时备份文件（不进仓库）
+*.bak-*
+*.bak
+lxserver/logs/
+
+# 火山引擎语音合成凭据（用户密钥，绝不入仓）
+collect/volc_config.json
+collect/volc_config*.json
+
+# 语音预览缓存（运行时生成）
+collect/voices/preview/
+
+# 发版前的临时备份
+*.bak_*
+
+
+
+# Breeze 语音合成（引擎/模型/输出体积巨大，不入库；部署时单独放）
+breeze/models/
+breeze/engine/
+breeze/output/
+breeze/ui/index.autoref.html

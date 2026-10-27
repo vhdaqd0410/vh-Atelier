@@ -1,0 +1,2252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>vh-Atelier</title>
+    <link rel="stylesheet" href="css/atelier.css">
+</head>
+<body>
+    <div class="top-head">
+        <h1>vh-Atelier</h1>
+        <button type="button" id="btnSite" class="site-btn" title="打开官网：功能说明 / 截图 / 下载 / 提需求">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8c2.5 3 3.8 5.9 3.8 9.2S14.5 18.2 12 21.2c-2.5-3-3.8-5.9-3.8-9.2S9.5 5.8 12 2.8z"/></svg>
+            官网<span class="sd"></span>
+        </button>
+        <span class="sep"></span>
+        <button type="button" id="btnHistory" class="log-btn" title="版本更新历史：每个版本改了什么、修了什么">📋 历史</button>
+        <button type="button" id="btnUpdate" class="log-btn" title="检查更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
+        <button type="button" id="btnFeedback" class="log-btn" title="在线反馈：提 Bug / 需求 / 意见">📮 反馈</button>
+        <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">📄<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
+    </div>
+    <div class="sub">素材 · 剧本 · 超分 · 字幕 · 声音 · 审片 · 交付 · 进度 八工作台</div>
+
+    <!-- 错误日志浮层 -->
+    <div id="logOverlay" class="log-overlay" style="display:none;">
+        <div class="log-box">
+            <div class="log-head">
+                <span class="log-title">运行日志</span>
+                <span class="log-path" id="logPath"></span>
+                <button type="button" id="logClose" class="log-x" title="关闭">✕</button>
+            </div>
+            <div class="log-body" id="logBody"></div>
+            <div class="log-foot">
+                <button type="button" id="logRefresh" class="secondary">刷新</button>
+                <button type="button" id="logCopy" class="secondary">复制全部</button>
+                <button type="button" id="logOpen" class="secondary">打开文件</button>
+                <button type="button" id="logClear" class="secondary">清空</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 时间线工具条（常驻） -->
+    <div id="tlBar"></div>
+
+    <div class="ws-groups">
+        <button class="ws-group active" data-group="media">🗂 素材</button>
+        <button class="ws-group" data-group="script">📖 剧本</button>
+        <button class="ws-group" data-group="upscale">✨ 超分</button>
+        <button class="ws-group" data-group="sub">字幕</button>
+        <button class="ws-group" data-group="audio">声音</button>
+        <button class="ws-group" data-group="shenpian">🎬 审片</button>
+        <button class="ws-group" data-group="deliver">交付</button>
+        <button class="ws-group" data-group="components">📦 组件</button>
+        <button class="ws-group" data-group="feedback">📮 反馈</button>
+        <button class="ws-group" data-group="prconv">🔧 工具</button>
+    </div>
+
+    <div class="tabs ws-subtabs" data-group="sub" style="display:none;">
+        <button class="tab active" data-tab="subtitle">字幕识别</button>
+        <button class="tab" data-tab="check">字幕校对</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="audio" style="display:none;">
+        <button class="tab" data-tab="separate">人声分离</button>
+        <button class="tab" data-tab="clone">语音克隆</button>
+                <button class="tab" data-tab="breeze">Breeze 朗读</button>
+        <button class="tab" data-tab="musiclib">音乐库</button>
+        <button class="tab" data-tab="sfx">音效库</button>
+        <button class="tab" data-tab="music">网易云</button>
+        <button class="tab" data-tab="bgm">短剧扒歌</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="deliver" style="display:none;">
+        <button class="tab" data-tab="export">多版本导出</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="script" style="display:none;">
+        <button class="tab" data-tab="script">剧本阅读</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="media" style="display:none;">
+        <button class="tab active" data-tab="media">素材浏览</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
+        <button class="tab active" data-tab="upscale">去字幕 / 超分（云端）</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="feedback" style="display:none;">
+        <button class="tab active" data-tab="feedback">反馈中心</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="prconv" style="display:none;">
+        <button class="tab active" data-tab="prconv">PR 版本转换</button>
+        <button class="tab" data-tab="colorxml">调色 XML</button>
+    </div>
+
+    <!-- ==================== 板块一：字幕识别 ==================== -->
+    <div class="tab-panel" id="panel-subtitle" style="display:none;">
+        <div class="card">
+            <h2>1 · 序列（可多选）</h2>
+            <div class="row">
+                <button id="btnRefreshSeq" class="secondary">刷新序列列表</button>
+                <button id="btnToggleAll" class="secondary">全选</button>
+            </div>
+            <div id="seqList"><div class="hint" style="padding:6px 8px;">点「刷新序列列表」加载项目所有序列</div></div>
+        </div>
+
+        <div class="card">
+            <h2>2 · 识别设置</h2>
+            <label>语言</label>
+            <select id="selLang">
+                <option value="zh" selected>中文</option>
+                <option value="en">英文</option>
+                <option value="auto">自动检测</option>
+                <option value="ja">日语</option>
+                <option value="ko">韩语</option>
+            </select>
+            <label style="margin-top:10px;">识别基准</label>
+            <select id="selRange">
+                <option value="all" selected>整条时间轴</option>
+                <option value="inout">入点到出点</option>
+                <option value="selection">选中的片段</option>
+            </select>
+            <div class="note" style="margin-top:4px;">入点/出点：先在时间轴按 I / O 设置范围；选中片段：先在时间轴点选块</div>
+            <label style="margin-top:10px;">模型</label>
+            <select id="selModel">
+                <option value="funasr-zh">FunASR（中文·paraformer，1.2GB）</option>
+                <option value="ggml-large-v3-q5_0.bin">large-v3（英文/多语言，1.0GB）</option>
+            </select>
+            <div class="note" style="margin-top:4px;">中文→FunASR（paraformer，断句细、抗噪强）；英文/其他→whisper large-v3</div>
+            <div class="check-row">
+                <input type="checkbox" id="chkGpu" checked>
+                <label for="chkGpu" style="margin:0; display:inline;">使用 GPU 加速（NVIDIA CUDA）</label>
+            </div>
+            <div class="note" style="margin-top:4px;">GPU 仅对英文 whisper 生效；中文 FunASR 纯 CPU 已比实时快 30 倍</div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 执行</h2>
+            <div class="row">
+                <button id="btnBatch">批量识别选中序列</button>
+                <button id="btnStop" class="danger" style="flex:0 0 64px; display:none;">停止</button>
+            </div>
+            <div class="progress-wrap" id="wsProgressWrap">
+                <div class="progress-bar"><div class="fill indet" id="wsProgressFill"></div></div>
+                <div id="wsProgressText"></div>
+                <div id="wsProgressTime"></div>
+            </div>
+            <div id="wsStatus"></div>
+        </div>
+
+        <div class="card" id="resultCard" style="display:none;">
+            <h2>4 · 识别结果</h2>
+            <div id="resultSummary"></div>
+            <div id="subtitleList"></div>
+            <div class="row" style="margin-top:10px;">
+                <button id="btnWriteBack">回写当前序列</button>
+                <button id="btnExportSrt" class="secondary">导出当前 SRT</button>
+                <button id="btnToCheck" class="secondary">校对当前字幕</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="btnTranslate" class="secondary">翻译成中文（剧情参考）</button>
+                <button id="btnBilingual" class="secondary">导入双语字幕</button>
+            </div>
+        </div>
+
+        
+    </div>
+
+    
+
+    <!-- 人声分离（从字幕工作台迁至声音工作台） -->
+    <div class="tab-panel" id="panel-sep" style="display:none;">
+        <div class="card">
+            <h2>人声分离</h2>
+            <div class="note" style="margin-bottom:8px;">先在时间轴选中含人声+伴奏的音频块，再点分离。Spleeter 本地引擎，无需联网。</div>
+            <div class="row">
+                <button id="btnSeparate">分离人声 / 伴奏</button>
+                <button id="btnImportVocals" class="secondary mini" disabled>全部导入素材箱</button>
+            </div>
+            <div class="progress-wrap" id="sepProgressWrap">
+                <div class="progress-bar"><div class="fill indet" id="sepProgressFill"></div></div>
+                <div id="sepProgressText"></div>
+            </div>
+            <div id="sepStatus"></div>
+        </div>
+
+        <!-- 分离结果：直接拖拽进时间轴（与音乐库手感一致） -->
+        <div class="card">
+            <div class="sep-res-head">
+                <h2 style="margin:0;">分离结果</h2>
+                <button id="btnSepClear" class="secondary mini" style="margin-left:auto;">清空</button>
+            </div>
+            <div class="hint" style="margin-bottom:8px;">分离完的结果列在这里：▶ 试听、拖到时间轴直接插入（音频轨）、或点「导入」进「人声分离」素材箱。</div>
+            <div id="sepResultList" class="sep-res-list">
+                <div class="sep-res-empty">还没有分离结果</div>
+            </div>
+        </div>
+    </div>
+
+<!-- ==================== 板块二：语音克隆 ==================== -->
+    <div class="tab-panel" id="panel-clone" style="display:none;">
+        <!-- 1 · 选音色 -->
+        <div class="card">
+            <h2>1 · 选音色</h2>
+
+            <!-- 音色库优先 -->
+            <div class="vc-lib">
+                <div class="row" style="align-items:center;gap:6px;">
+                    <label style="margin:0;flex:1;">音色库（内置 + 我的）</label>
+                    <button id="btnSaveVoice" class="secondary mini" disabled>💾 保存当前音色</button>
+                </div>
+                <div class="row" style="margin-top:6px;">
+                    <select id="voiceLibSel" style="flex:1;"><option value="">（还没有保存的音色）</option></select>
+                    <button id="btnAudition" class="secondary mini" disabled>▶ 试听</button>
+                    <button id="btnUseVoice" class="secondary mini" disabled>使用</button>
+                    <button id="btnDelVoice" class="secondary mini" disabled>删除</button>
+                </div>
+                <div class="hint" id="voiceLibHint">内置音色含剪映复刻音色（本地）和云端音色（☁ 标记）。选好后点「使用」。</div>
+            </div>
+
+            <div class="vc-sep"><span>或从人声新建音色</span></div>
+
+            <details class="vc-fold">
+                <summary>从时间轴抓取</summary>
+                <div class="vc-modes" id="refSrcRow" style="margin-top:8px;">
+                    <button class="vc-mode active" data-src="clip">选中片段</button>
+                    <button class="vc-mode" data-src="inout">入点出点</button>
+                </div>
+
+                <!-- 来源：选中片段 -->
+                <div id="refSrcClip">
+                    <div class="row" style="margin-top:8px;">
+                        <button id="btnGrab">从时间轴选中片段抓取</button>
+                    </div>
+                    <div class="hint">先在时间轴选中一段人声（≤30 秒），再点上面按钮。</div>
+                </div>
+
+                <!-- 来源：序列入点出点（按轨取，不混入配乐/其他轨） -->
+                <div id="refSrcInOut" style="display:none;">
+                    <div class="row" style="margin-top:8px;align-items:center;gap:6px;">
+                        <label style="margin:0;flex:0 0 auto;">取哪条轨</label>
+                        <select id="refTrackSel" style="flex:1;">
+                            <option value="auto">自动（覆盖最完整的一条）</option>
+                        </select>
+                        <button id="btnRefreshRefTrack" class="secondary mini">刷新</button>
+                    </div>
+                    <div class="row" style="margin-top:6px;align-items:center;gap:6px;">
+                        <label style="margin:0;flex:0 0 auto;">导出预设</label>
+                        <select id="refPresetSel" style="flex:1;"><option value="">（未找到音频预设）</option></select>
+                        <button id="btnRefreshRefPreset" class="secondary mini">刷新</button>
+                    </div>
+                    <div class="row" style="margin-top:6px;">
+                        <button id="btnGrabInOut">从入点出点抓取</button>
+                    </div>
+                    <div class="hint">先在时间轴按 I / O 设好起止（≤30 秒）。抓取时<b>独奏所选轨</b>再渲染该区间，其他轨（配乐、其他人声）不会混进来；拿到的是这条轨经过时间轴处理后的声音。和「交付」里按轨静音是同一套逻辑。</div>
+                    <div class="hint" id="refRangeInfo" style="display:none;"></div>
+                </div>
+            </details>
+
+            <details class="vc-fold">
+                <summary>从项目素材截取</summary>
+                <div class="row" style="margin-top:8px;">
+                    <select id="projectMediaSel" style="flex:1;"><option value="">（点「刷新」加载项目素材）</option></select>
+                    <button id="btnRefreshMedia" class="secondary mini">刷新</button>
+                </div>
+                <div class="row" style="margin-top:6px;">
+                    <label style="margin:0;flex:0 0 auto;">起始秒</label>
+                    <input type="text" id="mediaStart" placeholder="0" style="flex:1;">
+                    <label style="margin:0;flex:0 0 auto;">时长秒</label>
+                    <input type="text" id="mediaDur" placeholder="5" style="flex:1;">
+                </div>
+                <div class="row" style="margin-top:8px;">
+                    <button id="btnGrabFromMedia" class="secondary">截取为参考音频</button>
+                </div>
+            </details>
+
+            <div class="ref-box" id="refInfo" style="margin-top:10px;">尚未选择参考音频</div>
+            <div id="vcRefWave" style="display:none;margin-top:8px;"></div>
+
+            <label style="margin-top:10px;">参考音频对应文字（说什么就填什么）</label>
+            <div class="row" style="margin-top:4px;">
+                <input type="text" id="refText" placeholder="例如：今天天气真不错" style="flex:1;">
+                <button id="btnAutoRef" class="secondary mini">自动识别</button>
+            </div>
+            <div class="hint">跨语言模式不需要填（音色由音频决定）。</div>
+        </div>
+
+        <!-- 2 · 说什么 -->
+        <div class="card">
+            <h2>2 · 说什么</h2>
+            <div class="vc-modes" id="modeRow">
+                <button class="vc-mode active" data-mode="clone">克隆</button>
+                <button class="vc-mode" data-mode="instruct">情绪指令</button>
+                <button class="vc-mode" data-mode="cross">跨语言</button>
+            </div>
+            <div class="hint" id="modeHint">克隆：参考音频说什么语言，就合成什么语言。</div>
+
+            <label style="margin-top:10px;">要克隆说出的文字</label>
+            <textarea id="ttsText" rows="3" placeholder="输入要合成的话，中英文均可"></textarea>
+
+            <!-- 仅「情绪指令」模式显示 -->
+            <div id="instructWrap" style="display:none;margin-top:10px;">
+                <label>语气 / 指令（自然语言，留空则无效）</label>
+                <input type="text" id="instructText" placeholder="例如：用四川话说这句话 / 愤怒地大声喊 / 温柔地轻声说">
+                <div class="vc-chips" id="instructChips">
+                    <span class="vc-chip" data-v="用四川话说这句话">四川话</span>
+                    <span class="vc-chip" data-v="用愤怒的语气大声喊出来">愤怒</span>
+                    <span class="vc-chip" data-v="温柔地轻声说">温柔</span>
+                    <span class="vc-chip" data-v="悲伤地说，语速缓慢">悲伤</span>
+                    <span class="vc-chip" data-v="冷漠平淡地说">冷漠</span>
+                    <span class="vc-chip" data-v="急促地说，语速加快">急促</span>
+                </div>
+            </div>
+
+            <!-- 仅「跨语言」模式显示 -->
+            <div id="crossWrap" style="display:none;margin-top:10px;">
+                <div class="hint" style="color:var(--fg-info);">ℹ 参考音频说中文、文字写英文即可 —— 用中文音色说外语，无需英文参考音频。</div>
+            </div>
+
+            <details class="vc-fold" style="margin-top:10px;">
+                <summary>高级：语速与模型</summary>
+                <div class="grid2" style="margin-top:8px;">
+                    <div>
+                        <label>语速 <span id="speedVal" style="color:var(--accent);font-weight:600;">1.0</span>×</label>
+                        <div class="speed-row">
+                            <input type="range" id="speedRange" min="0.5" max="2.0" step="0.05" value="1.0">
+                            <span class="val" id="speedLabel">1.0×</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label>模型</label>
+                        <select id="modelSel">
+                            <option value="base" selected>基础版（音色稳）</option>
+                            <option value="rl">RL 版（字准）</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="hint">基础版音色稳定；RL 版内容准确度更高（官方 CER 0.81 vs 1.21）。</div>
+            </details>
+
+            <div class="row" style="margin-top:12px;">
+                <button id="btnClone" disabled style="flex:1;">生成</button>
+                <button id="btnCloneStop" class="danger" disabled style="flex:0 0 76px;">停止</button>
+            </div>
+            <div class="progress-wrap" id="vcProgressWrap">
+                <div class="progress-bar"><div class="fill indet" id="vcProgressFill"></div></div>
+                <div id="vcProgressText"></div>
+            </div>
+            <div id="vcStatus"></div>
+        </div>
+
+        <!-- 3 · 结果 -->
+        <div class="card">
+            <h2>3 · 结果</h2>
+            <div id="vcResultList" class="sep-res-list"><div class="sep-res-empty">还没有生成结果</div></div>
+
+            <details class="vc-fold" style="margin-top:10px;">
+                <summary>插入到时间线（精确控制）</summary>
+                <div class="grid2" style="margin-top:8px;">
+                    <div>
+                        <label>目标音轨</label>
+                        <select id="trackSel"><option value="">（未加载）</option></select>
+                    </div>
+                    <div>
+                        <label>标签颜色</label>
+                        <select id="colorSel">
+                            <option value="0">蓝 Iris</option>
+                            <option value="1">绿 Forest</option>
+                            <option value="2">粉 Rose</option>
+                            <option value="3" selected>橙 Mango</option>
+                            <option value="4">紫 Violet</option>
+                            <option value="5">青 Caribbean</option>
+                            <option value="6">紫红 Lavender</option>
+                            <option value="7">灰 Slate</option>
+                        </select>
+                    </div>
+                </div>
+                <label style="margin-top:8px;">插入位置（秒，默认播放头）</label>
+                <input type="text" id="insertPos" placeholder="留空 = 播放头位置">
+                <div class="row" style="margin-top:8px;">
+                    <button id="btnRefreshTrack" class="secondary mini">刷新音轨</button>
+                    <button id="btnInsertTimeline" class="secondary" disabled>插入选中的结果</button>
+                </div>
+                <div class="hint">新片段插到指定轨道，后续片段整体后移，不覆盖任何已有音频。</div>
+            </details>
+
+            <div class="hint" style="margin-top:8px;">结果行可直接拖进 PR 时间轴；双击导入「语音克隆」素材箱。</div>
+        </div>
+
+        <!-- 隐藏：兼容旧逻辑 -->
+        <div class="result-info" id="resultInfo" style="display:none;"></div>
+        <audio id="player" style="display:none;"></audio>
+        <div class="player-panel" id="playerPanel" style="display:none;"></div>
+    </div>
+
+    
+
+<style>
+/* ===== Breeze 面板（460px 窄屏 · 已去变量依赖）===== */
+.bz-head{
+    display:flex;align-items:center;gap:6px;
+    padding:9px 12px;border-bottom:1px solid #1a2a3d;
+    background:linear-gradient(180deg,rgba(83,125,150,.10),transparent);
+}
+.bz-head-title{
+    font-size:13px;font-weight:600;color:#e8ecf4;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.bz-head-badge{
+    font-size:9.5px;padding:1px 6px;border-radius:4px;
+    background:rgba(127,214,139,.12);color:#7fd68b;
+    border:1px solid rgba(127,214,139,.3);
+    white-space:nowrap;flex:0 0 auto;
+}
+.bz-head-sp{flex:1;min-width:4px;}
+.bz-icon-btn{
+    flex:0 0 auto;width:24px;height:24px;
+    border:1px solid #2a3a5d;border-radius:6px;
+    background:transparent;color:#8a8a8a;
+    cursor:pointer;font-size:12px;line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    transition:.15s;padding:0;
+}
+.bz-icon-btn:hover{color:#9fd0ff;border-color:rgba(157,208,255,.45);
+    background:rgba(83,125,150,.15);}
+
+/* 折叠 */
+.bz-fold{border-bottom:1px solid #1a2a3d;}
+.bz-fold-head{
+    width:100%;display:flex;align-items:center;gap:7px;
+    padding:9px 12px;border:0;background:transparent;
+    color:#9db9ff;cursor:pointer;font:inherit;font-size:12px;
+    transition:.15s;text-align:left;
+}
+.bz-fold-head:hover{background:rgba(83,125,150,.10);color:#cfe0ff;}
+.bz-fold-arrow{
+    font-size:9px;color:#8a8a8a;transition:transform .2s;
+    display:inline-block;width:9px;flex:0 0 auto;
+}
+.bz-fold.open .bz-fold-arrow{transform:rotate(90deg);color:#9fd0ff;}
+.bz-fold-title{font-weight:500;white-space:nowrap;}
+.bz-fold-sub{
+    margin-left:auto;font-size:10px;color:#8a8a8a;
+    background:rgba(255,255,255,.05);padding:1px 7px;border-radius:4px;
+    flex:0 0 auto;
+}
+.bz-fold-body{display:none;padding:0 12px 12px;}
+.bz-fold.open .bz-fold-body{display:block;}
+
+/* 分段切换 */
+.bz-seg{
+    display:flex;align-items:center;gap:3px;
+    background:#0f1115;padding:3px;border-radius:8px;
+    border:1px solid #2a3a5d;margin-bottom:10px;
+}
+.bz-seg-btn{
+    flex:1;padding:7px 8px;border:0;border-radius:6px;
+    background:transparent;color:#8a8a8a;font:inherit;font-size:11.5px;
+    cursor:pointer;transition:.15s;white-space:nowrap;
+}
+.bz-seg-btn:hover{color:#9db9ff;}
+.bz-seg-btn.active{
+    background:linear-gradient(135deg,#537d96,#3a5d8a);
+    color:#fff;font-weight:500;
+    box-shadow:0 2px 8px rgba(58,93,138,.4);
+}
+.bz-tip{
+    display:block;font-size:10.5px;color:#8a8a8a;
+    margin-top:8px;line-height:1.5;
+}
+
+/* 按钮 */
+.bz-body-row{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;}
+.bz-btn-primary{
+    flex:1;min-width:0;padding:9px 12px;border:0;border-radius:8px;
+    cursor:pointer;
+    background:linear-gradient(135deg,#537d96,#3a5d8a);
+    color:#fff;font:inherit;font-size:12px;font-weight:500;
+    white-space:nowrap;transition:.16s;
+    box-shadow:0 2px 10px rgba(58,93,138,.32);
+}
+.bz-btn-primary:hover:not(:disabled){
+    filter:brightness(1.12);
+    box-shadow:0 3px 14px rgba(58,93,138,.5);
+}
+.bz-btn-primary:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;}
+.bz-btn-ghost{
+    flex:0 0 auto;padding:9px 12px;border:1px solid #2a3a5d;
+    border-radius:8px;background:#0f1115;color:#9db9ff;
+    font:inherit;font-size:11.5px;cursor:pointer;
+    transition:.15s;white-space:nowrap;
+}
+.bz-btn-ghost:hover{background:rgba(83,125,150,.15);color:#cfe0ff;
+    border-color:rgba(157,208,255,.4);}
+.bz-btn-icon{
+    flex:0 0 auto;width:28px;height:28px;
+    border:1px solid #2a3a5d;border-radius:7px;
+    background:#0f1115;color:#8a8a8a;
+    cursor:pointer;font-size:12px;line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    transition:.15s;padding:0;
+}
+.bz-btn-icon:hover{color:#9fd0ff;border-color:rgba(157,208,255,.4);}
+
+/* 字段 */
+.bz-field{display:flex;flex-direction:column;gap:4px;}
+.bz-field label{font-size:10.5px;color:#8a8a8a;}
+.bz-field-ctl{display:flex;gap:5px;align-items:center;}
+.bz-field-ctl select{
+    flex:1;min-width:0;padding:7px 26px 7px 9px;border-radius:7px;
+    border:1px solid #2a3a5d;background:#0f1115;color:#e8ecf4;
+    font:inherit;font-size:11.5px;cursor:pointer;appearance:none;
+    background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' viewBox='0 0 10 10'%3E%3Cpath fill='%238a8a8a' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center;
+    text-overflow:ellipsis;
+}
+.bz-field-ctl select:focus{outline:none;border-color:#537d96;}
+
+/* 结果区 */
+.bz-result{
+    margin-top:10px;padding:9px 10px;border-radius:9px;
+    background:linear-gradient(180deg,rgba(83,125,150,.14),rgba(15,17,21,.5));
+    border:1px solid rgba(157,208,255,.28);
+}
+.bz-result-head{
+    display:flex;align-items:center;gap:6px;margin-bottom:7px;
+    min-width:0;
+}
+.bz-result-name{
+    font-size:11.5px;color:#9fd0ff;font-weight:500;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    flex:1;min-width:0;
+}
+.bz-result-dur{
+    flex:0 0 auto;font-size:10px;color:#9db9ff;
+    font-variant-numeric:tabular-nums;
+    background:rgba(83,125,150,.22);padding:1px 6px;border-radius:4px;
+}
+.bz-result-spacer{display:none;}
+.bz-wave{border-radius:7px;overflow:hidden;}
+
+/* 识别按钮 */
+.bz-btn-tiny{
+    flex:0 0 auto;font-size:10px;padding:3px 8px;border-radius:5px;
+    border:1px solid rgba(157,208,255,.28);background:rgba(83,125,150,.15);
+    color:#9fd0ff;cursor:pointer;font-family:inherit;
+    transition:.15s;white-space:nowrap;
+}
+.bz-btn-tiny:hover:not(:disabled){background:rgba(83,125,150,.28);color:#cfe0ff;}
+.bz-btn-tiny:disabled{opacity:.45;cursor:not-allowed;}
+
+/* 文稿框 */
+.bz-text-wrap{margin-top:8px;}
+.bz-textarea{
+    width:100%;box-sizing:border-box;
+    background:#0f1115;border:1px solid #2a3a5d;border-radius:7px;
+    color:#e8ecf4;font:inherit;font-size:11.5px;line-height:1.55;
+    padding:7px 9px;resize:vertical;min-height:56px;
+    font-family:inherit;
+}
+.bz-textarea:focus{outline:none;border-color:#537d96;}
+.bz-textarea::placeholder{color:#5a6478;}
+.bz-text-actions{
+    display:flex;align-items:center;gap:8px;margin-top:6px;
+}
+.bz-asr-hint{font-size:10px;color:#8a8a8a;flex:1;min-width:0;}
+.bz-btn-mini{
+    flex:0 0 auto;font-size:10.5px;padding:5px 11px;border-radius:6px;
+    border:0;background:linear-gradient(135deg,#537d96,#3a5d8a);
+    color:#fff;cursor:pointer;font-family:inherit;font-weight:500;
+    transition:.15s;white-space:nowrap;
+}
+.bz-btn-mini:hover:not(:disabled){filter:brightness(1.12);}
+.bz-btn-mini:disabled{opacity:.45;cursor:not-allowed;}
+
+/* 状态条 */
+.bz-status{
+    margin-top:9px;font-size:11px;padding:7px 10px;border-radius:7px;
+    line-height:1.5;word-break:break-word;
+}
+.bz-status.err{background:rgba(255,138,154,.08);color:#ff8a9a;
+    border:1px solid rgba(255,138,154,.22);}
+.bz-status.busy{background:rgba(83,125,150,.14);color:#9fd0ff;
+    border:1px solid rgba(157,208,255,.25);}
+.bz-status.ok{background:rgba(157,208,255,.09);color:#9fd0ff;
+    border:1px solid rgba(157,208,255,.24);}
+</style>
+
+<style>
+/* ==== Breeze 原生面板 ==== */
+.bz-mprog{
+    height:6px;background:rgba(0,0,0,.3);border-radius:3px;
+    overflow:hidden;margin-top:10px;
+}
+.bz-mprog i{
+    display:block;height:100%;width:0%;
+    background:linear-gradient(90deg,#7fd68b,#5ab86c);
+    transition:width .4s;
+}
+.bz-prog-track{
+    height:5px;background:rgba(255,255,255,.08);border-radius:3px;
+    overflow:hidden;
+}
+.bz-prog-track i{
+    display:block;height:100%;width:0%;
+    background:linear-gradient(90deg,var(--accent,#537d96),#8ab4ff);
+    transition:width .3s;
+}
+.bz-prog-track i.indet{
+    width:30% !important;
+    animation:bzIndet 1.4s ease-in-out infinite;
+}
+@keyframes bzIndet{
+    0%{margin-left:-30%}
+    100%{margin-left:100%}
+}
+</style>
+
+<!-- ==================== Breeze 语音合成 ==================== -->
+    <div class="tab-panel" id="panel-breeze" style="display:none;">
+
+        <!-- 1 · 模型状态 -->
+        <div class="card bz-model-card" id="bzModelCard" style="display:none;">
+            <h2>需要先下载语音模型</h2>
+            <div class="hint">首次使用需下载约 2.3 GB 模型，下载后可离线使用。建议网络稳定时进行。</div>
+            <div class="bz-mprog"><i id="bzModelBar"></i></div>
+            <div class="row" style="margin-top:8px;align-items:center;gap:8px;">
+                <span class="hint" id="bzModelStat" style="flex:1;margin:0;">尚未开始</span>
+                <button id="bzBtnDlModel" class="secondary mini">开始下载</button>
+            </div>
+        </div>
+
+        <!-- 2 · 选音色 -->
+        <div class="card">
+            <h2>1 · 选音色</h2>
+
+            <!-- 已保存音色 -->
+            <div class="row" style="align-items:center;gap:6px;">
+                <label style="margin:0;flex:1;">音色库</label>
+                <button id="bzBtnRefreshVoice" class="secondary mini" title="刷新音色列表">↻ 刷新</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <select id="bzVoiceSel" style="flex:1;">
+                    <option value="">（用下方参考音频）</option>
+                </select>
+                <button id="bzBtnUseVoice" class="secondary mini" disabled>使用</button>
+            </div>
+            <div class="hint" id="bzVoiceHint">选了音色就不用再上传参考音频和填逐字稿。</div>
+
+            <div class="vc-sep"><span>或新建音色</span></div>
+
+            <!-- 从时间轴抓取 -->
+            <div class="row" style="align-items:center;gap:6px;">
+                <label style="margin:0;flex:0 0 auto;">取材方式</label>
+                <select id="bzSrcSel" style="flex:1;">
+                    <option value="clip">选中片段</option>
+                    <option value="inout">入出点</option>
+                </select>
+                <button id="bzBtnGrab" class="secondary mini">抓取</button>
+            </div>
+            <div class="hint" id="bzGrabHint">先在时间轴选中一段人声（≤30 秒）。</div>
+
+            <!-- 入出点专用 -->
+            <div id="bzInOutRow" style="display:none;margin-top:8px;">
+                <div class="row" style="align-items:center;gap:6px;">
+                    <label style="margin:0;flex:0 0 auto;">取哪条轨</label>
+                    <select id="bzTrackSel" style="flex:1;">
+                        <option value="auto">自动（最完整）</option>
+                    </select>
+                    <button id="bzBtnRefreshTrack" class="secondary mini">↻</button>
+                </div>
+                <div class="row" style="margin-top:6px;align-items:center;gap:6px;">
+                    <label style="margin:0;flex:0 0 auto;">导出预设</label>
+                    <select id="bzPresetSel" style="flex:1;">
+                        <option value="">（点 ↻ 加载）</option>
+                    </select>
+                    <button id="bzBtnRefreshPreset" class="secondary mini">↻</button>
+                </div>
+            </div>
+
+            <!-- 参考音频 -->
+            <div class="ref-box" id="bzRefInfo" style="margin-top:10px;">尚未选择参考音频</div>
+            <div id="bzWaveBox" style="display:none;margin-top:8px;"></div>
+
+            <label style="margin-top:10px;">参考音频对应文字</label>
+            <div class="row" style="margin-top:4px;">
+                <input type="text" id="bzRefText" placeholder="音频里说了什么就填什么" style="flex:1;">
+                <button id="bzBtnAsr" class="secondary mini">自动识别</button>
+            </div>
+            <div class="hint" id="bzAsrHint">抓取后会自动识别文字，请核对错字；也可点「自动识别」重跑。</div>
+        </div>
+
+        <!-- 3 · 说什么 -->
+        <div class="card">
+            <h2>2 · 说什么</h2>
+            <div class="vc-modes" id="bzModeRow">
+                <button class="vc-mode active" data-mode="design">声音设计</button>
+                <button class="vc-mode" data-mode="clone">声音克隆</button>
+                <button class="vc-mode" data-mode="direct">语气导演</button>
+            </div>
+            <div class="hint" id="bzModeHint">声音设计：不需要参考音频，用一句话描述想要的嗓音。</div>
+
+            <label style="margin-top:10px;">要朗读的文字</label>
+            <textarea id="bzText" rows="3" placeholder="输入要合成的内容，中英文均可"></textarea>
+
+            <!-- 声音设计：描述 -->
+            <div id="bzDesignWrap">
+                <label style="margin-top:10px;">声音描述</label>
+                <input type="text" id="bzInstruction" placeholder="例如：低沉沙哑的中年男性，语速缓慢，带点沧桑感">
+                <div class="hint">越具体越好，例如年龄、性别、音色、语气、语速。</div>
+            </div>
+
+            <!-- 语气导演：语气指令 -->
+            <div id="bzDirectWrap" style="display:none;">
+                <label style="margin-top:10px;">语气指令</label>
+                <input type="text" id="bzDirectText" placeholder="例如：用悲伤的语气慢慢说 / 愤怒地大声喊">
+                <div class="vc-chips" style="margin-top:6px;">
+                    <span class="vc-chip" data-v="用悲伤的语气慢慢说">悲伤</span>
+                    <span class="vc-chip" data-v="愤怒地大声喊出来">愤怒</span>
+                    <span class="vc-chip" data-v="温柔地轻声细语">温柔</span>
+                    <span class="vc-chip" data-v="语速加快，显得很着急">急促</span>
+                    <span class="vc-chip" data-v="冷漠平淡地说">冷漠</span>
+                </div>
+            </div>
+
+            <div class="grid2" style="margin-top:10px;">
+                <div>
+                    <label>贴合度 <span id="bzCfgVal" style="color:#537d96;font-weight:600;">4</span></label>
+                    <input type="range" id="bzCfg" min="1" max="10" step="0.5" value="4">
+                </div>
+                <div>
+                    <label>随机种子</label>
+                    <div style="display:flex;gap:4px;">
+                        <input type="number" id="bzSeed" value="42" style="flex:1;">
+                        <button id="bzBtnDice" class="secondary mini" title="随机">🎲</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 保存音色 -->
+            <details id="bzSaveWrap" style="margin-top:10px;">
+                <summary style="cursor:pointer;font-size:12px;color:#9fb4c7;">保存当前参考音频为音色</summary>
+                <div class="row" style="margin-top:8px;">
+                    <input type="text" id="bzSaveName" placeholder="音色名称（可中文）" style="flex:1;">
+                    <button id="bzBtnSaveVoice" class="secondary mini">保存</button>
+                </div>
+                <div class="hint">保存后出现在上方「音色库」下拉里，下次直接选。</div>
+            </details>
+        </div>
+
+        <!-- 4 · 生成与结果 -->
+        <div class="card">
+            <h2>3 · 生成</h2>
+
+            <!-- 进度 -->
+            <div id="bzProgWrap" style="display:none;margin-bottom:10px;">
+                <div class="bz-prog-track"><i id="bzProgBar"></i></div>
+                <div class="hint" id="bzProgText" style="margin-top:6px;">准备中…</div>
+            </div>
+
+            <div class="row">
+                <button id="bzBtnGen" class="primary" style="flex:1;">开始生成</button>
+                <button id="bzBtnStop" class="secondary" disabled>停止</button>
+            </div>
+
+            <!-- 结果 -->
+            <div id="bzResultWrap" style="display:none;margin-top:12px;">
+                <div class="ref-box" id="bzResultInfo" style="margin:0;"></div>
+                <div id="bzResultWave" style="margin-top:8px;"></div>
+                <div class="row" style="margin-top:10px;">
+                    <button id="bzBtnInsert" class="secondary" style="flex:1;">送到时间轴</button>
+                </div>
+                <div class="hint" id="bzInsertHint" style="margin-top:6px;"></div>
+            </div>
+        </div>
+
+        <div class="hint" style="padding:8px 4px;color:#e0a04a;">
+            ⚠ Breeze 模型权重为研究/非商业许可，生成内容请勿用于商业交付项目。
+        </div>
+    </div>
+
+    <!-- ==================== 板块三：音效库 ==================== -->
+    <div class="tab-panel" id="panel-sfx" style="display:none;">
+        <!-- 本地音效库视图 -->
+        <div id="sfx-local">
+            <div class="sfx-toolbar">
+                <div class="tr">
+                    <input type="text" id="sfxDir" placeholder="音效文件夹路径">
+                    <button id="btnSfxBrowse" class="tbtn">浏览</button>
+                    <button id="btnSfxScan" class="tbtn">扫描</button>
+                </div>
+                <div class="tr">
+                    <input type="text" id="sfxSearch" placeholder="搜索音效名 / 文件夹名...">
+                    <button id="btnSfxAll" class="tbtn on">浏览</button>
+                    <button id="btnSfxFav" class="tbtn">★ 收藏</button>
+                    <span id="sfxCount" style="margin-left:auto;"></span>
+                </div>
+            </div>
+
+            <!-- 从时间轴采集音效（导出选中音频为 wav 存进音效库） -->
+            <div class="sfx-cap" id="sfxCap">
+                <div class="sfx-cap-head" id="sfxCapHead">
+                    <span class="sfx-cap-ico">＋</span>
+                    <span class="sfx-cap-t">从时间轴采集音效</span>
+                    <span class="sfx-cap-hint" id="sfxCapHint">选中时间轴音频片段后导出为 wav</span>
+                    <span class="sfx-cap-arrow">▸</span>
+                </div>
+                <div class="sfx-cap-body" id="sfxCapBody" style="display:none;">
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">来源</span>
+                        <select id="sfxCapSrcMode" title="选取区间的方式" style="flex:0 0 116px;">
+                            <option value="selection">选中片段</option>
+                            <option value="inout">入点→出点</option>
+                        </select>
+                        <span class="sfx-cap-src" id="sfxCapSrc">未读取（点右侧「取区间」）</span>
+                        <button class="tbtn" id="btnSfxCapPick">取区间</button>
+                    </div>
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">名称</span>
+                        <input type="text" id="sfxCapName" placeholder="音效文件名（默认取片段名）">
+                    </div>
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">模式</span>
+                        <select id="sfxCapMode" title="选择导出方式">
+                            <option value="fast">快速模式 · ffmpeg 剪切</option>
+                            <option value="exact">精确模式 · PR 原生导出</option>
+                        </select>
+                    </div>
+                    <div class="sfx-cap-tip" id="sfxCapTip"></div>
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">保存到</span>
+                        <input type="text" id="sfxCapDir" placeholder="默认：音效库 / 新采集">
+                        <button class="tbtn" id="btnSfxCapDir">选目录</button>
+                        <button class="tbtn" id="btnSfxCapDef" title="恢复为音效库下「新采集」子目录">默认</button>
+                    </div>
+                    <div class="sfx-cap-row">
+                        <span class="sfx-lab">选项</span>
+                        <label class="sfx-cap-chk"><input type="checkbox" id="sfxCapFade"> 淡出 50ms（防拼接爆音）</label>
+                        <label class="sfx-cap-chk"><input type="checkbox" id="sfxCapImport"> 同时导入素材箱</label>
+                    </div>
+                    <div class="sfx-cap-row sfx-cap-act">
+                        <span id="sfxCapStatus" class="sfx-cap-st"></span>
+                        <button class="tbtn on" id="btnSfxCapGo">导出为音效</button>
+                    </div>
+                </div>
+            </div>
+            <div class="mllib-body">
+                <div class="mllib-tree" id="sfxTree"></div>
+                <div class="mllib-main">
+                    <div class="sfx-list" id="sfxList">
+                        <div class="sfx-spacer" id="sfxSpacer"></div>
+                        <div class="sfx-empty" id="sfxEmpty" style="display:none;">先选择音效库目录并「扫描目录」</div>
+                    </div>
+                    <div class="mllib-foot">
+                        <span id="sfxStatus"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="mllib-player" id="sfxPlayerBar" style="display:none;">
+                <div class="mlp-ctrl">
+                    <button id="btnSfxPrev" class="mlp-btn" title="上一个">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                    </button>
+                    <button id="btnSfxPlay" class="mlp-btn mlp-main" title="播放/暂停">
+                        <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                    </button>
+                    <button id="btnSfxNext" class="mlp-btn" title="下一个">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                    </button>
+                </div>
+                <div class="mlp-now">
+                    <div class="mlp-title" id="sfxPlayerTitle">未在播放</div>
+                    <div class="mlp-sub" id="sfxPlayerSub"></div>
+                </div>
+                <div class="mlp-bar">
+                    <span class="ptime" id="sfxCur">0:00</span>
+                    <div class="seek" id="sfxSeek"><div class="seek-fill" id="sfxSeekFill"></div></div>
+                    <span class="ptime" id="sfxDur">0:00</span>
+                </div>
+                <div class="mlp-vol">
+                    <button id="btnSfxVol" class="mlp-btn" title="静音/取消静音">
+                        <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                        <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                    </button>
+                    <input type="range" id="sfxVol" class="mlp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                </div>
+            </div>
+        </div>
+
+        <div id="sfxContextMenu"></div>
+    </div>
+
+    <!-- ==================== 板块三.4：音乐库（本地整轨） ==================== -->
+    <div class="tab-panel" id="panel-musiclib" style="display:none;">
+        <div id="musiclib-local">
+            <div class="mllib-toolbar">
+                <div class="tr">
+                    <input type="text" id="mllibDir" placeholder="音乐文件夹路径">
+                    <button id="btnMllibBrowse" class="tbtn">浏览</button>
+                    <button id="btnMllibScan" class="tbtn">扫描</button>
+                </div>
+                <div class="tr">
+                    <input type="text" id="mllibSearch" placeholder="搜索当前目录...">
+                    <span style="font-size:11px;color:var(--muted);">排序</span>
+                    <select id="mllibSort" style="flex:0 0 auto;max-width:110px;">
+                        <option value="ctime">创建时间</option>
+                        <option value="name">名称</option>
+                        <option value="mtime">修改时间</option>
+                        <option value="size">大小</option>
+                        <option value="type">类型</option>
+                    </select>
+                    <button id="btnMllibSortDir" class="tbtn" title="切换升降序" style="padding:6px 8px;font-size:11px;">↓ 新→旧</button>
+                </div>
+            </div>
+            <div class="mllib-body">
+                <div class="mllib-tree" id="mllibTree"></div>
+                <div class="mllib-main">
+                    <div class="mllib-list" id="mllibList">
+                        <div class="mllib-spacer" id="mllibSpacer"></div>
+                        <div class="mllib-empty" id="mllibEmpty" style="display:none;">选择左侧目录查看音乐，或点「扫描」构建库</div>
+                    </div>
+                    <div class="mllib-foot">
+                        <span id="mllibCount"></span>
+                        <span id="mllibStatus"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="mllib-player" id="mllibPlayer" style="display:none;">
+                <div class="mlp-ctrl">
+                    <button id="btnMlPrev" class="mlp-btn" title="上一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                    </button>
+                    <button id="btnMlPlay" class="mlp-btn mlp-main" title="播放/暂停">
+                        <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                    </button>
+                    <button id="btnMlNext" class="mlp-btn" title="下一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                    </button>
+                </div>
+                <div class="mlp-now">
+                    <div class="mlp-title" id="mlpTitle">未在播放</div>
+                    <div class="mlp-sub" id="mlpSub"></div>
+                </div>
+                <div class="mlp-bar">
+                    <span class="ptime" id="mlpCur">0:00</span>
+                    <div class="seek" id="mlpSeek"><div class="seek-fill" id="mlpSeekFill"></div></div>
+                    <span class="ptime" id="mlpDur">0:00</span>
+                </div>
+                <div class="mlp-vol">
+                    <button id="btnMlVol" class="mlp-btn" title="静音/取消静音">
+                        <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                        <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                    </button>
+                    <input type="range" id="mlpVol" class="mlp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                </div>
+            </div>
+        </div>
+        <div id="mllibContextMenu"></div>
+    </div>
+
+    <!-- ==================== 板块三.5：音乐（网易云） ==================== -->
+    <div class="tab-panel" id="panel-music" style="display:none;">
+        
+
+        <!-- ===== 网易云视图（原登录+主视图） ===== -->
+        <div id="musicNeteaseView" style="display:flex;flex:1;min-height:0;flex-direction:column;">
+        <!-- 登录视图 -->
+        <div id="musicLogin" class="card" style="display:none;">
+            <div class="music-login-head">
+                <span class="music-login-title">扫码登录网易云音乐</span>
+                <span id="musicServerState" class="music-server">服务启动中...</span>
+            </div>
+            <div class="music-qr-wrap">
+                <img id="musicQr" alt="登录二维码" style="display:none;">
+                <div id="musicQrHint" class="music-qr-hint">正在获取二维码...</div>
+            </div>
+            <div class="row">
+                <button id="btnMusicRefreshQr" class="secondary" disabled>刷新二维码</button>
+            </div>
+            <div class="music-tip">用网易云音乐 App 扫上方二维码登录。登录态会保存在本地，重启无需重扫。</div>
+        </div>
+
+        <!-- 主视图 -->
+        <div id="musicHome" style="display:none;">
+            <div class="music-userbar">
+                <img id="musicAvatar" class="music-avatar" alt="">
+                <span id="musicNick" class="music-nick"></span>
+                <button id="btnMusicLogout" class="mini danger">退出</button>
+            </div>
+            <div class="sfx-toolbar">
+                <div class="tr">
+                    <input type="text" id="musicQuery" placeholder="输入歌名 / 歌手 / 歌单名">
+                    <select id="musicType" style="flex:0 0 auto;width:64px;">
+                        <option value="1">歌曲</option>
+                        <option value="1000">歌单</option>
+                    </select>
+                    <button id="btnMusicSearch" class="tbtn">搜索</button>
+                </div>
+                <div class="tr">
+                    <button id="btnMusicMyPlaylist" class="tbtn">我的歌单</button>
+                    <button id="btnMusicRecent" class="tbtn">最近播放</button>
+                    <button id="btnMusicBack" class="tbtn" style="display:none;">← 返回</button>
+                    <span style="flex:1;"></span>
+                    <button id="btnMusicIdentify" class="tbtn" style="background:#2a3a5d;color:#9db9ff;border:1px solid #3a5d8a;" title="抓取电脑正在播放的声音，识别是什么歌（适用于红果/抖音等外放 BGM）">🎵 听歌识曲</button>
+                    <button id="btnMusicIdentifyStop" class="tbtn danger" style="display:none;">⏹ 停止</button>
+                </div>
+                <div id="musicIdentifyProgress" style="display:none;margin-top:6px;padding:8px;border:1px solid #3a5d8a;border-radius:6px;background:#1a2a3d;font-size:12px;"></div>
+                <div id="musicIdentifyResult" style="display:none;margin-top:6px;padding:8px;border:1px solid #3a5d8a;border-radius:6px;background:#1a2a3d;font-size:12px;"></div>
+                <div class="tr" style="margin-top:6px;">
+                    <button id="btnMusicSelectAll" class="tbtn">全选</button>
+                    <span id="musicSelCount" style="font-size:11px;color:var(--muted);"></span>
+                    <button id="btnMusicBatchDl" class="tbtn" style="background:var(--accent,#537d96);color:#fff;">批量下载选中</button>
+                    <button id="btnMusicSetDir" class="tbtn" title="设置下载保存到音乐库的哪个目录">下载目录…</button>
+                    <span id="musicDlDirLabel" style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;"></span>
+                </div>
+            </div>
+            <div id="musicList" class="music-list"></div>
+            <!-- 歌词面板 -->
+            <div class="music-lyric" id="musicLyric" style="display:none;">
+                <div class="lyric-body" id="lyricBody"></div>
+            </div>
+            <!-- 播放控件 -->
+            <div class="music-player" id="musicPlayer">
+                <div class="mp-ctrl">
+                    <button id="btnMusicPrev" class="mp-btn" title="上一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+                    </button>
+                    <button id="btnMusicPlayPause" class="mp-btn mp-main" title="播放/暂停">
+                        <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+                    </button>
+                    <button id="btnMusicNext" class="mp-btn" title="下一首">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+                    </button>
+                </div>
+                <div class="mp-now">
+                    <img id="mpCover" class="mp-cover" alt="">
+                    <div class="mp-meta">
+                        <div class="mp-title" id="mpTitle">未在播放</div>
+                        <div class="mp-sub" id="mpSub"></div>
+                    </div>
+                </div>
+                <div class="mp-bar">
+                    <span class="ptime" id="mpCur">0:00</span>
+                    <div class="seek" id="mpSeek"><div class="seek-fill" id="mpSeekFill"></div></div>
+                    <span class="ptime" id="mpDur">0:00</span>
+                </div>
+                <div class="mp-side">
+                    <div class="mp-vol">
+                        <button id="btnMusicVol" class="mp-mode" title="静音/取消静音">
+                            <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+                            <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                        </button>
+                        <input type="range" id="musicVol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+                    </div>
+                    <button id="btnMusicMode" class="mp-mode" title="列表循环"></button>
+                    <button id="btnMusicLyric" class="mp-mode" title="歌词">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h10"/></svg>
+                    </button>
+                    <button id="btnMusicDownload" class="mp-mode" title="下载当前歌曲">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="musicStatus"></div>
+        </div>
+        </div><!-- /musicNeteaseView -->
+
+        <!-- 试听（网易云） -->
+        <audio id="musicAudio" style="display:none;"></audio>
+    </div>
+
+    <!-- ==================== 板块：短剧扒歌 ==================== -->
+    <div class="tab-panel" id="panel-bgm" style="display:none;">
+        <div class="bgm-wrap">
+
+            <!-- 顶部：服务状态 + 搜索 -->
+            <div class="card" style="padding:10px 12px;">
+                <div class="tr" style="display:flex;gap:6px;align-items:center;">
+                    <span id="bgmSrvState" class="music-server" style="font-size:11px;">服务未连接</span>
+                    <span style="flex:1;"></span>
+                    <span id="bgmLoginHint" style="font-size:11px;color:#ffb84d;"></span>
+                </div>
+                <div class="tr" style="display:flex;gap:6px;margin-top:8px;">
+                    <input type="text" id="bgmQuery" placeholder="输入短剧名搜索（如：剑宗）" style="flex:1;" autocomplete="off">
+                    <button id="btnBgmSearch" class="tbtn primary">搜索</button>
+                </div>
+                <!-- 自动补全建议 -->
+                <div id="bgmSuggest" style="display:none;margin-top:4px;border:1px solid var(--border);border-radius:6px;background:var(--panel2);overflow:hidden;"></div>
+                <!-- 分享链接解析 -->
+                <div class="tr" style="display:flex;gap:6px;margin-top:8px;">
+                    <input type="text" id="bgmShare" placeholder="粘贴红果分享链接/App 短链/剧 ID（可带文案）" style="flex:1;">
+                    <button id="btnBgmShareParse" class="tbtn primary">解析</button>
+                </div>
+                <!-- 搜索历史 -->
+                <div id="bgmHistoryWrap" style="display:none;margin-top:8px;">
+                    <div style="display:flex;align-items:center;font-size:11px;color:var(--muted);margin-bottom:4px;">
+                        <span>搜索历史</span>
+                        <span style="flex:1;"></span>
+                        <span id="bgmHistClear" style="cursor:pointer;color:var(--fg-link);">清空</span>
+                    </div>
+                    <div id="bgmHistory" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                </div>
+            </div>
+
+            <!-- 首页：热门短剧瀑布流 -->
+            <div id="bgmHome" class="bgm-home">
+                <!-- 播放历史：接着看（首屏第一眼位置） -->
+                <div id="bgmPlayHistWrap" style="display:none;">
+                    <div class="bgm-sec-title">
+                        <span>播放历史</span>
+                        <span style="flex:1;"></span>
+                        <span id="bgmPlayHistClear" class="bgm-mini-link">清空</span>
+                    </div>
+                    <div id="bgmPlayHist" class="bgm-ph-list"></div>
+                </div>
+                <div class="bgm-sec-title">
+                    <span>热门短剧</span>
+                    <span style="flex:1;"></span>
+                    <span id="bgmHotRefresh" class="bgm-mini-link">刷新</span>
+                </div>
+                <!-- 榜单 -->
+                <div class="bgm-tab-row">
+                    <button class="tbtn bgm-hot-tab active" data-kind="all">热播总榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="real">真人剧榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="ai">AI 剧榜</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="comic">漫剧榜</button>
+                    <button class="tbtn bgm-hot-tab" id="bgmFavTab" data-kind="fav">⭐ 收藏</button>
+                    <button class="tbtn bgm-hot-tab" id="bgmDlTab" data-kind="downloaded">⬇ 已下载</button>
+                </div>
+                <!-- 题材分类 -->
+                <div class="bgm-tab-row">
+                    <span class="bgm-tab-label">题材</span>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:urban">都市</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:romance">甜宠</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:comeback">逆袭</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:suspense">悬疑</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:costume">古装</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:cute-kids">萌宝</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:fantasy">奇幻</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:family">家庭</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:comedy">喜剧</button>
+                    <button class="tbtn bgm-hot-tab" data-kind="cat:action-adventure">动作</button>
+                </div>
+                <div id="bgmHotGrid" class="bgm-grid"></div>
+                <!-- 已下载详情（点封面卡片后显示）：某剧的集列表 -->
+                <div id="bgmDlDetail" style="display:none;">
+                    <div class="bgm-dl-detail-head">
+                        <button id="btnBgmDlBack" class="tbtn">‹ 返回</button>
+                        <span class="bgm-dl-detail-title" id="bgmDlDetailTitle"></span>
+                        <span style="flex:1;"></span>
+                        <button id="btnBgmDlOpen" class="tbtn" title="打开所在目录">📂</button>
+                        <button id="btnBgmDlDelAll" class="tbtn danger" title="删除这部剧的全部本地文件">删除该剧</button>
+                    </div>
+                    <div class="bgm-dl-detail-sub" id="bgmDlDetailSub"></div>
+                    <div id="bgmDlDetailList" class="bgm-dl-detail-list"></div>
+                </div>
+            </div>
+
+            <!-- 搜索结果 -->
+            <div id="bgmSearchWrap" style="display:none;margin-top:8px;">
+                <div class="bgm-sec-title">搜索结果</div>
+                <div id="bgmSearchList" class="bgm-list"></div>
+            </div>
+
+            <!-- 剧集面板 -->
+            <div id="bgmSeriesWrap" style="display:none;margin-top:8px;">
+                <div class="card" style="padding:10px 12px;">
+                    <div class="tr" style="display:flex;gap:8px;align-items:center;">
+                        <button id="btnBgmBack" class="tbtn" style="padding:4px 8px;">←</button>
+                        <span id="bgmSeriesName" style="font-size:13px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                        <span id="bgmSeriesCount" style="font-size:11px;color:var(--muted);"></span>
+                    </div>
+                    <div id="bgmSeriesHead" class="bgm-card" style="border-bottom:none;padding:8px 0;"></div>
+
+                    <!-- 分区一：扒歌（识 BGM） -->
+                    <div class="bgm-zone-title">🎵 扒歌 · 识 BGM</div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                        <span style="font-size:11px;color:var(--muted);">在线从第</span>
+                        <input type="number" id="bgmFromEp" placeholder="起始" style="width:52px;" min="1" value="1">
+                        <span style="font-size:11px;color:var(--muted);">集起扒</span>
+                        <input type="number" id="bgmCount" placeholder="集数" style="width:52px;" min="1" value="10">
+                        <span style="font-size:11px;color:var(--muted);">集</span>
+                        <button id="btnBgmOnlineBatch" class="tbtn primary">在线批量扒</button>
+                    </div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                        <button id="btnBgmPickFile" class="tbtn">导入本地文件…</button>
+                        <button id="btnBgmPickDir" class="tbtn">导入本地目录…</button>
+                        <input type="number" id="bgmLimit" placeholder="上限" style="width:52px;" min="1" title="本地目录批量时最多处理多少集，留空=全部">
+                        <span style="font-size:11px;color:var(--muted);">目录上限集数</span>
+                        <span style="flex:1;"></span>
+                    </div>
+
+                    <!-- 分区二：下载（拿视频文件） -->
+                    <div class="bgm-zone-title" style="margin-top:12px;">📥 下载 · 拿视频</div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
+                        <button id="btnBgmDownloadAll" class="tbtn" title="下载全集">下载全集</button>
+                        <button id="btnBgmOpenDir" class="tbtn" style="padding:3px 8px;font-size:11px;">打开下载目录</button>
+                        <span id="bgmSeriesHint" style="font-size:11px;color:var(--muted);flex:1;"></span>
+                        <button id="btnBgmCancel" class="tbtn danger" style="display:none;">⏹ 停止</button>
+                    </div>
+                    <div id="bgmEpMeta" style="font-size:11px;color:var(--muted);margin-top:4px;"></div>
+                </div>
+                <div id="bgmEpList" class="bgm-list" style="margin-top:6px;"></div>
+            </div>
+
+            <!-- 剧集播放（本地已下载 / 边下边看） -->
+            <div id="bgmPlayerWrap" style="display:none;margin-top:8px;">
+                <div class="bgm-player">
+                    <!-- 头部：标题 + 工具 -->
+                    <div class="bgm-player-head">
+                        <span class="bgm-player-title" id="bgmPlayerTitle">未在播放</span>
+                        <span class="bgm-player-spacer"></span>
+                        <label class="bgm-player-chk">
+                            <input type="checkbox" id="bgmAutoNext" checked> 连播
+                        </label>
+                        <button id="btnBgmMini" class="bgm-pbtn" title="小窗/展开">小窗</button>
+                        <button id="btnBgmPlayerPrev" class="bgm-pbtn" title="上一集">◀</button>
+                        <button id="btnBgmPlayerNext" class="bgm-pbtn" title="下一集">▶</button>
+                        <button id="btnBgmPlayerClose" class="bgm-pbtn" title="关闭播放器">✕</button>
+                    </div>
+                    <!-- 画面 -->
+                    <div class="bgm-player-stage">
+                        <!-- 注意：不用原生 controls —— CEP 自带的原生控件与下方自制控制条重复，
+                             两套控件干同一件事。改由 .bgm-player-bar 统一接管。 -->
+                        <video id="bgmV" playsinline preload="metadata"></video>
+                        <!-- 就绪前遮罩：点播后立刻可见，覆盖 下载中/转码中/准备播放/失败 四种状态。
+                             以前这些只靠 2.2 秒的 flash 浮字提示，画面区是黑屏，用户感觉不到反馈。 -->
+                        <div id="bgmBuf" class="bgm-buf" style="display:none;">
+                            <div class="bgm-buf-inner">
+                                <div class="bgm-buf-spin"></div>
+                                <div class="bgm-buf-msg" id="bgmBufMsg">准备播放…</div>
+                                <div class="bgm-buf-bar" id="bgmBufBarWrap" style="display:none;">
+                                    <div class="bgm-buf-fill" id="bgmBufFill"></div>
+                                </div>
+                                <div class="bgm-buf-sub" id="bgmBufSub"></div>
+                                <button class="bgm-buf-cancel" id="bgmBufCancel" style="display:none;">取消</button>
+                            </div>
+                        </div>
+                        <!-- 悬浮听歌识曲（复用网易云板块的识曲链路）-->
+                        <button id="bgmIdentifyFab" class="bgm-fab" title="听歌识曲：录 6 秒正在播放的声音并识别">🎧</button>
+                        <div id="bgmIdentifyPanel" class="bgm-fab-panel" style="display:none;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span style="flex:1;font-size:11.5px;color:var(--fg-info);">🎧 听歌识曲</span>
+                                <button id="btnBgmIdentifyStop" class="tbtn danger" style="display:none;padding:2px 7px;font-size:11px;">停</button>
+                                <button id="btnBgmIdentifyClose" class="tbtn" style="padding:2px 7px;font-size:11px;">✕</button>
+                            </div>
+                            <div id="bgmIdentifyProgress" class="bgm-fab-prog"></div>
+                            <div id="bgmIdentifyResult" class="bgm-fab-res" style="display:none;"></div>
+                        </div>
+                        <!-- 正在播放的 BGM 提示已改为进度条上的临时气泡（见 bgmProgWrap 内） -->
+                        <!-- 选集浮层（控制条「☰」触发，不用回列表） -->
+                        <div id="bgmEpPicker" class="bgm-eppick" style="display:none;">
+                            <div class="bgm-eppick-head">
+                                <span>选集</span>
+                                <span style="flex:1;"></span>
+                                <button class="bgm-pbtn" id="btnBgmEpPickerClose" title="关闭">✕</button>
+                            </div>
+                            <div class="bgm-eppick-grid" id="bgmEpPickerGrid"></div>
+                        </div>
+                    </div>
+                    <!-- 进度条 + BGM 色块（合一）：整条就是进度条（底色=轨道、高亮=已播、色块=BGM 区间），
+                         点击/拖动可跳转；当前播放的那首色块会放大+发光。
+                         原来视频上另蒙了一层半透明遮罩，挡住画面，已去掉。 -->
+                    <div class="bgm-player-foot">
+                        <div id="bgmProgWrap" class="bgm-pbar" style="display:none;">
+                            <!-- 当前 BGM 气泡：从进度条对应位置滑出，播完收回 -->
+                            <div id="bgmNowSong" class="bgm-nsbub" title="点这里跳到识别列表"></div>
+                            <span class="bgm-pbar-time" id="bgmPbarCur">0:00</span>
+                            <div class="bgm-pbar-hit" id="bgmPbarHit" title="点击/拖动跳转">
+                                <div class="bgm-pbar-fill" id="bgmPbarFill"></div>
+                                <div id="bgmMarkerBar"></div>
+                                <div class="bgm-pbar-knob" id="bgmPbarKnob"></div>
+                            </div>
+                            <span class="bgm-pbar-time" id="bgmPbarDur">0:00</span>
+                        </div>
+                        <div id="bgmMarkerTip" class="bgm-player-tip"></div>
+                        <div id="bgmTcHint" class="bgm-player-tip" style="display:none;color:var(--fg-warn-soft);"></div>
+                    </div>
+                    <!-- 播放器自带控制条（原面板底部 #bgmBar 挪入此处，与画面同体） -->
+                    <div id="bgmBar" class="bgm-player-bar" style="display:none;">
+                        <button id="btnBgmBarPlay" class="bgm-pbtn" title="播放/暂停">▶</button>
+                        <span class="bgm-bar-time" id="bgmBarCur">0:00</span>
+                        <span class="bgm-pbar-spacer"></span>
+                        <button id="btnBgmBarPrev" class="bgm-pbtn" title="上一集">◀</button>
+                        <button id="btnBgmBarPick" class="bgm-pbtn" title="选集">☰</button>
+                        <button id="btnBgmBarNext" class="bgm-pbtn" title="下一集">▶</button>
+                        <button id="btnBgmBarFull" class="bgm-pbtn" title="全屏">⛶</button>
+                        <input type="range" id="bgmBarVol" min="0" max="1" step="0.01" value="0.8"
+                            style="width:56px;flex:0 0 auto;" title="音量">
+                    </div>
+                    <!-- 播放器内直接扒此集（大按钮，省得回列表点） -->
+                    <div class="bgm-player-rip">
+                        <button id="btnBgmRipThis" class="bgm-rip-btn">🎵 扒此集</button>
+                    </div>
+                    <div id="bgmPlayerInfo" class="bgm-player-info"></div>
+                </div>
+            </div>
+
+            <!-- 内嵌预览（直接嵌官网播放页，不依赖逆向解析） -->
+            <div id="bgmPreviewWrap" style="display:none;margin-top:8px;">
+                <div class="bgm-sec-title">
+                    <span>预览：<span id="bgmPreviewTitle"></span></span>
+                    <span style="flex:1;"></span>
+                    <button id="btnBgmPreviewExternal" class="tbtn" style="padding:3px 8px;font-size:11px;">浏览器打开</button>
+                    <button id="btnBgmPreviewClose" class="tbtn" style="padding:3px 8px;font-size:11px;">✕ 关闭</button>
+                </div>
+                <iframe id="bgmPreviewFrame" src="about:blank"
+                    allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                    style="width:100%;height:340px;border:1px solid #333;border-radius:6px;background:#000;"></iframe>
+                <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">内嵌预览来自红果官网播放页。若此处一直空白，点「浏览器打开」看。</div>
+            </div>
+
+            <!-- 进度 -->
+            <div id="bgmProgress" style="display:none;margin-top:8px;padding:10px;border:1px solid #3a5d8a;border-radius:6px;background:#1a2a3d;">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#9db9ff;">
+                    <span id="bgmProgMsg">准备中…</span>
+                    <span style="flex:1;"></span>
+                    <span id="bgmProgPct">0%</span>
+                </div>
+                <div style="height:6px;background:#0f1a26;border-radius:3px;margin-top:8px;overflow:hidden;">
+                    <div id="bgmProgBar" style="height:100%;width:0;background:linear-gradient(90deg,#537d96,#7fb3d5);transition:width .3s;"></div>
+                </div>
+                <div id="bgmProgTime" style="font-size:11px;color:#889;margin-top:6px;"></div>
+            </div>
+
+            <!-- 结果 -->
+            <div id="bgmResultWrap" style="display:none;margin-top:8px;">
+                <div class="bgm-sec-title">
+                    <span id="bgmResultTitle">识别结果</span>
+                    <span style="flex:1;"></span>
+                    <span id="bgmSongSelInfo" style="font-size:10.5px;color:var(--muted);"></span>
+                    <button id="btnBgmSelAllSongs" class="tbtn" style="padding:3px 8px;font-size:11px;">全选</button>
+                    <button id="btnBgmDownloadSongs" class="tbtn ok" style="padding:3px 8px;font-size:11px;">下载选中歌曲</button>
+                    <button id="btnBgmToLib" class="tbtn" style="padding:3px 8px;font-size:11px;">加进歌单…</button>
+                    <button id="btnBgmMusicDir" class="tbtn" style="padding:3px 8px;font-size:11px;">音乐目录…</button>
+                </div>
+                <div id="bgmMusicDirLabel" style="font-size:10.5px;color:var(--muted);"></div>
+                <div id="bgmSongInfo" style="font-size:10.5px;color:var(--muted);"></div>
+                <!-- 试听条：只服务歌曲试听，与视频播放器互不干扰 -->
+                <div id="bgmSongBar" class="bgm-songbar" style="display:none;">
+                    <div class="bgm-songbar-row">
+                        <span class="bgm-songbar-ico">🎵</span>
+                        <span class="bgm-songbar-name" id="bgmSongName">未在试听</span>
+                        <span class="bgm-songbar-spacer"></span>
+                        <button class="bgm-pbtn" id="btnBgmSongPrev" title="上一首">◀</button>
+                        <button class="bgm-pbtn" id="btnBgmSongPlay" title="播放/暂停">▶</button>
+                        <button class="bgm-pbtn" id="btnBgmSongNext" title="下一首">▶</button>
+                        <span class="bgm-songbar-time" id="bgmSongCur">0:00</span>
+                        <input type="range" id="bgmSongVol" min="0" max="1" step="0.01" value="0.8"
+                            style="width:52px;flex:0 0 auto;" title="试听音量">
+                        <button class="bgm-pbtn" id="btnBgmSongClose" title="收起试听条">✕</button>
+                    </div>
+                    <div class="bgm-songbar-prog" id="bgmSongProgHit" title="点击/拖动跳转">
+                        <div class="bgm-songbar-fill" id="bgmSongFill"></div>
+                        <div class="bgm-songbar-knob" id="bgmSongKnob"></div>
+                    </div>
+                    <div class="bgm-songbar-sub">
+                        <span id="bgmSongDur">0:00</span>
+                        <span style="flex:1;"></span>
+                        <button class="bgm-songbar-loc" id="btnBgmSongLoc" title="定位到视频对应位置" style="display:none;">定位到视频</button>
+                    </div>
+                </div>
+                <div id="bgmResultList" class="bgm-list"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- ==================== 板块四：多版本导出 ==================== -->
+    <!-- ==================== 板块：音乐聚合（lxserver） ==================== -->
+    <div class="tab-panel" id="panel-export" style="display:none;">
+        <div class="exp-header">
+            <span class="dot" id="status-dot"></span>
+            <span class="exp-title">多版本交付导出</span>
+            <span class="exp-ver" id="version"></span>
+        </div>
+        <div class="group">
+            <div class="group-title"><span>序列</span><span>勾选要导出的（支持多选）</span></div>
+            <div class="seq-list" id="seq-list"></div>
+            <div class="mini-btns">
+                <button id="btn-sel-all">全选</button>
+                <button id="btn-sel-none">全不选</button>
+                <button id="btn-refresh-seq">🔄 刷新序列</button>
+            </div>
+        </div>
+
+        <div class="group" id="tpl-group">
+            <details class="exp-fold" id="tpl-fold">
+                <summary class="exp-fold-sum">
+                    <span class="exp-fold-label">交付模板</span>
+                    <span class="exp-fold-cur" id="tpl-current">自由配置</span>
+                    <span class="exp-fold-arrow">▾</span>
+                </summary>
+                <div class="exp-fold-body">
+                    <div class="tpl-row">
+                        <select id="tpl-select" style="flex:1;">
+                            <option value="">（自由配置 · 不套模板）</option>
+                        </select>
+                        <button type="button" id="btn-tpl-save">另存为模板…</button>
+                    </div>
+                    <div class="mini-btns" style="margin-top:6px;">
+                        <button id="btn-tpl-rename">重命名当前模板</button>
+                        <button id="btn-tpl-delete" style="color:#ff9a9a;">删除当前模板</button>
+                    </div>
+                    <div class="tpl-tip" id="tpl-tip"></div>
+                </div>
+            </details>
+        </div>
+
+        <div class="group">
+            <details class="exp-fold" id="rnd-fold">
+                <summary class="exp-fold-sum">
+                    <span class="exp-fold-label">渲染通道</span>
+                    <span class="exp-fold-cur" id="rnd-current">AME 队列</span>
+                    <span class="exp-fold-arrow">▾</span>
+                </summary>
+                <div class="exp-fold-body">
+                    <div class="rnd-row">
+                        <label class="rnd-opt">
+                            <input type="radio" name="rnd-channel" id="rnd-pr" value="pr">
+                            <span><b>PR 直渲</b><br><em>PR 前台渲染，导出期间 PR 被占用</em></span>
+                        </label>
+                        <label class="rnd-opt">
+                            <input type="radio" name="rnd-channel" id="rnd-ame" value="ame" checked>
+                            <span><b>AME 队列</b><br><em>交给 Media Encoder，PR 可继续用</em></span>
+                        </label>
+                    </div>
+                    <div class="rnd-tip" id="rnd-tip"></div>
+                </div>
+            </details>
+        </div>
+
+        <div class="group">
+            <div class="group-title"><span>交付结构</span><span>选中 000交付 根目录，一键填充各版本路径</span></div>
+            <label class="flabel">交付根目录</label>
+            <div class="dir-row">
+                <input type="text" id="delivery-root" placeholder="例如 D:\交付\000交付">
+                <button type="button" id="btn-browse-root">浏览…</button>
+            </div>
+            <label class="chk-line" style="margin-top:6px;">
+                <input type="checkbox" id="chk-autofill" checked>
+                填完根目录后自动填充各版本路径
+            </label>
+            <div class="mini-btns">
+                <button id="btn-autofill">重新填充各版本路径</button>
+            </div>
+            <label class="chk-line" style="margin-top:8px;">
+                <input type="checkbox" id="chk-manifest"> 生成交付清单（CSV）
+            </label>
+        </div>
+
+        <div class="group">
+            <div class="group-title"><span>交付版本</span><span>勾选「启用」才参与导出</span></div>
+            <div id="versions-wrap"></div>
+            <button id="btn-add-version" class="btn-add">＋ 添加版本</button>
+        </div>
+
+        <div class="group">
+            <div class="group-title"><span>字幕</span><span>由「无字幕」版本的预设产生 sidecar 字幕</span></div>
+            <label class="chk-line">
+                <input type="checkbox" id="chk-subtitle"> 导出字幕 srt（自动改名并归位）
+            </label>
+            <label class="flabel">字幕输出目录</label>
+            <div class="dir-row">
+                <input type="text" id="subtitle-dir" placeholder="例如 C:\...\000交付\3.字幕文件">
+                <button type="button" id="btn-browse-subtitle">浏览…</button>
+            </div>
+        </div>
+
+        <div class="progress-area" id="progress-area">
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <div class="progress-meta">
+                <span id="progress-state"></span>
+                <span id="progress-time"></span>
+                <span class="progress-pct" id="progress-pct"></span>
+            </div>
+        </div>
+
+        <div class="btns">
+            <button id="btn-go">一键导出</button>
+            <button id="btn-stop" disabled>停止</button>
+            <button id="btn-refresh">刷新</button>
+            <button id="btn-open-out" title="导出完成后用文件管理器打开输出文件夹">📂 打开输出目录</button>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <!-- ==================== 板块五：字幕校对 ==================== -->
+    <div class="tab-panel" id="panel-check" style="display:none;">
+        <div class="card">
+            <h2>1 · 选字幕与剧本</h2>
+            <label>字幕 SRT（在项目面板点选一个字幕素材，然后点「读取选中」）</label>
+            <div class="row" style="margin-top:4px;">
+                <button id="ckPickSelected" class="secondary">读取项目选中的字幕</button>
+                <span class="ck-path" id="ckSrtPath">未选择</span>
+                <span class="ck-srt-badge" id="ckSrtBadge">✓ 已选择</span>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="ckPickSrt" class="secondary">或选择 SRT 文件…</button>
+            </div>
+            <label style="margin-top:10px;">剧本 docx（台词标准答案）</label>
+            <div class="row">
+                <button id="ckPickDocx" class="secondary">选择剧本目录…</button>
+                <span class="ck-path" id="ckDocxPath">未选择</span>
+                <span class="ck-srt-badge" id="ckDocxBadge">✓ 已选择</span>
+            </div>
+            <div id="ckDocxList" style="display:none;"></div>
+            <label style="margin-top:10px;">校对集数</label>
+            <div class="row">
+                <input type="text" id="ckEpisode" value="第一集" placeholder="例如：第一集 / 1 / 第2集" style="flex:1;">
+            </div>
+            <div class="hint" style="margin-top:6px;">集数写「第一集」「1」「第2集」都行；剧本台词是标准答案，字幕应逐字对齐。</div>
+        </div>
+
+        <div class="card">
+            <h2>2 · 全局替换字典（所有项目通用，应用修正时自动生效）</h2>
+            <div class="hint" style="margin-bottom:6px;">中英文通用：英文如 bitch → b*tch（按词边界），中文如 傻逼 → **（直接替换）。字典存成本地文件，可手动批量编辑，长期维护。</div>
+            <div class="row" style="margin-top:4px;">
+                <button id="ckDictToggle" class="secondary mini">收起列表</button>
+                <span id="ckDictCount" style="font-size:11px;color:var(--muted);flex:0 0 auto;"></span>
+                <input type="text" id="ckDictSearch" placeholder="搜索原词或替换词…" style="flex:1;">
+            </div>
+            <div class="row" id="ckDictAddRow" style="margin-top:6px;">
+                <input type="text" id="ckDictFrom" placeholder="原词，如 bitch / 傻逼" style="flex:1;">
+                <span class="ck-dict-arrow">→</span>
+                <input type="text" id="ckDictTo" placeholder="替换为，如 b*tch / **" style="flex:1;">
+                <button id="ckDictAdd" class="secondary">添加</button>
+            </div>
+            <div id="ckDictList"></div>
+            <div class="row" style="margin-top:8px;">
+                <button id="ckDictOpen" class="secondary mini">打开字典文件</button>
+                <button id="ckDictReload" class="secondary mini">重新加载</button>
+                <span class="ck-path" id="ckDictPath" title=""></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 执行校对</h2>
+            <div class="row">
+                <button id="ckRun">开始校对</button>
+                <button id="ckDictOnly" class="secondary">只套用字典（敏感词替换）</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <button id="ckTranslate" class="secondary">翻译成中文（剧情参考）</button>
+                <button id="ckBilingual" class="secondary">导入双语字幕</button>
+            </div>
+            <div id="ckStatus"></div>
+        </div>
+
+        <div class="card" id="ckResultCard">
+            <h2>4 · 差异清单</h2>
+            <div id="ckSummary"></div>
+            <div class="row" id="ckTypeRow" style="margin-top:6px; display:none;">
+                <button id="ckSelReplace" class="secondary mini">全选听错</button>
+                <button id="ckSelInsert" class="secondary mini">全选漏词</button>
+                <button id="ckSelDelete" class="secondary mini">全选多余</button>
+            </div>
+            <div id="ckList"></div>
+            <div class="row" id="ckApplyRow" style="margin-top:10px; display:none;">
+                <button id="ckSelectAll" class="secondary">全选</button>
+                <button id="ckApply">应用选中的修正</button>
+                <button id="ckExportFixed" class="secondary">导出修正 SRT</button>
+            </div>
+        </div>
+    </div>
+
+    <audio id="player" style="display:none;"></audio>
+
+    <!-- ==================== 板块六：视频下载 ==================== -->
+    <!-- ==================== 待办（独立板块：逐条列待办 → 打勾 → 生成当日总结） ==================== -->
+    <!-- ==================== 板块八：项目进度（视频工作台联动） ==================== -->
+    <!-- ==================== PR 工具（版本转换） ==================== -->
+    <div class="tab-panel" id="panel-prconv" style="display:none;">
+        <div class="pt-wrap">
+
+            <!-- ===== 工具：PR 版本转换 ===== -->
+            <section class="pt-tool" id="ptToolConv" data-tool="conv">
+                <header class="pt-head" id="ptHeadConv">
+                    <span class="pt-caret">▸</span>
+                    <span class="pt-ico">🔧</span>
+                    <span class="pt-title">PR 版本转换</span>
+                    <span class="pt-sum" id="pcSrcVer">未选择文件</span>
+                </header>
+                <div class="pt-body" id="ptBodyConv" style="display:none;">
+                    <div class="pt-tip">
+                        高版本 PR 做的样式/工程，低版本打开会报「保存于更新版本」。
+                        选文件 → 选目标版本 → 转换。高版本一定能开低版本，默认转 <b>PR 2021</b> 即可。
+                    </div>
+                    <div class="pt-row">
+                        <label class="pt-lb">文件</label>
+                        <input type="text" id="pcSrc" class="pt-in" placeholder=".prtextstyle 文字样式 / .prproj 工程文件">
+                        <button id="pcBrowse" class="secondary mini">选择文件…</button>
+                    </div>
+                    <div class="pt-row">
+                        <label class="pt-lb">目标版本</label>
+                        <select id="pcTarget" class="pt-in"></select>
+                        <button id="pcApply" class="primary mini" style="flex:0 0 auto;">开始转换</button>
+                        <button id="pcDetect" class="secondary mini">识别版本</button>
+                        <button id="pcOpenOut" class="secondary mini" style="display:none;">打开输出位置</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== 工具：缺失字体修复 ===== -->
+            <section class="pt-tool" id="ptToolFont" data-tool="font">
+                <header class="pt-head" id="ptHeadFont">
+                    <span class="pt-caret">▸</span>
+                    <span class="pt-ico">🔤</span>
+                    <span class="pt-title">缺失字体修复</span>
+                    <span class="pt-sum" id="pcFontStatus">检测中…</span>
+                </header>
+                <div class="pt-body" id="ptBodyFont" style="display:none;">
+                    <div class="pt-tip">
+                        PR 2021 及更早版本<b>不支持可变字体</b>。Windows 自带的 Bahnschrift 是可变字体，
+                        高版本样式里存的 <code>Bahnschrift-Bold</code> 会被低版本判为「字体不可用」。
+                        这里装一个从该字体固化出来的静态 Bold（<b>字重与原设计一致</b>）。
+                        字体随插件附带，<b>免管理员、可随时卸载</b>；装完重启 PR 生效。
+                    </div>
+                    <div class="pt-row">
+                        <button id="pcFontInstall" class="primary mini">安装字体</button>
+                        <button id="pcFontUninstall" class="secondary mini" style="display:none;">卸载</button>
+                        <button id="pcFontScan" class="secondary mini">扫描样式字体</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== 工具：日志 ===== -->
+            <section class="pt-tool" id="ptToolLog" data-tool="log">
+                <header class="pt-head" id="ptHeadLog">
+                    <span class="pt-caret">▸</span>
+                    <span class="pt-ico">📄</span>
+                    <span class="pt-title">运行日志</span>
+                    <button id="pcClearLog" class="secondary mini" style="margin-left:auto;">清空</button>
+                </header>
+                <div class="pt-body pt-body-grow" id="ptBodyLog" style="display:none;">
+                    <div id="pcLog" class="pt-log"></div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+    <!-- ==================== PR 工具：调色 XML 清理 ==================== -->
+    <div class="tab-panel" id="panel-colorxml" style="display:none;">
+        <div class="cx-layout">
+
+            <!-- 左：配置 -->
+            <div class="cx-left">
+
+                <div class="cx-card">
+                    <div class="cx-card-head">
+                        <span class="cx-card-ico">🎨</span>
+                        <span class="cx-card-title">调色 XML 清理</span>
+                        <span class="pt-sum" id="cxStatus">未读取序列</span>
+                    </div>
+                    <div class="cx-card-body">
+                        <div class="cx-tip">
+                            剪辑完成后，把序列导出成<b>只给达芬奇调色</b>的单轨 XML。
+                            自动删除被禁用的镜头、水印 / 调整图层 / 转场等装饰轨、全部音频，
+                            多条视频轨合并成一条 V1。<b>原工程不会被改动。</b>
+                        </div>
+
+                        <!-- 序列 -->
+                        <div class="cx-row">
+                            <label class="cx-lb">序列</label>
+                            <select id="cxSeq" class="cx-in" title="选择要处理的序列（列出当前工程里的全部序列）"></select>
+                            <button id="cxRefreshSeq" class="secondary mini"
+                                    title="重新读取工程里的序列列表（在 PR 里新建/改名序列后点这里）">↻</button>
+                        </div>
+
+                        <!-- 步骤按钮 -->
+                        <div class="cx-steps">
+                            <button id="cxReadSeq" class="primary cx-step-btn"
+                                    title="第一步：把所选序列导出为 XML 并读取轨道结构（只读，不会修改工程）">
+                                <span class="cx-step-no">1</span>读取当前序列
+                            </button>
+                            <button id="cxGo" class="primary cx-step-btn"
+                                    title="第二步：按当前轨道选择生成调色 XML，输出到下方指定目录">
+                                <span class="cx-step-no">2</span>生成调色 XML
+                            </button>
+                            <button id="cxOpenOut" class="secondary mini" style="display:none;"
+                                    title="在资源管理器中定位刚生成的文件">打开输出位置</button>
+                        </div>
+
+                        <!-- 保留轨道 -->
+                        <div class="cx-group" id="cxTracksWrap" style="display:none;">
+                            <div class="cx-group-head">
+                                <span class="cx-group-title">保留轨道</span>
+                                <span class="cx-group-hint">勾选 = 参与合轨；不勾 = 整轨丢弃（水印/调整图层等请取消勾选）</span>
+                                <button id="cxAll" class="secondary mini" title="勾选全部有内容的轨道">全选</button>
+                                <button id="cxNone" class="secondary mini" title="只保留 V1，其余全部丢弃">仅留 V1</button>
+                            </div>
+                            <div id="cxTracks" class="cx-tracks"></div>
+                        </div>
+
+                        <!-- 预览 -->
+                        <div class="cx-summary" id="cxSummaryRow" style="display:none;">
+                            <span class="cx-summary-ico">📊</span>
+                            <span id="cxSummary"></span>
+                        </div>
+
+                        <!-- 输出 -->
+                        <div class="cx-row">
+                            <label class="cx-lb">输出目录</label>
+                            <input type="text" id="cxOutDir" class="cx-in" placeholder="选择 XML 输出目录">
+                            <button id="cxOutBrowse" class="secondary mini" title="选择输出目录（会记住上次位置）">浏览…</button>
+                        </div>
+                        <div class="cx-row">
+                            <label class="cx-lb">文件名</label>
+                            <input type="text" id="cxOutName" class="cx-in" placeholder="读取序列后自动填充">
+                            <label class="cx-chk" title="勾选后不在 XML 里保留转场（转场会在输出里表现为两段重叠）">
+                                <input type="checkbox" id="cxDropTrans" style="width:auto;"> 丢弃转场
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 中间：拖动分隔条（左右宽度自由调整） -->
+            <div class="cx-split" id="cxSplit" title="拖动调整左右宽度（双击恢复默认）"></div>
+
+            <!-- 右：日志 -->
+            <div class="cx-right">
+                <div class="cx-card cx-logcard">
+                    <div class="cx-card-head">
+                        <span class="cx-card-ico">📄</span>
+                        <span class="cx-card-title">运行日志</span>
+                        <span class="cx-logstat" id="cxLogStat"></span>
+                        <button id="cxPurgeTmp" class="secondary mini"
+                                title="清理各板块在系统临时目录遗留的中间文件（听歌识曲录音、字幕音频、调色 XML 等）；只删插件自己的文件">🧹 清理缓存</button>
+                        <button id="cxClearLog" class="secondary mini" title="清空日志">清空</button>
+                    </div>
+                    <div class="cx-card-body cx-logbody">
+                        <div id="cxLog" class="cx-log"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <div class="tab-panel" id="panel-shenpian" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
+            <div class="wb-nav">
+                <button class="wb-nav-btn" id="spBack" title="后退（站内跳转后回到上一个地址）">←</button>
+                <button class="wb-nav-btn" id="spFwd" title="前进">→</button>
+                <button class="wb-nav-btn" id="spReload" title="刷新当前页">↻</button>
+                <button class="wb-nav-btn" id="btnSpHome" title="回到分秒帧首页">🏠</button>
+                <button class="wb-nav-btn wb-nav-ext" id="spExternal" title="在外部浏览器打开">↗</button>
+                <input type="text" class="wb-nav-url" id="spUrl" placeholder="输入网址回车跳转">
+            </div>
+            <!-- 一键解析：粘贴含链接的聊天文字，自动提取并打开 -->
+            <div class="sp-parse-bar" id="spParseBar">
+                <span class="sp-parse-ic">🔗</span>
+                <input type="text" id="spParseInput" placeholder="粘贴一段文字（含分秒帧链接），回车自动打开" autocomplete="off">
+                <button id="spParseBtn" class="secondary mini">打开</button>
+                <button id="spParsePaste" class="secondary mini" title="从剪贴板读取并打开">📋 粘贴打开</button>
+            </div>
+            <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+        </div>
+    </div>
+
+    <!-- ==================== 反馈中心（内嵌自建反馈服务） ==================== -->
+    <div class="tab-panel" id="panel-components" style="display:none;">
+        <div class="card">
+            <h2>组件与模型</h2>
+            <div class="hint" style="line-height:1.7;">
+                插件本体不含大体积模型。<b>首次用到某功能时</b>会提示下载，也可以在这里手动管理。
+            </div>
+            <div class="row" style="margin-top:10px;">
+                <button id="cpRecheck" class="secondary" style="flex:1;">🔄 重新检测</button>
+            </div>
+        </div>
+        <div class="card">
+            <h2>组件状态</h2>
+            <div id="cpList"></div>
+        </div>
+        <div class="card" id="cpNetdiskCard" style="display:none;">
+            <h2>网盘下载说明</h2>
+            <div class="hint" id="cpNetdiskTip" style="line-height:1.7;"></div>
+        </div>
+        <div class="hint" style="padding:8px 4px;color:#8a8a8a;line-height:1.7;">
+            下载的文件会放到插件目录内。若下载失败，可换网络重试，或使用网盘通道。
+        </div>
+    </div>
+
+    <div class="tab-panel" id="panel-feedback" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
+            <div class="wb-nav">
+                <button class="wb-nav-btn" id="fbNavReload" title="刷新页面">↻</button>
+                <button class="wb-nav-btn" id="fbNavHome" title="回到首页">🏠</button>
+                <button class="wb-nav-btn wb-nav-ext" id="fbNavExternal" title="在外部浏览器打开">↗</button>
+                <span class="wb-nav-url" id="fbNavHint" style="display:flex;align-items:center;color:var(--muted);font-size:11px;">加载中…</span>
+                <button class="wb-nav-btn" id="fbNavSubmit" title="提交新反馈" style="color:#7fd68b;">📮 提反馈</button>
+            </div>
+            <iframe id="fbFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#0f1115;" src="about:blank"></iframe>
+        </div>
+    </div>
+
+    <!-- ==================== 管理（内嵌授权管理台；主插件专用，不参与授权管控） ==================== -->
+    <!-- ==================== 超分（一键导出并超分 + 外站工具） ==================== -->
+    <div class="tab-panel" id="panel-upscale" style="display:none;">
+        <!-- 操作区卡片（滚动） -->
+        <div class="en-scroll">
+            <!-- 卡1：序列 + 设置 合栏紧凑 -->
+            <div class="en-card">
+                <div class="en-card-head">
+                    <span>🎞 选择序列 · 设置</span>
+                    <button id="enRefSeq" class="secondary mini" style="margin-left:auto;">🔄 刷新</button>
+                </div>
+                <div id="enSeqList" class="en-seqs"><div class="hint" style="padding:4px 6px;">点「刷新」加载序列，默认选当前活动序列</div></div>
+                <!-- 快捷：从时间轴选中片段整段处理（不用先导出整集） -->
+                <div class="en-clip-row">
+                    <button id="enGrabClip" class="secondary mini">✂ 从时间轴读取区间</button>
+                    <span id="enClipInfo" class="en-clip-info">未读取（在时间轴选中片段，或按 I / O 设好入出点）</span>
+                </div>
+                <div class="en-row2" style="margin-top:4px;">
+                    <label class="en-f"><span>区间来源</span>
+                        <select id="enClipSrc">
+                            <option value="selection" selected>选中片段</option>
+                            <option value="inout">入点→出点</option>
+                        </select>
+                    </label>
+                    <span style="font-size:10px;color:#8a8a8a;">选「入点→出点」时，按时间轴 I / O 设定的区间处理</span>
+                </div>
+                <div class="en-row2">
+                    <label class="en-f"><span>处理类型</span>
+                        <select id="enMode">
+                            <option value="enhance" selected>⚡ 超分（去字幕底版）</option>
+                            <option value="erase">🧹 去字幕（擦除硬字幕）</option>
+                        </select>
+                    </label>
+                    <label class="en-f"><span>导出预设</span>
+                        <select id="enPreset"><option value="">自动（无字幕）</option></select>
+                    </label>
+                    <label class="en-f"><span>上传文件夹</span>
+                        <select id="enFolder"><option value="14086">超分（默认）</option></select>
+                    </label>
+                    <label class="en-f" id="enResWrap"><span>分辨率</span>
+                        <select id="enRes">
+                            <option value="720p" selected>720P · ¥2.5/分</option>
+                            <option value="1080p">1080P · ¥5/分</option>
+                            <option value="2k">2K · ¥10/分</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="en-actions">
+                    <button id="enGo" class="en-go" title="导出所选序列并提交到云端；提交后可立即选其他序列继续，不必等云端处理完">🚀 导出并超分</button>
+                    <button id="enGoClip" class="en-go" title="对时间轴读取的区间跑完整流程（支持选中片段或入点→出点）；提交后即可继续处理其他片段，不必等云端处理完">🎬 处理选中区间</button>
+                    <button id="enStop" class="secondary mini" disabled>停止</button>
+                    <button id="enEnv" class="secondary mini" title="检查 Python 与 ddddocr">🔧 环境</button>
+                    <button id="enAccount" class="secondary mini" title="设置超分站账号（每台机器各用各的）">⚙ 账号</button>
+                </div>
+                <div class="en-acc-hint" id="enAccHint"></div>
+                <!-- 进度 -->
+                <div id="enProgWrap" class="en-prog" style="display:none;">
+                    <div class="en-prog-bar"><div id="enProgFill" class="en-prog-fill"></div></div>
+                    <div class="en-prog-meta"><span id="enProgText"></span><span id="enProgPct"></span></div>
+                </div>
+                <div class="en-act-hint" id="enActHint"></div>
+            </div>
+
+                        <!-- 卡2：任务(左) + 日志(右) 并排 -->
+            <div class="en-split">
+                <div class="en-card en-col" id="enTaskCard">
+                    <div class="en-card-head">
+                        <span id="enTaskTitle">📥 超分任务</span>
+                        <label class="en-pickall" title="全选/取消全选已完成的任务">
+                            <input type="checkbox" id="enTaskPickAll">
+                            <span>全选</span>
+                        </label>
+                        <button id="enTaskDlSel" class="secondary mini" disabled>⬇ 下载选中</button>
+                        <button id="enTaskRefresh" class="secondary mini">🔄</button>
+                        <button id="enTaskExpand" class="wb-nav-btn en-card-exp" title="展开：任务列表占满面板（再点还原）">⤢</button>
+                    </div>
+                    <div class="en-task-hint" id="enTaskHint"></div>
+                    <div id="enTaskList" class="en-tasks"><div class="hint" style="padding:6px;">暂无</div></div>
+                </div>
+                <div class="en-card en-col" id="enLogCard">
+                    <div class="en-card-head">
+                        <span>📋 运行日志</span>
+                        <button id="enLogClear" class="secondary mini" style="margin-left:auto;">清空</button>
+                        <button id="enLogExpand" class="wb-nav-btn en-card-exp" title="展开：日志占满面板（再点还原）">⤢</button>
+                    </div>
+                    <div id="enBgQueue" class="en-bgqueue" style="display:none;"></div>
+                    <div class="en-log" id="enLog"></div>
+                </div>
+            </div>
+        </div>
+
+            <!-- 拖拽分隔条：上下拖动调整内嵌站高度 -->
+        <div class="en-splitter" id="upSplitter" title="上下拖动调整内嵌网站高度；双击还原默认">
+            <span class="en-splitter-grip"></span>
+        </div>
+        <!-- 超分站内嵌 -->
+        <div class="wb-nav" style="margin-top:4px;" id="upNav">
+            <button class="wb-nav-btn" id="upBack" title="后退">←</button>
+            <button class="wb-nav-btn" id="upFwd" title="前进">→</button>
+            <button class="wb-nav-btn" id="upReload" title="刷新">↻</button>
+            <button class="wb-nav-btn" id="btnUpscaleHome" title="首页">🏠</button>
+            <button class="wb-nav-btn wb-nav-ext" id="upExternal" title="外部打开">↗</button>
+            <input type="text" class="wb-nav-url" id="upUrl" placeholder="输入网址回车跳转">
+            <button class="wb-nav-btn" id="upExpand" title="展开：内嵌站占满整个面板（再点还原）">⤢</button>
+        </div>
+        <iframe id="upscaleFrame" style="flex:0 0 260px;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+    </div>
+
+<!-- ==================== 本地去字幕（VSR） ==================== -->
+    <!-- ==================== 本地超分（Real-ESRGAN） ==================== -->
+    <style>
+/* ==== 素材面板搜索 ==== */
+.md-searchbar{
+    display:flex;align-items:center;gap:5px;
+    padding:5px 7px;border-radius:5px;
+    background:rgba(255,255,255,.035);
+    border:1px solid rgba(255,255,255,.07);
+}
+.md-search-ic{font-size:11px;opacity:.55;flex:0 0 auto;}
+#mdSearch{
+    flex:1;min-width:0;background:transparent;border:none;outline:none;
+    color:#e8ecf4;font-size:11.5px;padding:2px 0;
+}
+#mdSearch::placeholder{color:rgba(232,236,244,.32);}
+#mdSearchDeep.deep-on{color:#7fd68b;border-color:#2a5a3a;background:rgba(127,214,139,.10);}
+.md-searchbar .mini{flex:0 0 auto;padding:2px 7px;font-size:10.5px;}
+/* 搜索结果里的高亮 */
+.md-hl{
+    background:rgba(255,214,102,.28);
+    color:#ffe07a;
+    border-radius:2px;
+    padding:0 1px;
+    font-weight:600;
+}
+.md-search-hit{color:#7fd68b;font-weight:600;}
+.md-file .md-fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+</style>
+
+<style>
+/* ==== 剧本阅读·选中即复制（贴选区右端的小胶囊） ==== */
+.scr-quickcopy{
+    position:fixed;
+    flex:0 0 auto;
+    min-width:auto;
+    z-index:2147483000;
+    display:inline-flex;align-items:center;gap:3px;
+    height:22px;padding:0 9px;
+    font-size:11px;line-height:1;
+    font-family:inherit;
+    color:#eaf3ff;
+    background:linear-gradient(180deg,rgba(83,125,150,.97),rgba(50,82,105,.97));
+    border:1px solid rgba(138,180,255,.42);
+    border-radius:11px;
+    box-shadow:0 2px 8px rgba(0,0,0,.45);
+    cursor:pointer;
+    user-select:none;
+    white-space:nowrap;
+    transition:background .12s, transform .08s;
+}
+.scr-quickcopy:hover{
+    background:linear-gradient(180deg,rgba(108,158,186,.99),rgba(66,104,130,.99));
+    border-color:rgba(160,205,255,.72);
+}
+.scr-quickcopy:active{transform:translateY(1px);}
+</style>
+
+<style>
+/* ==== 进度卡片·缺集摘要（两行式） ==== */
+.prg-miss-row{
+    font-size:10.5px;
+    line-height:1.75;
+    padding:3px 2px 1px;
+    color:#c9d4e0;
+    word-break:break-word;
+}
+.prg-miss-row.is-done{color:#7fd68b;}
+.prg-ms-done{color:#7fd68b;}
+.prg-ms-miss{color:#e0b96a;}
+.prg-miss-row b{font-weight:600;}
+</style>
+
+<style>
+/* ==== 交付面板·折叠组 ==== */
+.exp-fold{
+    border:1px solid rgba(255,255,255,.09);
+    border-radius:5px;
+    background:rgba(255,255,255,.022);
+    overflow:hidden;
+}
+.exp-fold > summary{
+    list-style:none;
+    display:flex;align-items:center;gap:7px;
+    padding:7px 9px;
+    cursor:pointer;
+    user-select:none;
+    font-size:11.5px;
+    transition:background .12s;
+}
+.exp-fold > summary::-webkit-details-marker{display:none;}
+.exp-fold > summary::marker{display:none;content:'';}
+.exp-fold > summary:hover{background:rgba(255,255,255,.045);}
+.exp-fold-label{flex:0 0 auto;color:#cfd8e3;font-weight:600;}
+.exp-fold-cur{
+    flex:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    text-align:right;
+    color:#7fb3d5;
+    font-size:10.5px;
+}
+.exp-fold-arrow{
+    flex:0 0 auto;
+    color:rgba(255,255,255,.35);
+    font-size:9px;
+    transition:transform .16s;
+}
+.exp-fold[open] .exp-fold-arrow{transform:rotate(180deg);}
+.exp-fold-body{
+    padding:8px 9px 9px;
+    border-top:1px solid rgba(255,255,255,.06);
+}
+/* 自动填充勾选行 */
+.chk-line{
+    display:flex;align-items:center;gap:5px;
+    font-size:11px;cursor:pointer;color:#c9d4e0;
+}
+.chk-line input[type=checkbox]{flex:0 0 auto;margin:0;cursor:pointer;}
+/* 完成弹窗 */
+.exp-done-mask{
+    position:fixed;inset:0;z-index:2147482000;
+    background:rgba(0,0,0,.55);
+    display:flex;align-items:center;justify-content:center;
+    animation:expFade .16s ease;
+}
+@keyframes expFade{from{opacity:0}to{opacity:1}}
+.exp-done-box{
+    min-width:260px;max-width:340px;
+    background:#1a2130;
+    border:1px solid rgba(127,214,139,.42);
+    border-radius:9px;
+    box-shadow:0 12px 40px rgba(0,0,0,.6);
+    padding:16px 18px 14px;
+    text-align:center;
+}
+.exp-done-ic{font-size:26px;line-height:1;margin-bottom:8px;}
+.exp-done-title{font-size:13.5px;font-weight:600;color:#7fd68b;margin-bottom:5px;}
+.exp-done-desc{font-size:11px;color:#9aa8b8;line-height:1.6;margin-bottom:13px;word-break:break-all;}
+.exp-done-btns{display:flex;gap:8px;justify-content:center;}
+.exp-done-btns button{
+    flex:1 1 auto;
+    white-space:nowrap;
+    padding:6px 12px;font-size:11.5px;
+    border-radius:5px;cursor:pointer;border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.06);color:#d8e2ee;
+    transition:background .12s;
+    min-width:0;
+}
+.exp-done-btns button:hover{background:rgba(255,255,255,.12);}
+.exp-done-btns button.primary{
+    background:rgba(83,125,150,.85);
+    border-color:rgba(138,180,255,.42);
+    color:#eaf3ff;
+}
+.exp-done-btns button.primary:hover{background:rgba(108,158,186,.95);}
+</style>
+
+<style>
+/* ==== 审片·链接解析条 ==== */
+.sp-parse-bar{
+    display:flex;align-items:center;gap:5px;
+    padding:4px 7px;margin-bottom:5px;
+    background:rgba(255,255,255,.035);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:5px;
+    flex:0 0 auto;
+}
+.sp-parse-ic{font-size:11px;opacity:.55;flex:0 0 auto;}
+#spParseInput{
+    flex:1;min-width:0;
+    background:transparent;border:none;outline:none;
+    color:#e8ecf4;font-size:11.5px;padding:2px 0;
+}
+#spParseInput::placeholder{color:rgba(232,236,244,.32);}
+#spParseInput.sp-parse-hit{color:#7fd68b;}
+.sp-parse-bar .mini{flex:0 0 auto;padding:2px 7px;font-size:10.5px;}
+</style>
+
+<style>
+/* ==== 交付日志可读性 ==== */
+.log{
+    font-family:"Consolas","Courier New",monospace;
+    font-size:11px;
+    line-height:1.72;
+    max-height:230px;
+    overflow-y:auto;
+    padding:7px 9px;
+    background:rgba(0,0,0,.32);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:5px;
+    margin-top:8px;
+}
+.log-line{display:flex;gap:6px;padding:1px 0;word-break:break-word;}
+.log-ts{flex:0 0 auto;color:rgba(255,255,255,.24);font-size:10px;}
+.log-body{flex:1;min-width:0;}
+.log-line.info .log-body{color:#b8c4d2;}
+.log-line.success .log-body{color:#7fd68b;font-weight:500;}
+.log-line.warn .log-body{color:#e0b96a;}
+.log-line.error .log-body{color:#ff8a8a;font-weight:600;}
+/* 分隔线更醒目 */
+.log-line .log-body:empty{display:none;}
+</style>
+
+    <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
+    <div class="tab-panel" id="panel-media" style="display:none;">
+        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
+            <!-- 顶部：我的电脑/盘符 根入口 + 常用根 + 设根 -->
+            <div class="md-bar">
+                <select id="mdRootSel" style="flex:1;min-width:0;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;padding:4px;"></select>
+                <button id="mdAddRoot" class="secondary mini" title="添加常用根目录">📂 设根…</button>
+                <button id="mdAddSubRoot" class="secondary mini" title="把当前选中目录加入常用根">📌 存当前</button>
+            </div>
+            <!-- 工程信息 + 导入目标 -->
+            <div class="md-bar" style="flex-wrap:wrap;">
+                <span id="mdProjInfo" style="font-size:10px;color:#9fd0ff;flex:1 1 auto;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="">工程：检测中…</span>
+                <input id="mdBinName" type="text" value="素材" placeholder="素材箱名" style="flex:0 1 90px;min-width:60px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;padding:3px 6px;" title="导入到哪个素材箱（不存在自动创建）">
+            </div>
+            <!-- 搜索条 -->
+            <div class="md-bar md-searchbar">
+                <span class="md-search-ic">🔍</span>
+                <input id="mdSearch" type="text" placeholder="搜索当前目录下的文件名 / 文件夹名（支持模糊、拼音首字母）" autocomplete="off" spellcheck="false">
+                <button id="mdSearchDeep" class="secondary mini" title="开启后搜索会递归进所有子文件夹">仅当前层</button>
+                <button id="mdSearchClear" class="secondary mini" style="display:none;" title="清空搜索">✕</button>
+            </div>
+            <!-- 主体：左目录树（纯文件夹） / 右文件列表 -->
+            <div style="flex:1;display:flex;gap:6px;min-height:0;">
+                <div class="md-tree" id="mdTree"><div class="hint" style="padding:8px;">浏览目录</div></div>
+                <div class="md-files" id="mdDetail">
+                    <div class="md-fhead" id="mdFHead"><span class="hint">← 选择左侧文件夹查看内容</span></div>
+                    <div class="md-flist" id="mdFList"></div>
+                </div>
+            </div>
+            <!-- 底部工具条 -->
+            <div class="md-bar">
+                <button id="mdImpSel" class="secondary mini" style="color:#7fd68b;border-color:#2a5a3a;">⬇ 导入选中(0)</button>
+                <button id="mdImpFolder" class="secondary mini" title="导入当前目录整个文件夹（保留目录层级）">📁 导入当前目录</button>
+                <span style="font-size:10px;color:var(--muted);flex:1;">拖拽文件可直接放入 PR 时间线/项目</span>
+            </div>
+            <!-- 进度弹窗由 JS 模态呈现 -->
+        </div>
+    </div>
+
+    
+<!-- ==================== 剧本阅读（动态面板：由 progress.js 填充） ==================== -->
+    <div class="tab-panel" id="panel-script" style="display:none;"></div>
+
+    <script src="js/CSInterface.js"></script>
+    <script src="js/errorlog.js"></script>
+    <script src="js/log-overlay.js"></script>
+    <script src="js/updater.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/timeline-bar.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/localsvc.js"></script>
+    <script src="js/tmp-clean.js"></script>
+    <script src="js/translate.js"></script>
+    <script src="js/subtitle.js"></script>
+    <script src="js/audio-preset.js"></script>
+    <script src="js/wave-mini.js"></script>
+    <script src="js/clone.js"></script>
+<script src="js/breeze.js"></script>
+    <script src="js/wavesurfer.js"></script>
+    <script src="js/clip-select.js"></script>
+    <script src="js/library-exclude.js"></script>
+    <script src="js/sfx.js"></script>
+    <script src="js/sfx-capture.js"></script>
+    <script src="js/musiclib.js"></script>
+    <script src="js/music.js"></script>
+    <script src="js/bgm.js"></script>
+    <script src="js/export.js"></script>
+    <script src="js/en-shared.js"></script>
+    <script src="js/en-local.js"></script>
+    <script src="js/enhance.js"></script>
+    <script src="js/vsr.js"></script>
+    <script src="js/vsr-ui.js"></script>
+    <script src="js/media.js"></script>
+    <script src="js/check.js"></script>
+    <script src="js/script.js"></script>
+    <script src="js/local-project-create.js"></script>
+    <script src="js/iframe-nav.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/components-ui.js"></script>
+    <script src="js/feedback.js"></script>
+    <script src="js/feedback-ui.js"></script>
+    <script src="js/feedback-panel.js"></script>
+    <script src="js/pr-convert.js"></script>
+    <script src="js/pr-convert-ui.js"></script>
+    <script src="js/flatten-xml.js"></script>
+    <script src="js/flatten-ui.js"></script>
+    <script src="js/font-install.js"></script>
+    <script src="js/font-fix.js"></script>
+    <script src="js/font-fix-ui.js"></script>
+    <script src="js/tool-panel.js"></script>
+
+    <script>
+    // ==================== 面板尾部逻辑（统一收拢） ====================
+
+    // ---- 1. 在线更新 ----
+    (function () {
+        var btn = document.getElementById('btnUpdate');
+        if (btn && window.__vhUpdate && !window.__vhUpdateBtnBound) {
+            window.__vhUpdateBtnBound = true;
+            btn.addEventListener('click', function () { window.__vhUpdate.show(false); });
+        }
+        // 更新历史入口
+        var hbtn = document.getElementById('btnHistory');
+        if (hbtn && window.__vhUpdate && window.__vhUpdate.history) {
+            hbtn.addEventListener('click', function () { window.__vhUpdate.history(); });
+        }
+        // 启动后自动检查一次（有新版本才弹窗）
+        if (window.__vhUpdate && window.__vhUpdate.autoCheck) {
+            window.__vhUpdate.autoCheck();
+        }
+    })();
+    </script>
+
+<script>
+    // ---- 官网入口：CEP 面板里 <a target=_blank> 不会打开系统浏览器，
+    //      必须走 child_process 调系统 start 命令 ----
+    (function () {
+        var btn = document.getElementById('btnSite');
+        if (!btn) return;
+        var SITE_URL = 'http://47.122.108.231:8888/';
+        function openSite() {
+            // 优先走 CEP 官方 API
+            try {
+                if (typeof CSInterface !== 'undefined') {
+                    var cs = new CSInterface();
+                    if (cs.openURLInDefaultBrowser) {
+                        cs.openURLInDefaultBrowser(SITE_URL);
+                        return;
+                    }
+                }
+            } catch (e) {}
+            // 退回 child_process
+            try {
+                require('child_process').exec('start "" "' + SITE_URL + '"');
+                return;
+            } catch (e) {}
+            // 最后退回 window.open（浏览器调试环境）
+            try { window.open(SITE_URL, '_blank'); } catch (e) {}
+        }
+        btn.addEventListener('click', openSite);
+    })();
+</script>
+</body>
+</html>
