@@ -350,37 +350,93 @@
     //   有缺集：⚠️ 缺 26 集 · 已完成 52/78（67%）　张三 52-58　李四 73-78
     //   全完成：✅ 已完成 78/78
     //   无数据：返回 ''（调用方隐藏该行）
+    // 缺集摘要行文案（首页卡片 + 明细共用）
+    // 目标格式（用户指定）：
+    //   已完成：刘梦真 36-41，王傲雪 42-47，杨倩 48-53
+    //   ⚠️缺 35 集：张大强 1，任显翔 2-5,28-29，王琳蓓 30-35
+    // 规则：
+    //   · 已完成/缺集 各自按剪辑师分组，组内集号压缩成区间
+    //   · 组间用「，」分隔，组内是「名字 集号」
+    //   · 缺集行加 ⚠️ 前缀；已完成行加 ✅ 前缀（全完成时不显示缺集行）
     function missSummaryHtml(sc) {
         if (!sc || !sc.ok) return '';
         var total = parseInt(sc.total, 10) || 0;
-        var present = (sc.present || []).length;
-        var missing = sc.missing || [];
         if (total <= 0) return '';
-        // present 可能含超出 total 的集号，用并集里的实际完成数兜底
-        if (!present) present = parseInt(sc.current_count, 10) || 0;
-        var pct = Math.round(present / total * 100);
-        if (!missing.length) {
-            return '✅ 已完成 ' + present + '/' + total;
+
+        var present = (sc.present || []).map(function (x) { return parseInt(x, 10); })
+            .filter(function (x) { return !isNaN(x); });
+        if (!present.length) {
+            var cc = parseInt(sc.current_count, 10) || 0;
+            if (cc > 0) for (var i2 = 1; i2 <= cc; i2++) present.push(i2);
         }
+        var missing = (sc.missing || []).map(function (x) { return parseInt(x, 10); })
+            .filter(function (x) { return !isNaN(x); });
+
         var planMap = sc.editor_plan || {};
-        var mg = {};
-        missing.forEach(function (epn) {
-            var ed = planMap[String(epn)] || planMap[epn] || '未分配';
-            if (!mg[ed]) mg[ed] = [];
-            mg[ed].push(parseInt(epn, 10));
-        });
-        // 缺得多的剪辑师排前面，未分配垫底
-        var eds = Object.keys(mg).sort(function (a, b) {
-            if (a === '未分配') return 1;
-            if (b === '未分配') return -1;
-            return mg[b].length - mg[a].length || (a < b ? -1 : 1);
-        });
-        var parts = [];
-        eds.forEach(function (ed) {
-            parts.push(esc(ed) + ' ' + compactEpList(mg[ed]));
-        });
-        return '⚠️ 缺 ' + missing.length + ' 集 · 已完成 ' + present + '/' + total
-            + '（' + pct + '%）　' + parts.join('　');
+        function editorOf(ep) {
+            var ed = planMap[String(ep)] || planMap[ep];
+            return (ed == null || ed === '') ? '未分配' : String(ed);
+        }
+
+        // 按剪辑师分组，组内排序
+        function groupByEditor(eps) {
+            var g = {};
+            eps.forEach(function (ep) {
+                var ed = editorOf(ep);
+                if (!g[ed]) g[ed] = [];
+                g[ed].push(ep);
+            });
+            Object.keys(g).forEach(function (ed) {
+                g[ed].sort(function (a, b) { return a - b; });
+            });
+            return g;
+        }
+
+        // 组排序：一律按该组「最小集号」升序 ——
+        //   已完成：36-41、42-47、48-53… 顺着集数往下读
+        //   缺集  ：1、2-5,28-29、30-35… 也顺着集数往下读
+        // 这比「按组大小」更符合看进度的习惯，且两行对得上号。
+        // 「未分配」恒排最后。
+        function sortEditors(g) {
+            return Object.keys(g).sort(function (a, b) {
+                if (a === '未分配') return 1;
+                if (b === '未分配') return -1;
+                var ma = g[a].length ? g[a][0] : 0;
+                var mb = g[b].length ? g[b][0] : 0;
+                if (ma !== mb) return ma - mb;
+                return a < b ? -1 : 1;
+            });
+        }
+
+        // 拼成「名字 集号，名字 集号」；sep 是组间分隔符
+        function joinParts(g, cls) {
+            var eds = sortEditors(g);
+            var parts = eds.map(function (ed) {
+                return '<span class="' + cls + '">' + esc(ed) + ' ' + compactEpList(g[ed]) + '</span>';
+            });
+            return parts.join('，');
+        }
+
+        var gPresent = groupByEditor(present);
+        var gMissing = groupByEditor(missing);
+
+        // 全完成：只显示一行已完成
+        if (!missing.length) {
+            var doneAll = '已完成 ' + present.length + '/' + total;
+            return '✅ <span class="prg-ms-done">' + doneAll + '</span>';
+        }
+
+        var out = [];
+
+        // 第一行：已完成（按人分）
+        if (present.length) {
+            out.push('✅ 已完成：' + joinParts(gPresent, 'prg-ms-done'));
+        }
+
+        // 第二行：缺集（按人分）
+        out.push('⚠️ 缺 ' + missing.length + ' 集：' + joinParts(gMissing, 'prg-ms-miss'));
+
+        return out.join('<br>');
     }
 
     // 渲染概览

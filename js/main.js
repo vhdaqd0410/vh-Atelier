@@ -3,7 +3,6 @@
 (function () {
     var panels = {
         media: document.getElementById('panel-media'),
-        netdisk: document.getElementById('panel-netdisk'),
         subtitle: document.getElementById('panel-subtitle'),
         check: document.getElementById('panel-check'),
         separate: document.getElementById('panel-sep'),
@@ -11,19 +10,15 @@
         sfx: document.getElementById('panel-sfx'),
         musiclib: document.getElementById('panel-musiclib'),
         music: document.getElementById('panel-music'),
-        musicagg: document.getElementById('panel-musicagg'),
         bgm: document.getElementById('panel-bgm'),
         export: document.getElementById('panel-export'),
-        video: document.getElementById('panel-video'),
         progress: document.getElementById('panel-progress'),
         script: document.getElementById('panel-script'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
-        localsub: document.getElementById('panel-localsub'),
-  localup: document.getElementById('panel-localup'),
         prconv: document.getElementById('panel-prconv'),
         colorxml: document.getElementById('panel-colorxml'),
-        todo: document.getElementById('panel-todo'),
+        breeze: document.getElementById('panel-breeze'),
         feedback: document.getElementById('panel-feedback'),
         admin: document.getElementById('panel-admin')
     };
@@ -32,9 +27,8 @@
     var groups = {
         media: { members: ['media', 'netdisk'], default: 'media' },
         progress: { members: ['progress'], default: 'progress' },
-        todo: { members: ['todo'], default: 'todo' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
-        audio: { members: ['separate', 'clone', 'sfx', 'musiclib', 'music', 'musicagg', 'bgm'], default: 'separate' },
+        audio: { members: ['separate', 'clone', 'breeze', 'sfx', 'musiclib', 'music', 'musicagg', 'bgm'], default: 'separate' },
         deliver: { members: ['export', 'video'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
@@ -61,7 +55,7 @@
     // 原因：display:none 会把 iframe 压成 0×0，CEP 的 Chromium 会丢弃跨域
     //       iframe 的合成层，切回来就是黑屏（只能手动刷新）。
     //       改用「保留尺寸的隐藏」：绝对定位 + visibility:hidden + 移出可视区。
-    var IFRAME_PANELS = { shenpian: 1, upscale: 1, feedback: 1, admin: 1, musicagg: 1 };
+    var IFRAME_PANELS = { shenpian: 1, upscale: 1, feedback: 1, admin: 1 };
 
     // 真正显示某个 panel
     function showPanel(name) {
@@ -157,9 +151,7 @@
             try { window.__progressOnShow(); } catch (e) {}
         }
         // 待办：切到时刷新（跨天/外部改动后回来看到最新）
-        if (name === 'todo' && window.__todoOnShow) {
-            try { window.__todoOnShow(); } catch (e) {}
-        }
+
         // 剧本：切到剧本 tab 时若面板是空的（没在阅读、也没首页），渲染剧本库首页
         if (name === 'script' && window.__atShowScriptHome) {
             try { window.__atShowScriptHome(); } catch (e) {}

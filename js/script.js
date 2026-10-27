@@ -1098,97 +1098,23 @@
         return { selected: txt, speech: speech, role: role, dlg: dlg };
     }
 
+    // 只保留一个动作：复制选中。按钮做成小圆角胶囊，紧贴选区右端。
     function buildSelMenu(info) {
-        var menu = document.createElement('div');
-        menu.className = 'scr-selmenu';
         var sel = String(info.selected || '').trim();
-        var speech = String(info.speech || '').trim();
-
-        function item(label, key, text, cls) {
-            var b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'it' + (cls ? ' ' + cls : '');
-            if (key) {
-                var kEl = document.createElement('span');
-                kEl.className = 'k';
-                kEl.textContent = key;
-                b.appendChild(kEl);
-            }
-            var tEl = document.createElement('span');
-            tEl.className = 't';
-            tEl.textContent = label;
-            b.appendChild(tEl);
-            b.title = text;
-            b.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
-            b.addEventListener('click', function (ev) {
-                ev.preventDefault();
-                ev.stopPropagation();
-                window.__copyText && window.__copyText(text);
-                closeSelMenu();
-            });
-            return b;
-        }
-
-        var hd = document.createElement('div');
-        hd.className = 'hd';
-        hd.textContent = '复制：' + (sel.length > 26 ? sel.slice(0, 26) + '…' : sel);
-        menu.appendChild(hd);
-
-        // 1) 复制选中（原样）
-        menu.appendChild(item('复制选中', '⎘', sel));
-
-        // 2) 选中片段按标点断句
-        var U = window.__vhUtils;
-        var parts = (U && U.splitSentences) ? U.splitSentences(sel) : [];
-        if (parts.length > 1) {
-            menu.appendChild(divider());
-            var cap = document.createElement('div');
-            cap.className = 'hd subh';
-            cap.textContent = '选中的后半句 / 前半句（按标点断）';
-            menu.appendChild(cap);
-            parts.forEach(function (p, i) {
-                menu.appendChild(item(p.text, String(i + 1) + '.', p.text));
-            });
-        }
-
-        // 3) 以选中位置为界，取整句的前半/后半
-        if (speech && U && U.halfAround) {
-            var at = speech.indexOf(sel);
-            var half = U.halfAround(speech, at >= 0 ? at + Math.ceil(sel.length / 2) : -1);
-            if (half && (half.hasHead || half.hasTail)) {
-                menu.appendChild(divider());
-                var cap2 = document.createElement('div');
-                cap2.className = 'hd subh';
-                cap2.textContent = '整句的前半 / 后半';
-                menu.appendChild(cap2);
-                if (half.hasHead) menu.appendChild(item(shorten(half.head), '前半', half.head));
-                if (half.hasTail) menu.appendChild(item(shorten(half.tail), '后半', half.tail));
-            }
-        }
-
-        // 4) 整句（该行台词全部）
-        if (speech && speech !== sel) {
-            menu.appendChild(divider());
-            var cap3 = document.createElement('div');
-            cap3.className = 'hd subh';
-            cap3.textContent = '整句 / 整行';
-            menu.appendChild(cap3);
-            menu.appendChild(item(shorten(speech), '整句', speech));
-            if (info.role) {
-                menu.appendChild(item(shorten(info.role + '：' + speech), '整行', info.role + '：' + speech));
-            }
-        }
-        return menu;
-    }
-
-    function divider() {
-        var d = document.createElement('div');
-        d.className = 'sp';
-        return d;
-    }
-    function shorten(s) {
-        s = String(s || '');
-        return s.length > 34 ? s.slice(0, 34) + '…' : s;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'scr-quickcopy';
+        btn.innerHTML = '⎘ 复制';
+        btn.title = sel.length > 30 ? ('复制：' + sel.slice(0, 30) + '…') : ('复制：' + sel);
+        // mousedown 阻止默认，避免点击时把选区清掉
+        btn.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            window.__copyText && window.__copyText(sel);
+            closeSelMenu();
+        });
+        return btn;
     }
 
     // 在选区附近显示菜单
@@ -1200,56 +1126,38 @@
         menu.style.visibility = 'hidden';
         document.body.appendChild(menu);
         selMenuEl = menu;
-        var sel = window.getSelection();
-        var r = sel.getRangeAt(0).getBoundingClientRect();
-        // 关键：菜单挂到「整条台词行」外面（不是在选中的几个字旁边），
-        // 否则会把正在读的后半句盖住 —— 用户要复制的恰恰是没被选中的那部分。
-        var anchor = null;
-        var node = sel.anchorNode;
-        var el0 = node && (node.nodeType === 1 ? node : node.parentNode);
-        if (el0 && el0.closest) anchor = el0.closest('.scr-dlg');
-        var rect = anchor ? anchor.getBoundingClientRect() : r;
-        var W = window.innerWidth, H = window.innerHeight;
-        // 三档避让，目标只有一个：菜单绝不覆盖当前台词行（用户要看的就是这行）
-        //   ① 行下方有空间 → 挂该行下方
-        //   ② 行右侧有空间 → 挂该行右侧（同一水平带，落在那行文字之后）
-        //   ③ 都不够 → 挂视口内该行之外的最大空区，并限高滚动
-        var below = H - rect.bottom - 8;          // 下方可用高
-        var right = W - rect.right - 8;           // 行尾右侧可用宽
-        menu.style.overflowY = 'auto';
-        var mw0 = menu.offsetWidth;
-        var mh0 = menu.offsetHeight;
-        var x, y, maxH;
 
-        if (below >= Math.min(mh0, 90)) {
-            // ① 下方
-            maxH = below;
-            menu.style.maxHeight = Math.min(maxH, H - 24) + 'px';
-            x = rect.left;
-            y = rect.bottom + 6;
-        } else if (right >= mw0 + 8) {
-            // ② 行右侧（不压字）
-            menu.style.maxHeight = Math.min(H - 24, Math.max(160, H - 16)) + 'px';
-            x = rect.right + 10;
-            y = Math.max(8, rect.top);
-        } else {
-            // ③ 都不够：挑离该行最远的空区（上方或下方），并限高
-            var above = rect.top - 8;
-            if (above > below) {
-                maxH = above;
-                menu.style.maxHeight = Math.min(maxH, H - 24) + 'px';
-                var mh2 = Math.min(menu.offsetHeight, maxH);
-                y = Math.max(8, rect.top - mh2 - 6);
-            } else {
-                maxH = below;
-                menu.style.maxHeight = Math.min(maxH, H - 24) + 'px';
-                y = rect.bottom + 6;
-            }
-            x = rect.left;
+        var sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) { closeSelMenu(); return; }
+        var range = sel.getRangeAt(0);
+
+        // 取选区最后一个矩形：多行选中时它是「最后一行的右侧」，
+        // 按钮就该贴在这里（紧挨选中文字的右端，一下就能点到）。
+        var rects = range.getClientRects();
+        var r = (rects && rects.length) ? rects[rects.length - 1] : range.getBoundingClientRect();
+        if (!r || (!r.width && !r.height)) r = range.getBoundingClientRect();
+
+        var W = window.innerWidth, H = window.innerHeight;
+        var mw = menu.offsetWidth || 62;
+        var mh = menu.offsetHeight || 22;
+        var GAP = 4;   // 与文字的间距，紧贴但留一点空气
+
+        // 默认：选区右端外侧，垂直居中于该行
+        var x = r.right + GAP;
+        var y = r.top + (r.height - mh) / 2;
+
+        // 右边放不下 → 放到选区左端外侧
+        if (x + mw > W - 6) {
+            x = r.left - mw - GAP;
         }
-        if (x + menu.offsetWidth > W - 8) x = Math.max(8, W - menu.offsetWidth - 8);
-        if (x < 8) x = 8;
-        if (y < 8) y = 8;
+        // 左边也放不下（选区几乎占满一行）→ 退回右端并夹到视口内
+        if (x < 6) {
+            x = Math.min(W - mw - 6, Math.max(6, r.right + GAP));
+        }
+        // 垂直夹取
+        if (y < 4) y = 4;
+        if (y + mh > H - 4) y = H - mh - 4;
+
         menu.style.left = Math.round(x) + 'px';
         menu.style.top = Math.round(y) + 'px';
         menu.style.visibility = 'visible';

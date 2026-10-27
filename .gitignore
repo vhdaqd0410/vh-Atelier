@@ -102,3 +102,10 @@ collect/voices/preview/
 # 发版前的临时备份
 *.bak_*
 
+
+
+# Breeze 语音合成（引擎/模型/输出体积巨大，不入库；部署时单独放）
+breeze/models/
+breeze/engine/
+breeze/output/
+breeze/ui/index.autoref.html

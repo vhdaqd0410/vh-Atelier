@@ -240,7 +240,17 @@ def fetch_video(dev, vid):
         params=dict(urllib.parse.parse_qsl(p.query, keep_blank_values=True)),
         data=json.loads(bb), devices=DEV, header=hdrs, log=False)
     req = urllib.request.Request(SU, data=bb, headers=SH, method="POST")
-    d = json.loads(urllib.request.urlopen(req, context=CTX, timeout=30).read())
+    raw = urllib.request.urlopen(req, context=CTX, timeout=30).read()
+    # 实测：设备号被风控时接口返回 HTTP 200 但响应体为空（0 字节），
+    # 直接 json.loads 会抛 NoneType 的 JSONDecodeError（"Expecting value: line 1 column 1"），
+    # 上层 is_device_blocked 因此认不出来、不会换设备号，表现为永远下载失败。
+    # 这里把空响应显式转成 DeviceBlockedError，交给重试逻辑换号。
+    if not raw or not raw.strip():
+        raise DeviceBlockedError("设备号被风控（接口返回空响应）")
+    try:
+        d = json.loads(raw)
+    except ValueError:
+        raise DeviceBlockedError("设备号被风控（响应非 JSON：" + raw[:60].decode("utf-8", "replace") + "）")
     code = d.get("Code", d.get("code"))
     if code != 0:
         # 110001 = 设备被风控/异常（实测：换新设备号即恢复），用特定前缀便于上层识别
@@ -290,7 +300,13 @@ class DeviceBlockedError(RuntimeError):
 def is_device_blocked(err):
     """判断是否「设备被风控」类错误（可用换设备解决）"""
     s = str(err or "")
-    return ("110001" in s) or isinstance(err, DeviceBlockedError)
+    if "110001" in s or isinstance(err, DeviceBlockedError):
+        return True
+    # 兜底：接口返回空体/非 JSON 时 json.loads 抛的错也要算风控，
+    # 否则永远卡在 "Expecting value: line 1 column 1 (char 0)" 不换号。
+    if isinstance(err, ValueError) and "Expecting value" in s:
+        return True
+    return False
 
 
 def refresh_device(old_dev):
@@ -319,10 +335,19 @@ def download(vid, out_path, dev, retries=3):
                 cmd += ["-decryption_key", derive_content_key(enc["spade_a"]).hex()]
             cmd += ["-i", item.get("main_url") or item.get("backup_url"),
                     "-c", "copy", "-movflags", "+faststart", out_path]
+            # 先删旧文件：否则 ffmpeg 失败时，目录里上一轮的同名文件会被
+            # os.path.exists 误判为「本次下载成功」，出现假成功、日志与产出对不上。
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+            except Exception:
+                pass
             r = subprocess.run(cmd, capture_output=True)
-            if os.path.exists(out_path) and os.path.getsize(out_path) > 10000:
+            # 同时校验返回码与文件大小，缺一不可
+            if r.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 10000:
                 return os.path.getsize(out_path), int(meta.get("vheight", 0) or 0)
-            last = (r.stderr or b"").decode("utf-8", "replace")[-200:]
+            err = (r.stderr or b"").decode("utf-8", "replace")[-200:]
+            last = err or ("ffmpeg 返回码 " + str(r.returncode))
         except Exception as e:
             last = str(e)
             # 设备被风控 → 换新设备号重试（实测有效）
@@ -331,6 +356,7 @@ def download(vid, out_path, dev, retries=3):
                 if nd:
                     cur_dev = nd
                     persist_new_device(nd)
+                    time.sleep(1.0)
                     continue
         if attempt < retries:
             # 轻微退避，避免连环请求再次触发风控

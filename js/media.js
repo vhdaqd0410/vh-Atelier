@@ -719,6 +719,277 @@
   // 兼容旧调用：renderFiles(dir) → 显示目录详情
   function renderFiles(dir) { showDirDetail(dir); }
 
+  // ==================== 搜索 ====================
+  // 需求：模糊搜索 + 能搜到文件夹 + 关键字实时高亮。
+  // 设计要点：
+  //   1. 默认只搜当前目录（快），可切「含子目录」递归
+  //   2. 按相关度排序：完全等于 > 开头匹配 > 包含 > 子序列（模糊）
+  //   3. 高亮不替换原文本：先 escapeHtml 再插入 <span class="md-hl">
+  var searchQuery = '';
+  var searchDeep = false;
+  var searchTimer = null;
+  var searchSeq = 0;
+
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // 把关键词在文本里的命中片段包成高亮标签。q 已是小写。
+  function highlight(text, q) {
+    var safe = escHtml(text);
+    if (!q) return safe;
+    var low = safe.toLowerCase();
+    var out = '';
+    var i = 0;
+    var from = 0;
+    while (i < low.length) {
+      var at = low.indexOf(q, from);
+      if (at < 0) break;
+      out += safe.slice(from, at);
+      out += '<span class="md-hl">' + safe.slice(at, at + q.length) + '</span>';
+      from = at + q.length;
+      i = from;
+    }
+    out += safe.slice(from);
+    return out;
+  }
+
+  // 模糊打分：返回 0 表示不匹配；数字越大越相关
+  function fuzzyScore(name, q) {
+    if (!q) return 1;
+    var n = String(name || '').toLowerCase();
+    if (!n) return 0;
+    if (n === q) return 1000;
+    var idx = n.indexOf(q);
+    if (idx === 0) return 800 - Math.min(200, n.length - q.length);
+    if (idx > 0) return 600 - Math.min(200, idx) - Math.min(100, n.length - q.length);
+    // 子序列匹配：关键字字符按顺序出现即算命中（模糊）
+    var pi = 0;
+    var hits = 0;
+    var firstAt = -1;
+    for (var i = 0; i < n.length && pi < q.length; i++) {
+      if (n[i] === q[pi]) {
+        if (firstAt < 0) firstAt = i;
+        pi++;
+        hits++;
+      }
+    }
+    if (pi < q.length) return 0;
+    // 命中密度越高、越靠前越相关
+    return 300 + hits * 10 - Math.min(150, firstAt * 5);
+  }
+
+  // 递归收集目录下的条目。limit 防止超大目录卡死。
+  function collectEntries(root, q, deep, limit) {
+    limit = limit || 800;
+    var out = [];
+    var stack = [{ dir: root, rel: '', depth: 0 }];
+    var guard = 0;
+
+    while (stack.length && out.length < limit) {
+      var cur = stack.shift();
+      var subs = [];
+      var files = [];
+      try { subs = listDirs(cur.dir); } catch (e) {}
+      try { files = listFiles(cur.dir); } catch (e) {}
+
+      // 文件夹：自身名字参与匹配
+      for (var i = 0; i < subs.length; i++) {
+        var dn = subs[i];
+        var dsc = fuzzyScore(dn, q);
+        var subRel = cur.rel ? (cur.rel + '/' + dn) : dn;
+        if (dsc > 0) {
+          out.push({
+            kind: 'dir',
+            name: dn,
+            full: path.join(cur.dir, dn),
+            rel: subRel,
+            score: dsc
+          });
+        }
+        if (deep) stack.push({ dir: path.join(cur.dir, dn), rel: subRel, depth: cur.depth + 1 });
+      }
+
+      // 文件
+      for (var j = 0; j < files.length; j++) {
+        var fn = files[j];
+        var fsc = fuzzyScore(fn, q);
+        if (fsc > 0) {
+          out.push({
+            kind: 'file',
+            name: fn,
+            full: path.join(cur.dir, fn),
+            rel: cur.rel ? (cur.rel + '/' + fn) : fn,
+            score: fsc
+          });
+        }
+      }
+
+      if (++guard > 2000) break;   // 极端情况下兜底
+    }
+    // 文件夹优先一点点，其次按分数
+    out.sort(function (a, b) {
+      if (a.score !== b.score) return b.score - a.score;
+      if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
+      return a.name.localeCompare(b.name, 'zh');
+    });
+    return out;
+  }
+
+  // 渲染搜索结果到右侧列表
+  function renderSearchResults() {
+    if (!el.fhead || !el.flist) return;
+    el.fhead.innerHTML = '';
+    el.flist.innerHTML = '';
+
+    var q = String(searchQuery || '').trim().toLowerCase();
+    if (!q) { renderFilePanel(curDirPath); return; }
+
+    var base = curDirPath && curDirPath !== 'COMPUTER' ? curDirPath : '';
+    if (!base) {
+      var h0 = document.createElement('div');
+      h0.className = 'hint';
+      h0.style.padding = '6px 4px';
+      h0.textContent = '先选一个文件夹，再搜索';
+      el.fhead.appendChild(h0);
+      return;
+    }
+
+    var seq = ++searchSeq;
+    var entries = collectEntries(base, q, searchDeep, 800);
+    if (seq !== searchSeq) return;   // 有更新的搜索，丢弃本次
+
+    // 头部统计
+    var ttl = document.createElement('div');
+    ttl.className = 'md-fcap';
+    ttl.textContent = '搜索：' + searchQuery;
+    el.fhead.appendChild(ttl);
+
+    var info = document.createElement('div');
+    info.className = 'md-finfo';
+    var nDir = 0, nFile = 0;
+    entries.forEach(function (e) { if (e.kind === 'dir') nDir++; else nFile++; });
+    info.innerHTML = '<span class="md-search-hit">' + entries.length + '</span> 项'
+      + (nDir ? ' · ' + nDir + ' 文件夹' : '')
+      + (nFile ? ' · ' + nFile + ' 文件' : '')
+      + (searchDeep ? ' · 含子目录' : ' · 仅当前层');
+    el.fhead.appendChild(info);
+
+    if (!entries.length) {
+      var empty = document.createElement('div');
+      empty.className = 'hint';
+      empty.style.padding = '12px 6px';
+      empty.textContent = searchDeep
+        ? '没找到匹配项。换个关键词试试。'
+        : '当前层没找到。点右侧「仅当前层」可切换为搜索所有子目录。';
+      el.flist.appendChild(empty);
+      return;
+    }
+
+    entries.forEach(function (e) {
+      var row;
+      if (e.kind === 'dir') {
+        row = document.createElement('div');
+        row.className = 'md-file';
+        row.innerHTML = '<span class="md-ic">📁</span><span class="md-fn"></span>';
+        var fnEl = row.querySelector('.md-fn');
+        fnEl.innerHTML = highlight(e.name, q);
+        if (e.rel && e.rel !== e.name) {
+          var sub = document.createElement('span');
+          sub.style.cssText = 'font-size:9.5px;opacity:.45;margin-left:6px;';
+          sub.textContent = e.rel;
+          fnEl.appendChild(sub);
+        }
+        row.title = e.full;
+        row.addEventListener('click', function () { openDir(e.full, true); });
+      } else {
+        row = makeFileLeaf(e.full, e.name, path.dirname(e.full));
+        if (row) {
+          var fname = row.querySelector('.md-fn');
+          if (fname) {
+            fname.innerHTML = highlight(e.name, q);
+            if (e.rel && e.rel !== e.name) {
+              var sub2 = document.createElement('span');
+              sub2.style.cssText = 'font-size:9.5px;opacity:.45;margin-left:6px;';
+              sub2.textContent = path.dirname(e.rel) || '';
+              fname.appendChild(sub2);
+            }
+          }
+        }
+      }
+      if (row) el.flist.appendChild(row);
+    });
+  }
+
+  function setSearchQuery(v) {
+    searchQuery = v || '';
+    var clr = document.getElementById('mdSearchClear');
+    if (clr) clr.style.display = searchQuery ? '' : 'none';
+    if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+    // 防抖 160ms：输入过程中不卡
+    searchTimer = setTimeout(function () {
+      searchTimer = null;
+      if (String(searchQuery).trim()) {
+        if (searchDeep) {
+          // 递归搜索可能稍慢，先给个提示
+          if (el.fhead) {
+            el.fhead.innerHTML = '<div class="hint" style="padding:6px 4px;">正在搜索子目录…</div>';
+          }
+        }
+        renderSearchResults();
+      } else {
+        renderFilePanel(curDirPath);
+      }
+    }, 160);
+  }
+
+  function bindSearch() {
+    var inp = document.getElementById('mdSearch');
+    var deepBtn = document.getElementById('mdSearchDeep');
+    var clrBtn = document.getElementById('mdSearchClear');
+
+    if (inp) {
+      inp.addEventListener('input', function () { setSearchQuery(inp.value); });
+      inp.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') {
+          inp.value = '';
+          setSearchQuery('');
+          inp.blur();
+        }
+      });
+    }
+
+    if (deepBtn) {
+      deepBtn.addEventListener('click', function () {
+        searchDeep = !searchDeep;
+        deepBtn.textContent = searchDeep ? '含子目录' : '仅当前层';
+        deepBtn.classList.toggle('deep-on', searchDeep);
+        if (String(searchQuery).trim()) setSearchQuery(searchQuery);
+      });
+    }
+
+    if (clrBtn) {
+      clrBtn.addEventListener('click', function () {
+        if (inp) inp.value = '';
+        setSearchQuery('');
+        if (inp) inp.focus();
+      });
+    }
+  }
+
+  // 立即绑定（脚本在 body 末尾加载，DOM 已就绪）
+  try {
+    if (document.getElementById('mdSearch')) bindSearch();
+    else if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bindSearch);
+    }
+  } catch (e) {
+    if (window.__vhLog) { try { window.__vhLog.err('[media] 搜索绑定失败', e); } catch (_) {} }
+  }
+
+
   function insertToTimeline(full, name) {
     try {
       csInterface.evalScript('sfxGetPlayerPosition()', function (posResult) {
@@ -1043,7 +1314,23 @@
     } catch (e) {}
   }
   // ===== 初始化 =====
-  window.__mediaOnShow = function () { refreshProjInfo(); if (!el.tree.innerHTML.trim() || !currentRoot) renderRootSel(); restoreLastDir(); };
+  window.__mediaOnShow = function () {
+    refreshProjInfo();
+    if (!el.tree.innerHTML.trim() || !currentRoot) renderRootSel();
+    restoreLastDir();
+    // 从别的面板切回来时，若搜索框有内容就重放搜索
+    try {
+      var si = document.getElementById('mdSearch');
+      if (si && String(si.value || '').trim()) setSearchQuery(si.value);
+    } catch (e) {}
+  };
+
+  // 供调试/外部调用
+  window.__mediaSearch = function (q) {
+    var si = document.getElementById('mdSearch');
+    if (si) si.value = q || '';
+    setSearchQuery(q || '');
+  };
   renderRootSel();
   refreshProjInfo();
 

@@ -2268,6 +2268,207 @@ function tlInOutFromSelection() {
 }
 
 // ---- 状态 ----
+
+// ── 工程另存多份：能力探测（先确认 API 是否可用）──
+function tlProbeProject() {
+  try {
+    var out = { ok: true };
+    // 1) 工程路径
+    try {
+      out.projectPath = String(app.project.path || '');
+    } catch (e) { out.projectPath = 'ERR:' + e.message; }
+    // 2) 工程名
+    try {
+      out.projectName = String(app.project.name || '');
+    } catch (e) { out.projectName = 'ERR:' + e.message; }
+
+    // 3) 序列名列表
+    var names = [];
+    try {
+      var n = app.project.sequences.numSequences;
+      for (var i = 0; i < n; i++) {
+        names.push(String(app.project.sequences[i].name || ''));
+      }
+    } catch (e) { names = ['ERR:' + e.message]; }
+    out.sequences = names;
+
+    // 4) File 复制能力（用工程文件自身做一次 dry-run，只判断能否构造）
+    try {
+      var p = String(app.project.path || '');
+      if (p) {
+        var f = new File(p);
+        out.fileExists = f.exists;
+        out.fileParent = f.parent ? String(f.parent.fsName) : '';
+        out.fileName = String(f.name || '');
+        // 检查写权限（不实际写）
+        out.parentWritable = f.parent ? f.parent.exists : false;
+      } else {
+        out.fileExists = false;
+      }
+    } catch (e) {
+      out.fileErr = String(e.message || e);
+    }
+
+    return "OK:" + JSON.stringify(out);
+  } catch (e) {
+    return "ERR:" + String(e.message || e);
+  }
+}
+
+
+// ── 另存分集工程 ──
+// 复制当前工程为多份，命名 <项目ID>-第N集.prproj，并依次打开。
+// 项目 ID 规则：文件基名中「书名号之前」的最后一段连续数字。
+//   076-H0259-12040《咫尺相思》.prproj  -> 12040
+function tlExtractProjId(fullPathOrName) {
+  // 入参可能是完整路径，也可能只是文件名，统一处理
+  var s = String(fullPathOrName || '');
+
+  // 1) 只取路径最后一段（兼容 / 和 \）
+  var seg = s;
+  var p1 = s.lastIndexOf('/');
+  var p2 = s.lastIndexOf('\\');
+  var cut = Math.max(p1, p2);
+  if (cut >= 0) seg = s.substring(cut + 1);
+
+  // 2) 去掉扩展名
+  seg = seg.replace(/\.prproj$/i, '');
+
+  // 3) 截到书名号/括号之前
+  var stop = seg.length;
+  var marks = ['《', '【', '「', '〔', '（', '('];
+  for (var i = 0; i < marks.length; i++) {
+    var idx = seg.indexOf(marks[i]);
+    if (idx > 0 && idx < stop) stop = idx;
+  }
+  seg = seg.substring(0, stop);
+
+  // 4) 优先：取最后一个连字符/下划线/空格之后那段里的数字组
+  //    076-H0259-12040  -> 末段 12040
+  var parts = seg.split(/[-_\s]+/);
+  for (var k = parts.length - 1; k >= 0; k--) {
+    var tok = parts[k];
+    if (tok && /^\d+$/.test(tok)) return tok;      // 纯数字段直接命中
+    var mm = String(tok).match(/(\d{3,})/);         // 含字母的段，取 3 位以上数字
+    if (mm) return mm[1];
+  }
+
+  // 5) 兜底：整串里最后一段数字
+  var m = String(seg).match(/(\d+)(?!.*\d)/);
+  return m ? m[1] : '';
+}
+
+function tlSaveEpisodeCopies(epListJson) {
+  try {
+    var eps = [];
+    try {
+      var raw = (typeof epListJson === 'string') ? epListJson : String(epListJson);
+      var arr = JSON.parse(raw);
+      for (var i = 0; i < arr.length; i++) {
+        var e = parseInt(arr[i], 10);
+        if (isFinite(e) && e > 0) eps.push(e);
+      }
+    } catch (e0) {
+      return "ERR:集号解析失败：" + String(e0.message || e0);
+    }
+    if (!eps.length) return "ERR:没有有效的集号";
+
+    // 1) 当前工程路径
+    var projPath = '';
+    try { projPath = String(app.project.path || ''); } catch (e) {}
+    if (!projPath) return "ERR:当前工程尚未保存到磁盘（请先 Ctrl+S 保存一次）";
+
+    var projFile = new File(projPath);
+    if (!projFile.exists) return "ERR:找不到工程文件：" + projPath;
+
+    var dir = projFile.parent;
+    if (!dir || !dir.exists) return "ERR:工程所在目录不可用";
+
+    // 1.5) 防连环复制：当前工程本身就是分集副本时拒绝
+    var curName = String(projFile.name || '');
+    if (/-第\d+集\.prproj$/i.test(curName)) {
+      return "ERR:当前工程已是分集副本（" + curName + "），请在原始工程上操作";
+    }
+
+    // 2) 项目 ID —— 用完整路径提取（File.name 在部分工程上返回值不可靠）
+    var projId = tlExtractProjId(projPath);
+    if (!projId) {
+      return "ERR:无法从工程名提取编号（需形如 xxx-12345《剧名》.prproj）｜实际路径：" + projPath;
+    }
+
+    // 3) 逐个复制
+    var created = [];
+    var failed = [];
+    for (var k = 0; k < eps.length; k++) {
+      var n = eps[k];
+      var newName = projId + '-第' + n + '集.prproj';
+      var dst = new File(dir.fsName + '/' + newName);
+      try {
+        if (dst.exists) {
+          // 已存在则跳过，不覆盖用户已有文件
+          created.push({ ep: n, path: dst.fsName, name: newName, skipped: true });
+          continue;
+        }
+        var ok = projFile.copy(dst.fsName);
+        if (ok && dst.exists) {
+          created.push({ ep: n, path: dst.fsName, name: newName, skipped: false });
+        } else {
+          failed.push({ ep: n, reason: 'copy() 返回 false' });
+        }
+      } catch (e2) {
+        failed.push({ ep: n, reason: String(e2.message || e2) });
+      }
+    }
+
+    if (!created.length) {
+      return "ERR:全部复制失败 " + JSON.stringify(failed);
+    }
+
+    return "OK:" + JSON.stringify({
+      projId: projId,
+      srcName: String(projFile.name || ''),
+      srcPath: projPath,
+      dir: String(dir.fsName || ''),
+      created: created,
+      failed: failed
+    });
+  } catch (e) {
+    return "ERR:" + String(e.message || e);
+  }
+}
+
+// 打开指定工程（供前端复制完成后逐个调用）
+function tlOpenProject(pathStr) {
+  try {
+    var f = new File(String(pathStr || ''));
+    if (!f.exists) return "ERR:文件不存在";
+    var ok = app.openDocument(f.fsName);
+    return "OK:" + JSON.stringify({ opened: String(f.name || ''), ok: !!ok });
+  } catch (e) {
+    return "ERR:" + String(e.message || e);
+  }
+}
+
+// 在当前已打开的工程里，切到指定名字的序列（找不到就保持默认）
+function tlActivateSequenceByName(seqName) {
+  try {
+    var want = String(seqName || '');
+    var n = app.project.sequences.numSequences;
+    for (var i = 0; i < n; i++) {
+      var s = app.project.sequences[i];
+      if (String(s.name || '') === want) {
+        try { app.project.openSequence(s.sequenceID); } catch (e1) {
+          try { app.project.activeSequence = s; } catch (e2) {}
+        }
+        return "OK:" + JSON.stringify({ activated: want, found: true });
+      }
+    }
+    return "OK:" + JSON.stringify({ activated: '', found: false });
+  } catch (e) {
+    return "ERR:" + String(e.message || e);
+  }
+}
+
 function tlStatus() {
     try {
         var out = { ok: true };

@@ -47,6 +47,9 @@
   var btnTplDelete = document.getElementById('btn-tpl-delete');
   var tplTip = document.getElementById('tpl-tip');
   var tplGroup = document.getElementById('tpl-group');
+  var tplCurrent = document.getElementById('tpl-current');
+  var rndCurrent = document.getElementById('rnd-current');
+  var chkAutofill = document.getElementById('chk-autofill');
   var rndPr = document.getElementById('rnd-pr');
   var rndAme = document.getElementById('rnd-ame');
   var rndTip = document.getElementById('rnd-tip');
@@ -70,6 +73,9 @@
         : 'PR 直渲：渲染在 Premiere 前台进行，导出期间会占用 PR，不能同时编辑。';
       rndTip.className = 'rnd-tip' + (ch === 'ame' ? ' is-ame' : '');
     }
+    // 折叠标题上直接显示当前通道，不展开也能看到
+    var _rc = document.getElementById('rnd-current');
+    if (_rc) _rc.textContent = (ch === 'pr') ? 'PR 直渲' : 'AME 队列';
   }
 
   // ── 全局状态 ──────────────────────────────────
@@ -90,6 +96,97 @@
   var activeTplId = '';      // 当前套用的模板 id；'' = 自由配置
   var tplDirty = false;      // 当前配置相对模板是否有改动
   var lastSnapshot = null;   // 套用模板时的快照，用于 dirty 对比// ── 基础 UI 工具 ──────────────────────────────
+
+  // ── 完成弹窗：任务跑完给一个明确结论 + 一键打开输出目录 ──
+  // 用自定义弹层而非 alert：alert 会阻塞 PR，且没法放按钮回调。
+  function showDoneDialog(opts) {
+    opts = opts || {};
+    var ok = opts.ok !== false;
+    var old = document.getElementById('expDoneMask');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+
+    var mask = document.createElement('div');
+    mask.id = 'expDoneMask';
+    mask.className = 'exp-done-mask';
+
+    var box = document.createElement('div');
+    box.className = 'exp-done-box';
+
+    var ic = document.createElement('div');
+    ic.className = 'exp-done-ic';
+    ic.textContent = ok ? '✅' : '⚠️';
+    box.appendChild(ic);
+
+    var ttl = document.createElement('div');
+    ttl.className = 'exp-done-title';
+    ttl.textContent = opts.title || (ok ? '导出完成' : '导出结束（有未完成项）');
+    box.appendChild(ttl);
+
+    var desc = document.createElement('div');
+    desc.className = 'exp-done-desc';
+    desc.textContent = opts.desc || '';
+    box.appendChild(desc);
+
+    var btns = document.createElement('div');
+    btns.className = 'exp-done-btns';
+
+    var outDir = opts.outDir || lastOutputDir || '';
+    if (outDir) {
+      var bOpen = document.createElement('button');
+      bOpen.type = 'button';
+      bOpen.className = 'primary';
+      bOpen.textContent = '📂 打开输出目录';
+      bOpen.addEventListener('click', function () {
+        // 复用已有的打开目录能力
+        try {
+          if (typeof openOutputDir === 'function') { openOutputDir(); }
+          else if (window.__openFolder) { window.__openFolder(outDir); }
+          else {
+            var cp = require('child_process');
+            cp.exec('explorer "' + outDir + '"');
+          }
+        } catch (e) {}
+      });
+      btns.appendChild(bOpen);
+    }
+
+    var bClose = document.createElement('button');
+    bClose.type = 'button';
+    bClose.textContent = '关闭';
+    bClose.addEventListener('click', function () {
+      if (mask.parentNode) mask.parentNode.removeChild(mask);
+    });
+    btns.appendChild(bClose);
+
+    box.appendChild(btns);
+    mask.appendChild(box);
+    document.body.appendChild(mask);
+
+    // 点遮罩关闭
+    mask.addEventListener('click', function (e) {
+      if (e.target === mask && mask.parentNode) mask.parentNode.removeChild(mask);
+    });
+    // Esc 关闭
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        if (mask.parentNode) mask.parentNode.removeChild(mask);
+        document.removeEventListener('keydown', onKey);
+      }
+    }
+    document.addEventListener('keydown', onKey);
+
+    // 12 秒后自动淡出，避免挡住后续操作
+    setTimeout(function () {
+      if (mask.parentNode) {
+        mask.style.transition = 'opacity .3s';
+        mask.style.opacity = '0';
+        setTimeout(function () {
+          if (mask.parentNode) mask.parentNode.removeChild(mask);
+        }, 320);
+      }
+    }, 12000);
+  }
+
   function setLog(msg, level) {
     // level: 'info'(默认) | 'success' | 'warn' | 'error' | true(兼容旧代码=error)
     var lv = 'info';
@@ -458,6 +555,20 @@
   }
 
   function updateTplTip() {
+    // 折叠标题显示「当前在用哪个模板」
+    try {
+      var _tc = document.getElementById('tpl-current');
+      if (_tc) {
+        var _at = activeTemplate();
+        if (_at && _at.name) {
+          _tc.textContent = _at.name + (tplDirty ? '（有改动）' : '');
+          _tc.style.color = tplDirty ? '#e0b96a' : '#7fb3d5';
+        } else {
+          _tc.textContent = '自由配置';
+          _tc.style.color = '#8a9bab';
+        }
+      }
+    } catch (e) {}
     if (!tplTip) return;
     var at = activeTemplate();
     if (!at) {
@@ -1147,8 +1258,10 @@
                    ' ｜ 本机 ME 年份 [' + ((pj.me && pj.me.years) || []).join('/') + ']');
             (pj.warnings || []).forEach(function (w) { setLog('  ⚠ ' + w, 'warn'); });
             if (pj.reason === 'VERSION_MISMATCH') {
-              setLog('  ✗ PR 与 ME 版本不配套：队列任务会由 PR 本地渲染（占用 PR，且 ME 队列里看不到）', 'error');
-              setLog('  → 建议装与 PR 同版本的 Media Encoder；或把渲染通道切到「PR 直渲」以免误解', 'error');
+              // 这不是失败：PR 会自己把活干完，文件照样出。
+              // 原来打成 error 红字，导致每次任务正常完成、日志却红一片，误以为出错。
+              setLog('  ℹ PR 与 ME 版本不配套：队列任务将由 PR 本地渲染完成（不影响出片）', 'warn');
+              setLog('  → 想让 ME 队列真正接管，装与 PR 同版本的 Media Encoder', 'warn');
             } else if (!pj.ok) {
               setLog('  ⚠ 预检未通过（' + (pj.reason || '未知') + '），AME 队列可能不可用', 'warn');
             } else {
@@ -1410,7 +1523,16 @@
         }
         if (rr && rr.err) {
           if (rr.err === '__CANCELED__') { setLog('⏹「' + job.version + '」被取消', 'warn'); }
-          else { setLog('✗「' + job.version + '」渲染失败：' + rr.err, 'error'); }
+          else {
+          // 同样是「回调说失败但文件已生成」的情况：文件在就按完成处理
+          var _fExists = false;
+          try { _fExists = !!(job.out && job.out.file && fs.existsSync(job.out.file)); } catch (_) {}
+          if (_fExists) {
+            setLog('ℹ「' + job.version + '」通道报告异常，但文件已生成，视为完成', 'warn');
+          } else {
+            setLog('✗「' + job.version + '」渲染失败：' + rr.err, 'error');
+          }
+        }
           manifest.push({ seq: job.out ? job.version : '', version: job.version, status: '失败', file: job.file, dir: job.out ? job.out.dir : '', size: '', duration: '' });
         } else {
           done++;
@@ -1501,11 +1623,49 @@
         if (resA.stopped) {
           setLog('⏹ 已停止（用户中止）', 'warn');
         } else if (!resA.ok) {
-          setLog('✗ AME 流程失败：' + resA.err, 'error');
+          // 中间流程报错不代表没出片：AME 回调缺失 / ME 没就绪时 PR 会自己渲完。
+          // 先看产物在不在，在就算成功，避免正常任务留下红色报错。
+          var _madeA = 0, _wantA = 0;
+          try {
+            manifest.forEach(function (m) {
+              if (m.status === '成功') {
+                _madeA++;
+                try { if (m.file && fs.existsSync(m.file)) _wantA++; } catch (_) {}
+              }
+            });
+          } catch (_) {}
+          if (_madeA > 0) {
+            setLog('ℹ AME 通道有提示信息（' + resA.err + '），但已产出 ' + _madeA + ' 个文件，视为完成', 'warn');
+            showDoneDialog({
+              ok: true,
+              title: '导出完成',
+              desc: '已产出 ' + _madeA + ' 个文件（AME 通道有提示但不影响出片）。',
+              outDir: (function () {
+                try { var e2 = enabledVersions(); return (e2.length && e2[0].outDir) || lastOutputDir || ''; }
+                catch (_) { return lastOutputDir || ''; }
+              })()
+            });
+          } else {
+            setLog('✗ AME 流程失败：' + resA.err, 'error');
+            showDoneDialog({ ok: false, title: '导出结束（未产出文件）', desc: String(resA.err || '') });
+          }
         } else {
           setProgress(100, '全部完成', (Date.now() - startTime) / 1000, 0);
           setLog('════ AME 批量结束：完成 ' + resA.done + ' / ' + resA.total + ' ════',
                  resA.done === resA.total ? 'success' : 'warn');
+            (function () {
+              var _allA = (resA.done === resA.total && resA.total > 0);
+              var _evA = enabledVersions();
+              var _dirA = (_evA.length && _evA[0].outDir) ? _evA[0].outDir : (lastOutputDir || '');
+              showDoneDialog({
+                ok: _allA,
+                title: _allA ? '导出完成' : '导出结束（部分未完成）',
+                desc: _allA
+                  ? ('已成功导出 ' + resA.done + ' 个序列的全部版本。')
+                  : ('完成 ' + resA.done + ' / ' + resA.total + '，请查看日志确认原因。'),
+                outDir: _dirA
+              });
+            })();
         }
         if (chkManifest.checked) writeManifest(manifest);
         try {
@@ -1547,6 +1707,18 @@
         setProgress(100, '全部完成', (Date.now() - startTime) / 1000, 0);
         var allOk = (doneSeq === totalSeq && totalSeq > 0);
         setLog('════ 批量结束：成功 ' + doneSeq + ' / 失败 ' + (totalSeq - doneSeq) + ' ════', allOk ? 'success' : 'warn');
+        (function () {
+          var _ev = enabledVersions();
+          var _dir = (_ev.length && _ev[0].outDir) ? _ev[0].outDir : (lastOutputDir || '');
+          showDoneDialog({
+            ok: allOk,
+            title: allOk ? '导出完成' : '导出结束（部分未完成）',
+            desc: allOk
+              ? ('已成功导出 ' + doneSeq + ' 个序列的全部启用版本。')
+              : ('成功 ' + doneSeq + ' / ' + totalSeq + '，失败 ' + (totalSeq - doneSeq) + ' 个，请查看日志。'),
+            outDir: _dir
+          });
+        })();
         if (chkManifest.checked) writeManifest(manifest);
         // 导出全部成功：记录首个启用版本输出目录，供「打开输出目录」按钮用
         try {
@@ -1696,14 +1868,48 @@
     btnAddVersion.addEventListener('click', addVersion);
 
   btnBrowseRoot.addEventListener('click', function () {
-    browseFolder(deliveryRoot, function (p) { setDeliveryRoot(p); });
+    browseFolder(deliveryRoot, function (p) {
+      setDeliveryRoot(p);
+      maybeAutofill();
+    });
   });
   btnAutofill.addEventListener('click', autofillFromRoot);
+
+  // 自动填充开关（默认开）：勾着时填完根目录即刻填充各版本路径，不用再点按钮
+  var AUTOFILL_KEY = 'pr_me_autofill_v1';
+  function getAutofillOn() {
+    try { return localStorage.getItem(AUTOFILL_KEY) !== '0'; } catch (e) { return true; }
+  }
+  function setAutofillOn(on) {
+    try { localStorage.setItem(AUTOFILL_KEY, on ? '1' : '0'); } catch (e) {}
+  }
+  if (chkAutofill) {
+    chkAutofill.checked = getAutofillOn();
+    chkAutofill.addEventListener('change', function () {
+      setAutofillOn(chkAutofill.checked);
+    });
+  }
+  // 根目录变化时若开着自动填充就立刻填充（防抖，避免拖动输入时反复扫描）
+  var _afTimer = null;
+  function maybeAutofill() {
+    if (!chkAutofill || !chkAutofill.checked) return;
+    var root = (deliveryRoot.value || '').trim();
+    if (!root) return;
+    if (_afTimer) clearTimeout(_afTimer);
+    _afTimer = setTimeout(function () {
+      _afTimer = null;
+      try { autofillFromRoot(); } catch (e) {
+        setLog('自动填充失败：' + (e && e.message || e), 'warn');
+      }
+    }, 450);
+  }
   btnBrowseSubtitle.addEventListener('click', function () {
     browseFolder(subtitleDir, function (p) {
       var cfg = getSubtitleCfg(); cfg.dir = p; setSubtitleCfg(cfg);
     });
   });
+  deliveryRoot.addEventListener('change', maybeAutofill);
+  deliveryRoot.addEventListener('blur', maybeAutofill);
   chkManifest.addEventListener('change', function () { setManifestCfg(chkManifest.checked); });
   chkSubtitle.addEventListener('change', function () {
     var cfg = getSubtitleCfg(); cfg.enabled = chkSubtitle.checked; setSubtitleCfg(cfg);
