@@ -1918,6 +1918,23 @@
     var cfg = getSubtitleCfg(); cfg.dir = subtitleDir.value; setSubtitleCfg(cfg);
   });
 
+  // 切到交付面板时自动刷新序列列表（用户从别的面板回来，序列可能变了）
+  // 加 800ms 防抖：连续切换不会刷多次
+  var _onShowTimer = null;
+  window.__exportOnShow = function () {
+    if (_onShowTimer) clearTimeout(_onShowTimer);
+    _onShowTimer = setTimeout(function () {
+      _onShowTimer = null;
+      try {
+        refreshSequences().then(function () {
+          // 静默刷新，不写日志（避免每次切面板都刷一条）
+        }).catch(function (e) {
+          try { setLog('序列刷新失败：' + (e && e.message || e), 'warn'); } catch (_) {}
+        });
+      } catch (e) {}
+    }, 800);
+  };
+
   btnRefresh.addEventListener('click', async function () {
     refreshPresets();
     await refreshSequences();

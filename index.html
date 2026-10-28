@@ -45,7 +45,6 @@
         <button class="ws-group" data-group="media">🗂 素材</button>
         <button class="ws-group" data-group="script">📖 剧本</button>
         <button class="ws-group active" data-group="progress">进度</button>
-        <button class="ws-group" data-group="todo">📝 待办</button>
         <button class="ws-group" data-group="upscale">✨ 超分</button>
         <button class="ws-group" data-group="sub">字幕</button>
         <button class="ws-group" data-group="audio">声音</button>
@@ -2014,7 +2013,13 @@
 }
 .prg-miss-row.is-done{color:#7fd68b;}
 .prg-ms-done{color:#7fd68b;}
-.prg-ms-miss{color:#e0b96a;}
+/* 缺集是「待处理项」，用暖色更符合语义：绿=完成，黄橙=欠账，红=严重 */
+.prg-ms-miss{color:#f0b64a;}
+/* 缺集行里的分隔逗号也要黄，不然整句读起来割裂 */
+.prg-ms-sep{color:#f0b64a;opacity:.85;}
+/* 缺集数量用更重的红，一眼能看到缺多少 */
+.prg-ms-count{color:#ff8a6a;font-weight:700;}
+.prg-ms-warn{color:#e0b96a;}
 .prg-miss-row b{font-weight:600;}
 </style>
 

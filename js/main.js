@@ -131,6 +131,10 @@
 
     // 懒启动钩子
     function lazyInit(name) {
+        // 交付面板：切到时自动刷新序列列表（序列可能已变）
+        if (name === 'export' && window.__exportOnShow) {
+            try { window.__exportOnShow(); } catch (e) {}
+        }
         if (name === 'music' && window.__musicOnShow) {
             try { window.__musicOnShow(); } catch (e) {}
         }

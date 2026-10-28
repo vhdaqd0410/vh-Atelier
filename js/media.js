@@ -335,31 +335,45 @@
     if (node.abs === 'COMPUTER') return listDrives().length;
     try { return listDirs(node.abs).length; } catch (e) { return 0; }
   }
-  // 把 target 路径的祖先链全部展开（用于恢复上次位置 / 面包屑跳转）
+  // 把 target 路径的祖先链全部展开（用于恢复上次位置 / 搜索定位 / 面包屑跳转）
+  // 关键：chain 是从根往下排的「逐级路径」，但不一定包含根本身，
+  //      所以循环里必须「每一轮先在当前节点的子级里找 chain[i]」，
+  //      找不到时才跳过（而当 chain[i] 就是当前节点本身时直接前进到下一轮）。
+  //      旧实现在第一轮就 break，导致整条链从来展开不出来。
   function expandAncestors(target) {
     if (!treeModel || !target || target === 'COMPUTER') return;
-    var norm = function (p) { return String(p).replace(/[\\/]+$/, '').toLowerCase(); };
-    var targetNorm = norm(target);
+    // 统一分隔符（path.dirname 在 Windows 会产出反斜杠，直接比较会不相等）
+    var norm = function (p) { return String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); };
+    var rootLen = treeModel.abs.length;
     var chain = [];
-    var probe = target;
-    while (probe && probe.length >= treeModel.abs.length) {
+    var probe = String(target);
+    while (probe && probe.length >= rootLen) {
       chain.unshift(probe);
       var p2 = path.dirname(probe);
       if (p2 === probe) break;
       probe = p2;
     }
+    // 根自身永远展开
     var node = treeModel;
     expandedSet[node.abs] = true;
+
     for (var i = 0; i < chain.length; i++) {
-      if (norm(chain[i]) === norm(node.abs)) continue;
+      var want = norm(chain[i]);
+      // 情况 A：chain[i] 就是当前节点 → 直接前进（不需要匹配）
+      if (want === norm(node.abs)) continue;
+      // 情况 B：在当前节点的子级里找
       var kids = ensureChildren(node);
       var hit = null;
       for (var k = 0; k < kids.length; k++) {
-        if (norm(kids[k].abs) === norm(chain[i])) { hit = kids[k]; break; }
+        if (norm(kids[k].abs) === want) { hit = kids[k]; break; }
       }
-      if (!hit) break;
+      if (!hit) {
+        // 找不到说明这条路径不在当前树里（比如被跳过/权限不足），停止下钻
+        // 但已展开的部分保留，用户至少能看到最近的可见祖先
+        break;
+      }
       node = hit;
-      if (i < chain.length - 1) expandedSet[node.abs] = true;
+      expandedSet[node.abs] = true;   // 途经的每一级都展开
     }
   }
 
@@ -781,15 +795,35 @@
     return 300 + hits * 10 - Math.min(150, firstAt * 5);
   }
 
-  // 递归收集目录下的条目。limit 防止超大目录卡死。
+  // 递归收集目录下的条目。
+  // 关键：必须有「扫描节点总数」硬上限，否则搜一个不存在的词会把整盘走完 → 界面卡死。
+  // 之前 limit 只限制「推送结果数」，不限制「遍历量」，所以含子目录模式下必卡。
+  var SCAN_MAX_DIRS = 2500;      // 最多遍历多少个目录
+  var SCAN_MAX_MS = 4000;        // 最多扫多久（毫秒）
+  var SCAN_MAX_DEPTH = 8;        // 最大递归深度
+  // 这些目录平时不需要搜，跳过能省大量时间
+  var SKIP_DIR_NAMES = {
+    'node_modules': 1, '$recycle.bin': 1, 'system volume information': 1,
+    'windows': 1, 'winsxs': 1, 'programdata': 1, '.git': 1, '__pycache__': 1,
+    'appdata': 1, 'application data': 1, 'local settings': 1, 'temp': 1
+  };
+
   function collectEntries(root, q, deep, limit) {
     limit = limit || 800;
     var out = [];
     var stack = [{ dir: root, rel: '', depth: 0 }];
-    var guard = 0;
+    var dirsScanned = 0;
+    var t0 = Date.now();
+    var truncated = false;
 
     while (stack.length && out.length < limit) {
+      // 三重刹车：目录数 / 耗时 / 深度
+      if (dirsScanned >= SCAN_MAX_DIRS) { truncated = true; break; }
+      if (Date.now() - t0 > SCAN_MAX_MS) { truncated = true; break; }
+
       var cur = stack.shift();
+      dirsScanned++;
+
       var subs = [];
       var files = [];
       try { subs = listDirs(cur.dir); } catch (e) {}
@@ -809,12 +843,16 @@
             score: dsc
           });
         }
-        if (deep) stack.push({ dir: path.join(cur.dir, dn), rel: subRel, depth: cur.depth + 1 });
+        if (deep && cur.depth < SCAN_MAX_DEPTH) {
+          if (!SKIP_DIR_NAMES[String(dn).toLowerCase()]) {
+            stack.push({ dir: path.join(cur.dir, dn), rel: subRel, depth: cur.depth + 1 });
+          }
+        }
       }
 
       // 文件
-      for (var j = 0; j < files.length; j++) {
-        var fn = files[j];
+      for (var k = 0; k < files.length; k++) {
+        var fn = files[k];
         var fsc = fuzzyScore(fn, q);
         if (fsc > 0) {
           out.push({
@@ -826,15 +864,17 @@
           });
         }
       }
-
-      if (++guard > 2000) break;   // 极端情况下兜底
     }
+    if (stack.length) truncated = true;
+
     // 文件夹优先一点点，其次按分数
     out.sort(function (a, b) {
       if (a.score !== b.score) return b.score - a.score;
       if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
       return a.name.localeCompare(b.name, 'zh');
     });
+    out.__truncated = truncated;
+    out.__scanned = dirsScanned;
     return out;
   }
 
@@ -874,7 +914,8 @@
     info.innerHTML = '<span class="md-search-hit">' + entries.length + '</span> 项'
       + (nDir ? ' · ' + nDir + ' 文件夹' : '')
       + (nFile ? ' · ' + nFile + ' 文件' : '')
-      + (searchDeep ? ' · 含子目录' : ' · 仅当前层');
+      + (searchDeep ? ' · 含子目录' : ' · 仅当前层')
+      + (entries.__truncated ? ' · <span style="color:#e0b96a;">已达扫描上限，结果可能不全</span>' : '');
     el.fhead.appendChild(info);
 
     if (!entries.length) {
@@ -903,7 +944,7 @@
           fnEl.appendChild(sub);
         }
         row.title = e.full;
-        row.addEventListener('click', function () { openDir(e.full, true); });
+        row.addEventListener('click', function () { gotoDirFromSearch(e.full); });
       } else {
         row = makeFileLeaf(e.full, e.name, path.dirname(e.full));
         if (row) {
@@ -921,6 +962,111 @@
       }
       if (row) el.flist.appendChild(row);
     });
+  }
+
+  // 从搜索结果跳到某个文件夹：在左侧目录树里展开并高亮定位。
+  // 之前这里调用了 openDir()，但这个函数根本不存在（原文件里从来没有），
+  // 所以点文件夹结果完全没反应。正确做法是走现有的 browseDir + renderNav 机制。
+  function gotoDirFromSearch(target) {
+    if (!target) return;
+
+    // 目标可能不在当前根下（比如搜索范围跨了根），这种情况先把根切过去
+    // 统一分隔符（path.dirname 在 Windows 会产出反斜杠，直接比较会不相等）
+    var norm = function (p) { return String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); };
+    var t = String(target);
+    var rootAbs = currentRoot || '';
+    var insideRoot = false;
+    try {
+      insideRoot = rootAbs && (norm(t) === norm(rootAbs) ||
+                                norm(t).indexOf(norm(rootAbs) + '\\') === 0 ||
+                                norm(t).indexOf(norm(rootAbs) + '/') === 0);
+    } catch (e) { insideRoot = false; }
+
+    if (!insideRoot && currentRoot !== 'COMPUTER') {
+      // 不在当前根内：把该路径所在盘/目录设为根
+      try {
+        var driveM = /^([A-Za-z]):/.exec(t);
+        if (driveM) setRoot(driveM[1].toUpperCase() + ':/');
+      } catch (e) {}
+    }
+
+    // 清空搜索框：定位完成后用户通常是想浏览这个目录
+    var inp = document.getElementById('mdSearch');
+    if (inp) inp.value = '';
+    searchQuery = '';
+    var clr = document.getElementById('mdSearchClear');
+    if (clr) clr.style.display = 'none';
+
+    // 关键：browseDir 决定「当前选中目录」，treeModel/expandedSet 决定树的展开状态
+    browseDir = t;
+    curDirPath = t;
+    try { localStorage.setItem('mdCurDir', t); } catch (e) {}
+
+    // 重建树模型（根不变的情况下只需展开祖先链）
+    if (!treeModel || treeModel.abs !== currentRoot) {
+      treeModel = makeNode(currentRoot, dirName(currentRoot) || currentRoot, 0);
+    }
+
+    // 目标是根本身 → 根必须展开，否则用户点到根上会以为没反应
+    if (norm(t) === norm(currentRoot)) {
+      expandedSet[treeModel.abs] = true;
+    } else {
+      expandAncestors(t);
+      // expandAncestors 只展开「祖先」，不含目标自身。
+      // 用户点一个文件夹是想看它里面有什么，所以把目标自己也展开。
+      // 这里通过重新走一遍祖先链拿到目标节点，确认它存在后展开。
+      try {
+        var normF = function (p) { return String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); };
+        var probeNode = treeModel;
+        var chain2 = [];
+        var pr = t;
+        while (pr && pr.length >= treeModel.abs.length) {
+          chain2.unshift(pr);
+          var pp = path.dirname(pr);
+          if (pp === pr) break;
+          pr = pp;
+        }
+        var found = true;
+        for (var ci = 0; ci < chain2.length; ci++) {
+          if (normF(chain2[ci]) === normF(probeNode.abs)) continue;
+          var kids2 = ensureChildren(probeNode);
+          var hit2 = null;
+          for (var ki = 0; ki < kids2.length; ki++) {
+            if (normF(kids2[ki].abs) === normF(chain2[ci])) { hit2 = kids2[ki]; break; }
+          }
+          if (!hit2) { found = false; break; }
+          probeNode = hit2;
+        }
+        if (found && probeNode) {
+          expandedSet[probeNode.abs] = true;
+          try { if (subCount(probeNode) > 0) ensureChildren(probeNode); } catch (e) {}
+        }
+      } catch (e) {}
+    }
+
+    // 高亮并滚动到该节点
+    renderNav();
+    setTimeout(function () { scrollTreeTo(t); }, 80);
+  }
+
+  // 把目录树里对应节点滚到可视区域并加高亮
+  function scrollTreeTo(abs) {
+    try {
+      var nodes = el.tree ? el.tree.querySelectorAll('.md-tree-item') : [];
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        var nrm = function (p) { return String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(); };
+        if (n.title && nrm(n.title) === nrm(abs)) {
+          n.classList.add('sel');
+          try { n.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+          // 短暂闪光提示
+          n.style.transition = 'background .25s';
+          n.style.background = 'rgba(127,214,139,.28)';
+          setTimeout(function () { n.style.background = ''; }, 900);
+          return;
+        }
+      }
+    } catch (e) {}
   }
 
   function setSearchQuery(v) {

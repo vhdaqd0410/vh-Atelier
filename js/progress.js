@@ -409,12 +409,14 @@
         }
 
         // 拼成「名字 集号，名字 集号」；sep 是组间分隔符
-        function joinParts(g, cls) {
+        function joinParts(g, cls, sepCls) {
             var eds = sortEditors(g);
             var parts = eds.map(function (ed) {
                 return '<span class="' + cls + '">' + esc(ed) + ' ' + compactEpList(g[ed]) + '</span>';
             });
-            return parts.join('，');
+            // 分隔逗号单独包一层：缺集行的逗号也要跟文字同色，不然读起来割裂
+            var sep = sepCls ? ('<span class="' + sepCls + '">，</span>') : '，';
+            return parts.join(sep);
         }
 
         var gPresent = groupByEditor(present);
@@ -434,7 +436,10 @@
         }
 
         // 第二行：缺集（按人分）
-        out.push('⚠️ 缺 ' + missing.length + ' 集：' + joinParts(gMissing, 'prg-ms-miss'));
+        out.push('<span class="prg-ms-warn">⚠️ 缺 </span>'
+            + '<span class="prg-ms-count">' + missing.length + '</span>'
+            + '<span class="prg-ms-warn"> 集：</span>'
+            + joinParts(gMissing, 'prg-ms-miss', 'prg-ms-sep'));
 
         return out.join('<br>');
     }
