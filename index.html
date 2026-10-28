@@ -197,6 +197,38 @@
 
 <!-- ==================== 板块二：语音克隆 ==================== -->
     <div class="tab-panel" id="panel-clone" style="display:none;">
+        <!-- 0 · 引擎状态 -->
+        <div class="card" id="ceCard" style="padding:8px 10px;">
+            <div class="ce-bar" id="ceBar">
+                <span class="ce-dot" id="ceDot"></span>
+                <span class="ce-text" id="ceText">检测引擎中…</span>
+                <span style="flex:1"></span>
+                <button class="secondary mini" id="ceRecheck" title="重新检测">↻</button>
+                <button class="secondary mini" id="ceSetup" title="设置引擎目录">⚙ 设置</button>
+            </div>
+            <div id="ceDetail" style="display:none;margin-top:8px;">
+                <div class="ce-steps" id="ceSteps"></div>
+                <div class="ce-actions">
+                    <button class="secondary mini" id="ceBrowse">📂 选择 CosyVoice3 目录</button>
+                    <button class="secondary mini" id="ceRetry">🔄 重新检测</button>
+                </div>
+            </div>
+            <div id="ceConfig" style="display:none;margin-top:8px;">
+                <label class="flabel" style="font-size:11px;">CosyVoice3 引擎目录</label>
+                <div class="dir-row" style="margin-top:4px;">
+                    <input type="text" id="ceRootInput" placeholder="例如 D:\cosyvoice3_V30" style="flex:1;">
+                    <button class="secondary mini" id="ceRootBrowse">浏览…</button>
+                </div>
+                <div class="hint" style="margin-top:5px;line-height:1.6;">
+                    目录里应有 <code>_internal</code>、<code>cosyvoice</code>、<code>pretrained_models</code> 三个文件夹。
+                </div>
+                <div class="ce-actions" style="margin-top:7px;">
+                    <button class="secondary mini" id="ceRootSave">保存并检测</button>
+                    <button class="secondary mini" id="ceRootAuto">恢复自动探测</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 1 · 选音色 -->
         <div class="card">
             <h2>1 · 选音色</h2>
@@ -765,8 +797,31 @@
             <div id="bzResultWrap" style="display:none;margin-top:12px;">
                 <div class="ref-box" id="bzResultInfo" style="margin:0;"></div>
                 <div id="bzResultWave" style="margin-top:8px;"></div>
-                <div class="row" style="margin-top:10px;">
-                    <button id="bzBtnInsert" class="secondary" style="flex:1;">送到时间轴</button>
+                <div class="hint" style="margin-top:6px;color:#7fd68b;">
+                    💡 直接把这行或波形<b>拖进时间轴</b>，松手即插入（推荐）
+                </div>
+                <div class="bz-insert-row">
+                    <label class="bz-ir-label">目标轨道</label>
+                    <select id="bzInsTrack" style="flex:1;">
+                        <option value="auto">自动（找空轨）</option>
+                        <option value="0">A1</option>
+                        <option value="1">A2</option>
+                        <option value="2">A3</option>
+                        <option value="3">A4</option>
+                    </select>
+                    <button id="bzBtnRefreshInsTrack" class="secondary mini" title="刷新轨道列表">↻</button>
+                </div>
+                <div class="bz-insert-row">
+                    <label class="bz-ir-label">插入位置</label>
+                    <select id="bzInsPos" style="flex:1;">
+                        <option value="playhead">播放头位置</option>
+                        <option value="inpoint">入点位置</option>
+                        <option value="end">时间轴末尾</option>
+                        <option value="start">时间轴开头</option>
+                    </select>
+                </div>
+                <div class="row" style="margin-top:8px;">
+                    <button id="bzBtnInsert" class="secondary" style="flex:1;">插入到时间轴</button>
                 </div>
                 <div class="hint" id="bzInsertHint" style="margin-top:6px;"></div>
             </div>
@@ -2153,6 +2208,53 @@
 .log-line .log-body:empty{display:none;}
 </style>
 
+<style>
+/* ==== 语音克隆·引擎状态 ==== */
+.ce-bar{display:flex;align-items:center;gap:6px;font-size:11.5px;}
+.ce-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:#8a8a8a;transition:background .2s;}
+.ce-dot.ok{background:#7fd68b;box-shadow:0 0 6px rgba(127,214,139,.6);}
+.ce-dot.warn{background:#e0b96a;box-shadow:0 0 6px rgba(224,185,106,.5);}
+.ce-dot.err{background:#ff8a8a;box-shadow:0 0 6px rgba(255,138,138,.5);}
+.ce-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#cfd8e3;}
+.ce-text.ok{color:#7fd68b;}
+.ce-text.warn{color:#e0b96a;}
+.ce-text.err{color:#ff8a8a;}
+.ce-steps{font-size:10.5px;line-height:1.85;color:#9aa8b8;background:rgba(0,0,0,.22);border-radius:5px;padding:7px 9px;}
+.ce-step{display:flex;gap:6px;align-items:flex-start;}
+.ce-step .ic{flex:0 0 auto;width:14px;}
+.ce-step.miss .tx{color:#e0b96a;}
+.ce-step .sub{color:#6f7c8a;font-size:9.5px;margin-top:1px;}
+.ce-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+.ce-actions button{flex:0 0 auto;}
+#panel-clone code{background:rgba(255,255,255,.08);padding:1px 4px;border-radius:3px;font-size:10px;color:#9fd0ff;}
+</style>
+
+<style>
+/* ==== Breeze 插入目标 ==== */
+.bz-insert-row{
+    display:flex;align-items:center;gap:6px;
+    margin-top:7px;
+}
+.bz-ir-label{
+    flex:0 0 auto;margin:0;
+    font-size:10.5px;color:#8a9bab;min-width:52px;
+}
+.bz-insert-row select{
+    background:rgba(255,255,255,.05);
+    color:#e8ecf4;border:1px solid rgba(255,255,255,.12);
+    border-radius:4px;font-size:11px;padding:3px 5px;
+}
+/* 可拖拽元素视觉提示 */
+#bzResultInfo[draggable="true"],
+#bzResultWave[draggable="true"]{
+    cursor:grab;
+}
+#bzResultInfo[draggable="true"]:hover{
+    border-color:rgba(127,214,139,.5) !important;
+    background:rgba(127,214,139,.06);
+}
+</style>
+
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
     <div class="tab-panel" id="panel-media" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
@@ -2209,6 +2311,8 @@
     <script src="js/subtitle.js"></script>
     <script src="js/audio-preset.js"></script>
     <script src="js/wave-mini.js"></script>
+    <script src="js/cosy-engine.js"></script>
+    <script src="js/cosy-engine-ui.js"></script>
     <script src="js/clone.js"></script>
 <script src="js/breeze.js"></script>
     <script src="js/wavesurfer.js"></script>

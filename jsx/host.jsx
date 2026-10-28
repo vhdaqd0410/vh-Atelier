@@ -660,6 +660,69 @@ function vcGetPlayerPosition() {
     }
 }
 
+// 取「插入基准位置」：给 Breeze/克隆的「插入位置」下拉用
+// mode: playhead | inpoint | end | start
+function vcGetInsertPositionStr() {
+    try {
+        var seq = app.project.activeSequence;
+        if (!seq) return JSON.stringify({ error: '没有激活的序列' });
+
+        var mode = String(vcInsertPosMode || 'playhead').toLowerCase();
+        var sec = 0;
+
+        if (mode === 'playhead') {
+            var pos = seq.getPlayerPosition();
+            if (pos) { try { sec = pos.seconds || 0; } catch (e) {} }
+        } else if (mode === 'inpoint') {
+            // 序列入点：PR 的 inPoint 是 Time 对象，取服务端试几种字段
+            var ip = null;
+            try { ip = seq.inPoint; } catch (e) {}
+            if (ip) {
+                try { sec = ip.seconds; } catch (e) {}
+                if (typeof sec !== 'number' || isNaN(sec)) {
+                    try { sec = ip.getSeconds(); } catch (e) {}
+                }
+            }
+            if (typeof sec !== 'number' || isNaN(sec)) sec = 0;
+        } else if (mode === 'end') {
+            // 时间轴末尾 = 所有轨道上最靠后的出点
+            var maxTicks = 0;
+            try {
+                var vTracks = seq.videoTracks.numTracks || 0;
+                for (var vi = 0; vi < vTracks; vi++) {
+                    var vt = seq.videoTracks[vi];
+                    for (var vc = 0; vc < (vt.clips.numItems || 0); vc++) {
+                        var c1 = vt.clips[vc];
+                        var e1 = 0;
+                        try { e1 = c1.end.ticks; } catch (e) {}
+                        if (e1 > maxTicks) maxTicks = e1;
+                    }
+                }
+                var aTracks = seq.audioTracks.numTracks || 0;
+                for (var ai = 0; ai < aTracks; ai++) {
+                    var at = seq.audioTracks[ai];
+                    for (var ac = 0; ac < (at.clips.numItems || 0); ac++) {
+                        var c2 = at.clips[ac];
+                        var e2 = 0;
+                        try { e2 = c2.end.ticks; } catch (e) {}
+                        if (e2 > maxTicks) maxTicks = e2;
+                    }
+                }
+            } catch (e) {}
+            var TICKS = 254016000000;   // PR 每秒 tick 数
+            sec = maxTicks > 0 ? (maxTicks / TICKS) : 0;
+        } else if (mode === 'start') {
+            sec = 0;
+        }
+
+        if (typeof sec !== 'number' || isNaN(sec) || sec < 0) sec = 0;
+
+        return JSON.stringify({ positionSec: sec, mode: mode });
+    } catch (e) {
+        return JSON.stringify({ error: String(e.message || e) });
+    }
+}
+
 // ---------- 遍历项目素材列表（供参考音频「项目选素材」）----------
 // 递归遍历项目树，把带媒体的素材（音频/视频）列出来，含路径、时长、所在素材箱
 function vcListProjectMedia() {

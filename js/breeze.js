@@ -98,6 +98,9 @@
         el.resultInfo = $('bzResultInfo');
         el.resultWave = $('bzResultWave');
         el.btnInsert = $('bzBtnInsert');
+        el.insTrack = $('bzInsTrack');
+        el.insPos = $('bzInsPos');
+        el.btnRefreshInsTrack = $('bzBtnRefreshInsTrack');
         el.insertHint = $('bzInsertHint');
     }
 
@@ -894,52 +897,216 @@
             el.resultInfo.textContent = '✓ ' + fmtSec(secs) + ' · ' + path.basename(wav);
             el.resultInfo.classList.add('has');
         }
+        // 结果可拖进时间轴：走 CEP 官方 DnD（与语音克隆/音乐库/音效库同一套）
+        // 只让「信息行 + 波形」可拖，整块 resultWrap 不设：
+        // 否则里面的按钮（送到时间轴等）会被裹进拖拽区域，容易误触发。
+        makeDraggable(el.resultInfo, wav);
+        makeDraggable(el.resultWave, wav);
         destroyResultWave();
         if (window.vhWave && el.resultWave) {
             try {
                 resultWaveInst = window.vhWave.mount(el.resultWave, wav, {
                     height: 44, color: '#7fd68b', bg: 'rgba(0,0,0,.25)'
                 });
+                // 波形画完后重新标一次可拖（vhWave 会重建内部 DOM）
+                setTimeout(function () {
+                    makeDraggable(el.resultWave, wav);
+                }, 60);
             } catch (e) {
                 el.resultWave.innerHTML = '<div class="hint">波形加载失败</div>';
             }
         }
         if (el.btnInsert) el.btnInsert.disabled = false;
-        if (el.insertHint) el.insertHint.textContent = '点「送到时间轴」插入播放头位置，或直接拖波形到时间轴。';
+        if (el.insertHint) {
+            el.insertHint.textContent = '可直接拖进时间轴；或选好轨道与位置后点「插入到时间轴」。';
+        }
+        // 生成完刷新轨道列表，让用户能选到最新建的音轨
+        refreshInsTracks();
+    }
+
+    // 让元素可拖进 PR 时间轴。
+    // CEP 官方 DnD：dataTransfer 里塞 com.adobe.cep.dnd.file.N，PR 会当作素材接收。
+    // 关键细节（踩过的坑）：
+    //   · 必须设 draggable='true'
+    //   · dragstart 里不能 preventDefault，否则 PR 收不到
+    //   · 同时塞 text/plain 兜底（有些版本只认这个）
+    function makeDraggable(node, filePath) {
+        if (!node || !filePath) return;
+        try {
+            node.setAttribute('draggable', 'true');
+            node.style.cursor = 'grab';
+            node.title = (node.title ? (node.title + '\n') : '') +
+                         '拖到时间轴即可插入\n' + filePath;
+
+            // 避免重复绑定（每次 showResult 会重新调用）
+            if (!node.__vhDragBound) {
+                node.__vhDragBound = true;
+
+                // 拖拽真正开始时才写数据：dragstart 在子元素上触发也会冒泡到这里，
+                // 用捕获+冒泡都兜一层，避免某些 CEP 版本在 canvas 上不触发。
+                function fill(ev) {
+                    var t = ev.target;
+                    if (t && (t.tagName === 'BUTTON' || t.tagName === 'INPUT')) {
+                        ev.preventDefault();
+                        return;
+                    }
+                    try {
+                        ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', filePath);
+                        ev.dataTransfer.setData('text/plain', filePath);
+                        ev.dataTransfer.effectAllowed = 'copy';
+                        ev.dataTransfer.dropEffect = 'copy';
+                    } catch (e) {
+                        console.log('[breeze] dragstart 失败: ' + e.message);
+                    }
+                    node.style.cursor = 'grabbing';
+                }
+
+                node.addEventListener('dragstart', fill, false);
+                node.addEventListener('dragend', function () {
+                    node.style.cursor = 'grab';
+                });
+            }
+
+            // 内部子元素（canvas / span / svg）也标可拖：
+            // CEP 里 canvas 上直接拖有时不触发，让它们随父级一起可拖更稳。
+            markChildrenDraggable(node);
+
+            // 用 MutationObserver 跟踪后续插入的子元素（vhWave.mount 是异步画完的）
+            if (!node.__vhDragObserver && window.MutationObserver) {
+                try {
+                    var mo = new MutationObserver(function () {
+                        markChildrenDraggable(node);
+                    });
+                    mo.observe(node, { childList: true, subtree: true });
+                    node.__vhDragObserver = mo;
+                } catch (e) {}
+            }
+        } catch (e) {
+            console.log('[breeze] makeDraggable 失败: ' + e.message);
+        }
+    }
+
+    // 给容器内所有非按钮元素标可拖（按钮保持不可拖，避免误触）
+    function markChildrenDraggable(node) {
+        try {
+            var kids = node.querySelectorAll ? node.querySelectorAll('*') : [];
+            for (var i = 0; i < kids.length; i++) {
+                var c = kids[i];
+                if (c.tagName === 'BUTTON' || c.tagName === 'INPUT' || c.tagName === 'SELECT') continue;
+                if (c.getAttribute('draggable') !== 'true') {
+                    c.setAttribute('draggable', 'true');
+                }
+                if (!c.style.cursor) c.style.cursor = 'grab';
+                c.style.userSelect = 'none';   // 防止拖拽变成选中文字
+            }
+        } catch (e) {}
     }
 
     // ---------- 送时间轴 ----------
+    // 按用户选的「目标轨道 + 插入位置」执行。
+    // 轨道 auto = 依次试 A1/A2/A3/A4，找第一条能插入的（不覆盖已有内容由 PR 自己决定）。
     function insertToTimeline() {
         if (!lastOutWav || !fs.existsSync(lastOutWav)) {
             alert('还没有生成音频'); return;
         }
 
-        setProgress(100, '正在插入时间轴…', false);
+        var posMode = el.insPos ? el.insPos.value : 'playhead';
+        var trackVal = el.insTrack ? el.insTrack.value : 'auto';
 
-        var payload = { wavPath: lastOutWav, trackIndex: 0, positionSec: -1, colorLabel: 9 };
+        setProgress(100, '正在读取插入位置…', false);
+
+        // 先问 PR 要基准位置
+        evalJsx('vcInsertPosMode = ' + JSON.stringify(posMode) + ';', function () {
+            evalJsx('vcGetInsertPositionStr()', function (r) {
+                var p = parseHost(r);
+                var posSec = 0;
+                if (p.ok && p.data && typeof p.data.positionSec === 'number') {
+                    posSec = p.data.positionSec;
+                } else if (!p.ok) {
+                    setProgress(0, '读取位置失败：' + (p.msg || '未知'), false);
+                    return;
+                }
+
+                // 轨道候选
+                var candidates;
+                if (trackVal === 'auto') {
+                    candidates = [0, 1, 2, 3];
+                } else {
+                    var n = parseInt(trackVal, 10);
+                    candidates = isNaN(n) ? [0] : [n];
+                }
+
+                tryInsert(candidates, posSec, 0);
+            });
+        });
+    }
+
+    // 依次尝试候选轨道
+    function tryInsert(candidates, posSec, idx) {
+        if (idx >= candidates.length) {
+            setProgress(0, '插入失败：没有可用的音轨（可试「自动」或先建一条音频轨）', false);
+            return;
+        }
+        var trackIndex = candidates[idx];
+        var payload = {
+            wavPath: lastOutWav,
+            trackIndex: trackIndex,
+            positionSec: posSec,
+            colorLabel: 9
+        };
+
+        setProgress(100, '正在插入（试 A' + (trackIndex + 1) + '）…', false);
+
         evalJsx('vcInsertPayload = ' + JSON.stringify(payload) + ';', function () {
             evalJsx('vcInsertToTimelineStr()', function (r) {
                 var p = parseHost(r);
                 if (p.ok) {
                     var d = p.data || {};
-                    setProgress(100, '✓ 已插入 A' + ((d.trackIndex || 0) + 1) + ' 轨', false);
+                    var ti = (typeof d.trackIndex === 'number') ? d.trackIndex : trackIndex;
+                    var ps = (typeof d.positionSec === 'number') ? d.positionSec : posSec;
+                    setProgress(100, '✓ 已插入 A' + (ti + 1) + ' 轨 @ ' + fmtSec(ps), false);
+                    if (el.insertHint) {
+                        el.insertHint.textContent = '已插入 A' + (ti + 1) + ' 轨，起始 ' + fmtSec(ps);
+                    }
                     return;
                 }
-                // 换 A2 再试
-                var p2 = { wavPath: lastOutWav, trackIndex: 1, positionSec: -1, colorLabel: 9 };
-                evalJsx('vcInsertPayload = ' + JSON.stringify(p2) + ';', function () {
-                    evalJsx('vcInsertToTimelineStr()', function (r2) {
-                        var q = parseHost(r2);
-                        if (q.ok) {
-                            setProgress(100, '✓ 已插入 A2 轨', false);
-                        } else {
-                            setProgress(0, '插入失败：' + (q.msg || p.msg), false);
-                        }
-                    });
-                });
+                // 失败：试下一条轨
+                tryInsert(candidates, posSec, idx + 1);
             });
         });
     }
+
+    // 刷新轨道下拉（读序列真实音轨数）
+    function refreshInsTracks() {
+        if (!el.insTrack) return;
+        evalJsx('vcGetAudioTracks()', function (r) {
+            var p = parseHost(r);
+            var arr = p.ok ? ((p.data && p.data.tracks) || (Array.isArray(p.data) ? p.data : null)) : null;
+            var cur = el.insTrack.value;
+
+            el.insTrack.innerHTML = '<option value="auto">自动（找空轨）</option>';
+            if (arr && arr.length) {
+                arr.forEach(function (t, i) {
+                    var idx = (t.index != null) ? t.index : i;
+                    var o = document.createElement('option');
+                    o.value = String(idx);
+                    o.textContent = 'A' + (idx + 1) + (t.name ? (' · ' + t.name) : '');
+                    el.insTrack.appendChild(o);
+                });
+            } else {
+                // 拿不到就退到固定 A1-A4
+                for (var i = 0; i < 4; i++) {
+                    var o2 = document.createElement('option');
+                    o2.value = String(i);
+                    o2.textContent = 'A' + (i + 1);
+                    el.insTrack.appendChild(o2);
+                }
+            }
+            // 尽量保持用户原来的选择
+            try { if (cur) el.insTrack.value = cur; } catch (e) {}
+        });
+    }
+
 
     // ---------- 绑定 ----------
     function bind() {
@@ -1020,6 +1187,22 @@
         if (el.btnGen) el.btnGen.addEventListener('click', generate);
         if (el.btnStop) el.btnStop.addEventListener('click', stopGen);
         if (el.btnInsert) el.btnInsert.addEventListener('click', insertToTimeline);
+        if (el.btnRefreshInsTrack) el.btnRefreshInsTrack.addEventListener('click', refreshInsTracks);
+
+        // 记住上次选的轨道/位置，下次生成完直接沿用
+        var INS_KEY = 'vh_bz_insert_target';
+        try {
+            var saved = JSON.parse(localStorage.getItem(INS_KEY) || '{}');
+            if (saved.pos && el.insPos) el.insPos.value = saved.pos;
+        } catch (e) {}
+        function saveInsTarget() {
+            try {
+                localStorage.setItem(INS_KEY, JSON.stringify({
+                    pos: el.insPos ? el.insPos.value : 'playhead'
+                }));
+            } catch (e) {}
+        }
+        if (el.insPos) el.insPos.addEventListener('change', saveInsTarget);
 
         // 面板切到时刷新状态
         var tab = document.querySelector('.tab[data-tab="breeze"]');
@@ -1028,9 +1211,14 @@
                 setTimeout(function () {
                     checkModel();
                     loadVoices();
+                    // 轨道可能变了（用户新建了音轨），顺手刷新
+                    if (lastOutWav) refreshInsTracks();
                 }, 80);
             });
         }
+
+        // 生成完成展示结果时，刷新一次轨道列表
+        // （把 refreshInsTracks 挂到 showResult 里更直接，见 showResult 末尾）
 
         // 初始
         setTimeout(function () {

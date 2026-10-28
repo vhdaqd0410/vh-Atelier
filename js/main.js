@@ -131,6 +131,9 @@
 
     // 懒启动钩子
     function lazyInit(name) {
+        if (name === 'clone' && window.__cloneEngineOnShow) {
+            try { window.__cloneEngineOnShow(); } catch (e) {}
+        }
         // 交付面板：切到时自动刷新序列列表（序列可能已变）
         if (name === 'export' && window.__exportOnShow) {
             try { window.__exportOnShow(); } catch (e) {}
