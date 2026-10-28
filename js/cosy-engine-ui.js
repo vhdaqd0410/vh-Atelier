@@ -3,11 +3,12 @@
 (function () {
     'use strict';
 
-    var fs, path, childProcess;
+    var fs, path, childProcess, os2;
     try {
         fs = require('fs');
         path = require('path');
         childProcess = require('child_process');
+        os2 = require('os');
     } catch (e) { return; }
 
     function $(id) { return document.getElementById(id); }
@@ -173,21 +174,100 @@
         return r;
     }
 
-    // 浏览目录（用 PowerShell 文件夹选择器，绕开编码坑）
-    function browseDir(cb) {
-        var ps = [
-            'Add-Type -AssemblyName System.Windows.Forms',
-            '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
-            '$d.Description = "选择 CosyVoice3 目录（含 _internal / cosyvoice / pretrained_models）"',
-            'if ($d.ShowDialog() -eq "OK") { Write-Output $d.SelectedPath }'
-        ].join('; ');
+    // 定位扩展根目录（folderpicker.ps1 的位置）
+    function locateExtRoot() {
+        var r = '';
         try {
-            var r = childProcess.spawnSync('powershell', ['-NoProfile', '-STA', '-Command', ps],
-                                           { encoding: 'utf8', timeout: 120000, windowsHide: false });
-            var out = String(r.stdout || '').trim().split(/\r?\n/).pop().trim();
-            if (out && fs.existsSync(out)) { cb(out); return; }
+            if (typeof CSInterface !== 'undefined') {
+                r = new CSInterface().getSystemPath('extension');
+            }
         } catch (e) {}
-        cb('');
+        if (r && fs.existsSync(path.join(r, 'jsx', 'folderpicker.ps1'))) return r;
+        // 退路：从 __dirname 往上找
+        try {
+            var d = (typeof __dirname !== 'undefined') ? __dirname : '';
+            if (d) {
+                var up = (path.basename(d).toLowerCase() === 'js') ? path.dirname(d) : d;
+                if (fs.existsSync(path.join(up, 'jsx', 'folderpicker.ps1'))) return up;
+            }
+        } catch (e) {}
+        return r || '';
+    }
+
+    // 目录选择器：复用插件里经过验证的 jsx/folderpicker.ps1
+    // 关键：路径通过临时文件进出，不走 stdout（CEP 下 stdout 编码不可靠）
+    function browseDir(initial, title, cb) {
+        // 整个流程包一层：任何异常都要让用户看到原因，不能静默失败
+        try {
+            _browseDirInner(initial, title, cb);
+        } catch (e) {
+            console.log('[cosy] browseDir 异常: ' + (e && e.message));
+            try {
+                if (typeof setProg === 'function') {
+                    setProg(0, '打开目录选择失败：' + (e && e.message || e), 'err');
+                }
+            } catch (_) {}
+            cb('');
+        }
+    }
+
+    function _browseDirInner(initial, title, cb) {
+        var last = '';
+        try { last = localStorage.getItem('vh_cosy_lastdir') || ''; } catch (e) {}
+
+        var init = '';
+        if (initial && fs.existsSync(initial)) init = initial;
+        else if (last && fs.existsSync(last)) init = last;
+        else if (initial) {
+            var par = path.dirname(initial);
+            if (fs.existsSync(par)) init = par;
+        }
+
+        var ops = os2;
+        var stamp = Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        var inFile = path.join(ops.tmpdir(), 'cosy_dir_in_' + stamp + '.txt');
+        var outFile = path.join(ops.tmpdir(), 'cosy_dir_out_' + stamp + '.txt');
+
+        try {
+            fs.writeFileSync(inFile,
+                JSON.stringify({ path: init, title: title || '选择文件夹' }), 'utf8');
+        } catch (e) { cb(''); return; }
+
+        var extRoot = locateExtRoot();
+        var psPath = path.join(extRoot || '', 'jsx', 'folderpicker.ps1');
+        if (!fs.existsSync(psPath)) {
+            try { fs.unlinkSync(inFile); } catch (e) {}
+            console.log('[cosy] 找不到 folderpicker.ps1: ' + psPath + ' (extRoot=' + extRoot + ')');
+            try {
+                if (typeof setProg === 'function') {
+                    setProg(0, '找不到目录选择器（jsx/folderpicker.ps1），请直接用输入框填路径', 'err');
+                }
+            } catch (e2) {}
+            cb('');
+            return;
+        }
+
+        var cmd = 'powershell -NoProfile -STA -ExecutionPolicy Bypass -File "' +
+                  psPath + '" -Ini "' + inFile + '" -Out "' + outFile + '"';
+
+        // 用 exec 而不是 spawnSync：spawnSync 会卡住 CEP 的 UI 线程，
+        // 导致对话框画不出来或点了没反应。
+        childProcess.exec(cmd, { windowsHide: true, timeout: 180000 }, function (err) {
+            try { fs.unlinkSync(inFile); } catch (e) {}
+
+            var picked = '';
+            try {
+                if (fs.existsSync(outFile)) {
+                    picked = String(fs.readFileSync(outFile, 'utf8')).trim();
+                    fs.unlinkSync(outFile);
+                }
+            } catch (e) {}
+
+            if (picked) {
+                try { localStorage.setItem('vh_cosy_lastdir', picked); } catch (e) {}
+            }
+            cb(picked);
+        });
     }
 
     // ---------- 导入已下载的引擎包 ----------
@@ -225,31 +305,18 @@
         }
     }
 
-    // 选解压目标目录（默认放插件同级，或让用户选）
+    // 选解压目标目录
     function pickTargetRoot(cb) {
-        // 默认：引擎装在插件目录下面会撑爆 C 盘，所以默认用 D 盘
         var def = 'D:\\cosyvoice3_V30';
         try {
             var eng = window.__vhCosyEngine;
             var cur = eng ? eng.getRoot() : '';
             if (cur && cur.length > 3) def = cur;
         } catch (e) {}
-
-        var ps = [
-            'Add-Type -AssemblyName System.Windows.Forms',
-            '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
-            '$d.Description = "选择引擎解压位置（建议选空间大的盘）"',
-            '$d.SelectedPath = "' + def.replace(/'/g, "''") + '"',
-            'if ($d.ShowDialog() -eq "OK") { Write-Output $d.SelectedPath }'
-        ].join('; ');
-        try {
-            var r = childProcess.spawnSync('powershell', ['-NoProfile', '-STA', '-Command', ps],
-                                           { encoding: 'utf8', timeout: 180000 });
-            var out = String(r.stdout || '').trim().split(/\r?\n/).pop().trim();
-            cb(out || '');
-        } catch (e) {
-            cb('');
-        }
+        // 目录可能不存在（首次安装），browseDir 内部会退到父目录
+        browseDir(def, '选择引擎解压位置（建议选空间大的盘）', function (p) {
+            cb(p || '');
+        });
     }
 
     // 核心：导入流程
@@ -390,17 +457,21 @@
         // 直接选目录并保存
         if (el.btnBrowse) {
             el.btnBrowse.addEventListener('click', function () {
-                browseDir(function (p) {
-                    if (!p) return;
-                    window.__vhCosyEngine.setRoot(p);
-                    doCheck();
-                });
+                var cur = '';
+                try { cur = window.__vhCosyEngine.getRoot(); } catch (e) {}
+                browseDir(cur, '选择 CosyVoice3 目录（含 _internal / cosyvoice / pretrained_models）',
+                    function (p) {
+                        if (!p) return;
+                        window.__vhCosyEngine.setRoot(p);
+                        doCheck();
+                    });
             });
         }
 
         if (el.btnRootBrowse) {
             el.btnRootBrowse.addEventListener('click', function () {
-                browseDir(function (p) {
+                var cur = el.rootInput ? el.rootInput.value.trim() : '';
+                browseDir(cur, '选择 CosyVoice3 目录', function (p) {
                     if (p && el.rootInput) el.rootInput.value = p;
                 });
             });
@@ -441,6 +512,10 @@
 
     window.__vhCloneEngineUI = {
         check: doCheck,
-        last: function () { return lastResult; }
+        last: function () { return lastResult; },
+        // 调试/测试用：直接调目录选择
+        browse: function (initial, title, cb) { browseDir(initial, title, cb); },
+        importPkg: doImport,
+        openNetdisk: openNetdisk
     };
 })();
