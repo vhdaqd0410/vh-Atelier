@@ -206,13 +206,36 @@
                 <button class="secondary mini" id="ceRecheck" title="重新检测">↻</button>
                 <button class="secondary mini" id="ceSetup" title="设置引擎目录">⚙ 设置</button>
             </div>
+            <!-- 缺失详情（默认隐藏） -->
             <div id="ceDetail" style="display:none;margin-top:8px;">
                 <div class="ce-steps" id="ceSteps"></div>
+
+                <!-- 一键获取：网盘下载 + 自动导入 -->
+                <div class="ce-get">
+                    <div class="ce-get-row">
+                        <button class="secondary mini ce-btn-main" id="ceOpenNetdisk">⬇ 网盘下载</button>
+                        <span class="ce-get-hint">提取码 <b id="cePwd">3mez</b></span>
+                    </div>
+                    <div class="ce-get-row">
+                        <button class="secondary mini ce-btn-main" id="ceImportPkg">📦 导入已下载</button>
+                        <span class="ce-get-hint">下完点这里，自动解压配置</span>
+                    </div>
+                    <div class="ce-get-row">
+                        <button class="secondary mini" id="ceBrowse">📂 指定已有目录</button>
+                    </div>
+                </div>
+
+                <!-- 导入进度 -->
+                <div id="ceImportProg" style="display:none;margin-top:9px;">
+                    <div class="ce-ip-track"><i id="ceIpBar"></i></div>
+                    <div class="ce-ip-text" id="ceIpText">准备中…</div>
+                </div>
+
                 <div class="ce-actions">
-                    <button class="secondary mini" id="ceBrowse">📂 选择 CosyVoice3 目录</button>
                     <button class="secondary mini" id="ceRetry">🔄 重新检测</button>
                 </div>
             </div>
+            <!-- 设置面板（默认隐藏） -->
             <div id="ceConfig" style="display:none;margin-top:8px;">
                 <label class="flabel" style="font-size:11px;">CosyVoice3 引擎目录</label>
                 <div class="dir-row" style="margin-top:4px;">
@@ -2210,12 +2233,22 @@
 
 <style>
 /* ==== 语音克隆·引擎状态 ==== */
-.ce-bar{display:flex;align-items:center;gap:6px;font-size:11.5px;}
+.ce-bar{display:flex;align-items:flex-start;gap:6px;font-size:11.5px;}
+.ce-bar .mini{flex:0 0 auto;white-space:nowrap;padding:2px 7px;font-size:10.5px;}
+.ce-bar > span:first-child{margin-top:5px;}   /* 圆点与首行对齐 */
 .ce-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:#8a8a8a;transition:background .2s;}
 .ce-dot.ok{background:#7fd68b;box-shadow:0 0 6px rgba(127,214,139,.6);}
 .ce-dot.warn{background:#e0b96a;box-shadow:0 0 6px rgba(224,185,106,.5);}
 .ce-dot.err{background:#ff8a8a;box-shadow:0 0 6px rgba(255,138,138,.5);}
-.ce-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#cfd8e3;}
+.ce-text{
+    flex:1;min-width:0;
+    color:#cfd8e3;
+    font-size:11px;
+    line-height:1.45;
+    /* 中文按整词换行，避免「目 / 录」这种单字掉落 */
+    word-break:keep-all;
+    overflow-wrap:break-word;
+}
 .ce-text.ok{color:#7fd68b;}
 .ce-text.warn{color:#e0b96a;}
 .ce-text.err{color:#ff8a8a;}
@@ -2255,6 +2288,58 @@
 }
 </style>
 
+<style>
+/* ==== 语音克隆·获取引擎 ==== */
+.ce-get{
+    margin-top:9px;padding-top:8px;
+    border-top:1px dashed rgba(255,255,255,.1);
+}
+.ce-get-title{
+    font-size:10.5px;color:#8a9bab;margin-bottom:7px;
+}
+.ce-get-row{
+    display:flex;align-items:center;gap:7px;
+    margin-bottom:6px;
+}
+.ce-get-row:last-child{margin-bottom:0;}
+.ce-btn-main{
+    flex:0 0 148px;
+    width:148px;
+    text-align:center;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+/* 第三个按钮（已有目录）也要同宽，视觉才整齐 */
+.ce-get-row > button.secondary.mini{
+    flex:0 0 148px;
+    width:148px;
+    text-align:center;
+    white-space:nowrap;
+}
+.ce-get-hint{
+    flex:1;min-width:0;
+    font-size:9.5px;color:#6f7c8a;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ce-get-hint b{color:#9fd0ff;font-weight:600;}
+/* 导入进度条 */
+.ce-ip-track{
+    height:5px;background:rgba(255,255,255,.08);
+    border-radius:3px;overflow:hidden;
+}
+.ce-ip-track i{
+    display:block;height:100%;width:0%;
+    background:linear-gradient(90deg,#537d96,#7fd68b);
+    transition:width .4s;
+}
+.ce-ip-text{
+    font-size:10px;color:#8a9bab;margin-top:5px;
+    line-height:1.5;
+}
+.ce-ip-text.ok{color:#7fd68b;}
+.ce-ip-text.err{color:#ff8a8a;}
+</style>
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
     <div class="tab-panel" id="panel-media" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
@@ -2312,6 +2397,7 @@
     <script src="js/audio-preset.js"></script>
     <script src="js/wave-mini.js"></script>
     <script src="js/cosy-engine.js"></script>
+    <script src="js/cosy-import.js"></script>
     <script src="js/cosy-engine-ui.js"></script>
     <script src="js/clone.js"></script>
 <script src="js/breeze.js"></script>

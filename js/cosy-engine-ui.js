@@ -29,7 +29,22 @@
         el.btnRootBrowse = $('ceRootBrowse');
         el.btnRootSave = $('ceRootSave');
         el.btnRootAuto = $('ceRootAuto');
+
+        // 获取引擎
+        el.btnOpenNetdisk = $('ceOpenNetdisk');
+        el.btnImportPkg = $('ceImportPkg');
+        el.prog = $('ceImportProg');
+        el.progBar = $('ceIpBar');
+        el.progText = $('ceIpText');
+        el.pwd = $('cePwd');
     }
+
+    // 网盘信息（放这里便于以后改）
+    var NETDISK = {
+        url: 'https://pan.baidu.com/s/1GjuvFnrbCyShFlP3aZHyvw',
+        pwd: '3mez',
+        size: '8.14 GB'
+    };
 
     // 缺什么、要做什么，一条一条列出来
     function buildSteps(r) {
@@ -175,11 +190,186 @@
         cb('');
     }
 
+    // ---------- 导入已下载的引擎包 ----------
+    function setProg(pct, text, cls) {
+        if (!el.prog) return;
+        el.prog.style.display = '';
+        if (el.progBar) el.progBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        if (el.progText) {
+            el.progText.textContent = text;
+            el.progText.className = 'ce-ip-text' + (cls ? ' ' + cls : '');
+        }
+    }
+
+    function hideProg() {
+        if (el.prog) el.prog.style.display = 'none';
+        if (el.progBar) el.progBar.style.width = '0%';
+    }
+
+    // 让用户选 zip 文件
+    function pickZip(cb) {
+        var ps = [
+            'Add-Type -AssemblyName System.Windows.Forms',
+            '$d = New-Object System.Windows.Forms.OpenFileDialog',
+            '$d.Title = "选择下载好的 CosyVoice3 引擎包"',
+            '$d.Filter = "压缩包 (*.zip)|*.zip"',
+            'if ($d.ShowDialog() -eq "OK") { Write-Output $d.FileName }'
+        ].join('; ');
+        try {
+            var r = childProcess.spawnSync('powershell', ['-NoProfile', '-STA', '-Command', ps],
+                                           { encoding: 'utf8', timeout: 180000 });
+            var out = String(r.stdout || '').trim().split(/\r?\n/).pop().trim();
+            cb(out || '');
+        } catch (e) {
+            cb('');
+        }
+    }
+
+    // 选解压目标目录（默认放插件同级，或让用户选）
+    function pickTargetRoot(cb) {
+        // 默认：引擎装在插件目录下面会撑爆 C 盘，所以默认用 D 盘
+        var def = 'D:\\cosyvoice3_V30';
+        try {
+            var eng = window.__vhCosyEngine;
+            var cur = eng ? eng.getRoot() : '';
+            if (cur && cur.length > 3) def = cur;
+        } catch (e) {}
+
+        var ps = [
+            'Add-Type -AssemblyName System.Windows.Forms',
+            '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
+            '$d.Description = "选择引擎解压位置（建议选空间大的盘）"',
+            '$d.SelectedPath = "' + def.replace(/'/g, "''") + '"',
+            'if ($d.ShowDialog() -eq "OK") { Write-Output $d.SelectedPath }'
+        ].join('; ');
+        try {
+            var r = childProcess.spawnSync('powershell', ['-NoProfile', '-STA', '-Command', ps],
+                                           { encoding: 'utf8', timeout: 180000 });
+            var out = String(r.stdout || '').trim().split(/\r?\n/).pop().trim();
+            cb(out || '');
+        } catch (e) {
+            cb('');
+        }
+    }
+
+    // 核心：导入流程
+    function doImport() {
+        var imp = window.__vhCosyImport;
+        if (!imp) { setProg(0, '导入模块未加载', 'err'); return; }
+
+        // 1. 先自动扫描下载目录
+        setProg(3, '正在查找已下载的引擎包…');
+        var found = [];
+        try { found = imp.scan(); } catch (e) {}
+
+        if (found.length === 0) {
+            // 没找到，让用户手动选
+            setProg(3, '下载目录里没找到，请手动选择 zip 文件');
+            pickZip(function (p) {
+                if (!p) { hideProg(); return; }
+                startImport(p);
+            });
+        } else if (found.length === 1) {
+            startImport(found[0].path);
+        } else {
+            // 多个，选最新的
+            setProg(3, '找到 ' + found.length + ' 个包，使用最新的：' + found[0].name);
+            startImport(found[0].path);
+        }
+    }
+
+    function startImport(zipPath) {
+        var imp = window.__vhCosyImport;
+
+        var exists = false;
+        try { exists = fs.existsSync(zipPath); } catch (e) {}
+        if (!exists) { setProg(0, '文件不存在: ' + zipPath, 'err'); return; }
+
+        var mb = 0;
+        try { mb = fs.statSync(zipPath).size / 1024 / 1024; } catch (e) {}
+        setProg(5, '校验压缩包…（' + (mb / 1024).toFixed(2) + ' GB）');
+
+        imp.validate(zipPath).then(function (v) {
+            setProg(10, '校验通过（' + v.entries + ' 个条目）。请选择解压位置…');
+
+            // 选目标目录
+            setTimeout(function () {
+                pickTargetRoot(function (root) {
+                    if (!root) { hideProg(); return; }
+
+                    // 空间检查（需要约 zip 大小 × 1.35）
+                    var needMB = mb * 1.35;
+                    var freeMB = imp.freeSpaceMB(root);
+                    if (freeMB > 0 && freeMB < needMB) {
+                        setProg(0, '空间不足：' + root + ' 剩余 ' +
+                                (freeMB / 1024).toFixed(1) + ' GB，需要约 ' +
+                                (needMB / 1024).toFixed(1) + ' GB', 'err');
+                        return;
+                    }
+
+                    setProg(12, '开始解压到 ' + root + '（约 1-3 分钟）…');
+
+                    imp.extract(zipPath, root, function (p) {
+                        if (p.phase === 'extract') {
+                            setProg(12 + p.percent * 0.83,
+                                    '解压中 ' + p.percent.toFixed(0) + '%  ' +
+                                    (p.doneMB || 0).toFixed(0) + ' / ' + (p.totalMB || 0).toFixed(0) + ' MB');
+                        }
+                    }).then(function (r) {
+                        setProg(97, '解压完成（' + r.sec.toFixed(0) + ' 秒），正在验证…');
+
+                        var ver = imp.verifyInstalled(root);
+                        if (!ver.ok) {
+                            setProg(0, '解压后校验失败，缺少：' + ver.missing.join('、') +
+                                    '（可能空间不足或压缩包损坏）', 'err');
+                            return;
+                        }
+
+                        // 配置路径
+                        try {
+                            window.__vhCosyEngine.setRoot(root);
+                        } catch (e) {}
+
+                        setProg(100, '✓ 安装完成，引擎就绪', 'ok');
+
+                        // 重新检测并刷新界面
+                        setTimeout(function () {
+                            doCheck();
+                            hideProg();
+                            try {
+                                window.__vhFlash && window.__vhFlash('引擎已就绪');
+                            } catch (e) {}
+                        }, 900);
+                    }).catch(function (e) {
+                        setProg(0, '解压失败：' + (e && e.message || e), 'err');
+                    });
+                });
+            }, 200);
+        }).catch(function (e) {
+            setProg(0, '校验失败：' + (e && e.message || e), 'err');
+        });
+    }
+
+    // 打开网盘
+    function openNetdisk() {
+        try {
+            var cmd = 'start "" "' + NETDISK.url + '"';
+            childProcess.exec(cmd, { shell: 'cmd.exe', windowsHide: true }, function () {});
+            setProg(0, '已在浏览器打开网盘。提取码：' + NETDISK.pwd +
+                    '　下载完成后点「📦 导入已下载的包」', 'ok');
+        } catch (e) {
+            setProg(0, '打开失败，请手动访问：' + NETDISK.url + ' 提取码 ' + NETDISK.pwd, 'err');
+        }
+    }
+
     function bind() {
         initEl();
         if (!el.dot) return;   // 面板不在
 
         doCheck(true);
+
+        // 提取码显示
+        if (el.pwd) el.pwd.textContent = NETDISK.pwd;
 
         if (el.btnRecheck) el.btnRecheck.addEventListener('click', function () { doCheck(); });
         if (el.btnRetry) el.btnRetry.addEventListener('click', function () { doCheck(); });
@@ -224,6 +414,10 @@
                 doCheck();
             });
         }
+
+        // 获取引擎
+        if (el.btnOpenNetdisk) el.btnOpenNetdisk.addEventListener('click', openNetdisk);
+        if (el.btnImportPkg) el.btnImportPkg.addEventListener('click', doImport);
 
         if (el.btnRootAuto) {
             el.btnRootAuto.addEventListener('click', function () {
