@@ -129,6 +129,10 @@
 
     // 懒启动钩子
     function lazyInit(name) {
+        // 语音克隆：切到时重新检测引擎（用户可能刚装了 CosyVoice3）
+        if (name === 'clone' && window.__cloneEngineOnShow) {
+            try { window.__cloneEngineOnShow(); } catch (e) {}
+        }
         // 组件面板：切到时重扫一遍组件状态
         if (name === 'components' && window.__componentsOnShow) {
             try { window.__componentsOnShow(); } catch (e) {}

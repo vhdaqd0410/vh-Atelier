@@ -275,6 +275,18 @@
             return;
         }
 
+        // 引擎不就绪就别往下走：否则用户会看到一长串 Python traceback
+        if (!isVolc) {
+            try {
+                var engChk = window.__vhCosyEngine ? window.__vhCosyEngine.check() : null;
+                if (engChk && !engChk.canRun) {
+                    setStatus('引擎未就绪：' + engChk.summary + '（见上方引擎状态）', 'err');
+                    try { window.__cloneEngineOnShow && window.__cloneEngineOnShow(); } catch (_) {}
+                    return;
+                }
+            } catch (e) {}
+        }
+
         var pythonExe = detectPython();
         if (!pythonExe) { setStatus('未找到 Python 环境', 'err'); return; }
         var cliPath = path.join(extRoot, 'py', 'volc_tts_cli.py');
@@ -1215,6 +1227,19 @@
                 model: modelVariant
             };
             if (mode === 'instruct') cfg.instruct_text = instructText;
+
+            // 把用户在「引擎设置」里指定的目录传给 python（py 侧有同样的默认值兜底）
+            try {
+                var eng = window.__vhCosyEngine;
+                if (eng) {
+                    var root = eng.getRoot();
+                    if (root) {
+                        cfg.internal = path.join(root, '_internal');
+                        cfg.matcha = path.join(root, 'third_party', 'Matcha-TTS');
+                        cfg.model_dir = path.join(root, 'pretrained_models');
+                    }
+                }
+            } catch (e) {}
         }
         fs.writeFileSync(cfgPath, JSON.stringify(cfg), 'utf8');
 
