@@ -767,6 +767,30 @@
             }
         }
 
+        // 输出目录必须提前建好：引擎只负责写文件，不会建目录。
+        // 之前这里漏了，首次使用（目录还不存在）就会
+        // "failed to write ...\breeze\output\bz_xxx.wav"。
+        if (!OUTPUT_DIR) {
+            setProgress(0, '输出目录不可用（扩展根路径没取到）', false);
+            return;
+        }
+        try {
+            if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+        } catch (e) {
+            setProgress(0, '无法创建输出目录：' + (e.message || e), false);
+            return;
+        }
+        // 目录存在了还要能写：权限/占用都可能在写盘时才暴露，
+        // 先探一次，把问题在启动引擎之前就报出来（引擎跑完才报太浪费时间）。
+        try {
+            var probe = path.join(OUTPUT_DIR, '.write_test_' + Date.now());
+            fs.writeFileSync(probe, 'ok');
+            fs.unlinkSync(probe);
+        } catch (e) {
+            setProgress(0, '输出目录不可写：' + (e.message || e) + '\n路径：' + OUTPUT_DIR, false);
+            return;
+        }
+
         var outWav = path.join(OUTPUT_DIR, 'bz_' + Date.now() + '.wav');
         args.push('--output', outWav);
 
@@ -870,6 +894,13 @@
             if (code !== 0) {
                 setBusy(false);
                 var tail = genLines.slice(-6).join(' | ');
+                // 写盘失败单独说清楚：这类问题重试没用，是目录/权限问题。
+                if (/failed to write|cannot write|permission denied|ENOENT|EACCES/i.test(tail)) {
+                    setProgress(0, '生成失败：无法写入音频文件\n' +
+                        '输出目录：' + OUTPUT_DIR + '\n' +
+                        '请确认该目录存在且可写（或磁盘已满）。\n' + tail, false);
+                    return;
+                }
                 setProgress(0, '生成失败（code=' + code + '）：' + tail, false);
                 return;
             }
@@ -942,7 +973,21 @@
     }
 
     // ---------- 绑定 ----------
+    // 启动即确保输出目录存在：不等到点生成才建，
+    // 避免用户第一次使用就撞 "failed to write"。
+    function ensureOutputDir() {
+        if (!OUTPUT_DIR) return false;
+        try {
+            if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+            return true;
+        } catch (e) {
+            console.log('[breeze] 创建输出目录失败: ' + (e.message || e));
+            return false;
+        }
+    }
+
     function bind() {
+        ensureOutputDir();
         initEl();
         loadMap();
 
