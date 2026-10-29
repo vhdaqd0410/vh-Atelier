@@ -35,13 +35,13 @@
         {
             id: 'funasr',
             name: '字幕识别模型',
-            desc: '本地字幕识别（Paraformer + 标点 + VAD），约 1.24 GB',
+            desc: '本地字幕识别（Paraformer + 标点 + VAD）',
             size: '1.24 GB',
             dir: 'models/funasr',
             check: function () {
                 var p = path.join(extRoot, 'models', 'funasr');
                 if (!fs.existsSync(p)) return false;
-                // 关键文件：模型权重
+                // 关键文件：大模型权重
                 var found = false;
                 try {
                     var stack = [p];
@@ -63,14 +63,14 @@
                 } catch (e) {}
                 return found;
             },
-            url: 'https://github.com/vhdaqd0410/vh-Atelier/releases/download/models/funasr.zip',
-            netdisk: '（百度网盘链接待填）',
+            url: '',
+            netdisk: '',
             unzip: true
         },
         {
             id: 'breeze',
             name: 'Breeze 语音合成',
-            desc: '本地 GGUF 语音引擎 + 模型，约 2.46 GB',
+            desc: '本地 GGUF 语音引擎 + 模型',
             size: '2.46 GB',
             dir: 'breeze',
             check: function () {
@@ -81,62 +81,21 @@
                            fs.statSync(mdl).size > 1500 * 1024 * 1024;
                 } catch (e) { return false; }
             },
-            url: 'https://github.com/vhdaqd0410/vh-Atelier/releases/download/models/breeze.zip',
-            netdisk: '（百度网盘链接待填）',
+            url: '',
+            netdisk: '',
             unzip: true
         },
         {
-            id: 'sherpa',
-            name: '人声分离引擎',
-            desc: '扒歌用的人声/伴奏分离，约 20 MB',
-            size: '20 MB',
-            dir: 'bin/sherpa',
+            id: 'ncm',
+            name: '网易云服务',
+            desc: '网易云音乐搜索/试听/下载的本地服务',
+            size: '27 MB',
+            dir: 'ncm',
             check: function () {
-                return fs.existsSync(path.join(extRoot, 'bin', 'sherpa', 'sherpa-onnx-offline.exe'));
+                return fs.existsSync(path.join(extRoot, 'ncm', 'index.js'));
             },
-            url: 'https://github.com/vhdaqd0410/vh-Atelier/releases/download/models/sherpa.zip',
-            netdisk: '（百度网盘链接待填）',
-            unzip: true
-        },
-        {
-            id: 'spleeter',
-            name: '人声分离模型',
-            desc: '2stems 分离模型，约 37 MB',
-            size: '37 MB',
-            dir: 'models/spleeter',
-            check: function () {
-                var p = path.join(extRoot, 'models', 'spleeter');
-                if (!fs.existsSync(p)) return false;
-                try {
-                    var stack = [p], guard = 0;
-                    while (stack.length && guard++ < 100) {
-                        var d = stack.shift();
-                        var list = fs.readdirSync(d, { withFileTypes: true });
-                        for (var i = 0; i < list.length; i++) {
-                            var f = list[i];
-                            var full = path.join(d, f.name);
-                            if (f.isDirectory()) stack.push(full);
-                            else if (/vocals.*\.onnx$/i.test(f.name)) return true;
-                        }
-                    }
-                } catch (e) {}
-                return false;
-            },
-            url: 'https://github.com/vhdaqd0410/vh-Atelier/releases/download/models/spleeter.zip',
-            netdisk: '（百度网盘链接待填）',
-            unzip: true
-        },
-        {
-            id: 'realesrgan',
-            name: '本地超分引擎',
-            desc: 'Real-ESRGAN 本地放大，约 50 MB',
-            size: '50 MB',
-            dir: 'bin/realesrgan',
-            check: function () {
-                return fs.existsSync(path.join(extRoot, 'bin', 'realesrgan', 'realesrgan-ncnn-vulkan.exe'));
-            },
-            url: 'https://github.com/vhdaqd0410/vh-Atelier/releases/download/models/realesrgan.zip',
-            netdisk: '（百度网盘链接待填）',
+            url: '',
+            netdisk: '',
             unzip: true
         }
     ];

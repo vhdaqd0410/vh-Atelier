@@ -96,8 +96,23 @@ def ascii_path(p):
 
 
 def inject_runtime(internal, matcha, torio_stub):
-    """在 import torch 之前，把引擎路径注入 sys.path。"""
-    for _p in (torio_stub, internal, matcha):
+    """在 import torch 之前，把引擎路径注入 sys.path。
+
+    必须同时加入「引擎根目录」：cosyvoice 源码在 <root>/cosyvoice 下，
+    而不在 <root>/_internal 里。只加 internal 会导致
+    "No module named 'cosyvoice'"（原来能跑是因为 cwd 恰好在根目录）。
+    """
+    # 由 internal 反推引擎根目录（internal 通常是 <root>/_internal）
+    eng_root = ''
+    try:
+        if internal:
+            cand = os.path.dirname(os.path.abspath(internal))
+            if os.path.isdir(os.path.join(cand, 'cosyvoice')):
+                eng_root = cand
+    except Exception:
+        eng_root = ''
+
+    for _p in (torio_stub, internal, matcha, eng_root):
         if _p and os.path.isdir(_p) and _p not in sys.path:
             sys.path.insert(0, _p)
     _torch_lib = os.path.join(internal, 'torch', 'lib')

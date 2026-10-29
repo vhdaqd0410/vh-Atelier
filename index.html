@@ -2254,6 +2254,133 @@
 .ce-ip-text.err{color:#ff8a8a;}
 </style>
 
+<style>
+/* ==== 授权遮罩 ==== */
+#licMask{
+    position:fixed;inset:0;z-index:2147483000;
+    background:linear-gradient(160deg,#0b0e13 0%,#121821 60%,#0f141b 100%);
+    display:flex;align-items:center;justify-content:center;
+    padding:16px;box-sizing:border-box;
+    overflow:auto;
+    font-family:"Microsoft YaHei",-apple-system,sans-serif;
+    transition:opacity .22s ease;
+}
+.lic-box{
+    width:400px;
+    max-width:calc(100% - 24px);
+    box-sizing:border-box;
+    background:rgba(22,28,38,.96);
+    border:1px solid rgba(138,180,255,.16);
+    border-radius:12px;
+    box-shadow:0 24px 70px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.03) inset;
+    overflow:hidden;
+}
+.lic-head{
+    padding:22px 22px 16px;
+    text-align:center;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    background:linear-gradient(180deg, rgba(83,125,150,.13), transparent);
+}
+.lic-logo{
+    font-size:22px;font-weight:700;letter-spacing:.6px;
+    background:linear-gradient(92deg,#8ab4ff,#7fd68b);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.lic-sub{font-size:11px;color:#6f7c8a;margin-top:5px;letter-spacing:.5px;}
+.lic-body{padding:16px 22px 18px;}
+
+/* 模式切换 */
+.lic-tabs{
+    display:flex;gap:4px;margin-bottom:16px;
+    background:rgba(0,0,0,.28);border-radius:7px;padding:3px;
+}
+.lic-tab{
+    flex:1;padding:7px 0;font-size:12px;
+    background:transparent;border:none;border-radius:5px;
+    color:#8a9bab;cursor:pointer;transition:all .15s;
+}
+.lic-tab:hover{color:#cfd8e3;}
+.lic-tab.active{background:rgba(83,125,150,.55);color:#eaf3ff;font-weight:600;}
+
+/* 表单 */
+.lic-label{
+    display:block;font-size:11px;color:#8a9bab;margin:10px 0 5px;
+}
+.lic-input{
+    width:100%;max-width:100%;box-sizing:border-box;
+    display:block;
+    padding:9px 11px;font-size:12.5px;
+    background:rgba(0,0,0,.32);
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:6px;color:#e8ecf4;
+    outline:none;transition:border-color .15s;
+}
+.lic-input:focus{border-color:rgba(138,180,255,.55);}
+.lic-input::placeholder{color:rgba(232,236,244,.22);}
+
+.lic-btn{
+    width:100%;margin-top:14px;padding:10px 0;
+    font-size:13px;font-weight:600;border-radius:6px;
+    border:1px solid transparent;cursor:pointer;
+    transition:all .15s;
+}
+.lic-btn.primary{
+    background:linear-gradient(180deg,#5a87a8,#3f6a87);
+    border-color:rgba(138,180,255,.32);
+    color:#f0f7ff;
+}
+.lic-btn.primary:hover{background:linear-gradient(180deg,#6b9ab9,#4a7693);}
+.lic-btn.primary:disabled{opacity:.45;cursor:not-allowed;}
+.lic-btn.ghost{
+    background:rgba(255,255,255,.05);
+    border-color:rgba(255,255,255,.12);
+    color:#b8c4d2;font-weight:400;font-size:11.5px;
+    padding:6px 0;margin-top:0;
+}
+.lic-btn.ghost:hover{background:rgba(255,255,255,.1);}
+
+.lic-row{text-align:center;margin-top:10px;}
+.lic-link{
+    background:none;border:none;padding:0;
+    font-size:11px;color:#7fb3d5;cursor:pointer;
+    text-decoration:underline;text-underline-offset:2px;
+}
+.lic-link:hover{color:#9fd0ff;}
+
+.lic-hint{
+    font-size:10.5px;color:#6f7c8a;margin-top:10px;
+    line-height:1.6;
+}
+
+/* 消息 */
+.lic-msg{
+    margin-top:12px;font-size:11.5px;line-height:1.6;
+    min-height:18px;color:#8a9bab;
+    white-space:pre-wrap;word-break:break-word;
+}
+.lic-msg.ok{color:#7fd68b;}
+.lic-msg.err{color:#ff8a8a;}
+
+/* 底部 */
+.lic-foot{
+    margin-top:18px;padding-top:14px;
+    border-top:1px solid rgba(255,255,255,.06);
+}
+.lic-device{
+    display:flex;flex-direction:column;gap:3px;
+    font-size:10px;color:#6f7c8a;
+}
+.lic-device b{color:#9aa8b8;font-weight:600;}
+.lic-mono{
+    font-family:Consolas,monospace;
+    color:#6f7c8a;letter-spacing:.3px;
+}
+.lic-actions{
+    display:flex;gap:8px;margin-top:10px;
+}
+.lic-actions .lic-btn{flex:1;}
+</style>
+
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
     <div class="tab-panel" id="panel-media" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
@@ -2298,6 +2425,8 @@
     <div class="tab-panel" id="panel-script" style="display:none;"></div>
 
     <script src="js/CSInterface.js"></script>
+    <script src="js/license-client.js"></script>
+    <script src="js/license-ui.js"></script>
     <script src="js/errorlog.js"></script>
     <script src="js/log-overlay.js"></script>
     <script src="js/updater.js"></script>

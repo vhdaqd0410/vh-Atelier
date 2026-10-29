@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <ExtensionManifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    ExtensionBundleId="com.vh.atelier"
+    ExtensionBundleId="com.vh.atelier.pro"
     ExtensionBundleVersion="1.82.11"
     Version="6.0">
 
     <ExtensionList>
-        <Extension Id="com.vh.atelier.panel" Version="1.82.11"/>
-        <Extension Id="com.vh.atelier.bg" Version="1.82.11"/>
+        <Extension Id="com.vh.atelier.pro.panel" Version="1.82.11"/>
+        <Extension Id="com.vh.atelier.pro.bg" Version="1.82.11"/>
     </ExtensionList>
 
     <ExecutionEnvironment>
@@ -22,7 +22,7 @@
     </ExecutionEnvironment>
 
     <DispatchInfoList>
-        <Extension Id="com.vh.atelier.panel">
+        <Extension Id="com.vh.atelier.pro.panel">
             <DispatchInfo>
                 <Resources>
                     <MainPath>./index.html</MainPath>
@@ -57,7 +57,7 @@
         </Extension>
 
         <!-- 隐藏面板：全局热键桥，PR 启动即加载，spawn 钩子进程并广播热键事件 -->
-        <Extension Id="com.vh.atelier.bg">
+        <Extension Id="com.vh.atelier.pro.bg">
             <DispatchInfo>
                 <Resources>
                     <MainPath>./bg/bg.html</MainPath>
