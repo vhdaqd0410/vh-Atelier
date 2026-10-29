@@ -14,8 +14,12 @@
 (function () {
     'use strict';
 
-    var FB = window.__vhFeedback;
-    if (!FB) { console.log('[fb] feedback.js 未加载'); return; }
+    // 惰性获取：不在加载时硬性依赖，避免 feedback.js 因任何原因没加载时
+    // 整个面板静默失效（用户点提交毫无反应，无从判断问题）。
+    // 改为每次用时取，并在提交时给出明确的错误提示。
+    function getFB() {
+        return window.__vhFeedback || null;
+    }
 
     var STORE_KEY = 'vh_fb_mine_v1';
     var MAX_STORE = 100;
@@ -57,6 +61,29 @@
             var t = el.btnSubmit.querySelector('.fb-submit-t');
             if (t) t.textContent = b ? '提交中…' : '提交反馈';
         }
+    }
+
+    // 提交结束的统一出口：无论成功、失败还是抛异常，都必须解锁按钮。
+    // 之前这里漏了异常路径，调用不存在的函数直接抛错，busy 一直为 true，
+    // 按钮永久停在"提交中…"。现在所有出口都收敛到 finish()。
+    var finished = false;
+    function finish(err, res) {
+        if (finished) return;
+        finished = true;
+        setBusy(false);
+        if (submitWatchdog) { clearTimeout(submitWatchdog); submitWatchdog = null; }
+        handleResult(err, res);
+    }
+    var submitWatchdog = null;
+
+    // 兜底：即使底层回调永远不触发（网络层异常/回调丢失），30 秒后也必须解锁
+    function armWatchdog() {
+        if (submitWatchdog) clearTimeout(submitWatchdog);
+        submitWatchdog = setTimeout(function () {
+            submitWatchdog = null;
+            if (finished) return;
+            finish(new Error('提交超时（30 秒无响应），请检查网络后重试'));
+        }, 30000);
     }
 
     // ---------- 本地记录 ----------
@@ -137,12 +164,36 @@
         if (contact) fullDetail += '\n\n---\n联系方式：' + contact;
 
         setBusy(true);
+        finished = false;
+        armWatchdog();
         msg('正在提交…');
 
         var opts = { withLogs: !!(el.withLogs && el.withLogs.checked) };
 
-        FB.submitFeedback(curKind, title, fullDetail, opts, function (err, res) {
-            setBusy(false);
+        // feedback.js 导出的名字是 submit（不是 submitFeedback）。
+        // 兼容两种：优先 submit，退到 submitFeedback，都没有就立即报错，不静默卡住。
+        var fb = getFB();
+        if (!fb) {
+            finish(new Error('反馈模块未加载（js/feedback.js），请重启插件或重新安装'));
+            return;
+        }
+        var submitFn = (typeof fb.submit === 'function') ? fb.submit
+                     : (typeof fb.submitFeedback === 'function') ? fb.submitFeedback
+                     : null;
+        if (!submitFn) {
+            finish(new Error('反馈模块缺少 submit 接口，请重启插件'));
+            return;
+        }
+
+        try {
+            submitFn.call(fb, curKind, title, fullDetail, opts, finish);
+        } catch (e) {
+            finish(e instanceof Error ? e : new Error(String(e)));
+        }
+    }
+
+    // 处理提交结果
+    function handleResult(err, res) {
             if (err) {
                 var m = String(err.message || err);
                 if (/超时|不可达|ENOTFOUND|ECONNREFUSED|network/i.test(m)) {
@@ -178,7 +229,6 @@
                     msg('✓ 提交成功。点右上角「我的反馈」可以查看处理进度', 'ok');
                 }
             }, 2600);
-        });
     }
 
     // ---------- 我的反馈列表 ----------
@@ -217,7 +267,7 @@
         el.histList.innerHTML = '<div class="fb-empty">加载中…</div>';
 
         var cfg = {};
-        try { cfg = FB.cfg ? FB.cfg() : {}; } catch (e) {}
+        try { var fbx = getFB(); cfg = (fbx && fbx.cfg) ? fbx.cfg() : {}; } catch (e) {}
         var base = (cfg && cfg.base) || 'http://47.122.108.231:17893';
 
         var done = false;
@@ -362,8 +412,9 @@
     // 每次切到反馈面板：回到表单视图并探一次服务器
     window.__feedbackPanelOnShow = function () {
         showForm();
-        if (FB.ping) {
-            FB.ping(function (err) {
+        var fbp = getFB();
+        if (fbp && fbp.ping) {
+            fbp.ping(function (err) {
                 if (err) {
                     msg('⚠ 反馈服务器暂时连不上，提交可能失败：' + (err.message || ''), 'warn');
                 } else if (el.msg && el.msg.textContent.indexOf('连不上') >= 0) {

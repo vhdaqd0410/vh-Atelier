@@ -4,6 +4,37 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.14",
+      "date": "2026-10-29",
+      "title": "修复提交反馈卡住 + 启动默认账号面板",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "修复提交反馈一直卡在「正在提交」：feedback.js 的 post() 只设了 options.timeout，但 Node 的这个选项不会在空闲时自动触发 timeout 事件，必须显式 req.setTimeout()。网络卡住时请求永远挂着，回调不触发，按钮就永远停在提交中"
+        },
+        {
+          "type": "fix",
+          "text": "修复调用名错误：面板调用的是 FB.submitFeedback，但 feedback.js 实际导出的是 FB.submit，未定义函数抛异常后解锁逻辑被跳过。现已改为 submit 并保留兼容"
+        },
+        {
+          "type": "fix",
+          "text": "提交链路全面加固：回调只允许触发一次（error/timeout/close/end 可能叠加）；构造期异常（如 Buffer 不可用）立即回调不再静默中断；加 close 事件兜底"
+        },
+        {
+          "type": "fix",
+          "text": "Content-Length 不再硬依赖 Buffer.byteLength，改用本地 utf8ByteLength，Buffer 不可用的环境也能正常提交"
+        },
+        {
+          "type": "fix",
+          "text": "面板加 30 秒看门狗兜底：即使底层回调永远不触发，按钮也会在 30 秒后解锁并提示超时"
+        },
+        {
+          "type": "new",
+          "text": "插件启动默认停在「账号」面板（原来停在素材），打开就能看到授权状态和剩余天数"
+        }
+      ]
+    },
+    {
       "version": "1.82.13",
       "date": "2026-10-29",
       "title": "反馈中心重做：只保留提反馈，去掉管理功能",

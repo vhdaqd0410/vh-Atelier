@@ -211,6 +211,23 @@
         switchTab(target);
     }
 
+    // ---------- 首屏初始化 ----------
+    // 打开插件时默认停在「账号」面板，让用户先看到授权状态。
+    // 不依赖 HTML 里的 active 类：面板默认全 display:none，
+    // 必须有显式调用才会真正显示，否则首屏是空白的。
+    function bootInitialPanel() {
+        var START_GROUP = 'account';
+        if (!groups[START_GROUP]) return;
+        try { switchGroup(START_GROUP); } catch (e) {
+            console.log('[boot] 初始面板切换失败: ' + (e && e.message));
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootInitialPanel);
+    } else {
+        bootInitialPanel();
+    }
+
     // 事件：组按钮
     groupBtns.forEach(function (b) {
         b.addEventListener('click', function () {

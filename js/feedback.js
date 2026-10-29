@@ -119,6 +119,26 @@
         }
     }
 
+    // 计算 UTF-8 字节数。不能直接用 Buffer.byteLength：
+    // 某些 CEP 上下文里 Buffer 可能不可用（Node 集成未启用/被沙箱限制），
+    // 一旦抛错整个 post() 就中断，请求发不出去。
+    function utf8ByteLength(str) {
+        try {
+            if (typeof Buffer !== 'undefined' && Buffer && typeof Buffer.byteLength === 'function') {
+                return Buffer.byteLength(str);
+            }
+        } catch (e) {}
+        var n = 0;
+        for (var i = 0; i < str.length; i++) {
+            var c = str.charCodeAt(i);
+            if (c < 0x80) n += 1;
+            else if (c < 0x800) n += 2;
+            else if (c >= 0xD800 && c <= 0xDBFF) { n += 4; i++; }
+            else n += 3;
+        }
+        return n;
+    }
+
     // ---------- 提交 ----------
     function post(endpoint, payload, timeout, cb) {
         var u = parseEndpoint(endpoint);
@@ -134,34 +154,67 @@
             headers: {
                 'User-Agent': 'vh-Atelier-feedback',
                 'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(data)
+                'Content-Length': utf8ByteLength(data)
             },
             timeout: timeout
         };
-        var req = mod.request(opts, function (res) {
-            var buf = '';
-            res.on('data', function (d) { buf += d.toString(); });
-            res.on('end', function () {
-                var j = null;
-                try { j = JSON.parse(buf); } catch (e) {}
-                if (res.statusCode >= 200 && res.statusCode < 300 && j && j.ok) return cb(null, j);
-                var msg = (j && j.error) || ('HTTP ' + res.statusCode);
-                if (res.statusCode === 403) msg = '口令不正确';
-                else if (res.statusCode === 429) msg = '提交太频繁，请稍后再试';
-                else if (res.statusCode === 404) msg = '中转服务地址不对（404）';
-                cb(new Error(msg));
+        // 回调只允许触发一次：error / timeout / close / end 可能叠加触发，
+        // 重复调用会让上层的 completed 状态错乱。
+        var settled = false;
+        function done(err, ok) {
+            if (settled) return;
+            settled = true;
+            try { cb(err, ok); } catch (e) {}
+        }
+
+        var req;
+        try {
+            req = mod.request(opts, function (res) {
+                var buf = '';
+                res.on('data', function (d) { buf += d.toString(); });
+                res.on('end', function () {
+                    var j = null;
+                    try { j = JSON.parse(buf); } catch (e) {}
+                    if (res.statusCode >= 200 && res.statusCode < 300 && j && j.ok) return done(null, j);
+                    var msg = (j && j.error) || ('HTTP ' + res.statusCode);
+                    if (res.statusCode === 403) msg = '口令不正确';
+                    else if (res.statusCode === 429) msg = '提交太频繁，请稍后再试';
+                    else if (res.statusCode === 404) msg = '中转服务地址不对（404）';
+                    done(new Error(msg));
+                });
+                res.on('error', function (e) {
+                    done(new Error('读取响应失败：' + (e && e.message)));
+                });
             });
-        });
+        } catch (e) {
+            // Buffer 未定义、URL 非法、模块不可用等构造期异常，必须立刻回调，
+            // 否则上层永远等不到结果（表现为一直「提交中」）。
+            return done(new Error('请求构造失败：' + (e && e.message ? e.message : e)));
+        }
+
         req.on('error', function (e) {
-            cb(new Error('连不上中转服务：' + e.message +
+            done(new Error('连不上中转服务：' + (e && e.message) +
                 '（地址 ' + u.hostname + ':' + opts.port + '，请确认服务器可达）'));
         });
         req.on('timeout', function () {
             try { req.destroy(); } catch (e) {}
-            cb(new Error('请求超时（' + timeout + 'ms）'));
+            done(new Error('请求超时（' + timeout + 'ms）'));
         });
-        req.write(data);
-        req.end();
+        // 连接被对端提前关闭且没走 error 时兜底
+        req.on('close', function () {
+            if (!settled) done(new Error('连接被关闭，未收到响应'));
+        });
+
+        // 关键：Node 里 opts.timeout 只对建立连接阶段生效，
+        // 不会在空闲时自动触发 'timeout' 事件，必须显式 setTimeout。
+        try { if (typeof req.setTimeout === 'function') req.setTimeout(timeout); } catch (e) {}
+
+        try {
+            req.write(data);
+            req.end();
+        } catch (e) {
+            done(new Error('发送请求失败：' + (e && e.message ? e.message : e)));
+        }
     }
 
     // kind: 'bug' | 'idea' | 'other'
