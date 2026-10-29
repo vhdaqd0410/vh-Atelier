@@ -4,6 +4,33 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.16",
+      "date": "2026-10-29",
+      "title": "反馈提交改走 XHR，一瞬间完成并立即提示成功",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "提交反馈一直显示「正在提交」的真正根因：CEP 面板里 Node http 的请求确实发出去了（服务端日志能看到数据全部入库），但 response 回调不回到 JS 上下文，界面永远等不到结果。现改为 XMLHttpRequest 主通道，同环境里授权模块用它一直稳定"
+        },
+        {
+          "type": "fix",
+          "text": "修复提交成功但提示不更新的作用域错误：handleResult 拆成独立函数后拿不到 doSubmit 的局部变量 title，抛 ReferenceError 导致提示卡在「正在提交」。改用模块级 pendingTitle / pendingKind 传递"
+        },
+        {
+          "type": "impr",
+          "text": "提交耗时从原来的干等缩短：XHR 超时 8 秒，界面兜底 12 秒（原来 30 秒），正常情况 300ms 内完成"
+        },
+        {
+          "type": "impr",
+          "text": "成功提示一次性给出完整信息，不再 2.6 秒后覆盖重写"
+        },
+        {
+          "type": "impr",
+          "text": "XHR 不可用时自动退回 Node http 通道，两条路都走不通才报错"
+        }
+      ]
+    },
+    {
       "version": "1.82.15",
       "date": "2026-10-29",
       "title": "修复提交失败误报 + 登录状态持久化 + 记住密码自动登录",

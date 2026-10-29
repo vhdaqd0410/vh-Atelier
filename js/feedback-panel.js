@@ -28,6 +28,10 @@
     var el = {};
     var curKind = 'bug';
     var busy = false;
+    // 本次提交的上下文：handleResult 是独立函数，拿不到 doSubmit 的局部变量，
+    // 之前靠闭包巧合能用，拆函数后就 ReferenceError 了。这里显式存一份。
+    var pendingKind = 'bug';
+    var pendingTitle = '';
 
     function initEl() {
         el.panel = $('panel-feedback');
@@ -76,14 +80,15 @@
     }
     var submitWatchdog = null;
 
-    // 兜底：即使底层回调永远不触发（网络层异常/回调丢失），30 秒后也必须解锁
+    // 兜底：即使底层回调永远不触发（网络层异常/回调丢失），也必须解锁。
+    // XHR 自身 8 秒超时，这里 12 秒是最后一道保险，不让人干等半分钟。
     function armWatchdog() {
         if (submitWatchdog) clearTimeout(submitWatchdog);
         submitWatchdog = setTimeout(function () {
             submitWatchdog = null;
             if (finished) return;
-            finish(new Error('提交超时（30 秒无响应），请检查网络后重试'));
-        }, 30000);
+            finish(new Error('提交超时，请检查网络后重试'));
+        }, 12000);
     }
 
     // ---------- 本地记录 ----------
@@ -163,6 +168,9 @@
         var fullDetail = detail;
         if (contact) fullDetail += '\n\n---\n联系方式：' + contact;
 
+        pendingKind = curKind;
+        pendingTitle = title;
+
         setBusy(true);
         finished = false;
         armWatchdog();
@@ -192,43 +200,37 @@
         }
     }
 
-    // 处理提交结果
+    // 处理提交结果（在 finish 里调用，负责给用户明确反馈）
     function handleResult(err, res) {
-            if (err) {
-                var m = String(err.message || err);
-                if (/超时|不可达|ENOTFOUND|ECONNREFUSED|network/i.test(m)) {
-                    msg('提交失败：连不上反馈服务器\n' + m +
-                        '\n\n可以稍后重试，或把问题直接发给管理员。', 'err');
-                } else {
-                    msg('提交失败：' + m, 'err');
-                }
-                return;
+        if (err) {
+            var m = String(err.message || err);
+            if (/超时|不可达|ENOTFOUND|ECONNREFUSED|network|连不上/i.test(m)) {
+                msg('提交失败：连不上反馈服务器\n' + m +
+                    '\n\n可以稍后重试，或把问题直接发给管理员。', 'err');
+            } else {
+                msg('提交失败：' + m, 'err');
             }
+            return;
+        }
 
-            // 记到本地，供「我的反馈」查看进度
-            var id = (res && (res.id || res.number)) || null;
-            if (id) {
-                addStore({
-                    id: String(id),
-                    kind: curKind,
-                    title: title,
-                    createdAt: Date.now()
-                });
-            }
+        // 记到本地，供「我的反馈」查看进度
+        var id = (res && (res.id || res.number)) || null;
+        if (id) {
+            addStore({
+                id: String(id),
+                kind: pendingKind,
+                title: pendingTitle,
+                createdAt: Date.now()
+            });
+        }
 
-            msg('✓ 提交成功！感谢反馈，我们会尽快处理。', 'ok');
+        msg('✓ 提交成功！感谢反馈，我们会尽快处理。\n点右上角「我的反馈」可以查看处理进度', 'ok');
 
-            if (el.title) el.title.value = '';
-            if (el.detail) el.detail.value = '';
-            if (el.contact) el.contact.value = '';
-            bindCount(el.title, el.titleCount, 200);
-            bindCount(el.detail, el.detailCount, 15000);
-
-            setTimeout(function () {
-                if (el.msg && el.msg.textContent.indexOf('提交成功') >= 0) {
-                    msg('✓ 提交成功。点右上角「我的反馈」可以查看处理进度', 'ok');
-                }
-            }, 2600);
+        if (el.title) el.title.value = '';
+        if (el.detail) el.detail.value = '';
+        if (el.contact) el.contact.value = '';
+        bindCount(el.title, el.titleCount, 200);
+        bindCount(el.detail, el.detailCount, 15000);
     }
 
     // ---------- 我的反馈列表 ----------

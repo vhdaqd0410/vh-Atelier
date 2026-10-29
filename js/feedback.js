@@ -140,26 +140,85 @@
     }
 
     // ---------- 提交 ----------
+
+    // 提交反馈。
+    //
+    // 为什么用 XMLHttpRequest 而不是 Node 的 http 模块：
+    //   在 CEP 面板里，Node http 的请求确实发出去了（服务端日志能看到，
+    //   数据也写进了库），但 response 回调不回到 JS 上下文，
+    //   界面就永远等不到结果，表现为「一直正在提交」。
+    //   插件里 license-client.js 用 XHR 调授权服务器一直稳定，所以这里也走 XHR。
+    //
+    // 解析响应：2xx 一律视为服务器已收下；只有明确 4xx/5xx 才报错。
+    // 这样即使响应体格式有变化，也不会出现「已入库却提示失败」。
+    function handleResponse(status, text, cb, settledRef) {
+        if (settledRef.settled) return;
+        settledRef.settled = true;
+
+        var j = null;
+        try { j = JSON.parse(text); } catch (e) {}
+
+        if (status === 0) {
+            return cb(new Error('连不上反馈服务器（网络不可达或被拦截）'));
+        }
+        if (status >= 200 && status < 300) {
+            // 服务器明确说失败才失败
+            if (j && j.ok === false) {
+                return cb(new Error(j.error || ('服务器拒绝：HTTP ' + status)));
+            }
+            return cb(null, j || { ok: true, raw: text });
+        }
+        if (status === 403) return cb(new Error('口令不正确'));
+        if (status === 429) return cb(new Error('提交太频繁，请稍后再试'));
+        if (status === 404) return cb(new Error('反馈服务地址不对（404）'));
+        return cb(new Error((j && j.error) || ('HTTP ' + status)));
+    }
+
     function post(endpoint, payload, timeout, cb) {
+        var data = JSON.stringify(payload);
+        var ref = { settled: false };
+
+        // ---- 主通道：XHR（CEP 里最可靠）----
+        var xhr = null;
+        try {
+            if (typeof XMLHttpRequest !== 'undefined') xhr = new XMLHttpRequest();
+        } catch (e) { xhr = null; }
+
+        if (xhr) {
+            try {
+                xhr.open('POST', endpoint, true);
+                try { xhr.setRequestHeader('Content-Type', 'application/json'); } catch (e) {}
+                // 缩短等待：正常 100ms 内就能完成，8 秒足够；不要让人干等 20 秒
+                xhr.timeout = Math.min(timeout || 8000, 10000);
+
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState !== 4) return;
+                    handleResponse(xhr.status, xhr.responseText || '', cb, ref);
+                };
+                xhr.ontimeout = function () {
+                    if (ref.settled) return;
+                    ref.settled = true;
+                    cb(new Error('提交超时，请检查网络后重试'));
+                };
+                xhr.onerror = function () {
+                    if (ref.settled) return;
+                    ref.settled = true;
+                    cb(new Error('连不上反馈服务器，请检查网络'));
+                };
+
+                xhr.send(data);
+                return;
+            } catch (e) {
+                // XHR 构造/发送异常，退到 Node http
+                ref.settled = false;
+            }
+        }
+
+        // ---- 兜底通道：Node http ----
         var u = parseEndpoint(endpoint);
-        if (!u) return cb(new Error('中转地址无效：' + endpoint));
+        if (!u) return cb(new Error('反馈服务地址无效：' + endpoint));
 
         var mod = (u.protocol === 'https:') ? https : http;
-        var data = JSON.stringify(payload);
-        var opts = {
-            hostname: u.hostname,
-            port: u.port,
-            path: u.path,
-            method: 'POST',
-            headers: {
-                'User-Agent': 'vh-Atelier-feedback',
-                'Content-Type': 'application/json',
-                'Content-Length': utf8ByteLength(data)
-            },
-            timeout: timeout
-        };
-        // 回调只允许触发一次：error / timeout / close / end 可能叠加触发，
-        // 重复调用会让上层的 completed 状态错乱。
         var settled = false;
         function done(err, ok) {
             if (settled) return;
@@ -167,74 +226,48 @@
             try { cb(err, ok); } catch (e) {}
         }
 
-        // 是否已经收到响应头。收到响应头说明服务器已经受理了请求，
-        // 此后绝不能再把 close 当成失败 —— 服务器可能已经写库成功。
-        var gotResponse = false;
-        var statusCode = 0;
-        var respBody = '';
-
-        function finishWithBody() {
-            var j = null;
-            try { j = JSON.parse(respBody); } catch (e) {}
-            // 2xx 且业务成功
-            if (statusCode >= 200 && statusCode < 300 && j && j.ok) return done(null, j);
-            // 2xx 但没解析出 ok：服务器已经收下，仍按成功处理，
-            // 只在明确 4xx/5xx 时才报错，避免"已入库却提示失败"。
-            if (statusCode >= 200 && statusCode < 300 && !j) return done(null, { ok: true, raw: respBody });
-            var msg = (j && j.error) || ('HTTP ' + statusCode);
-            if (statusCode === 403) msg = '口令不正确';
-            else if (statusCode === 429) msg = '提交太频繁，请稍后再试';
-            else if (statusCode === 404) msg = '中转服务地址不对（404）';
-            done(new Error(msg));
-        }
+        var gotResponse = false, statusCode = 0, respBody = '';
 
         var req;
         try {
-            req = mod.request(opts, function (res) {
+            req = mod.request({
+                hostname: u.hostname,
+                port: u.port,
+                path: u.path,
+                method: 'POST',
+                headers: {
+                    'User-Agent': 'vh-Atelier-feedback',
+                    'Content-Type': 'application/json',
+                    'Content-Length': utf8ByteLength(data)
+                },
+                timeout: timeout
+            }, function (res) {
                 gotResponse = true;
                 statusCode = res.statusCode;
                 res.on('data', function (d) { respBody += d.toString(); });
                 res.on('end', function () {
-                    finishWithBody();
-                });
-                res.on('error', function (e) {
-                    // 已经拿到状态码就按状态码判定，不因读取中断判失败
-                    if (statusCode) finishWithBody();
-                    else done(new Error('读取响应失败：' + (e && e.message)));
-                });
-                res.on('close', function () {
-                    // 响应流关闭：若 end 没来但已有内容/状态码，按已收到的判定
-                    if (!settled && (statusCode || respBody)) finishWithBody();
+                    handleResponse(statusCode, respBody, function (e, r) { done(e, r); },
+                                   { get settled() { return settled; }, set settled(v) { settled = v; } });
                 });
             });
         } catch (e) {
-            // Buffer 未定义、URL 非法、模块不可用等构造期异常，必须立刻回调，
-            // 否则上层永远等不到结果（表现为一直「提交中」）。
             return done(new Error('请求构造失败：' + (e && e.message ? e.message : e)));
         }
 
         req.on('error', function (e) {
-            done(new Error('连不上中转服务：' + (e && e.message) +
-                '（地址 ' + u.hostname + ':' + opts.port + '，请确认服务器可达）'));
+            done(new Error('连不上反馈服务器：' + (e && e.message)));
         });
         req.on('timeout', function () {
             try { req.destroy(); } catch (e) {}
-            // 已收到响应头的话，说明服务端已受理，按响应结果判定
-            if (gotResponse) { finishWithBody(); return; }
-            done(new Error('请求超时（' + timeout + 'ms）'));
+            if (gotResponse) { handleResponse(statusCode, respBody, function (e2, r) { done(e2, r); }, { settled: false }); return; }
+            done(new Error('提交超时，请检查网络后重试'));
         });
-        // 连接被关闭：只有「从未收到响应头」才判定失败。
-        // 早期版本无条件判定失败，导致服务器已写库成功、界面却提示连接被关闭。
         req.on('close', function () {
-            if (settled) return;
-            if (gotResponse) { finishWithBody(); return; }
+            if (settled || gotResponse) return;
             done(new Error('连接被关闭，未收到响应'));
         });
 
-        // 关键：Node 里 opts.timeout 只对建立连接阶段生效，
-        // 不会在空闲时自动触发 'timeout' 事件，必须显式 setTimeout。
         try { if (typeof req.setTimeout === 'function') req.setTimeout(timeout); } catch (e) {}
-
         try {
             req.write(data);
             req.end();
