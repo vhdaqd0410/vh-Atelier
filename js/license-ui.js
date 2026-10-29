@@ -257,27 +257,168 @@
         }, 900);
     }
 
-    // 申请授权弹窗
-    function showRequestDialog() {
-        var note = window.prompt(
-            '申请授权\n\n' +
-            '请填写你的用途说明（可选），提交后管理员会在后台看到。\n' +
-            '设备：' + LIC.deviceName() + '\n' +
-            '设备ID：' + LIC.deviceId() + '\n\n' +
-            '如果已有账号，请先在「账号登录」里登录；没有账号可先注册。\n' +
-            '也可以直接把上面的设备ID发给管理员，让他给你开通或发卡密。',
-            ''
-        );
-        if (note === null) return;
+    // 申请授权弹窗（贴合插件风格）
+    function showRequestDialog(presetType) {
+        // 复用遮罩层样式
+        var mask = document.createElement('div');
+        mask.id = 'licReqMask';
+        mask.className = 'lic-modal-mask';
+        mask.innerHTML = [
+            '<div class="lic-modal">',
+            '  <div class="lic-modal-head">',
+            '    <span class="lic-modal-title">申请授权</span>',
+            '    <button class="lic-modal-x" id="licReqClose" title="关闭">✕</button>',
+            '  </div>',
+            '  <div class="lic-modal-body">',
 
-        msg('正在提交申请…');
-        LIC.requestAccess(note).then(function (j) {
-            msg('✓ 申请已提交，请在后台处理。也可以把设备ID发给管理员加速处理。', 'ok');
-        }).catch(function (e) {
-            // /api/request 可能需要登录，退回到提示手动联系
-            msg('提交失败（' + (e.message || '') + '）。请直接把设备ID发给管理员。', 'err');
+            '    <div class="lic-req-info">',
+            '      <div class="lic-req-row"><span>设备名称</span><b id="licReqDevName">-</b></div>',
+            '      <div class="lic-req-row"><span>设备 ID</span><b class="lic-mono" id="licReqDevId">-</b></div>',
+            '      <div class="lic-req-row"><span>当前账号</span><b id="licReqEmail">(未登录)</b></div>',
+            '    </div>',
+
+            '    <label class="lic-label">申请类型</label>',
+            '    <select id="licReqType" class="lic-input lic-select">',
+            '      <option value="new">首次开通</option>',
+            '      <option value="renew">续期</option>',
+            '      <option value="plugin">增加插件权限</option>',
+            '      <option value="unbind">解绑旧设备</option>',
+            '      <option value="other">其他问题</option>',
+            '    </select>',
+
+            '    <label class="lic-label">需要开通的时长</label>',
+            '    <select id="licReqDays" class="lic-input lic-select">',
+            '      <option value="7">7 天</option>',
+            '      <option value="30" selected>30 天（一个月）</option>',
+            '      <option value="90">90 天（三个月）</option>',
+            '      <option value="365">365 天（一年）</option>',
+            '      <option value="0">由管理员决定</option>',
+            '    </select>',
+
+            '    <label class="lic-label">说明 <span class="lic-opt">（选填，最多 200 字）</span></label>',
+            '    <textarea id="licReqNote" class="lic-input lic-textarea" rows="3"',
+            '      placeholder="例如：我是XX工作室，买了年卡需要开通；或者：之前的授权已到期需要续期"></textarea>',
+
+            '    <div class="lic-req-tip">',
+            '      <b>提示：</b>提交后管理员会在后台看到你的申请，通常会在 24 小时内处理。',
+            '      急用可以把上面的<b>设备 ID</b> 发给管理员，能更快处理。',
+            '    </div>',
+
+            '    <div id="licReqMsg" class="lic-msg"></div>',
+
+            '    <div class="lic-modal-foot">',
+            '      <button class="lic-btn ghost" id="licReqCopy" style="flex:1;">复制申请信息</button>',
+            '      <button class="lic-btn primary" id="licReqSubmit" style="flex:1;">提交申请</button>',
+            '    </div>',
+            '  </div>',
+            '</div>'
+        ].join('\n');
+
+        document.body.appendChild(mask);
+
+        function q(id) { return document.getElementById(id); }
+        function setMsg(t, cls) {
+            var m = q('licReqMsg');
+            if (!m) return;
+            m.textContent = t || '';
+            m.className = 'lic-msg' + (cls ? ' ' + cls : '');
+        }
+
+        // 填充设备信息
+        q('licReqDevName').textContent = LIC.deviceName();
+        q('licReqDevId').textContent = LIC.deviceId();
+        var st = LIC.state ? LIC.state() : {};
+        q('licReqEmail').textContent = st.email || '(未登录)';
+
+        // 外部调用时预设申请类型
+        if (presetType) {
+            try {
+                var sel = q('licReqType');
+                for (var i = 0; i < sel.options.length; i++) {
+                    if (sel.options[i].value === presetType) {
+                        sel.selectedIndex = i;
+                        break;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function close() {
+            if (mask.parentNode) mask.parentNode.removeChild(mask);
+        }
+
+        q('licReqClose').addEventListener('click', close);
+        mask.addEventListener('click', function (ev) {
+            if (ev.target === mask) close();
+        });
+
+        // 复制完整申请信息（可以直接发给管理员）
+        q('licReqCopy').addEventListener('click', function () {
+            var typeText = q('licReqType').options[q('licReqType').selectedIndex].text;
+            var daysText = q('licReqDays').options[q('licReqDays').selectedIndex].text;
+            var note = (q('licReqNote').value || '').trim();
+            var txt = [
+                '【vh-Atelier 授权申请】',
+                '类型：' + typeText,
+                '时长：' + daysText,
+                '设备名称：' + LIC.deviceName(),
+                '设备 ID：' + LIC.deviceId(),
+                '账号：' + (st.email || '(未登录)'),
+                note ? ('说明：' + note) : ''
+            ].filter(Boolean).join('\n');
+
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(txt);
+                } else if (window.__copyText) {
+                    window.__copyText(txt);
+                }
+                setMsg('✓ 申请信息已复制，可以直接发给管理员', 'ok');
+            } catch (e) {
+                setMsg('复制失败，请手动记录：\n' + txt, 'err');
+            }
+        });
+
+        // 提交
+        q('licReqSubmit').addEventListener('click', function () {
+            var typeVal = q('licReqType').value;
+            var daysVal = q('licReqDays').value;
+            var note = (q('licReqNote').value || '').trim();
+
+            if (note.length > 200) {
+                setMsg('说明太长，请控制在 200 字以内', 'err');
+                return;
+            }
+
+            var btn = q('licReqSubmit');
+            btn.disabled = true;
+            btn.textContent = '提交中…';
+            setMsg('正在提交…');
+
+            // 组装完整说明（服务器只存 message 字段）
+            var typeText = q('licReqType').options[q('licReqType').selectedIndex].text;
+            var daysText = q('licReqDays').options[q('licReqDays').selectedIndex].text;
+            var full = '[类型]' + typeText + ' [时长]' + daysText +
+                       (note ? (' [说明]' + note) : '') +
+                       ' [设备]' + LIC.deviceName() + ' [设备ID]' + LIC.deviceId();
+
+            LIC.requestAccess(full, st.email || '').then(function () {
+                setMsg('✓ 申请已提交，管理员会在后台看到', 'ok');
+                btn.textContent = '已提交';
+                setTimeout(close, 1800);
+            }).catch(function (e) {
+                btn.disabled = false;
+                btn.textContent = '提交申请';
+                var m = e && e.message || '';
+                if (/邮箱/.test(m)) {
+                    setMsg('提交失败：需要先登录或填写邮箱。\n可以点「复制申请信息」直接发给管理员。', 'err');
+                } else {
+                    setMsg('提交失败：' + m + '\n可以点「复制申请信息」直接发给管理员。', 'err');
+                }
+            });
         });
     }
+
 
     // ---------- 启动检查 ----------
     function start() {
@@ -317,6 +458,12 @@
     window.__vhLicenseUI = {
         start: start,
         unlock: unlock,
+        request: function (presetType) {
+            // 遮罩层可能已关闭（已授权状态），这时直接弹申请窗
+            try { showRequestDialog(presetType); } catch (e) {
+                console.log('[lic] 打开申请弹窗失败: ' + e.message);
+            }
+        },
         relock: function (reason) {
             unlocked = false;
             buildMask();

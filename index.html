@@ -50,6 +50,7 @@
         <button class="ws-group" data-group="shenpian">🎬 审片</button>
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="components">📦 组件</button>
+        <button class="ws-group" data-group="account">👤 账号</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
         <button class="ws-group" data-group="prconv">🔧 工具</button>
     </div>
@@ -1837,6 +1838,15 @@
         </div>
     </div>
 
+    <div class="tab-panel" id="panel-account" style="display:none;">
+        <div class="ac-header">
+            <span class="ac-title">账号与授权</span>
+            <span class="ac-sub">查看授权状态 · 续期 · 切换账号</span>
+        </div>
+        <div class="ac-wrap" id="acBody"></div>
+        <div class="ac-msg" id="acMsg"></div>
+    </div>
+
     <div class="tab-panel" id="panel-feedback" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
             <div class="wb-nav">
@@ -2381,6 +2391,204 @@
 .lic-actions .lic-btn{flex:1;}
 </style>
 
+<style>
+/* ==== 账号与授权面板 ==== */
+.ac-header{
+    padding:12px 14px 10px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+}
+.ac-title{font-size:14px;font-weight:700;color:#e8ecf4;letter-spacing:.3px;}
+.ac-sub{display:block;font-size:10.5px;color:#6f7c8a;margin-top:3px;}
+.ac-wrap{padding:12px 14px;}
+
+/* 卡片 */
+.ac-card{
+    background:rgba(255,255,255,.028);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:8px;
+    padding:12px 13px;
+    margin-bottom:10px;
+}
+.ac-top{display:flex;align-items:center;gap:14px;}
+.ac-ring-wrap{flex:0 0 auto;width:72px;height:72px;}
+.ac-ring{width:72px;height:72px;}
+.ac-info{flex:1;min-width:0;}
+.ac-row{
+    display:flex;align-items:baseline;gap:8px;
+    font-size:11px;line-height:1.9;
+}
+.ac-row span{flex:0 0 52px;color:#6f7c8a;}
+.ac-row b{
+    flex:1;min-width:0;color:#cfd8e3;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ac-plan{color:#8ab4ff !important;}
+.ac-ok{color:#7fd68b !important;}
+.ac-err{color:#ff8a8a !important;}
+
+.ac-sec-title{
+    font-size:10.5px;color:#6f7c8a;
+    margin-bottom:7px;letter-spacing:.3px;
+}
+.ac-plugins{display:flex;flex-wrap:wrap;gap:5px;}
+.ac-tag{
+    display:inline-block;
+    padding:3px 8px;border-radius:4px;
+    font-size:10px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.09);
+    color:#9aa8b8;
+}
+.ac-tag.cur{
+    background:rgba(127,214,139,.14);
+    border-color:rgba(127,214,139,.35);
+    color:#7fd68b;
+    font-weight:600;
+}
+.ac-none{font-size:11px;color:#6f7c8a;}
+
+/* 警告条 */
+.ac-warn{
+    padding:8px 11px;border-radius:6px;
+    font-size:11px;line-height:1.6;
+    margin-bottom:10px;
+}
+.ac-warn.warn{
+    background:rgba(224,185,106,.12);
+    border:1px solid rgba(224,185,106,.3);
+    color:#e0b96a;
+}
+.ac-warn.err{
+    background:rgba(255,138,138,.12);
+    border:1px solid rgba(255,138,138,.3);
+    color:#ff8a8a;
+}
+
+/* 按钮 */
+.ac-btns{
+    display:grid;grid-template-columns:1fr 1fr;
+    gap:7px;margin-top:12px;
+}
+.ac-btn{
+    padding:8px 10px;
+    font-size:11.5px;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:5px;
+    color:#b8c4d2;
+    cursor:pointer;
+    transition:all .14s;
+    white-space:nowrap;
+}
+.ac-btn:hover{background:rgba(255,255,255,.1);color:#e8ecf4;}
+.ac-btn:disabled{opacity:.45;cursor:not-allowed;}
+.ac-btn.primary{
+    background:linear-gradient(180deg,#5a87a8,#3f6a87);
+    border-color:rgba(138,180,255,.32);
+    color:#f0f7ff;
+}
+.ac-btn.danger{color:#ff9a9a;}
+.ac-btn.danger:hover{background:rgba(255,138,138,.12);border-color:rgba(255,138,138,.3);}
+
+/* 空状态 */
+.ac-empty{text-align:center;padding:34px 14px;}
+.ac-empty-ic{font-size:32px;opacity:.5;margin-bottom:10px;}
+.ac-empty-t{font-size:13px;color:#cfd8e3;margin-bottom:6px;}
+.ac-empty-d{font-size:11px;color:#6f7c8a;line-height:1.6;margin-bottom:16px;}
+.ac-empty .ac-btn{width:auto;padding:8px 24px;}
+
+.ac-msg{
+    font-size:11px;line-height:1.6;
+    padding:0 14px 12px;
+    color:#8a9bab;
+    white-space:pre-wrap;
+}
+.ac-msg.ok{color:#7fd68b;}
+.ac-msg.err{color:#ff8a8a;}
+.ac-msg.warn{color:#e0b96a;}
+
+.ac-logout-tip{
+    font-size:11.5px;color:#9aa8b8;
+    line-height:1.8;margin-bottom:14px;
+}
+
+/* ==== 通用弹窗（申请授权 / 退出确认）==== */
+.lic-modal-mask{
+    position:fixed;inset:0;z-index:2147483100;
+    background:rgba(0,0,0,.62);
+    display:flex;align-items:center;justify-content:center;
+    padding:16px;box-sizing:border-box;
+    animation:licFade .16s ease;
+}
+@keyframes licFade{from{opacity:0}to{opacity:1}}
+.lic-modal{
+    width:400px;max-width:100%;
+    max-height:calc(100vh - 32px);
+    display:flex;flex-direction:column;
+    background:#161c26;
+    border:1px solid rgba(138,180,255,.18);
+    border-radius:10px;
+    box-shadow:0 20px 60px rgba(0,0,0,.75);
+    overflow:hidden;
+}
+.lic-modal-head{
+    display:flex;align-items:center;
+    padding:12px 15px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    background:linear-gradient(180deg,rgba(83,125,150,.1),transparent);
+}
+.lic-modal-title{flex:1;font-size:13px;font-weight:700;color:#e8ecf4;}
+.lic-modal-x{
+    background:none;border:none;color:#6f7c8a;
+    font-size:15px;cursor:pointer;padding:0 4px;line-height:1;
+}
+.lic-modal-x:hover{color:#ff8a8a;}
+.lic-modal-body{padding:14px 15px 15px;overflow-y:auto;}
+.lic-modal-foot{display:flex;gap:8px;margin-top:14px;}
+
+/* 申请弹窗专用 */
+.lic-select{
+    appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,#6f7c8a 50%),
+                     linear-gradient(135deg,#6f7c8a 50%,transparent 50%);
+    background-position:calc(100% - 14px) calc(50% - 2px),
+                         calc(100% - 9px) calc(50% - 2px);
+    background-size:5px 5px, 5px 5px;
+    background-repeat:no-repeat;
+    padding-right:28px;
+    cursor:pointer;
+}
+.lic-textarea{
+    resize:vertical;min-height:62px;
+    font-family:inherit;line-height:1.6;
+}
+.lic-opt{color:#5a6675;font-size:9.5px;font-weight:400;}
+.lic-req-info{
+    background:rgba(0,0,0,.24);
+    border-radius:6px;
+    padding:9px 11px;
+    margin-bottom:12px;
+}
+.lic-req-row{
+    display:flex;align-items:baseline;gap:8px;
+    font-size:10.5px;line-height:1.9;
+}
+.lic-req-row span{flex:0 0 56px;color:#6f7c8a;}
+.lic-req-row b{
+    flex:1;min-width:0;color:#9aa8b8;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.lic-req-tip{
+    margin-top:12px;padding:9px 11px;
+    background:rgba(83,125,150,.1);
+    border-left:2px solid rgba(138,180,255,.4);
+    border-radius:4px;
+    font-size:10.5px;line-height:1.7;
+    color:#8a9bab;
+}
+.lic-req-tip b{color:#9fd0ff;}
+</style>
+
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
     <div class="tab-panel" id="panel-media" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
@@ -2427,6 +2635,7 @@
     <script src="js/CSInterface.js"></script>
     <script src="js/license-client.js"></script>
     <script src="js/license-ui.js"></script>
+    <script src="js/account-panel.js"></script>
     <script src="js/errorlog.js"></script>
     <script src="js/log-overlay.js"></script>
     <script src="js/updater.js"></script>

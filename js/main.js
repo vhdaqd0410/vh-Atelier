@@ -19,6 +19,7 @@
         colorxml: document.getElementById('panel-colorxml'),
         breeze: document.getElementById('panel-breeze'),
         components: document.getElementById('panel-components'),
+        account: document.getElementById('panel-account'),
         feedback: document.getElementById('panel-feedback')
     };
 
@@ -33,6 +34,7 @@
         upscale: { members: ['upscale'], default: 'upscale' },
         prconv: { members: ['prconv', 'colorxml'], default: 'prconv' },
         components: { members: ['components'], default: 'components' },
+        account: { members: ['account'], default: 'account' },
         feedback: { members: ['feedback'], default: 'feedback' },
     };
     // tab 归属映射
@@ -129,6 +131,9 @@
 
     // 懒启动钩子
     function lazyInit(name) {
+        if (name === 'account' && window.__accountOnShow) {
+            try { window.__accountOnShow(); } catch (e) {}
+        }
         // 语音克隆：切到时重新检测引擎（用户可能刚装了 CosyVoice3）
         if (name === 'clone' && window.__cloneEngineOnShow) {
             try { window.__cloneEngineOnShow(); } catch (e) {}
