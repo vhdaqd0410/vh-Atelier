@@ -22,7 +22,22 @@
     var BZ_DIR = extRoot ? path.join(extRoot, 'breeze') : '';
     var ENGINE_DIR = BZ_DIR ? path.join(BZ_DIR, 'engine') : '';
     var MODEL_DIR = BZ_DIR ? path.join(BZ_DIR, 'models') : '';
-    var OUTPUT_DIR = BZ_DIR ? path.join(BZ_DIR, 'output') : '';
+    // 输出目录不再写死：由 js/audio-out.js 统一管理（可在设置里自定义）。
+    var DEFAULT_OUTPUT_DIR = BZ_DIR ? path.join(BZ_DIR, 'output') : '';
+    function outputDir() {
+        try {
+            if (window.__vhAudioOut && window.__vhAudioOut.getDir) {
+                var d = window.__vhAudioOut.getDir();
+                if (d) return d;
+            }
+        } catch (e) {}
+        return DEFAULT_OUTPUT_DIR;
+    }
+    var OUTPUT_DIR = outputDir();
+    function recomputeOutputDir() {
+        OUTPUT_DIR = outputDir();
+        return OUTPUT_DIR;
+    }
     var VOICES_DIR = ENGINE_DIR ? path.join(ENGINE_DIR, 'voices') : '';
 
     var CLI = ENGINE_DIR ? path.join(ENGINE_DIR, 'breeze-cli.exe') : '';
@@ -35,7 +50,8 @@
     var genStartAt = 0;
     var genTick = null;
     var genLines = [];           // 收集 cli 输出用于诊断
-    var lastOutWav = null;       // 最近生成的 wav
+    var lastOutWav = null;
+    var currentResultWav = null;       // 最近生成的 wav
     var refWavPath = null;       // 当前参考音频
     var refDuration = 0;
     var mode = 'design';
@@ -770,29 +786,30 @@
             }
         }
 
-        // 输出目录必须提前建好：引擎只负责写文件，不会建目录。
-        // 之前这里漏了，首次使用（目录还不存在）就会
-        // "failed to write ...\breeze\output\bz_xxx.wav"。
+        // 每次生成重新取目录（用户可能刚改过设置），并做存在+可写校验
+        recomputeOutputDir();
         if (!OUTPUT_DIR) {
             setProgress(0, '输出目录不可用（扩展根路径没取到）', false);
             return;
         }
+        var chk = { ok: true, msg: '' };
         try {
-            if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-        } catch (e) {
-            setProgress(0, '无法创建输出目录：' + (e.message || e), false);
+            if (window.__vhAudioOut && window.__vhAudioOut.ensure) {
+                chk = window.__vhAudioOut.ensure();
+            } else {
+                if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+                var probe = path.join(OUTPUT_DIR, '.write_test_' + Date.now());
+                fs.writeFileSync(probe, 'ok');
+                fs.unlinkSync(probe);
+            }
+        } catch (e2) {
+            chk = { ok: false, msg: '输出目录不可写：' + (e2.message || e2) };
+        }
+        if (!chk.ok) {
+            setProgress(0, '无法使用输出目录\n' + (chk.msg || '') + '\n路径：' + OUTPUT_DIR, false);
             return;
         }
-        // 目录存在了还要能写：权限/占用都可能在写盘时才暴露，
-        // 先探一次，把问题在启动引擎之前报出来（引擎跑完才报太浪费时间）。
-        try {
-            var probe = path.join(OUTPUT_DIR, '.write_test_' + Date.now());
-            fs.writeFileSync(probe, 'ok');
-            fs.unlinkSync(probe);
-        } catch (e) {
-            setProgress(0, '输出目录不可写：' + (e.message || e) + '\n路径：' + OUTPUT_DIR, false);
-            return;
-        }
+        OUTPUT_DIR = chk.dir || OUTPUT_DIR;
 
         var outWav = path.join(OUTPUT_DIR, 'bz_' + Date.now() + '.wav');
         args.push('--output', outWav);
@@ -964,56 +981,49 @@
     function makeDraggable(node, filePath) {
         if (!node || !filePath) return;
         try {
+            var p = String(filePath);
             node.setAttribute('draggable', 'true');
             node.style.cursor = 'grab';
-            node.title = (node.title ? (node.title + '\n') : '') +
-                         '拖到时间轴即可插入\n' + filePath;
+            node.title = '拖到时间轴即可插入\n' + p;
 
-            // 避免重复绑定（每次 showResult 会重新调用）
-            if (!node.__vhDragBound) {
-                node.__vhDragBound = true;
+            // 每次都用当前路径重绑：不能只绑一次。
+            // 只绑一次的话闭包里存的是首次的路径，第二次生成后
+            // 波形看着是新的，拖出来还是上一次的音频。
+            if (node.__vhDragFill) {
+                node.removeEventListener('dragstart', node.__vhDragFill, false);
+                node.removeEventListener('dragstart', node.__vhDragFill, true);
+            }
+            if (node.__vhDragEnd) {
+                node.removeEventListener('dragend', node.__vhDragEnd, false);
+            }
 
-                // 拖拽真正开始时才写数据：dragstart 在子元素上触发也会冒泡到这里，
-                // 用捕获+冒泡都兜一层，避免某些 CEP 版本在 canvas 上不触发。
-                function fill(ev) {
-                    var t = ev.target;
-                    if (t && (t.tagName === 'BUTTON' || t.tagName === 'INPUT')) {
-                        ev.preventDefault();
-                        return;
-                    }
-                    try {
-                        ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', filePath);
-                        ev.dataTransfer.setData('text/plain', filePath);
-                        ev.dataTransfer.effectAllowed = 'copy';
-                        ev.dataTransfer.dropEffect = 'copy';
-                    } catch (e) {
-                        console.log('[breeze] dragstart 失败: ' + e.message);
-                    }
-                    node.style.cursor = 'grabbing';
+            function fill(ev) {
+                var t = ev.target;
+                if (t && (t.tagName === 'BUTTON' || t.tagName === 'INPUT')) {
+                    ev.preventDefault();
+                    return;
                 }
-
-                node.addEventListener('dragstart', fill, false);
-                node.addEventListener('dragend', function () {
-                    node.style.cursor = 'grab';
-                });
-            }
-
-            // 内部子元素（canvas / span / svg）也标可拖：
-            // CEP 里 canvas 上直接拖有时不触发，让它们随父级一起可拖更稳。
-            markChildrenDraggable(node);
-
-            // 用 MutationObserver 跟踪后续插入的子元素（vhWave.mount 是异步画完的）
-            if (!node.__vhDragObserver && window.MutationObserver) {
                 try {
-                    var mo = new MutationObserver(function () {
-                        markChildrenDraggable(node);
-                    });
-                    mo.observe(node, { childList: true, subtree: true });
-                    node.__vhDragObserver = mo;
-                } catch (e) {}
+                    ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', p);
+                    ev.dataTransfer.setData('text/plain', p);
+                    ev.dataTransfer.effectAllowed = 'copy';
+                    ev.dataTransfer.dropEffect = 'copy';
+                } catch (e) {
+                    console.log('[breeze] dragstart 失败: ' + (e && e.message));
+                }
+                node.style.cursor = 'grabbing';
             }
+            function onEnd() { node.style.cursor = 'grab'; }
+
+            node.__vhDragFill = fill;
+            node.__vhDragEnd = onEnd;
+
+            // 捕获 + 冒泡各绑一次：某些 CEP 版本在 canvas 上不触发冒泡
+            node.addEventListener('dragstart', fill, false);
+            node.addEventListener('dragstart', fill, true);
+            node.addEventListener('dragend', onEnd, false);
         } catch (e) {
-            console.log('[breeze] makeDraggable 失败: ' + e.message);
+            console.log('[breeze] makeDraggable 失败: ' + (e && e.message));
         }
     }
 
@@ -1143,8 +1153,13 @@
     // 启动即确保输出目录存在：不等到点生成才建，
     // 避免用户第一次使用就撞 "failed to write"。
     function ensureOutputDir() {
+        recomputeOutputDir();
         if (!OUTPUT_DIR) return false;
         try {
+            if (window.__vhAudioOut && window.__vhAudioOut.ensure) {
+                var r = window.__vhAudioOut.ensure();
+                return !!r.ok;
+            }
             if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
             return true;
         } catch (e) {

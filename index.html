@@ -250,7 +250,10 @@
                     <button class="secondary mini" id="ceRootAuto">恢复自动探测</button>
                 </div>
             </div>
-        </div>
+        
+        <!-- 音频保存位置（与朗读共用同一个设置） -->
+        <div class="ao-mount" data-ao="clone"></div>
+</div>
 
         <!-- 1 · 选音色 -->
         <div class="card">
@@ -681,7 +684,10 @@
                 <span class="hint" id="bzModelStat" style="flex:1;margin:0;">尚未开始</span>
                 <button id="bzBtnDlModel" class="secondary mini">开始下载</button>
             </div>
-        </div>
+        
+        <!-- 音频保存位置（与语音克隆共用同一个设置） -->
+        <div class="ao-mount" data-ao="breeze"></div>
+</div>
 
         <!-- 2 · 选音色 -->
         <div class="card">
@@ -2340,6 +2346,12 @@
 .ce-ip-text.ok{color:#7fd68b;}
 .ce-ip-text.err{color:#ff8a8a;}
 </style>
+<style>
+.ao-card h2{margin-bottom:6px;}
+.ao-card .row{margin:0;}
+.ao-card .hint{margin-top:7px;line-height:1.6;word-break:break-all;}
+</style>
+
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
     <div class="tab-panel" id="panel-media" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
@@ -2399,6 +2411,7 @@
     <script src="js/cosy-engine.js"></script>
     <script src="js/cosy-import.js"></script>
     <script src="js/cosy-engine-ui.js"></script>
+    <script src="js/audio-out.js"></script>
     <script src="js/clone.js"></script>
 <script src="js/breeze.js"></script>
     <script src="js/wavesurfer.js"></script>
