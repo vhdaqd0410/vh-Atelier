@@ -265,11 +265,22 @@
     }
 
     // 切到账号面板时刷新
+    // 账号面板每次显示：先按当前状态画，再联网校验后重画一次。
+    // 之前登录成功后面板仍显示未登录，就是因为没有监听解锁事件，
+    // 只能靠切走再切回来触发 render。
     window.__accountOnShow = function () {
         render();
-        // 顺便联网校验一次
         LIC.verify().then(function () { render(); }).catch(function () {});
     };
+
+    // 授权状态一变（登录 / 卡密 / 自动登录 / 退出）立刻重画
+    try {
+        if (window.__vhLicenseUI && window.__vhLicenseUI.onUnlock) {
+            window.__vhLicenseUI.onUnlock(function () {
+                try { render(); } catch (e) {}
+            });
+        }
+    } catch (e) {}
 
     window.__vhAccount = {
         render: render,

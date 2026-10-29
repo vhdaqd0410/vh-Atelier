@@ -40,6 +40,10 @@
             '      <input type="text" id="licEmail" class="lic-input" placeholder="your@email.com" autocomplete="off">',
             '      <label class="lic-label">密码</label>',
             '      <input type="password" id="licPwd" class="lic-input" placeholder="至少 6 位">',
+            '      <div class="lic-remember">',
+            '        <label class="lic-chk"><input type="checkbox" id="licRememberPwd"><span>记住密码</span></label>',
+            '        <label class="lic-chk"><input type="checkbox" id="licAutoLogin"><span>自动登录</span></label>',
+            '      </div>',
             '      <button id="licBtnLogin" class="lic-btn primary">登 录</button>',
             '      <div class="lic-row">',
             '        <button id="licBtnRegister" class="lic-link">没有账号？注册并试用</button>',
@@ -113,11 +117,42 @@
         onUnlockCallbacks.forEach(function (fn) {
             try { fn(info); } catch (e) {}
         });
+        // 无论从哪条路径解锁（登录 / 卡密 / 自动登录 / 本地有效），
+        // 都让账号面板重绘一次，避免显示过期的"未登录"。
+        try {
+            if (window.__vhAccount && window.__vhAccount.render) {
+                setTimeout(function () {
+                    try { window.__vhAccount.render(); } catch (e) {}
+                }, 60);
+            }
+        } catch (e) {}
         console.log('[lic] 已解锁：' + JSON.stringify(info || {}));
     }
 
     // ---------- 绑定 ----------
     function bind() {
+        // 回填记住的账号密码
+        try {
+            var cr = (LIC.cred && LIC.cred()) || {};
+            var emEl = el('licEmail');
+            var pwEl = el('licPwd');
+            var rpEl = el('licRememberPwd');
+            var alEl = el('licAutoLogin');
+            if (emEl && cr.email) emEl.value = cr.email;
+            if (rpEl) rpEl.checked = !!cr.rememberPwd;
+            if (alEl) alEl.checked = !!cr.autoLogin;
+            if (pwEl && (cr.rememberPwd || cr.autoLogin) && cr.pwdEnc) {
+                var pwd = LIC.decPwd ? LIC.decPwd(cr.pwdEnc) : '';
+                if (pwd) pwEl.value = pwd;
+            }
+            // 勾自动登录时联动勾上记住密码（否则自动登录取不到密码）
+            if (alEl && rpEl) {
+                alEl.addEventListener('change', function () {
+                    if (alEl.checked) rpEl.checked = true;
+                });
+            }
+        } catch (e) {}
+
         // 切换 tab
         var tabs = maskEl.querySelectorAll('.lic-tab');
         Array.prototype.forEach.call(tabs, function (t) {
@@ -131,6 +166,21 @@
             });
         });
 
+        // 记住账号 / 密码勾选状态同步到本地
+        function syncCred(email) {
+            try {
+                if (!LIC.setCred) return;
+                var rp = el('licRememberPwd');
+                var al = el('licAutoLogin');
+                var c = (LIC.cred && LIC.cred()) || {};
+                c.email = String(email || c.email || '');
+                c.rememberEmail = !!(c.email);
+                c.rememberPwd = !!(rp && rp.checked);
+                c.autoLogin = !!(al && al.checked);
+                LIC.setCred(c);
+            } catch (e) {}
+        }
+
         // 登录
         if (el('licBtnLogin')) {
             el('licBtnLogin').addEventListener('click', function () {
@@ -138,6 +188,8 @@
                 var pwd = el('licPwd').value || '';
                 if (!email) { msg('请输入邮箱', 'err'); return; }
                 if (!pwd) { msg('请输入密码', 'err'); return; }
+                // 先记下勾选状态，LIC.login 成功后据此保存密码
+                syncCred(email);
                 busy(true, '正在登录…');
                 LIC.login(email, pwd).then(function (r) {
                     afterAuth(r, '登录成功');
@@ -252,8 +304,18 @@
         // 稍等再解锁，让用户看到成功提示
         setTimeout(function () {
             var st = LIC.localStatus();
-            if (st.canUse) unlock(st);
-            else msg('授权状态异常：' + (st.msg || ''), 'err');
+            if (st.canUse) {
+                unlock(st);
+                // 解锁后通知账号面板重绘：否则面板还停在"未登录"状态，
+                // 要切走再切回来才刷新。
+                try {
+                    if (window.__vhAccount && window.__vhAccount.render) {
+                        window.__vhAccount.render();
+                    }
+                } catch (e) {}
+            } else {
+                msg('授权状态异常：' + (st.msg || ''), 'err');
+            }
         }, 900);
     }
 
@@ -423,6 +485,8 @@
     // ---------- 启动检查 ----------
     function start() {
         var st = LIC.localStatus();
+
+        // 有 token 且本地有效：直接用，后台静默校验（原有逻辑）
         if (st.canUse) {
             // 本地看是有效的，后台异步校验一次（不阻塞）
             unlocked = true;
@@ -473,9 +537,46 @@
         isUnlocked: function () { return unlocked; }
     };
 
+    // 本地不可用时，尝试用记住的密码自动登录
+    function tryAutoLogin() {
+        if (!LIC.autoLogin) return;
+        var cr = (LIC.cred && LIC.cred()) || {};
+        if (!cr.autoLogin) return;
+        if (!cr.email || !cr.pwdEnc) return;
+        // 界面先给出提示，避免用户以为卡住
+        msg('正在自动登录…', '');
+        busy(true, '自动登录中…');
+        LIC.autoLogin().then(function (r) {
+            busy(false);
+            if (r && r.ok) {
+                var st2 = LIC.localStatus();
+                if (st2.canUse) { unlock(st2); return; }
+            }
+            // 自动登录失败：停在登录界面，把错误说清楚
+            msg('自动登录失败（' + ((r && r.msg) || (r && r.reason) || '未知') + '），请手动登录', 'err');
+        }).catch(function (e) {
+            busy(false);
+            msg('自动登录失败：' + (e && e.message), 'err');
+        });
+    }
+
+    function boot() {
+        start();
+        // start 只在本地有效时才解锁；到这里如果还没解锁，试自动登录
+        if (!unlocked) {
+            var st = LIC.localStatus();
+            if (!st.canUse) {
+                // 需要遮罩才有界面，先确保遮罩存在
+                buildMask();
+                bind();
+                tryAutoLogin();
+            }
+        }
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', start);
+        document.addEventListener('DOMContentLoaded', boot);
     } else {
-        setTimeout(start, 100);
+        setTimeout(boot, 100);
     }
 })();

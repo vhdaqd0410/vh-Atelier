@@ -167,23 +167,44 @@
             try { cb(err, ok); } catch (e) {}
         }
 
+        // 是否已经收到响应头。收到响应头说明服务器已经受理了请求，
+        // 此后绝不能再把 close 当成失败 —— 服务器可能已经写库成功。
+        var gotResponse = false;
+        var statusCode = 0;
+        var respBody = '';
+
+        function finishWithBody() {
+            var j = null;
+            try { j = JSON.parse(respBody); } catch (e) {}
+            // 2xx 且业务成功
+            if (statusCode >= 200 && statusCode < 300 && j && j.ok) return done(null, j);
+            // 2xx 但没解析出 ok：服务器已经收下，仍按成功处理，
+            // 只在明确 4xx/5xx 时才报错，避免"已入库却提示失败"。
+            if (statusCode >= 200 && statusCode < 300 && !j) return done(null, { ok: true, raw: respBody });
+            var msg = (j && j.error) || ('HTTP ' + statusCode);
+            if (statusCode === 403) msg = '口令不正确';
+            else if (statusCode === 429) msg = '提交太频繁，请稍后再试';
+            else if (statusCode === 404) msg = '中转服务地址不对（404）';
+            done(new Error(msg));
+        }
+
         var req;
         try {
             req = mod.request(opts, function (res) {
-                var buf = '';
-                res.on('data', function (d) { buf += d.toString(); });
+                gotResponse = true;
+                statusCode = res.statusCode;
+                res.on('data', function (d) { respBody += d.toString(); });
                 res.on('end', function () {
-                    var j = null;
-                    try { j = JSON.parse(buf); } catch (e) {}
-                    if (res.statusCode >= 200 && res.statusCode < 300 && j && j.ok) return done(null, j);
-                    var msg = (j && j.error) || ('HTTP ' + res.statusCode);
-                    if (res.statusCode === 403) msg = '口令不正确';
-                    else if (res.statusCode === 429) msg = '提交太频繁，请稍后再试';
-                    else if (res.statusCode === 404) msg = '中转服务地址不对（404）';
-                    done(new Error(msg));
+                    finishWithBody();
                 });
                 res.on('error', function (e) {
-                    done(new Error('读取响应失败：' + (e && e.message)));
+                    // 已经拿到状态码就按状态码判定，不因读取中断判失败
+                    if (statusCode) finishWithBody();
+                    else done(new Error('读取响应失败：' + (e && e.message)));
+                });
+                res.on('close', function () {
+                    // 响应流关闭：若 end 没来但已有内容/状态码，按已收到的判定
+                    if (!settled && (statusCode || respBody)) finishWithBody();
                 });
             });
         } catch (e) {
@@ -198,11 +219,16 @@
         });
         req.on('timeout', function () {
             try { req.destroy(); } catch (e) {}
+            // 已收到响应头的话，说明服务端已受理，按响应结果判定
+            if (gotResponse) { finishWithBody(); return; }
             done(new Error('请求超时（' + timeout + 'ms）'));
         });
-        // 连接被对端提前关闭且没走 error 时兜底
+        // 连接被关闭：只有「从未收到响应头」才判定失败。
+        // 早期版本无条件判定失败，导致服务器已写库成功、界面却提示连接被关闭。
         req.on('close', function () {
-            if (!settled) done(new Error('连接被关闭，未收到响应'));
+            if (settled) return;
+            if (gotResponse) { finishWithBody(); return; }
+            done(new Error('连接被关闭，未收到响应'));
         });
 
         // 关键：Node 里 opts.timeout 只对建立连接阶段生效，

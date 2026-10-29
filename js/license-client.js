@@ -57,6 +57,100 @@
         offlineGraceDays: 7
     };
 
+    // ---------- 记住账号 / 密码 ----------
+    // 密码只做本地混淆（Base64 + 逐字节异或），不是加密。
+    // 目的是防止明文躺在文件里被一眼看到，挡不住有意为之的人。
+    // 客户版插件里这是常见折中：真正的凭据安全靠 token 而不是密码。
+    var CRED_FILE = extRoot ? path.join(extRoot, 'collect', '_cred.json') : '';
+    var CRED_KEY = 'vh_lic_cred_v1';
+    var CRED_MIX = [0x5A, 0x31, 0x7C, 0x2E, 0x49, 0x63, 0x18, 0x74];
+
+    function xorStr(str) {
+        var out = '';
+        for (var i = 0; i < str.length; i++) {
+            out += String.fromCharCode(str.charCodeAt(i) ^ CRED_MIX[i % CRED_MIX.length]);
+        }
+        return out;
+    }
+
+    function b64enc(str) {
+        try {
+            return btoa(unescape(encodeURIComponent(str)));
+        } catch (e) {
+            var out = '';
+            for (var i = 0; i < str.length; i++) out += String.fromCharCode(str.charCodeAt(i) & 0xFF);
+            try { return btoa(out); } catch (e2) { return ''; }
+        }
+    }
+
+    function b64dec(str) {
+        try {
+            return decodeURIComponent(escape(atob(str)));
+        } catch (e) {
+            try { return atob(str); } catch (e2) { return ''; }
+        }
+    }
+
+    function encPwd(plain) {
+        if (!plain) return '';
+        return b64enc(xorStr(String(plain)));
+    }
+
+    function decPwd(enc) {
+        if (!enc) return '';
+        var s2 = b64dec(enc);
+        if (!s2) return '';
+        return xorStr(s2);
+    }
+
+    // 读取记住的凭据
+    function loadCred() {
+        var got = null;
+        try {
+            if (CRED_FILE && fs.existsSync(CRED_FILE)) {
+                got = JSON.parse(fs.readFileSync(CRED_FILE, 'utf8'));
+            }
+        } catch (e) {}
+        if (!got) {
+            try {
+                var raw = localStorage.getItem(CRED_KEY);
+                if (raw) got = JSON.parse(raw);
+            } catch (e) {}
+        }
+        if (!got || typeof got !== 'object') got = {};
+        return {
+            email: String(got.email || ''),
+            pwdEnc: String(got.pwdEnc || ''),
+            rememberEmail: !!got.rememberEmail,
+            rememberPwd: !!got.rememberPwd,
+            autoLogin: !!got.autoLogin
+        };
+    }
+
+    // 保存记住的凭据
+    function saveCred(c) {
+        var json = JSON.stringify({
+            email: String(c.email || ''),
+            pwdEnc: String(c.pwdEnc || ''),
+            rememberEmail: !!c.rememberEmail,
+            rememberPwd: !!c.rememberPwd,
+            autoLogin: !!c.autoLogin
+        });
+        try { localStorage.setItem(CRED_KEY, json); } catch (e) {}
+        try {
+            if (CRED_FILE) {
+                var d = path.dirname(CRED_FILE);
+                if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+                fs.writeFileSync(CRED_FILE, json, 'utf8');
+            }
+        } catch (e) {}
+    }
+
+    function clearCred() {
+        try { localStorage.removeItem(CRED_KEY); } catch (e) {}
+        try { if (CRED_FILE && fs.existsSync(CRED_FILE)) fs.unlinkSync(CRED_FILE); } catch (e) {}
+    }
+
     function loadState() {
         // 优先读文件（更持久）
         var got = null;
@@ -227,6 +321,21 @@
             applyReceipt(j.receipt);
             state.lastVerify = Date.now();
             saveState();
+
+            // 登录成功后按用户选择保存凭据
+            try {
+                var c = loadCred();
+                var em = String(email || '').trim();
+                if (c.rememberEmail || c.rememberPwd || c.autoLogin) {
+                    c.email = em;
+                }
+                if (c.rememberPwd || c.autoLogin) {
+                    // 自动登录必须能取到密码，所以勾自动登录也存密码
+                    c.pwdEnc = encPwd(password);
+                }
+                saveCred(c);
+            } catch (e) {}
+
             return { ok: true, receipt: j.receipt, token: state.token };
         });
     }
@@ -356,11 +465,14 @@
         };
     }
 
-    function logout() {
+    function logout(opt) {
+        opt = opt || {};
         state.token = '';
         state.receipt = null;
         state.lastVerify = 0;
         saveState();
+        // 主动退出时默认保留记住的账号密码，方便下次登录
+        if (opt.forget) clearCred();
     }
 
     // 申请授权（走 /api/request）
@@ -373,6 +485,10 @@
             plugin: PLUGIN_ID
         }, 20000);
     }
+
+    // 关键：定义之后必须真正执行一次，否则每次都是全新的空 state，
+    // 表现为"关掉插件再打开就要重新登录"。
+    loadState();
 
     window.__vhLicense = {
         PLUGIN_ID: PLUGIN_ID,
@@ -388,6 +504,25 @@
         canUseOffline: canUseOffline,
         logout: logout,
         requestAccess: requestAccess,
-        verifyReceipt: verifyReceipt
+        verifyReceipt: verifyReceipt,
+        // ---- 记住账号 / 密码 / 自动登录 ----
+        cred: loadCred,
+        setCred: function (c) { saveCred(c); },
+        clearCred: clearCred,
+        decPwd: decPwd,
+        // 自动登录：有 token 且本地可用就不动；否则用记住的密码重新登录
+        autoLogin: function () {
+            var c = loadCred();
+            if (!c.autoLogin || !c.email || !c.pwdEnc) {
+                return Promise.resolve({ ok: false, reason: 'disabled' });
+            }
+            var pwd = decPwd(c.pwdEnc);
+            if (!pwd) return Promise.resolve({ ok: false, reason: 'no-password' });
+            return login(c.email, pwd).then(function (r) {
+                return { ok: true, email: c.email, result: r };
+            }).catch(function (e) {
+                return { ok: false, reason: 'failed', msg: (e && e.message) || String(e) };
+            });
+        }
     };
 })();
