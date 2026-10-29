@@ -55,7 +55,7 @@
     // 原因：display:none 会把 iframe 压成 0×0，CEP 的 Chromium 会丢弃跨域
     //       iframe 的合成层，切回来就是黑屏（只能手动刷新）。
     //       改用「保留尺寸的隐藏」：绝对定位 + visibility:hidden + 移出可视区。
-    var IFRAME_PANELS = { shenpian: 1, upscale: 1, feedback: 1 };
+    var IFRAME_PANELS = { shenpian: 1, upscale: 1 };
 
     // 真正显示某个 panel
     function showPanel(name) {

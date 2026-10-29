@@ -1847,20 +1847,90 @@
         <div class="ac-msg" id="acMsg"></div>
     </div>
 
-    <div class="tab-panel" id="panel-feedback" style="display:none;">
-        <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
-            <div class="wb-nav">
-                <button class="wb-nav-btn" id="fbNavReload" title="刷新页面">↻</button>
-                <button class="wb-nav-btn" id="fbNavHome" title="回到首页">🏠</button>
-                <button class="wb-nav-btn wb-nav-ext" id="fbNavExternal" title="在外部浏览器打开">↗</button>
-                <span class="wb-nav-url" id="fbNavHint" style="display:flex;align-items:center;color:var(--muted);font-size:11px;">加载中…</span>
-                <button class="wb-nav-btn" id="fbNavSubmit" title="提交新反馈" style="color:#7fd68b;">📮 提反馈</button>
+        <div class="tab-panel" id="panel-feedback" style="display:none;">
+        <div class="fb-header">
+            <div class="fb-hd-left">
+                <span class="fb-hd-title">意见反馈</span>
+                <span class="fb-hd-sub">遇到问题或有好建议，告诉我们</span>
             </div>
-            <iframe id="fbFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#0f1115;" src="about:blank"></iframe>
+            <button class="fb-hd-link" id="fbBtnHistory">📋 我的反馈</button>
+        </div>
+
+        <!-- 主表单 -->
+        <div class="fb-form" id="fbFormWrap">
+
+            <!-- 类型选择（大按钮，显眼） -->
+            <div class="fb-kinds" id="fbKinds">
+                <button class="fb-kind active" data-kind="bug">
+                    <span class="fb-kind-ic">🐞</span>
+                    <span class="fb-kind-t">遇到问题</span>
+                    <span class="fb-kind-d">报错、崩溃、功能异常</span>
+                </button>
+                <button class="fb-kind" data-kind="idea">
+                    <span class="fb-kind-ic">💡</span>
+                    <span class="fb-kind-t">功能建议</span>
+                    <span class="fb-kind-d">想要的新功能、改进</span>
+                </button>
+                <button class="fb-kind" data-kind="other">
+                    <span class="fb-kind-ic">💬</span>
+                    <span class="fb-kind-t">其他</span>
+                    <span class="fb-kind-d">使用疑问、其他想法</span>
+                </button>
+            </div>
+
+            <!-- 标题 -->
+            <label class="fb-label">
+                一句话说明<span class="fb-req">*</span>
+            </label>
+            <input type="text" id="fbTitle" class="fb-input"
+                   placeholder="例如：多版本导出时提示找不到预设文件"
+                   maxlength="200">
+            <div class="fb-counter"><span id="fbTitleCount">0</span>/200</div>
+
+            <!-- 详细描述 -->
+            <label class="fb-label">
+                详细描述<span class="fb-opt">（建议写清楚，方便定位问题）</span>
+            </label>
+            <textarea id="fbDetail" class="fb-input fb-textarea" rows="6"
+                      placeholder="遇到问题时可以这样写：&#10;1. 我做了什么操作（点了哪个按钮、哪个板块）&#10;2. 期望的结果是什么&#10;3. 实际发生了什么（有报错信息就贴上来）&#10;4. 是否每次都这样"></textarea>
+            <div class="fb-counter"><span id="fbDetailCount">0</span>/15000</div>
+
+            <!-- 联系方式 -->
+            <label class="fb-label">
+                联系方式<span class="fb-opt">（选填，方便我们回复你）</span>
+            </label>
+            <input type="text" id="fbContact" class="fb-input"
+                   placeholder="邮箱 / 微信 / QQ，任填一个即可">
+
+            <!-- 附带日志 -->
+            <label class="fb-check">
+                <input type="checkbox" id="fbWithLogs" checked>
+                <span>附带运行日志（帮助定位问题，不含个人隐私）</span>
+            </label>
+
+            <!-- 提交 -->
+            <button class="fb-submit" id="fbBtnSubmit">
+                <span class="fb-submit-ic">📮</span>
+                <span class="fb-submit-t">提交反馈</span>
+            </button>
+
+            <div class="fb-msg" id="fbMsg"></div>
+        </div>
+
+        <!-- 我的反馈列表（默认隐藏） -->
+        <div class="fb-history" id="fbHistoryWrap" style="display:none;">
+            <div class="fb-hist-head">
+                <button class="fb-back" id="fbBtnBack">← 返回提交</button>
+                <span class="fb-hist-title">我的反馈</span>
+                <button class="fb-refresh" id="fbBtnRefreshList">↻</button>
+            </div>
+            <div class="fb-hist-list" id="fbHistList">
+                <div class="fb-empty">加载中…</div>
+            </div>
         </div>
     </div>
 
-    <!-- ==================== 管理（内嵌授权管理台；主插件专用，不参与授权管控） ==================== -->
+<!-- ==================== 管理（内嵌授权管理台；主插件专用，不参与授权管控） ==================== -->
     <!-- ==================== 超分（一键导出并超分 + 外站工具） ==================== -->
     <div class="tab-panel" id="panel-upscale" style="display:none;">
         <!-- 操作区卡片（滚动） -->
@@ -2587,6 +2657,283 @@
     color:#8a9bab;
 }
 .lic-req-tip b{color:#9fd0ff;}
+</style>
+
+<style>
+/* ==== 反馈中心（客户版）==== */
+#panel-feedback{
+    padding:0;
+    display:flex;flex-direction:column;
+    height:calc(100vh - 130px);
+    background:#0f1115;
+}
+
+/* 顶部 */
+.fb-header{
+    display:flex;align-items:center;gap:10px;
+    padding:13px 14px 11px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    background:linear-gradient(180deg,rgba(83,125,150,.1),transparent);
+    flex:0 0 auto;
+}
+.fb-hd-left{flex:1;min-width:0;}
+.fb-hd-title{
+    display:block;font-size:14px;font-weight:700;color:#e8ecf4;
+    letter-spacing:.3px;
+}
+.fb-hd-sub{
+    display:block;font-size:10.5px;color:#6f7c8a;margin-top:3px;
+}
+.fb-hd-link{
+    flex:0 0 auto;
+    padding:5px 11px;
+    font-size:11px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:5px;
+    color:#9aa8b8;
+    cursor:pointer;
+    transition:all .14s;
+    white-space:nowrap;
+}
+.fb-hd-link:hover{background:rgba(255,255,255,.11);color:#e8ecf4;}
+
+/* 表单容器 */
+.fb-form{
+    flex:1;overflow-y:auto;
+    padding:14px 14px 20px;
+}
+
+/* 类型大按钮 */
+.fb-kinds{
+    display:grid;grid-template-columns:1fr 1fr 1fr;
+    gap:7px;margin-bottom:16px;
+}
+.fb-kind{
+    padding:11px 6px 9px;
+    text-align:center;
+    background:rgba(255,255,255,.035);
+    border:1.5px solid rgba(255,255,255,.08);
+    border-radius:8px;
+    cursor:pointer;
+    transition:all .16s;
+    color:#8a9bab;
+}
+.fb-kind:hover{
+    background:rgba(255,255,255,.07);
+    border-color:rgba(255,255,255,.16);
+}
+.fb-kind.active{
+    background:rgba(83,125,150,.22);
+    border-color:rgba(138,180,255,.55);
+    color:#eaf3ff;
+    box-shadow:0 0 0 1px rgba(138,180,255,.20) inset;
+}
+.fb-kind-ic{display:block;font-size:19px;line-height:1.2;margin-bottom:5px;}
+.fb-kind-t{display:block;font-size:11.5px;font-weight:600;}
+.fb-kind-d{
+    display:block;font-size:9px;color:#5a6675;margin-top:3px;
+    line-height:1.35;
+}
+.fb-kind.active .fb-kind-d{color:#8fb8d8;}
+
+/* 表单字段 */
+.fb-label{
+    display:block;
+    font-size:11px;color:#9aa8b8;
+    margin:0 0 6px;
+    font-weight:600;
+}
+.fb-req{color:#ff8a8a;margin-left:2px;}
+.fb-opt{color:#5a6675;font-weight:400;font-size:10px;}
+.fb-input{
+    width:100%;box-sizing:border-box;
+    padding:9px 11px;
+    font-size:12px;
+    font-family:inherit;
+    line-height:1.6;
+    background:rgba(0,0,0,.3);
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:6px;
+    color:#e8ecf4;
+    outline:none;
+    transition:border-color .15s, background .15s;
+    margin-bottom:2px;
+}
+.fb-input:focus{
+    border-color:rgba(138,180,255,.55);
+    background:rgba(0,0,0,.4);
+}
+.fb-input::placeholder{color:rgba(232,236,244,.24);}
+.fb-textarea{resize:vertical;min-height:96px;}
+
+.fb-counter{
+    text-align:right;
+    font-size:9.5px;color:#5a6675;
+    margin-bottom:14px;
+    font-family:Consolas,monospace;
+}
+.fb-counter.warn{color:#e0b96a;}
+
+/* 复选框 */
+.fb-check{
+    display:flex;align-items:flex-start;gap:7px;
+    padding:10px 11px;
+    margin:14px 0 0;
+    background:rgba(255,255,255,.025);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:6px;
+    cursor:pointer;
+    font-size:10.5px;
+    color:#8a9bab;
+    line-height:1.55;
+}
+.fb-check input{
+    flex:0 0 auto;margin:2px 0 0;cursor:pointer;
+    width:13px;height:13px;
+}
+.fb-check:hover{background:rgba(255,255,255,.045);}
+
+/* 提交大按钮 */
+.fb-submit{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;
+    margin-top:18px;
+    padding:13px 0;
+    font-size:14px;
+    font-weight:700;
+    color:#f0f7ff;
+    letter-spacing:.5px;
+    background:linear-gradient(180deg,#5a87a8,#3f6a87);
+    border:1px solid rgba(138,180,255,.38);
+    border-radius:8px;
+    cursor:pointer;
+    transition:all .16s;
+    box-shadow:0 3px 12px rgba(63,106,135,.35);
+}
+.fb-submit:hover{
+    background:linear-gradient(180deg,#6b9ab9,#4a7693);
+    box-shadow:0 4px 18px rgba(63,106,135,.5);
+    transform:translateY(-1px);
+}
+.fb-submit:active{transform:translateY(0);}
+.fb-submit:disabled{
+    opacity:.5;cursor:not-allowed;transform:none;
+    box-shadow:none;
+}
+.fb-submit-ic{font-size:16px;}
+
+/* 消息 */
+.fb-msg{
+    font-size:11.5px;line-height:1.7;
+    margin-top:12px;
+    min-height:18px;
+    color:#8a9bab;
+    white-space:pre-wrap;
+}
+.fb-msg.ok{color:#7fd68b;}
+.fb-msg.err{color:#ff8a8a;}
+
+/* 历史列表 */
+.fb-history{
+    flex:1;display:flex;flex-direction:column;
+    min-height:0;
+}
+.fb-hist-head{
+    display:flex;align-items:center;gap:8px;
+    padding:11px 14px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    flex:0 0 auto;
+}
+.fb-back{
+    flex:0 0 auto;
+    padding:5px 10px;
+    font-size:11px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:5px;
+    color:#9aa8b8;
+    cursor:pointer;
+}
+.fb-back:hover{background:rgba(255,255,255,.11);color:#e8ecf4;}
+.fb-hist-title{flex:1;font-size:12px;font-weight:600;color:#cfd8e3;text-align:center;}
+.fb-refresh{
+    flex:0 0 auto;
+    width:26px;height:26px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:5px;
+    color:#9aa8b8;
+    cursor:pointer;
+    font-size:13px;
+}
+.fb-refresh:hover{background:rgba(255,255,255,.11);}
+
+.fb-hist-list{
+    flex:1;overflow-y:auto;
+    padding:10px 14px 16px;
+}
+.fb-hist-item{
+    padding:10px 11px;
+    margin-bottom:8px;
+    background:rgba(255,255,255,.028);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:7px;
+}
+.fb-hist-top{
+    display:flex;align-items:center;gap:6px;
+    margin-bottom:5px;
+}
+.fb-hist-kind{
+    flex:0 0 auto;
+    padding:1px 6px;
+    font-size:9px;
+    border-radius:3px;
+    background:rgba(255,255,255,.07);
+    color:#9aa8b8;
+}
+.fb-hist-kind.bug{background:rgba(255,138,138,.15);color:#ff8a8a;}
+.fb-hist-kind.idea{background:rgba(224,185,106,.15);color:#e0b96a;}
+.fb-hist-kind.other{background:rgba(138,180,255,.15);color:#8ab4ff;}
+.fb-hist-status{
+    flex:0 0 auto;
+    font-size:9px;
+    padding:1px 6px;
+    border-radius:3px;
+}
+.fb-hist-status.pending{background:rgba(224,185,106,.14);color:#e0b96a;}
+.fb-hist-status.done{background:rgba(127,214,139,.14);color:#7fd68b;}
+.fb-hist-status.replied{background:rgba(138,180,255,.14);color:#8ab4ff;}
+.fb-hist-title-t{
+    flex:1;min-width:0;
+    font-size:11.5px;color:#cfd8e3;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.fb-hist-time{
+    flex:0 0 auto;
+    font-size:9px;color:#5a6675;
+}
+.fb-hist-detail{
+    font-size:10.5px;color:#7a8696;
+    line-height:1.6;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;
+}
+.fb-hist-reply{
+    margin-top:7px;padding:7px 9px;
+    background:rgba(127,214,139,.08);
+    border-left:2px solid rgba(127,214,139,.4);
+    border-radius:4px;
+    font-size:10.5px;color:#9fd0ab;
+    line-height:1.6;
+}
+.fb-empty{
+    text-align:center;
+    padding:36px 14px;
+    font-size:11px;
+    color:#5a6675;
+    line-height:1.8;
+}
 </style>
 
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
