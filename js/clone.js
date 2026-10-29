@@ -12,6 +12,21 @@
     var refWavPath = null;      // 抓取的参考音频（英文路径 wav）
     var refClipMeta = null;     // 参考片段元信息
     var lastOutWav = null;      // 最近一次克隆产物
+
+    // 克隆产物保存位置：与朗读共用同一个设置（js/audio-out.js）。
+    // 之前固定写系统临时目录，文件容易被清理，也不便于用户查找。
+    // 现在落到统一目录；模块没加载时退回临时目录，保证功能可用。
+    function outDirForUser() {
+        try {
+            if (window.__vhAudioOut && window.__vhAudioOut.ensure) {
+                var r = window.__vhAudioOut.ensure();
+                if (r.ok && r.dir) return r.dir;
+            }
+        } catch (e) {}
+        var t = path.join(os.tmpdir(), 'vc_clone');
+        try { if (!fs.existsSync(t)) fs.mkdirSync(t, { recursive: true }); } catch (e) {}
+        return t;
+    }
     var busy = false;
     var audioTracks = [];       // 当前序列音轨列表 [{ index, name, clips }]
     var projectMedia = [];      // 项目素材列表 [{ name, mediaPath, binPath, duration, ext }]
@@ -1203,7 +1218,9 @@
 
         var tmpDir = path.join(os.tmpdir(), 'vc_clone');
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-        var outWav = path.join(tmpDir, 'clone_' + Date.now() + '.wav');
+        // 产物落用户目录，配置文件留临时目录（不污染用户文件夹）
+        var saveDir = outDirForUser();
+        var outWav = path.join(saveDir, 'clone_' + Date.now() + '.wav');
         var cfgPath = path.join(tmpDir, 'clone_cfg.json');
 
         var cfg;

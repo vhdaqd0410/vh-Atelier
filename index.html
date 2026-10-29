@@ -441,7 +441,10 @@
         <div class="result-info" id="resultInfo" style="display:none;"></div>
         <audio id="player" style="display:none;"></audio>
         <div class="player-panel" id="playerPanel" style="display:none;"></div>
-    </div>
+    
+        <!-- 音频保存位置（与朗读共用同一个设置） -->
+        <div class="ao-mount" data-ao="clone"></div>
+</div>
 
     
 
@@ -823,6 +826,9 @@
                 <div class="hint" id="bzInsertHint" style="margin-top:6px;"></div>
             </div>
         </div>
+
+        <!-- 音频保存位置（与语音克隆共用同一个设置） -->
+        <div class="ao-mount" data-ao="breeze"></div>
 
         <div class="hint" style="padding:8px 4px;color:#e0a04a;">
             ⚠ Breeze 模型权重为研究/非商业许可，生成内容请勿用于商业交付项目。
@@ -2952,6 +2958,17 @@
 }
 </style>
 
+<style>
+/* ==== 音频保存位置设置卡 ==== */
+.ao-card h2{margin-bottom:6px;}
+.ao-card .row{margin:0;}
+.ao-card .hint{
+    margin-top:7px;
+    line-height:1.6;
+    word-break:break-all;
+}
+</style>
+
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
     <div class="tab-panel" id="panel-media" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:6px;">
@@ -3015,6 +3032,7 @@
     <script src="js/cosy-import.js"></script>
     <script src="js/cosy-engine-ui.js"></script>
     <script src="js/clone.js"></script>
+    <script src="js/audio-out.js"></script>
 <script src="js/breeze.js"></script>
     <script src="js/wavesurfer.js"></script>
     <script src="js/clip-select.js"></script>

@@ -22,7 +22,24 @@
     var BZ_DIR = extRoot ? path.join(extRoot, 'breeze') : '';
     var ENGINE_DIR = BZ_DIR ? path.join(BZ_DIR, 'engine') : '';
     var MODEL_DIR = BZ_DIR ? path.join(BZ_DIR, 'models') : '';
-    var OUTPUT_DIR = BZ_DIR ? path.join(BZ_DIR, 'output') : '';
+    // 输出目录不再写死：由 js/audio-out.js 统一管理（可在设置里自定义）。
+    // 保留 DEFAULT_OUTPUT_DIR 作为兜底，audio-out 模块没加载时仍能工作。
+    var DEFAULT_OUTPUT_DIR = BZ_DIR ? path.join(BZ_DIR, 'output') : '';
+    function outputDir() {
+        try {
+            if (window.__vhAudioOut && window.__vhAudioOut.getDir) {
+                var d = window.__vhAudioOut.getDir();
+                if (d) return d;
+            }
+        } catch (e) {}
+        return DEFAULT_OUTPUT_DIR;
+    }
+    // 兼容旧代码里 OUTPUT_DIR 的读法（生成时 recomputeOutputDir 会更新它）
+    var OUTPUT_DIR = outputDir();
+    function recomputeOutputDir() {
+        OUTPUT_DIR = outputDir();
+        return OUTPUT_DIR;
+    }
     var VOICES_DIR = ENGINE_DIR ? path.join(ENGINE_DIR, 'voices') : '';
 
     var CLI = ENGINE_DIR ? path.join(ENGINE_DIR, 'breeze-cli.exe') : '';
@@ -35,7 +52,8 @@
     var genStartAt = 0;
     var genTick = null;
     var genLines = [];           // 收集 cli 输出用于诊断
-    var lastOutWav = null;       // 最近生成的 wav
+    var lastOutWav = null;       // 最近生成的 wav（供「送到时间轴」用）
+    var currentResultWav = null; // 结果区当前显示的那个文件（与 lastOutWav 应对齐）
     var refWavPath = null;       // 当前参考音频
     var refDuration = 0;
     var mode = 'design';
@@ -767,29 +785,32 @@
             }
         }
 
-        // 输出目录必须提前建好：引擎只负责写文件，不会建目录。
-        // 之前这里漏了，首次使用（目录还不存在）就会
-        // "failed to write ...\breeze\output\bz_xxx.wav"。
+        // 每次生成都重新取目录：用户可能刚在设置里改过。
+        // 同时用统一模块的 ensure 做「存在 + 可写」校验，
+        // 目录不可用时在启动引擎之前就报出来，不白跑一轮生成。
+        recomputeOutputDir();
         if (!OUTPUT_DIR) {
             setProgress(0, '输出目录不可用（扩展根路径没取到）', false);
             return;
         }
+        var chk = { ok: true, msg: '' };
         try {
-            if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+            if (window.__vhAudioOut && window.__vhAudioOut.ensure) {
+                chk = window.__vhAudioOut.ensure();
+            } else {
+                if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+                var probe = path.join(OUTPUT_DIR, '.write_test_' + Date.now());
+                fs.writeFileSync(probe, 'ok');
+                fs.unlinkSync(probe);
+            }
         } catch (e) {
-            setProgress(0, '无法创建输出目录：' + (e.message || e), false);
+            chk = { ok: false, msg: '输出目录不可写：' + (e.message || e) };
+        }
+        if (!chk.ok) {
+            setProgress(0, '无法使用输出目录\n' + (chk.msg || '') + '\n路径：' + OUTPUT_DIR, false);
             return;
         }
-        // 目录存在了还要能写：权限/占用都可能在写盘时才暴露，
-        // 先探一次，把问题在启动引擎之前就报出来（引擎跑完才报太浪费时间）。
-        try {
-            var probe = path.join(OUTPUT_DIR, '.write_test_' + Date.now());
-            fs.writeFileSync(probe, 'ok');
-            fs.unlinkSync(probe);
-        } catch (e) {
-            setProgress(0, '输出目录不可写：' + (e.message || e) + '\n路径：' + OUTPUT_DIR, false);
-            return;
-        }
+        OUTPUT_DIR = chk.dir || OUTPUT_DIR;
 
         var outWav = path.join(OUTPUT_DIR, 'bz_' + Date.now() + '.wav');
         args.push('--output', outWav);
@@ -920,6 +941,7 @@
     }
 
     function showResult(wav, secs) {
+        currentResultWav = wav;
         if (el.resultWrap) el.resultWrap.style.display = '';
         if (el.resultInfo) {
             el.resultInfo.textContent = '✓ ' + fmtSec(secs) + ' · ' + path.basename(wav);
@@ -935,14 +957,77 @@
                 el.resultWave.innerHTML = '<div class="hint">波形加载失败</div>';
             }
         }
+
+        // 波形拖拽进时间轴：必须每次重新绑到当前 wav 上。
+        // 之前完全没实现（提示语却写着能拖），CEP 拖拽拿不到新路径，
+        // 结果拖进去的是上一次的音频。
+        bindWaveDrag(el.resultWave, wav);
+
         if (el.btnInsert) el.btnInsert.disabled = false;
         if (el.insertHint) el.insertHint.textContent = '点「送到时间轴」插入播放头位置，或直接拖波形到时间轴。';
+    }
+
+    // 给结果波形绑定 CEP 原生拖拽。
+    // 关键：用闭包捕获本次的 path，而不是读全局 lastOutWav —— 后者在
+    // 多次生成后可能已被改写，导致拖出来的是别的文件。
+    function bindWaveDrag(host, filePath) {
+        if (!host) return;
+        var p = String(filePath || '');
+        if (!p) return;
+
+        host.setAttribute('draggable', 'true');
+        host.style.cursor = 'grab';
+
+        // 先清掉旧的监听（重复挂会让一次拖拽触发多次 setData）
+        if (host.__vhDragStart) {
+            host.removeEventListener('dragstart', host.__vhDragStart);
+            host.removeEventListener('dragend', host.__vhDragEnd);
+        }
+
+        host.__vhDragStart = function (ev) {
+            // 点在试听按钮上时不启动拖拽，避免误拖
+            var t = ev.target;
+            if (t && t.tagName === 'BUTTON') {
+                ev.preventDefault();
+                return;
+            }
+            try {
+                if (!fs.existsSync(p)) {
+                    ev.preventDefault();
+                    setProgress(0, '音频文件不存在，可能已被移动或删除：' + p, false);
+                    return;
+                }
+            } catch (e) {}
+            try {
+                ev.dataTransfer.setData('com.adobe.cep.dnd.file.0', p);
+                ev.dataTransfer.setData('text/plain', p);
+                ev.dataTransfer.effectAllowed = 'copy';
+            } catch (e) {
+                console.log('[breeze] 设置拖拽数据失败: ' + (e && e.message));
+            }
+        };
+        host.__vhDragEnd = function () {
+            host.style.cursor = 'grab';
+        };
+
+        host.addEventListener('dragstart', host.__vhDragStart);
+        host.addEventListener('dragend', host.__vhDragEnd);
     }
 
     // ---------- 送时间轴 ----------
     function insertToTimeline() {
         if (!lastOutWav || !fs.existsSync(lastOutWav)) {
             alert('还没有生成音频'); return;
+        }
+        // 防插错：确认要插入的就是当前结果区显示的那个文件。
+        // 曾经出现过「波形是新的、插进去是旧的」，排查后是路径没同步。
+        if (currentResultWav && currentResultWav !== lastOutWav) {
+            var useCur = confirm(
+                '检测到结果文件不一致：\n' +
+                '当前显示：' + path.basename(currentResultWav) + '\n' +
+                '将插入：' + path.basename(lastOutWav) + '\n\n' +
+                '是否改插入当前显示的这个？');
+            if (useCur) lastOutWav = currentResultWav;
         }
 
         setProgress(100, '正在插入时间轴…', false);
@@ -976,8 +1061,13 @@
     // 启动即确保输出目录存在：不等到点生成才建，
     // 避免用户第一次使用就撞 "failed to write"。
     function ensureOutputDir() {
+        recomputeOutputDir();
         if (!OUTPUT_DIR) return false;
         try {
+            if (window.__vhAudioOut && window.__vhAudioOut.ensure) {
+                var r = window.__vhAudioOut.ensure();
+                return !!r.ok;
+            }
             if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
             return true;
         } catch (e) {
