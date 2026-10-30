@@ -384,7 +384,189 @@ async function getSeries(seriesId) {
   return { series_id: seriesId, name: nm ? nm[1] : seriesId, cover, intro, tags, vid_list: vids, count: vids.length }
 }
 
-// ── 从官网播放页取 mp4 直链（免签名 / 免 cookie / 免设备号）──
+
+// ════════════════════════════════════════════════════════════════════
+// 短剧采集源（优先于官网链路）
+// ════════════════════════════════════════════════════════════════════
+// 为什么要这一层：
+//   红果官网页面只给 video/public/<vid>/360p.mp4，那是 10 秒试看片段；
+//   正片走 /api/video/protected/ 的火山 VOD + DRM（playauth / drmkek /
+//   x-amz-signature），且 accessible_episode_cnt 只有 5 集。纯 JS 拿不到、
+//   拿不稳。所以改走苹果 CMS 采集源：这些源由第三方维护、直接给 m3u8
+//   全集，不需要登录、不需要签名、不需要设备号。
+//
+// 端口与协议不变，只是 getVideo 的取地址顺序变了。
+// ════════════════════════════════════════════════════════════════════
+
+// 采集源清单。权重高的先试（实测命中率：暴风 5/5、极速 4/5、非凡 3/5、魔都 3/5）
+const DRAMA_SOURCES = [
+  { id: 'bfzy', name: '暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod/' },
+  { id: 'jszy', name: '极速资源', api: 'https://jszyapi.com/api.php/provide/vod/' },
+  { id: 'ffzy', name: '非凡影视', api: 'https://cj.ffzyapi.com/api.php/provide/vod/' },
+  { id: 'mdzy', name: '魔都资源', api: 'https://www.mdzyapi.com/api.php/provide/vod/' },
+  { id: 'rycj', name: '如意资源', api: 'https://cj.rycjapi.com/api.php/provide/vod/' },
+  { id: '360 ', name: '360资源', api: 'https://360zy.com/api.php/provide/vod/' },
+]
+
+const DRAMA_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+
+// 采集源结果缓存：seriesId -> { at, hit }
+// 一部剧只需搜一次，后续每集直接复用。30 分钟内有效。
+const dramaSearchCache = new Map()
+
+// 集数列表缓存：videokey -> { at, map }
+const dramaEpsCache = new Map()
+
+function normTitle(s) {
+  return String(s || '')
+    .replace(/[\s，,。.、：:！!？?《》【】\[\]（）()·\-—_"'“”‘’]/g, '')
+    .replace(/第[一二三四五六七八九十\d]+[部季]$/g, '')
+    .toLowerCase()
+}
+
+// 找最匹配的条目：优先名字归一化后相等，其次互相包含
+function pickBestDrama(list, wantTitle) {
+  const want = normTitle(wantTitle)
+  if (!want) return null
+  let exact = null, contains = null, partial = null
+  for (const it of list) {
+    const nm = normTitle(it.vod_name)
+    if (!nm) continue
+    if (nm === want) { exact = it; break }
+    if (!contains && (nm.includes(want) || want.includes(nm))) contains = it
+    if (!partial && nm.slice(0, 6) === want.slice(0, 6)) partial = it
+  }
+  return exact || contains || partial || null
+}
+
+// 从 vod_play_url 解析集号 -> 播放地址
+// 格式："第1集$http://...#第2集$http://...#..."
+// 也兼容 "第1-40集$url" 这种合并集（取区间起点）
+function parsePlayUrl(playUrl) {
+  const out = []
+  if (!playUrl) return out
+  for (const seg of String(playUrl).split('#')) {
+    const i = seg.indexOf('$')
+    if (i < 0) continue
+    const label = seg.slice(0, i)
+    const url = seg.slice(i + 1).trim()
+    if (!/^https?:\/\//i.test(url)) continue
+    const m = /(\d+)/.exec(label)
+    if (!m) continue
+    out.push({ ep: parseInt(m[1], 10), label: label, url: url })
+  }
+  return out
+}
+
+// 搜采集源。返回 { source, title, eps: [{ep,url}], count }
+function searchDramaOnce(seriesName) {
+  if (!seriesName) return Promise.resolve(null)
+  const key = normTitle(seriesName)
+  const c = dramaSearchCache.get(key)
+  if (c && Date.now() - c.at < 30 * 60 * 1000) return Promise.resolve(c.hit)
+
+  return new Promise((resolve) => {
+    let idx = 0
+    const next = () => {
+      if (idx >= DRAMA_SOURCES.length) { resolve(null); return }
+      const src = DRAMA_SOURCES[idx++]
+      const url = src.api + '?ac=detail&wd=' + encodeURIComponent(seriesName)
+      fetchTextWithUA(url, DRAMA_UA, 15000).then((txt) => {
+        let j = null
+        try { j = JSON.parse(txt) } catch (e) { j = null }
+        const list = (j && j.list) || []
+        if (!list.length) { next(); return }
+        const best = pickBestDrama(list, seriesName)
+        if (!best) { next(); return }
+        const eps = parsePlayUrl(best.vod_play_url)
+        if (!eps.length) { next(); return }
+        const hit = {
+          source: src.name,
+          sourceId: src.id,
+          title: best.vod_name,
+          remarks: best.vod_remarks || '',
+          eps: eps.sort((a, b) => a.ep - b.ep),
+          count: eps.length,
+        }
+        dramaSearchCache.set(key, { at: Date.now(), hit: hit })
+        resolve(hit)
+      }).catch(() => { next() })
+    }
+    next()
+  })
+}
+
+// 取指定集的播放地址
+async function resolveFromSource(seriesName, epNo) {
+  if (!seriesName) return null
+  const hit = await searchDramaOnce(seriesName)
+  if (!hit) return null
+  let e = hit.eps.find(x => x.ep === epNo)
+  // 合并集（"第1-40集$url"）只解析出起点集号；落在区间内时用起点那条
+  if (!e) {
+    for (const x of hit.eps) {
+      const m = /(\d+)\s*[-–~]\s*(\d+)/.exec(x.label || '')
+      if (m) {
+        const a = parseInt(m[1], 10), b = parseInt(m[2], 10)
+        if (epNo >= a && epNo <= b) { e = { ep: epNo, url: x.url, label: x.label + '（合并集）' }; break }
+      }
+    }
+  }
+  if (!e) return null
+  return { url: e.url, label: e.label, source: hit.source, title: hit.title, count: hit.count }
+}
+
+// 带 UA 的文本抓取（采集站需要浏览器 UA，否则返回空）
+function fetchTextWithUA(url, ua, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let u = null
+    try { u = new URL(url) } catch (e) { return reject(new Error('bad url')) }
+    const mod = u.protocol === 'https:' ? https : http
+    const req = mod.get({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: {
+        'User-Agent': ua || DRAMA_UA,
+        'Accept': 'application/json,text/html,*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+      },
+      timeout: timeoutMs || 15000,
+    }, (res) => {
+      // 跟随重定向
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume()
+        const loc = res.headers.location
+        return fetchTextWithUA(
+          /^https?:\/\//i.test(loc) ? loc : new URL(loc, url).toString(),
+          ua, timeoutMs).then(resolve, reject)
+      }
+      const chunks = []
+      res.on('data', (d) => chunks.push(d))
+      res.on('end', () => {
+        let buf = Buffer.concat(chunks)
+        let txt = buf.toString('utf8')
+        // 采集站有时用 GBK
+        if (txt.indexOf('\ufffd') >= 0 || !/[\u4e00-\u9fa5]/.test(txt)) {
+          try { txt = buf.toString('gbk') } catch (e) {}
+        }
+        resolve(txt)
+      })
+    })
+    req.on('error', reject)
+    req.on('timeout', () => { try { req.destroy() } catch (e) {} reject(new Error('timeout')) })
+  })
+}
+
+// ════════════════════════════════════════════════════════════════════
+
+
+// ── 官网播放页取 mp4 直链（仅作最后兜底，且必须校验时长）──
+//
+// 注意：这个链路拿到的是 10 秒试看片段，不是正片。
+// 页面里 protectedPlayback=true、accessible_episode_cnt=5，
+// 正片走 /api/video/protected/ 的火山 VOD + DRM，纯 JS 无法稳定获取。
+// 正常流程应先走 DRAMA_SOURCES 采集源，这里只用于极端情况。
 // 页面 JSON-LD 里内置 contentUrl，是明文 mp4（无 DRM）；旧版字段为 main_url
 async function resolveWebVideo(seriesId, vid) {
   const url = `https://hongguoduanju.com/player/${seriesId}/` + (vid ? `${vid}/` : '')
@@ -993,14 +1175,32 @@ function newJob(kind) {
 // 返回 { file, size, height }
 
 // 读取本地视频真实时长（秒）。用于识别「官网只给了预告片段」的情况。
+// 探测媒体时长（秒）。失败返回 0。
+//
+// 历史坑：原来调 ffprobe，但安装包里从来只有 ffmpeg-win32-x64.exe，
+// 没有 ffprobe.exe。findFfmpegProbe() 返回一个不存在的路径，
+// spawnSync 直接抛 ENOENT，catch 里 resolve(0)。
+// 结果就是「预告片段检测」的 realDur 永远是 0、条件永远不成立，
+// 保护形同虚设。现在改成解析 ffmpeg -i 的 stderr，不再依赖 ffprobe。
+const DUR_CACHE = new Map()
+
 function probeDuration(file) {
+  const key = String(file || '')
+  const c = DUR_CACHE.get(key)
+  if (c && Date.now() - c.at < 10 * 60 * 1000) return Promise.resolve(c.v)
+
   return new Promise((resolve) => {
     try {
-      const r = spawnSync(findFfmpegProbe(), ['-v', 'error', '-show_entries',
-        'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', file],
-        { encoding: 'utf8', timeout: 20000 })
-      const v = parseFloat(String(r.stdout || '').trim())
-      resolve(isFinite(v) ? v : 0)
+      const ff = findFfmpeg()
+      const r = spawnSync(ff, ['-hide_banner', '-i', file], {
+        encoding: 'utf8', timeout: 25000, windowsHide: true,
+      })
+      const m = /Duration:\s*(\d+):(\d+):([\d.]+)/.exec(String(r.stderr || ''))
+      let v = 0
+      if (m) v = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3])
+      if (!isFinite(v) || v < 0) v = 0
+      try { DUR_CACHE.set(key, { at: Date.now(), v: v }) } catch (e) {}
+      resolve(v)
     } catch (e) { resolve(0) }
   })
 }
@@ -1021,48 +1221,89 @@ async function downloadEpisodeAny(seriesId, vid, epNo, seriesName, onProgress) {
   const dir = videoDir()
   const fn = safeName(seriesName || seriesId) + '_' + ('0000' + epNo).slice(-4) + '.mp4'
   const local = path.join(dir, fn)
-  if (fs.existsSync(local) && fs.statSync(local).size > 10000) {
-    if (onProgress) onProgress(30, `第 ${epNo} 集：用本地已有文件`)
-    return { file: local, size: fs.statSync(local).size, height: 0, reused: true }
+  if (fs.existsSync(local) && fs.statSync(local).size > 300 * 1024) {
+    // 本地已有文件也要校验时长，避免历史上存下的 10 秒片段被当成完整集复用
+    const d0 = await probeDuration(local)
+    if (d0 === 0 || d0 >= 20) {
+      if (onProgress) onProgress(30, `第 ${epNo} 集：用本地已有文件`)
+      return { file: local, size: fs.statSync(local).size, height: 0, reused: true, duration: d0 }
+    }
+    if (onProgress) onProgress(4, `第 ${epNo} 集：本地文件只有 ${d0.toFixed(0)} 秒，重新下载`)
+    try { fs.unlinkSync(local) } catch (e) {}
   }
 
-  // 1) 官网免签名明文 mp4
+  // ── 顺序：采集源 → App 链路 → 官网兜底 ──
+  // 采集源最优先。第三方维护的苹果 CMS 源直接给全集 m3u8，
+  // 不需要登录、签名、设备号。实测覆盖 5/5、4/5 这类水平。
+  let srcErr = null
   try {
-    if (onProgress) onProgress(6, `第 ${epNo} 集：官网取地址`)
-    const info = await resolveWebVideo(seriesId, vid)
-    if (info && info.url) {
-      if (onProgress) onProgress(12, `第 ${epNo} 集：官网下载（${info.frame || '?'}）`)
-      const size = await downloadVideo(info.url, local)
-      const h = parseInt(String(info.frame || '').split('x')[1], 10) || 0
-
-      // 关键校验：官网 contentUrl 有时只是 10 秒预告片段，
-      // 不能当整集用（否则前端会显示「只有几秒」）。
-      // 实测时长明显短于页面声明时长 → 删掉，改走 App 链路拿完整剧集。
-      let realDur = 0
-      try { realDur = await probeDuration(local) } catch (e) { realDur = 0 }
-      const expectDur = Number(info.duration || 0)
-      const tooShort = realDur > 0 && (
-        realDur < 20 ||
-        (expectDur > 30 && realDur < expectDur * 0.6)
-      )
-      if (tooShort) {
-        try { fs.unlinkSync(local) } catch (e) {}
-        if (onProgress) onProgress(16, `第 ${epNo} 集：官网只有预告片段，改走 App 链路`)
-      } else {
-        return { file: local, size, height: h, via: 'web', duration: realDur }
+    if (onProgress) onProgress(6, `第 ${epNo} 集：搜采集源`)
+    const hit = await resolveFromSource(seriesName, epNo)
+    if (hit && hit.url) {
+      if (onProgress) onProgress(10, `第 ${epNo} 集：${hit.source}，下载中`)
+      const tmpF = local + '.part'
+      try { if (fs.existsSync(tmpF)) fs.unlinkSync(tmpF) } catch (e) {}
+      const size = await downloadVideo(hit.url, tmpF)
+      const d = await probeDuration(tmpF)
+      if (d > 0 && d < 20) {
+        try { fs.unlinkSync(tmpF) } catch (e) {}
+        throw new Error(`只下到 ${d.toFixed(1)} 秒，疑似预告或分片不全`)
       }
+      if (d === 0 && size < 300 * 1024) {
+        try { fs.unlinkSync(tmpF) } catch (e) {}
+        throw new Error('文件过小，疑似残缺')
+      }
+      try { if (fs.existsSync(local)) fs.unlinkSync(local) } catch (e) {}
+      fs.renameSync(tmpF, local)
+      if (onProgress) onProgress(35, `第 ${epNo} 集：${hit.source} 下载完成（${(size / 1048576).toFixed(1)}MB）`)
+      return { file: local, size, height: 0, via: 'source', source: hit.source, duration: d }
     }
   } catch (e) {
-    // 官网未开放该集，转 App 链路
+    srcErr = e
+    try { const tf = local + '.part'; if (fs.existsSync(tf)) fs.unlinkSync(tf) } catch (e2) {}
+    if (onProgress) onProgress(14, `第 ${epNo} 集：采集源未命中（${String(e.message || e).slice(0, 26)}）`)
   }
 
-  // 2) App 链路（签名 + 设备号，可下官网限制外的集）
-  if (onProgress) onProgress(20, `第 ${epNo} 集：转 App 链路（可下全剧）`)
-  const r = await appDownload(seriesId, vid, epNo, seriesName, dir, (pct, msg) => {
-    if (onProgress) onProgress(20 + Math.round(pct * 0.25), msg)
-  })
-  return { file: r.file, size: r.size, height: r.height || 0, via: 'app' }
+  // App 链路（红果 App 端接口 + 设备号）
+  try {
+    if (onProgress) onProgress(20, `第 ${epNo} 集：转 App 链路`)
+    const r = await appDownload(seriesId, vid, epNo, seriesName, dir, (pct, msg) => {
+      if (onProgress) onProgress(20 + Math.round(pct * 0.25), msg)
+    })
+    const d2 = await probeDuration(r.file)
+    if (d2 > 0 && d2 < 20) {
+      try { fs.unlinkSync(r.file) } catch (e) {}
+      throw new Error(`App 链路只拿到 ${d2.toFixed(1)} 秒`)
+    }
+    return { file: r.file, size: r.size, height: r.height || 0, via: 'app', duration: d2 }
+  } catch (e) {
+    if (onProgress) onProgress(40, `第 ${epNo} 集：App 链路失败（${String(e.message || e).slice(0, 22)}）`)
+  }
+
+  // 官网兜底。这里拿到的是 10 秒试看片段，只在前面全部失败时救急。
+  try {
+    if (onProgress) onProgress(42, `第 ${epNo} 集：官网兜底`)
+    const info = await resolveWebVideo(seriesId, vid)
+    if (info && info.url) {
+      const size = await downloadVideo(info.url, local)
+      const h = parseInt(String(info.frame || '').split('x')[1], 10) || 0
+      const realDur = await probeDuration(local)
+      const expectDur = Number(info.duration || 0)
+      if (realDur > 0 && ((expectDur > 30 && realDur < expectDur * 0.6) || realDur < 20)) {
+        try { fs.unlinkSync(local) } catch (e) {}
+        throw new Error(`官网只有 ${realDur.toFixed(0)} 秒，不是正片`)
+      }
+      return { file: local, size, height: h, via: 'web', duration: realDur }
+    }
+  } catch (e) {
+    throw new Error('所有来源都失败：' + String(e.message || e).slice(0, 70) +
+      (srcErr ? '（采集源：' + String(srcErr.message || srcErr).slice(0, 40) + '）' : ''))
+  }
+
+  throw new Error('该集在任何来源都拿不到地址' +
+    (srcErr ? '（采集源：' + String(srcErr.message || srcErr).slice(0, 40) + '）' : ''))
 }
+
 
 // 仅下载（不扒歌）
 async function runDownload(job, seriesId, vid, seriesName, epNo) {
