@@ -1,7 +1,7 @@
 // vh-Atelier 音频输出位置（朗读 / 声音克隆 共用）
 //
 // 为什么单独做一个模块：
-//   朗读走 breeze.js，音频产出会散在各处。
+//   朗读走 breeze.js，音频产出统一落在这里。
 //   用户要的是「一个设置项管住所有产出」，所以把路径决策抽出来统一管，
 //   各模块都从这里取目录，改一处全局生效。
 //
@@ -212,7 +212,7 @@
         mount.innerHTML = [
             '<div class="card ao-card">',
             '  <h2>音频保存位置</h2>',
-            '  <div class="hint" style="margin:0 0 8px;">朗读与语音克隆的产物都保存到这里，两处共用同一个设置。</div>',
+            '  <div class="hint" style="margin:0 0 8px;">朗读合成的音频会保存到这里。</div>',
             '  <div class="row" style="gap:6px;align-items:center;">',
             '    <input type="text" id="' + idIn + '" placeholder="默认：插件目录\\breeze\\output" style="flex:1;">',
             '    <button id="' + idBrowse + '" class="secondary mini">浏览…</button>',

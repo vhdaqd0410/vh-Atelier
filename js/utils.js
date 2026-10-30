@@ -131,7 +131,7 @@
     }
 
 
-    // ---------- 语音克隆：入点出点 → 按轨取纯净素材 ----------
+    // ---------- 入点出点 → 按轨取纯净素材 ----------
     // tracks: [{index, name, type:'audio'|'video', muted, clips:[{mediaPath, clipName,
     //           seqStart, mediaIn, mediaOut, ovStart, ovEnd, ovDur}]}]
     // 选轨优先级：非静音音频轨（覆盖时长最大）→ 任意音频轨 → 非静音视频轨 → 任意视频轨

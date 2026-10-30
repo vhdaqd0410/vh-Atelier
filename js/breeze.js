@@ -650,7 +650,7 @@
         }
     }
 
-    // 抓取完成后自动识别参考文字（与语音克隆面板行为一致）
+    // 抓取完成后自动识别参考文字
     function autoRecognizeRef() {
         if (!refWavPath) return;
         setTimeout(function () { runAsr(true); }, 150);

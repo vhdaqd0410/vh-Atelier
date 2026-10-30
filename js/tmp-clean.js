@@ -20,7 +20,6 @@
         { prefix: 'vh_drivelabel_', label: '盘符标签', kind: 'file' },
         { prefix: 'vh_update_', label: '更新包', kind: 'file' },
         { prefix: 'ws_subtitle', label: '字幕识别音频', kind: 'dir' },
-        { prefix: 'vc_clone', label: '语音克隆', kind: 'dir' },
         { prefix: 'vh_font_', label: '字体安装', kind: 'dir' },
         { prefix: 'cep_dir_', label: '文件夹选择器', kind: 'file' },
         { prefix: 'cep_td_', label: '待办导入', kind: 'file' },

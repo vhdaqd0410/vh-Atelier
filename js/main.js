@@ -1,5 +1,5 @@
 // vh-Atelier 整合插件 - 两级导航切换逻辑
-// 工作台（组）→ 子功能（面板）。三组：字幕(字幕识别/字幕校对)、声音(人声分离/语音克隆/音效库/音乐)、交付(多版本导出/视频下载)
+// 工作台（组）→ 子功能（面板）
 (function () {
     var panels = {
         media: document.getElementById('panel-media'),
@@ -133,7 +133,6 @@
         if (name === 'account' && window.__accountOnShow) {
             try { window.__accountOnShow(); } catch (e) {}
         }
-        // 语音克隆：切到时重新检测引擎（用户可能刚装了 CosyVoice3）
         // 组件面板：切到时重扫一遍组件状态
         if (name === 'components' && window.__componentsOnShow) {
             try { window.__componentsOnShow(); } catch (e) {}

@@ -86,32 +86,6 @@
             unzip: true
         },
         {
-            // 语音克隆的 Python 运行时：torch + CosyVoice 依赖全在这里。
-            // 客户电脑如果没装 Python 或没装 torch，克隆会直接崩在 init 阶段，
-            // 所以把整个环境打包成组件，解压即用，不需要 pip install。
-            id: 'cosy-runtime',
-            name: '语音克隆运行时',
-            desc: 'Python 环境 + torch + CosyVoice 依赖（克隆功能必需）',
-            size: '约 2.1 GB',
-            dir: 'runtime',
-            check: function () {
-                var py = path.join(extRoot, 'runtime', 'python.exe');
-                if (!fs.existsSync(py)) return false;
-                // 光有 python 不够，torch 和 cosyvoice 也要在
-                var sp = path.join(extRoot, 'runtime', 'Lib', 'site-packages');
-                return fs.existsSync(path.join(sp, 'torch')) &&
-                       fs.existsSync(path.join(sp, 'cosyvoice'));
-            },
-            url: '',
-            netdisk: '',      // 待填
-            unzip: true,
-            layout: {
-                'runtime/python.exe': 'Python 解释器',
-                'runtime/Lib/site-packages/torch/': 'PyTorch',
-                'runtime/Lib/site-packages/cosyvoice/': 'CosyVoice 源码'
-            }
-        },
-        {
             // whisper 是朗读/克隆的「自动识别参考音频文字」和字幕识别都要用的引擎。
             // 之前打包时漏了，只有装了别的字幕插件才能借到，所以单独列出来让用户下载。
             id: 'whisper',
