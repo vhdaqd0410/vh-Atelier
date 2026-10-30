@@ -75,17 +75,25 @@
                 okTag.style.cssText = 'font-size:10.5px;color:#7fd68b;flex:1;';
                 row.appendChild(okTag);
             } else {
-                var btnDl = document.createElement('button');
-                btnDl.className = 'secondary mini';
-                btnDl.textContent = '⬇ 在线下载';
-                btnDl.style.cssText = 'flex:1;font-size:11px;';
-                btnDl.addEventListener('click', function () { startDownload(c, card, btnDl); });
-                row.appendChild(btnDl);
+                // 有在线地址才显示「在线下载」；只有网盘时直接给网盘按钮
+                if (c.url) {
+                    var btnDl = document.createElement('button');
+                    btnDl.className = 'secondary mini';
+                    btnDl.textContent = '⬇ 在线下载';
+                    btnDl.style.cssText = 'flex:1;font-size:11px;';
+                    btnDl.addEventListener('click', function () { startDownload(c, card, btnDl); });
+                    row.appendChild(btnDl);
+                }
 
                 var btnNd = document.createElement('button');
                 btnNd.className = 'secondary mini';
-                btnNd.textContent = '📁 网盘';
-                btnNd.style.cssText = 'flex:0 0 auto;font-size:11px;';
+                btnNd.textContent = c.url ? '📁 网盘' : '📁 网盘下载';
+                btnNd.style.cssText = (c.url ? 'flex:0 0 auto;' : 'flex:1;') + 'font-size:11px;';
+                if (!c.url) {
+                    btnNd.style.background = 'linear-gradient(180deg,#537d96,#3f6a87)';
+                    btnNd.style.borderColor = 'rgba(138,180,255,.32)';
+                    btnNd.style.color = '#f0f7ff';
+                }
                 btnNd.addEventListener('click', function () {
                     window.__vhComponents.netdiskHelp(c);
                 });

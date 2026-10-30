@@ -86,6 +86,34 @@
             unzip: true
         },
         {
+            // whisper 是朗读/克隆的「自动识别参考音频文字」和字幕识别都要用的引擎。
+            // 之前打包时漏了，只有装了别的字幕插件才能借到，所以单独列出来让用户下载。
+            id: 'whisper',
+            name: 'Whisper 语音识别',
+            desc: '朗读与克隆的自动识别、字幕识别都要用',
+            size: '约 1.9 GB',
+            dir: 'bin/whisper',
+            check: function () {
+                // CPU 版必需；CUDA 版可选（有则优先用）
+                var cpu = path.join(extRoot, 'bin', 'whisper', 'win32-x64', 'whisper-cli.exe');
+                if (!fs.existsSync(cpu)) return false;
+                // 模型也要在
+                var m1 = path.join(extRoot, 'models', 'ggml-belle-large-v3-turbo-zh-q8_0.bin');
+                var m2 = path.join(extRoot, 'models', 'ggml-large-v3-q5_0.bin');
+                return fs.existsSync(m1) || fs.existsSync(m2);
+            },
+            url: '',          // 没有在线下载源，只走网盘
+            netdisk: '（待填：whisper 组件包网盘链接）',
+            unzip: true,
+            // 网盘包解压后的结构说明，展示给用户
+            layout: {
+                'bin/whisper/win32-x64/': 'CPU 引擎（必需，51 MB）',
+                'bin/whisper/cuda/': 'GPU 加速引擎（可选，1.1 GB）',
+                'models/ggml-belle-large-v3-turbo-zh-q8_0.bin': '中文模型（必需，834 MB）',
+                'models/ggml-large-v3-q5_0.bin': '通用模型（可选，1 GB）'
+            }
+        },
+        {
             id: 'ncm',
             name: '网易云服务',
             desc: '网易云音乐搜索/试听/下载的本地服务',
@@ -244,12 +272,26 @@
     // ── 网盘说明弹窗 ────────────────────────────────────────
     function showNetdiskHelp(c) {
         var target = path.join(extRoot, c.dir.replace(/\//g, path.sep));
-        var msg = '【' + c.name + '】\n\n' +
-                  '在线下载失败或太慢，可以用网盘：\n\n' +
-                  '1. 打开网盘链接下载：\n' + (c.netdisk || '（暂未提供）') + '\n\n' +
-                  '2. 解压后把整个文件夹放到：\n' + target + '\n\n' +
-                  '3. 回到插件点「重新检测」\n\n' +
-                  '需要下载的内容：' + c.desc;
+        var msg = '【' + c.name + '】\n\n';
+        msg += '1. 打开网盘链接下载：\n' + (c.netdisk || '（暂未提供）') + '\n\n';
+        msg += '2. 解压后，把里面的文件夹放进插件目录：\n' + extRoot + '\n\n';
+
+        // 有结构说明就逐个列清楚
+        if (c.layout) {
+            msg += '3. 放好之后应该是这样：\n';
+            Object.keys(c.layout).forEach(function (k) {
+                var line = (k.slice(-1) === '/') ? '   ' + k : '   ' + k;
+                msg += line + '\n      ' + c.layout[k] + '\n';
+            });
+            msg += '\n';
+        } else {
+            msg += '   目标位置：\n' + target + '\n\n';
+        }
+
+        msg += '4. 回到插件点「重新检测」\n\n';
+        msg += '需要下载的内容：' + c.desc;
+        if (c.size) msg += '（' + c.size + '）';
+
         try {
             window.__vhAlert ? window.__vhAlert(msg) : alert(msg);
         } catch (e) { alert(msg); }

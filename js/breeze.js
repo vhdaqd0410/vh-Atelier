@@ -498,6 +498,108 @@
     }
 
     // ---------- 自动识别 ----------
+
+    // ---------- whisper 中文路径规避 ----------
+    // 实测：whisper-cli 在路径含中文时直接崩溃（退出码 3221226505）。
+    // 引擎目录和模型文件都不能在中文路径下，音频文件不受影响。
+    // 所以当插件装在中文路径（用户名是中文很常见）时，
+    // 把引擎和模型镜像到 C:\ProgramData（纯 ASCII 且普通用户可写）再调用。
+    //
+    // 判断依据：路径里只要有一个非 ASCII 字符就要镜像。
+
+    function hasNonAscii(s) {
+        try {
+            return /[^\x00-\x7F]/.test(String(s || ''));
+        } catch (e) { return false; }
+    }
+
+    // 找一个可写的纯 ASCII 根目录
+    function asciiRoot() {
+        var cands = [
+            'C:\\ProgramData\\vh-atelier\\whisper',
+            'C:\\Windows\\Temp\\vh-atelier-whisper'
+        ];
+        for (var i = 0; i < cands.length; i++) {
+            try {
+                if (!fs.existsSync(cands[i])) fs.mkdirSync(cands[i], { recursive: true });
+                // 试写确认
+                var probe = path.join(cands[i], '.w');
+                fs.writeFileSync(probe, 'ok');
+                fs.unlinkSync(probe);
+                return cands[i];
+            } catch (e) {}
+        }
+        return '';
+    }
+
+    // 把 src 镜像到 dst（只在大小不同或不存在时复制）
+    function mirrorFile(src, dst) {
+        try {
+            if (!fs.existsSync(src)) return false;
+            var ss = fs.statSync(src).size;
+            if (fs.existsSync(dst)) {
+                try { if (fs.statSync(dst).size === ss) return true; } catch (e) {}
+            }
+            var dir = path.dirname(dst);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.copyFileSync(src, dst);
+            return true;
+        } catch (e) { return false; }
+    }
+
+    function mirrorDir(srcDir, dstDir) {
+        try {
+            if (!fs.existsSync(srcDir)) return;
+            if (!fs.existsSync(dstDir)) fs.mkdirSync(dstDir, { recursive: true });
+            fs.readdirSync(srcDir).forEach(function (n) {
+                var s = path.join(srcDir, n);
+                var d = path.join(dstDir, n);
+                var st;
+                try { st = fs.statSync(s); } catch (e) { return; }
+                if (st.isDirectory()) mirrorDir(s, d);
+                else mirrorFile(s, d);
+            });
+        } catch (e) {}
+    }
+
+    // 给定引擎目录 + 模型路径，返回真正可用的 { exe, model, cuda }
+    // 若路径含中文，会自动镜像到 ASCII 目录
+    function prepareWhisper(engineBase, modelPath) {
+        var cpuExe = path.join(engineBase, 'win32-x64', 'whisper-cli.exe');
+        var cudaExe = path.join(engineBase, 'cuda', 'whisper-cli.exe');
+
+        var needMirror = hasNonAscii(engineBase) || hasNonAscii(modelPath);
+
+        if (!needMirror) {
+            return { cpu: cpuExe, cuda: cudaExe, model: modelPath, mirrored: false };
+        }
+
+        var root = asciiRoot();
+        if (!root) {
+            // 找不到可写的 ASCII 目录，只能原样返回（大概率会崩，但至少不静默）
+            console.log('[whisper] 无法创建 ASCII 中转目录，中文路径下可能崩溃');
+            return { cpu: cpuExe, cuda: cudaExe, model: modelPath, mirrored: false, failed: true };
+        }
+
+        // 引擎：整个目录镜像过去（含 DLL）
+        var mCpu = path.join(root, 'engine', 'win32-x64');
+        var mCuda = path.join(root, 'engine', 'cuda');
+        if (fs.existsSync(cpuExe)) mirrorDir(path.dirname(cpuExe), mCpu);
+        if (fs.existsSync(cudaExe)) mirrorDir(path.dirname(cudaExe), mCuda);
+
+        // 模型
+        var mModel = path.join(root, 'models', path.basename(modelPath));
+        mirrorFile(modelPath, mModel);
+
+        return {
+            cpu: path.join(mCpu, 'whisper-cli.exe'),
+            cuda: path.join(mCuda, 'whisper-cli.exe'),
+            model: mModel,
+            mirrored: true,
+            root: root
+        };
+    }
+
     function locateWhisper() {
         var hd = os.homedir();
         var cands = [
@@ -526,7 +628,7 @@
                     if (fs.existsSync(t2)) { mp = t2; break; }
                 }
             }
-            if (mp) return { cuda: cu, cpu: cp, model: mp };
+            if (mp) return { cuda: cu, cpu: cp, model: mp, base: path.dirname(path.dirname(cp)) };
         }
         return null;
     }
@@ -567,7 +669,12 @@
             return;
         }
 
-        var exe = detectCudaAvailable(w.cuda) ? w.cuda : w.cpu;
+        // 中文路径规避：引擎/模型在含中文的路径下会让 whisper 崩溃，
+        // 需要时先镜像到 C:\ProgramData 再调用（音频路径不受影响）。
+        var prep = prepareWhisper(w.base || path.dirname(path.dirname(w.cpu || w.cuda)), w.model);
+        var exe = detectCudaAvailable(prep.cuda) ? prep.cuda : prep.cpu;
+        var modelPath = prep.model;
+
         var tmp = path.join(os.tmpdir(), 'bz_asr_' + Date.now());
         var wav16 = tmp + '_16k.wav';
         var ffmpeg = path.join(extRoot, 'bin', 'ffmpeg-win32-x64.exe');
@@ -586,7 +693,7 @@
                     return;
                 }
                 childProcess.execFile(exe,
-                    ['-m', w.model, '-l', 'auto', '-t', '4', '-osrt',
+                    ['-m', modelPath, '-l', 'auto', '-t', '4', '-osrt',
                      '-of', tmp, '-nf', '-sns', wav16],
                     { cwd: path.dirname(exe), timeout: 300000, maxBuffer: 50 * 1024 * 1024 },
                     function (e2) {
