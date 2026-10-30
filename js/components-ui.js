@@ -8,8 +8,8 @@
     function initEl() {
         el.list = $('cpList');
         el.recheck = $('cpRecheck');
+        el.installBtn = $('cpInstallDir');
 
-    if (el.installBtn) el.installBtn.addEventListener('click', doInstallFromDir);
         el.ndCard = $('cpNetdiskCard');
         el.ndTip = $('cpNetdiskTip');
     }
@@ -159,6 +159,12 @@
                     render();
                     el.recheck.textContent = '🔄 重新检测';
                 }, 200);
+            });
+        }
+        // 从解压目录安装：绑定要放在 bind() 里，doInstallFromDir 此时已定义
+        if (el.installBtn) {
+            el.installBtn.addEventListener('click', function () {
+                doInstallFromDir();
             });
         }
     }
