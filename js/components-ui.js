@@ -8,6 +8,8 @@
     function initEl() {
         el.list = $('cpList');
         el.recheck = $('cpRecheck');
+
+    if (el.installBtn) el.installBtn.addEventListener('click', doInstallFromDir);
         el.ndCard = $('cpNetdiskCard');
         el.ndTip = $('cpNetdiskTip');
     }
@@ -171,4 +173,116 @@
     window.__componentsOnShow = function () { render(); };
 
     window.__vhComponentsUI = { render: render };
+
+    // ---------- 从解压目录安装 ----------
+    // 复用插件里已验证的 folderpicker.ps1 选择目录，
+    // 然后交给 __vhComponents.installFromDir 复制。
+    function pickFolder(cb) {
+        var fs, path, os2, cp;
+        try {
+            fs = require('fs');
+            path = require('path');
+            os2 = require('os');
+            cp = require('child_process');
+        } catch (e) { cb(''); return; }
+
+        var extRoot = '';
+        try {
+            extRoot = new CSInterface().getSystemPath(SystemPath.EXTENSION) || '';
+        } catch (e) {}
+
+        // 兜底：从 __dirname 推导
+        if (!extRoot || !fs.existsSync(path.join(extRoot, 'jsx', 'folderpicker.ps1'))) {
+            try {
+                var d = (typeof __dirname !== 'undefined') ? __dirname : '';
+                if (d) {
+                    var root = (path.basename(d).toLowerCase() === 'js') ? path.dirname(d) : d;
+                    if (fs.existsSync(path.join(root, 'jsx', 'folderpicker.ps1'))) extRoot = root;
+                }
+            } catch (e) {}
+        }
+
+        var psPath = path.join(extRoot || '', 'jsx', 'folderpicker.ps1');
+        if (!psPath || !fs.existsSync(psPath)) { cb(''); return; }
+
+        var stamp = Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        var inFile = path.join(os2.tmpdir(), 'vh_cp_in_' + stamp + '.json');
+        var outFile = path.join(os2.tmpdir(), 'vh_cp_out_' + stamp + '.txt');
+
+        try {
+            fs.writeFileSync(inFile,
+                JSON.stringify({ path: '', title: '选择解压出来的文件夹' }), 'utf8');
+        } catch (e) { cb(''); return; }
+
+        var cmd = 'powershell -NoProfile -STA -ExecutionPolicy Bypass -File "' +
+                  psPath + '" -Ini "' + inFile + '" -Out "' + outFile + '"';
+
+        cp.exec(cmd, { windowsHide: true }, function () {
+            try { fs.unlinkSync(inFile); } catch (e) {}
+            var picked = '';
+            try {
+                if (fs.existsSync(outFile)) {
+                    picked = String(fs.readFileSync(outFile, 'utf8') || '').trim();
+                    try { fs.unlinkSync(outFile); } catch (e) {}
+                }
+            } catch (e) {}
+            cb(picked);
+        });
+    }
+
+    function doInstallFromDir() {
+        var comps = window.__vhComponents;
+        if (!comps || !comps.installFromDir) {
+            alert('组件模块未加载');
+            return;
+        }
+
+        var btn = el.installBtn;
+        pickFolder(function (dir) {
+            if (!dir) return;   // 用户取消
+
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '正在安装…';
+            }
+
+            // 让 UI 有机会刷新再开始复制
+            setTimeout(function () {
+                var res;
+                try {
+                    res = comps.installFromDir(dir, function (line) {
+                        console.log('[组件安装] ' + line);
+                    });
+                } catch (e) {
+                    res = { ok: false, msg: '安装出错：' + (e && e.message) };
+                }
+
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = '📂 从解压目录安装';
+                }
+
+                if (res.ok) {
+                    var lines = [res.msg, ''];
+                    if (res.whisperReady) {
+                        lines.push('✓ Whisper 组件已就位，可以用了。');
+                        lines.push('现在去「声音」面板，抓取参考音频后会自动识别文字。');
+                    } else if (res.partial) {
+                        lines.push('这次只复制了一部分，whisper 还用不了。');
+                        lines.push('请把完整的 bin 和 models 都放进去再试一次。');
+                    } else {
+                        lines.push('已复制，但检测仍未通过。');
+                        lines.push('请确认目录结构是 bin\\whisper\\ 和 models\\ 。');
+                    }
+                    lines.push('');
+                    lines.push('插件目录：' + (comps.extRoot || ''));
+                    alert(lines.join('\n'));
+                    render();
+                } else {
+                    alert(res.msg || '安装失败');
+                }
+            }, 60);
+        });
+    }
+
 })();

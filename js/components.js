@@ -15,7 +15,180 @@
         http = require('http');
         childProcess = require('child_process');
     } catch (e) {
-        window.__vhComponents = { list: [], check: function () { return {}; } };
+        // ---------- 从用户解压的目录自动安装 ----------
+    // 用户下载网盘包后解压到任意位置，点「选择解压目录」，
+    // 这里负责识别结构、复制到插件目录、给出结果。
+    // 支持的目录结构：
+    //   A) 直接是包根：      <dir>/bin/... <dir>/models/...
+    //   B) 多套一层：        <dir>/whisper-组件包/bin/... <dir>/whisper-组件包/models/...
+    //   C) 用户选中了内层：  <dir>/bin 或 <dir>/models 或 <dir>/whisper
+    // 三种都能认出来。
+
+    var fs2 = fs, path2 = path;
+
+    // 递归找某个目标目录（比如 bin/whisper）在 root 下的实际位置
+    function findDeep(root, relParts, maxDepth) {
+        var target = relParts[relParts.length - 1];
+        var stack = [{ dir: root, depth: 0 }];
+        var guard = 0;
+        while (stack.length && guard++ < 2000) {
+            var cur = stack.shift();
+            if (cur.depth > (maxDepth || 3)) continue;
+            var entries;
+            try { entries = fs2.readdirSync(cur.dir, { withFileTypes: true }); } catch (e) { continue; }
+            for (var i = 0; i < entries.length; i++) {
+                var e = entries[i];
+                if (!e.isDirectory()) continue;
+                var full = path2.join(cur.dir, e.name);
+                // 命中：目录名一致，且（若要求）完整相对路径也对
+                if (e.name.toLowerCase() === target.toLowerCase()) {
+                    if (relParts.length === 1) return full;
+                    // 检查父级链条
+                    var ok = true;
+                    var p = full;
+                    for (var k = relParts.length - 2; k >= 0; k--) {
+                        p = path2.dirname(p);
+                        if (path2.basename(p).toLowerCase() !== relParts[k].toLowerCase()) { ok = false; break; }
+                    }
+                    if (ok) return full;
+                }
+                stack.push({ dir: full, depth: cur.depth + 1 });
+            }
+        }
+        return '';
+    }
+
+    // 递归复制目录，返回 { files, bytes, skipped }
+    function copyDirInto(srcDir, dstDir, overwrite) {
+        var st = { files: 0, bytes: 0, skipped: 0 };
+        if (!fs2.existsSync(srcDir)) return st;
+        if (!fs2.existsSync(dstDir)) {
+            try { fs2.mkdirSync(dstDir, { recursive: true }); } catch (e) { return st; }
+        }
+        var entries;
+        try { entries = fs2.readdirSync(srcDir, { withFileTypes: true }); } catch (e) { return st; }
+        entries.forEach(function (e) {
+            var s = path2.join(srcDir, e.name);
+            var d = path2.join(dstDir, e.name);
+            if (e.isDirectory()) {
+                var sub = copyDirInto(s, d, overwrite);
+                st.files += sub.files; st.bytes += sub.bytes; st.skipped += sub.skipped;
+            } else {
+                try {
+                    if (!overwrite && fs2.existsSync(d)) {
+                        // 大小相同视为已存在，跳过
+                        if (fs2.statSync(d).size === fs2.statSync(s).size) { st.skipped++; return; }
+                    }
+                    fs2.copyFileSync(s, d);
+                    st.files++;
+                    try { st.bytes += fs2.statSync(d).size; } catch (e2) {}
+                } catch (err) { st.skipped++; }
+            }
+        });
+        return st;
+    }
+
+    // 主入口：从用户选的目录安装
+    function installFromDir(dir, onLog) {
+        var log = onLog || function () {};
+        if (!dir || !fs2.existsSync(dir)) {
+            return { ok: false, msg: '目录不存在' };
+        }
+
+        log('正在分析目录结构…');
+
+        // 找 bin/whisper（whisper 组件包的核心标志）
+        var srcWhisper = findDeep(dir, ['bin', 'whisper'], 4);
+        if (!srcWhisper) {
+            // 也许用户直接选了 whisper 目录
+            if (path2.basename(dir).toLowerCase() === 'whisper') {
+                srcWhisper = dir;
+            }
+        }
+
+        // 找 models 目录（含 ggml 文件）
+        var srcModels = '';
+        var modelsCands = [];
+        (function walk(d, depth) {
+            if (depth > 4) return;
+            var ents;
+            try { ents = fs2.readdirSync(d, { withFileTypes: true }); } catch (e) { return; }
+            // 这个目录本身像不像 models
+            var hasGgml = ents.some(function (e) {
+                return !e.isDirectory() && /^ggml-.*\.bin$/i.test(e.name);
+            });
+            if (hasGgml) { modelsCands.push(d); return; }
+            ents.forEach(function (e) {
+                if (e.isDirectory()) walk(path2.join(d, e.name), depth + 1);
+            });
+        })(dir, 0);
+
+        if (modelsCands.length) srcModels = modelsCands[0];
+
+        if (!srcWhisper && !srcModels) {
+            return {
+                ok: false,
+                msg: '在这个目录里没找到 whisper 组件。\n\n' +
+                     '请确认你选的是解压出来的文件夹，里面应该能看到 bin 和 models。\n\n' +
+                     '如果解压后多套了一层（比如 whisper-组件包\\bin），选中外层或内层都可以，但要能看到 bin 或 models 其中一个。'
+            };
+        }
+
+        var result = { ok: true, whisper: null, models: null, files: 0, bytes: 0, skipped: 0 };
+
+        // 复制引擎
+        if (srcWhisper) {
+            log('找到引擎：' + srcWhisper);
+            log('正在复制引擎…');
+            var dstWhisper = path2.join(extRoot, 'bin', 'whisper');
+            var r1 = copyDirInto(srcWhisper, dstWhisper, true);
+            result.whisper = { from: srcWhisper, to: dstWhisper, files: r1.files, bytes: r1.bytes };
+            result.files += r1.files;
+            result.bytes += r1.bytes;
+            result.skipped += r1.skipped;
+            log('引擎：' + r1.files + ' 个文件');
+        }
+
+        // 复制模型
+        if (srcModels) {
+            log('找到模型：' + srcModels);
+            log('正在复制模型（大文件，请稍候）…');
+            var dstModels = path2.join(extRoot, 'models');
+            var r2 = copyDirInto(srcModels, dstModels, true);
+            result.models = { from: srcModels, to: dstModels, files: r2.files, bytes: r2.bytes };
+            result.files += r2.files;
+            result.bytes += r2.bytes;
+            result.skipped += r2.skipped;
+            log('模型：' + r2.files + ' 个文件');
+        }
+
+        // 复制完成后重新检测
+        try {
+            var st = checkAll();
+            result.state = st;
+            result.whisperReady = !!(st.whisper && st.whisper.ready);
+        } catch (e) {}
+
+        // 明确告诉用户：只找到一半时缺什么
+        var notes = [];
+        if (!result.whisper) {
+            notes.push('⚠ 没找到引擎（bin\\whisper），whisper 还是用不了。');
+        }
+        if (!result.models) {
+            notes.push('⚠ 没找到模型（models\\ggml-*.bin），whisper 还是用不了。');
+        }
+
+        result.msg = '复制完成：' + result.files + ' 个文件，' +
+                     (result.bytes / 1048576).toFixed(0) + ' MB' +
+                     (result.skipped ? '（跳过 ' + result.skipped + ' 个已存在的）' : '');
+        if (notes.length) {
+            result.msg += '\n\n' + notes.join('\n');
+            result.partial = true;
+        }
+        return result;
+    }
+
+    window.__vhComponents = { list: [], check: function () { return {}; } };
         return;
     }
 
@@ -303,6 +476,8 @@
         missing: missingList,
         download: download,
         state: dlState,
-        netdiskHelp: showNetdiskHelp
+        netdiskHelp: showNetdiskHelp,
+        installFromDir: installFromDir,
+        extRoot: extRoot
     };
 })();
