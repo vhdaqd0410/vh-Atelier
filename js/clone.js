@@ -1305,9 +1305,55 @@
         }, 15000);
     }
 
+    // ---------- 引擎就绪检查 ----------
+    // 返回空字符串表示可用；返回文字表示缺什么。
+    // 不依赖引擎面板是否打开，面板没加载时自己查关键目录兜底。
+    function checkEngineReady() {
+        var eng = window.__vhCosyEngine;
+        if (eng && typeof eng.check === 'function') {
+            try {
+                var r = eng.check();
+                if (r && r.canRun) return '';
+                if (r && r.summary) return r.summary;
+            } catch (e) {}
+        }
+
+        var root = '';
+        try {
+            if (eng && typeof eng.getRoot === 'function') root = eng.getRoot() || '';
+        } catch (e) {}
+
+        if (!root) {
+            return '还没指定引擎位置。请在上方引擎卡片里点「⬇ 网盘下载」，装好后重试。';
+        }
+
+        var missing = [];
+        try { if (!fs.existsSync(path.join(root, '_internal'))) missing.push('_internal（运行时）'); } catch (e) {}
+        try { if (!fs.existsSync(path.join(root, 'cosyvoice'))) missing.push('cosyvoice（源码）'); } catch (e) {}
+        try { if (!fs.existsSync(path.join(root, 'pretrained_models'))) missing.push('pretrained_models（模型）'); } catch (e) {}
+
+        if (missing.length) {
+            return '引擎目录不完整，缺少：' + missing.join('、') +
+                   '。请在上方引擎卡片里重新导入整合包。';
+        }
+        return '';
+    }
+
     function clone() {
         if (busy) return;
         var isVolc = (currentEngine === 'volc2');
+
+        // 本地引擎要先确认就位，否则 python 只会吐一行 STAGE init 就退出，
+        // 用户看到的是一句没头没尾的「Command failed」，根本不知道要去装引擎。
+        if (!isVolc) {
+            var engErr = checkEngineReady();
+            if (engErr) {
+                setStatus('引擎未就绪：' + engErr, 'err');
+                try { window.__cloneEngineOnShow && window.__cloneEngineOnShow(); } catch (_) {}
+                return;
+            }
+        }
+
         if (!isVolc && !refWavPath) { setStatus('请先选择一个音色', 'err'); return; }
         var refText = el.refText.value.trim();
         var ttsText = el.ttsText.value.trim();

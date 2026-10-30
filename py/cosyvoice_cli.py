@@ -53,9 +53,33 @@ import json
 import time
 
 # 默认引擎路径（用户机器上的 CosyVoice3 工具安装位置）
-DEFAULT_INTERNAL = r"D:\cosyvoice3_V30\_internal"
-DEFAULT_MATCHA = r"D:\cosyvoice3_V30\third_party\Matcha-TTS"
-DEFAULT_MODEL_DIR = r"D:\cosyvoice3_V30\pretrained_models"
+# 引擎默认位置：优先用插件自己目录下的 engine/cosyvoice3_V30。
+# 之前写死成 D:\cosyvoice3_V30，客户电脑上没有这个盘就必然失败。
+# 现在按以下顺序找，第一个存在的就用：
+#   1. <插件目录>/engine/cosyvoice3_V30
+#   2. <插件目录>/engine
+#   3. D:\cosyvoice3_V30（本机开发时的老位置，兜底）
+_THIS = os.path.dirname(os.path.abspath(__file__))
+_EXT_ROOT = os.path.dirname(_THIS)          # py 的上一级就是插件根
+
+
+def _pick_engine_root():
+    cands = [
+        os.path.join(_EXT_ROOT, 'engine', 'cosyvoice3_V30'),
+        os.path.join(_EXT_ROOT, 'engine'),
+        r"D:\cosyvoice3_V30",
+    ]
+    for c in cands:
+        if os.path.isdir(os.path.join(c, '_internal')) and \
+           os.path.isdir(os.path.join(c, 'pretrained_models')):
+            return c
+    return cands[0]     # 都不存在时返回首选，让后续报错能指出预期位置
+
+
+_ENGINE_ROOT = _pick_engine_root()
+DEFAULT_INTERNAL = os.path.join(_ENGINE_ROOT, '_internal')
+DEFAULT_MATCHA = os.path.join(_ENGINE_ROOT, 'third_party', 'Matcha-TTS')
+DEFAULT_MODEL_DIR = os.path.join(_ENGINE_ROOT, 'pretrained_models')
 
 MODES = ('clone', 'instruct', 'cross')
 

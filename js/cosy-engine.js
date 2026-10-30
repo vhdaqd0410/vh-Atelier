@@ -24,14 +24,25 @@
 
     var KEY_ROOT = 'vh_cosy_root';
 
-    // 可能的默认位置（按优先级）——老用户无感的关键
-    var DEFAULT_CANDIDATES = [
+    // 可能的默认位置（按优先级）
+    // 第一位是「插件自己的 engine 目录」：自动导入整合包时就是解到这里，
+    // 优先查它，客户装完不用手动设置路径。
+    var _extRoot = '';
+    try { _extRoot = new CSInterface().getSystemPath(SystemPath.EXTENSION) || ''; } catch (e) {}
+
+    var DEFAULT_CANDIDATES = [];
+    if (_extRoot) {
+        DEFAULT_CANDIDATES.push(path.join(_extRoot, 'engine', 'cosyvoice3_V30'));
+        DEFAULT_CANDIDATES.push(path.join(_extRoot, 'engine'));
+    }
+    // 再回退到常见的独立安装位置（老用户把它们装在别处）
+    DEFAULT_CANDIDATES = DEFAULT_CANDIDATES.concat([
         'D:\\cosyvoice3_V30',
         'C:\\cosyvoice3_V30',
         'E:\\cosyvoice3_V30',
         'D:\\CosyVoice3',
         'D:\\cosyvoice'
-    ];
+    ]);
 
     // 读取引擎根目录。
     // 关键语义：用户「显式设置过」的路径必须如实返回（哪怕它不存在），

@@ -4,6 +4,29 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.22",
+      "date": "2026-10-30",
+      "title": "修复客户电脑语音克隆失败（只显示 STAGE init）",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "修复别的电脑上语音克隆报「Command failed」且只显示 STAGE init：客户版没打包 CosyVoice 引擎，而克隆按钮不检查引擎就直接调 Python，用户看到的是一句没头没尾的命令失败"
+        },
+        {
+          "type": "fix",
+          "text": "克隆前增加引擎就绪检查：缺引擎时明确提示「还没指定引擎位置」并自动展开上方的引擎安装卡片，引导走网盘下载流程，不再让 Python 崩在初始化阶段"
+        },
+        {
+          "type": "fix",
+          "text": "Python 侧的引擎默认路径不再写死 D:\\cosyvoice3_V30：改为按「插件自身 engine 目录 → 常见独立安装位置」依次查找，客户装到任意盘都能用"
+        },
+        {
+          "type": "fix",
+          "text": "引擎自动探测列表加入插件自己的 engine 目录：通过「导入整合包」安装后无需手动设置路径，重开面板即可识别"
+        }
+      ]
+    },
+    {
       "version": "1.82.21",
       "date": "2026-10-30",
       "title": "修复组件面板未加载 + 补 whisper 网盘链接",
