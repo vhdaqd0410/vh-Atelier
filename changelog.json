@@ -4,6 +4,33 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.23",
+      "date": "2026-10-30",
+      "title": "精简客户版：移除语音克隆，修复 Whisper 缺失",
+      "changes": [
+        {
+          "type": "impr",
+          "text": "移除「语音克隆」板块：该功能依赖 8GB CosyVoice 引擎和独立的 Python 环境，部署成本过高。朗读（Breeze）已覆盖配音需求，客户版不再提供克隆"
+        },
+        {
+          "type": "impr",
+          "text": "「声音」组现在是人声分离 / Breeze 朗读 / 音效库 / 音乐库 / 网易云 / 短剧扒歌，界面更清爽"
+        },
+        {
+          "type": "fix",
+          "text": "修复 Whisper 引擎缺失：之前打包时漏了 whisper，朗读的「自动识别参考文字」和字幕识别在别的电脑上会提示找不到引擎。现已完整打包 CPU + CUDA 引擎和两个模型"
+        },
+        {
+          "type": "fix",
+          "text": "修复 Windows 用户名是中文时 whisper 崩溃的问题：引擎和模型会自动镜像到 C:\\ProgramData 下调用"
+        },
+        {
+          "type": "impr",
+          "text": "在线更新现在会主动删除已废弃的模块文件（js/clone.js 等 5 个），老用户更新后不会残留"
+        }
+      ]
+    },
+    {
       "version": "1.82.22",
       "date": "2026-10-30",
       "title": "修复客户电脑语音克隆失败（只显示 STAGE init）",

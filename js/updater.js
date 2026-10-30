@@ -80,6 +80,31 @@
                 '.git', '_tmp', '_releases', 'node_modules',
                 'data', 'cache', 'music', 'backups', 'cover_cache'];
 
+    // 已废弃的文件：更新后主动删除。
+    // 覆盖式更新只「写入」不「删除」，模块下线后旧文件会一直留着，
+    // 既占空间也可能被 index.html 之外的地方误加载。
+    var OBSOLETE = [
+        'js/clone.js',
+        'js/cosy-engine.js',
+        'js/cosy-engine-ui.js',
+        'js/cosy-import.js',
+        'py/cosyvoice_cli.py'
+    ];
+
+    function purgeObsolete() {
+        var n = 0;
+        OBSOLETE.forEach(function (rel) {
+            try {
+                var p = path.join(ROOT, rel.replace(/\//g, path.sep));
+                if (fs.existsSync(p)) {
+                    fs.unlinkSync(p);
+                    n++;
+                }
+            } catch (e) {}
+        });
+        return n;
+    }
+
     function readCfg() {
         try {
             if (CFG_FILE && fs.existsSync(CFG_FILE)) {
@@ -513,6 +538,8 @@
                 var srcRoot = path.join(outDir, tops[0]);
                 log('正在覆盖代码文件（跳过模型/引擎/用户数据）…');
                 var n = copyTree(srcRoot, ROOT, ROOT);
+            // 覆盖完成后清理已废弃的模块文件
+            var purged = purgeObsolete();
                 log('已更新 ' + n + ' 个文件');
                 try { fs.unlinkSync(zipFile); } catch (e) {}
                 try { rmrf(outDir); } catch (e) {}

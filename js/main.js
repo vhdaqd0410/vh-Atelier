@@ -6,7 +6,6 @@
         subtitle: document.getElementById('panel-subtitle'),
         check: document.getElementById('panel-check'),
         separate: document.getElementById('panel-sep'),
-        clone: document.getElementById('panel-clone'),
         sfx: document.getElementById('panel-sfx'),
         musiclib: document.getElementById('panel-musiclib'),
         music: document.getElementById('panel-music'),
@@ -27,7 +26,7 @@
     var groups = {
         media: { members: ['media'], default: 'media' },
         sub: { members: ['subtitle', 'check'], default: 'subtitle' },
-        audio: { members: ['separate', 'clone', 'breeze', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
+        audio: { members: ['separate', 'breeze', 'sfx', 'musiclib', 'music', 'bgm'], default: 'separate' },
         deliver: { members: ['export'], default: 'export' },
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
@@ -135,9 +134,6 @@
             try { window.__accountOnShow(); } catch (e) {}
         }
         // 语音克隆：切到时重新检测引擎（用户可能刚装了 CosyVoice3）
-        if (name === 'clone' && window.__cloneEngineOnShow) {
-            try { window.__cloneEngineOnShow(); } catch (e) {}
-        }
         // 组件面板：切到时重扫一遍组件状态
         if (name === 'components' && window.__componentsOnShow) {
             try { window.__componentsOnShow(); } catch (e) {}
