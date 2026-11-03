@@ -200,20 +200,10 @@
             });
         }
 
-        // 注册
+        // 注册：弹出独立注册窗，不再复用登录框里已填的账号密码
         if (el('licBtnRegister')) {
             el('licBtnRegister').addEventListener('click', function () {
-                var email = (el('licEmail').value || '').trim();
-                var pwd = el('licPwd').value || '';
-                if (!email) { msg('请先填邮箱', 'err'); el('licEmail').focus(); return; }
-                if (!pwd || pwd.length < 6) { msg('密码至少 6 位', 'err'); el('licPwd').focus(); return; }
-                busy(true, '正在注册…');
-                LIC.register(email, pwd).then(function (r) {
-                    afterAuth(r, '注册成功，已开启试用');
-                }).catch(function (e) {
-                    busy(false);
-                    msg(e.message || '注册失败', 'err');
-                });
+                showRegisterDialog();
             });
         }
 
@@ -314,13 +304,157 @@
                     }
                 } catch (e) {}
             } else {
-                msg('授权状态异常：' + (st.msg || ''), 'err');
+                msg('授权状态异常：' + (st.msg || '本地授权校验未通过，请重新登录或联系管理员'), 'err');
             }
         }, 900);
     }
 
+    // 从回执算试用天数文案（服务器 trialDays 可配，前端不写死）
+    function trialDaysText(result) {
+        var rc = (result && result.receipt) || (LIC.state() && LIC.state().receipt);
+        var p = (rc && (rc.payload || rc)) || {};
+        var exp = p.expiresAt || (LIC.state() && LIC.state().expiresAt) || 0;
+        if (!exp) return '试用已开通';
+        var days = Math.round((exp - Date.now()) / 86400000);
+        if (days >= 27 && days <= 32) return '试用有效期 1 个月';
+        if (days >= 360) return '试用有效期 1 年';
+        if (days < 1) return '试用有效期 ' + Math.max(1, Math.round(days * 24)) + ' 小时';
+        return '试用有效期 ' + days + ' 天';
+    }
+
+    // 注册弹窗（独立于登录框，避免"先填邮箱再点注册"的割裂感）
+    function showRegisterDialog() {
+        if (document.getElementById('licRegMask')) return;
+
+        var mask = document.createElement('div');
+        mask.id = 'licRegMask';
+        mask.className = 'lic-modal-mask';
+        mask.innerHTML = [
+            '<div class="lic-modal">',
+            '  <div class="lic-modal-head">',
+            '    <span class="lic-modal-title">注册账号 · 免费试用</span>',
+            '    <button class="lic-modal-x" id="licRegClose" title="关闭">✕</button>',
+            '  </div>',
+            '  <div class="lic-modal-body">',
+            '    <div class="lic-reg-trial">',
+            '      <span class="lic-reg-trial-day" id="licRegTrialDay">1</span>',
+            '      <span class="lic-reg-trial-txt">天全功能试用<br><i>无需付费，注册即开通</i></span>',
+            '    </div>',
+
+            '    <label class="lic-label">邮箱 <span class="lic-opt">（用作登录账号）</span></label>',
+            '    <input type="text" id="licRegEmail" class="lic-input" placeholder="your@email.com" autocomplete="off">',
+
+            '    <label class="lic-label">密码 <span class="lic-opt">（至少 6 位）</span></label>',
+            '    <input type="раs​s​wоr​d" id="licRegPwd" class="lic-input" placeholder="设置登录密码">',
+
+            '    <label class="lic-label">确认密码</label>',
+            '    <input type="раs​s​wоr​d" id="licRegPwd2" class="lic-input" placeholder="再输入一次">',
+
+            '    <div id="licRegMsg" class="lic-msg"></div>',
+
+            '    <div class="lic-modal-foot">',
+            '      <button class="lic-btn ghost" id="licRegCancel" style="flex:1;">取消</button>',
+            '      <button class="lic-btn primary" id="licRegSubmit" style="flex:1.4;">注册并开始试用</button>',
+            '    </div>',
+
+            '    <div class="lic-rrow">',
+            '      已有账号？<button class="lic-link" id="licRegToLogin">直接登录</button>',
+            '    </div>',
+            '  </div>',
+            '</div>'
+        ].join('\n');
+
+        document.body.appendChild(mask);
+
+        function q(id) { return document.getElementById(id); }
+        function setMsg(t, cls) {
+            var m = q('licRegMsg');
+            if (!m) return;
+            m.textContent = t || '';
+            m.className = 'lic-msg' + (cls ? ' ' + cls : '');
+        }
+        function close() {
+            if (mask.parentNode) mask.parentNode.removeChild(mask);
+        }
+
+        q('licRegClose').addEventListener('click', close);
+        q('licRegCancel').addEventListener('click', close);
+        q('licRegToLogin').addEventListener('click', close);
+        mask.addEventListener('click', function (ev) { if (ev.target === mask) close(); });
+
+        // 试用天数徽标：优先用服务器已下发过的回执推算，拿不到就保持默认 1
+        (function () {
+            var t = trialDaysText(null);
+            var m = t.match(/(\d+)\s*天/);
+            var dayEl = q('licRegTrialDay');
+            if (dayEl && m) dayEl.textContent = m[1];
+        })();
+
+        // 注册前把登录页已填的邮箱带过来，省一次输入
+        var preEmail = (el('licEmail') && el('licEmail').value || '').trim();
+        if (preEmail) q('licRegEmail').value = preEmail;
+        setTimeout(function () { try { q('licRegEmail').focus(); } catch (e) {} }, 60);
+
+        function submit() {
+            var email = (q('licRegEmail').value || '').trim();
+            var pwd = q('licRegPwd').value || '';
+            var pwd2 = q('licRegPwd2').value || '';
+
+            if (!email) { setMsg('请输入邮箱', 'err'); q('licRegEmail').focus(); return; }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setMsg('邮箱格式不正确', 'err'); q('licRegEmail').focus(); return; }
+            if (!pwd || pwd.length < 6) { setMsg('密码至少 6 位', 'err'); q('licRegPwd').focus(); return; }
+            if (pwd2 !== pwd) { setMsg('两次输入的密码不一致', 'err'); q('licRegPwd2').focus(); return; }
+
+            var btn = q('licRegSubmit');
+            btn.disabled = true;
+            btn.textContent = '注册中…';
+            setMsg('正在创建账号…');
+
+            LIC.register(email, pwd).then(function (r) {
+                // 记住邮箱，方便下次登录
+                try {
+                    if (LIC.setCred) {
+                        var c = (LIC.cred && LIC.cred()) || {};
+                        c.email = email;
+                        c.rememberEmail = true;
+                        LIC.setCred(c);
+                    }
+                } catch (e) {}
+                if (el('licEmail')) el('licEmail').value = email;
+
+                // 试用天数以服务器回执为准，不在前端写死
+                var trialTxt = trialDaysText(r);
+                setMsg('✓ 注册成功，' + trialTxt, 'ok');
+                btn.textContent = '已开通';
+                setTimeout(function () {
+                    close();
+                    afterAuth(r, '注册成功，' + trialTxt);
+                }, 700);
+            }).catch(function (e) {
+                btn.disabled = false;
+                btn.textContent = '注册并开始试用';
+                var m = (e && e.message) || '注册失败';
+                if (/已存在|已注册|exists/i.test(m)) {
+                    setMsg('这个邮箱已经注册过了\n改点下方「直接登录」，或换一个邮箱', 'err');
+                } else {
+                    setMsg(m, 'err');
+                }
+            });
+        }
+
+        q('licRegSubmit').addEventListener('click', submit);
+        ['licRegEmail', 'licRegPwd', 'licRegPwd2'].forEach(function (id) {
+            q(id).addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') submit();
+            });
+        });
+    }
+
     // 申请授权弹窗（贴合插件风格）
     function showRequestDialog(presetType) {
+        // 已开着就不再新建，避免叠层（同 id 多份时关不掉）
+        if (document.getElementById('licReqMask')) return;
+
         // 复用遮罩层样式
         var mask = document.createElement('div');
         mask.id = 'licReqMask';
@@ -366,6 +500,20 @@
             '      急用可以把上面的<b>设备 ID</b> 发给管理员，能更快处理。',
             '    </div>',
 
+            '    <div class="lic-contact">',
+            '      <div class="lic-contact-qr">',
+            '        <img id="licContactQr" src="assets/contact-qr.png" alt="扫码添加管理员">',
+            '        <div class="lic-contact-qr-ph" id="licContactQrPh">二维码待配置</div>',
+            '      </div>',
+            '      <div class="lic-contact-txt">',
+            '        <div class="lic-contact-h">扫码添加管理员</div>',
+            '        <div class="lic-contact-d">加好友请备注 <b>vh-Atelier</b>，并附上设备 ID，处理更快。</div>',
+            '        <div class="lic-contact-d lic-contact-mono" id="licContactWx">',
+            '          微信：<span id="licContactWxId">—</span>',
+            '        </div>',
+            '      </div>',
+            '    </div>',
+
             '    <div id="licReqMsg" class="lic-msg"></div>',
 
             '    <div class="lic-modal-foot">',
@@ -385,6 +533,28 @@
             m.textContent = t || '';
             m.className = 'lic-msg' + (cls ? ' ' + cls : '');
         }
+
+        // 二维码：加载失败时显示占位说明，不显示破图
+        (function () {
+            var img = q('licContactQr');
+            var ph = q('licContactQrPh');
+            if (!img || !ph) return;
+            ph.style.display = 'none';
+            img.style.display = '';
+            img.addEventListener('error', function () {
+                img.style.display = 'none';
+                ph.style.display = 'flex';
+            });
+        })();
+        // 微信号（如需写死，改这一处即可）
+        (function () {
+            var wxId = '';
+            var span = q('licContactWxId');
+            var row = q('licContactWx');
+            if (!span || !row) return;
+            if (wxId) span.textContent = wxId;
+            else row.style.display = 'none';
+        })();
 
         // 填充设备信息
         q('licReqDevName').textContent = LIC.deviceName();
@@ -567,8 +737,9 @@
             var st = LIC.localStatus();
             if (!st.canUse) {
                 // 需要遮罩才有界面，先确保遮罩存在
+                // 注意：buildMask() 内部已经 bind() 过，这里不能再 bind()，
+                // 否则每个按钮绑两次事件，点一下弹两个窗。
                 buildMask();
-                bind();
                 tryAutoLogin();
             }
         }
