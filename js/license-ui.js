@@ -345,10 +345,10 @@
             '    <input type="text" id="licRegEmail" class="lic-input" placeholder="your@email.com" autocomplete="off">',
 
             '    <label class="lic-label">密码 <span class="lic-opt">（至少 6 位）</span></label>',
-            '    <input type="раs​s​wоr​d" id="licRegPwd" class="lic-input" placeholder="设置登录密码">',
+            '    <input type="password" id="licRegPwd" class="lic-input" placeholder="设置登录密码">',
 
             '    <label class="lic-label">确认密码</label>',
-            '    <input type="раs​s​wоr​d" id="licRegPwd2" class="lic-input" placeholder="再输入一次">',
+            '    <input type="password" id="licRegPwd2" class="lic-input" placeholder="再输入一次">',
 
             '    <div id="licRegMsg" class="lic-msg"></div>',
 
@@ -502,7 +502,7 @@
 
             '    <div class="lic-contact">',
             '      <div class="lic-contact-qr">',
-            '        <img id="licContactQr" src="assets/contact-qr.png" alt="扫码添加管理员">',
+            '        <img id="licContactQr" alt="扫码添加管理员">',
             '        <div class="lic-contact-qr-ph" id="licContactQrPh">二维码待配置</div>',
             '      </div>',
             '      <div class="lic-contact-txt">',
@@ -534,17 +534,41 @@
             m.className = 'lic-msg' + (cls ? ' ' + cls : '');
         }
 
-        // 二维码：加载失败时显示占位说明，不显示破图
+        // 二维码：多候选路径依次尝试，全失败才显示占位（不出现破图）
+        // 顺序很重要：collect/ 是用户数据目录，在线更新不会覆盖，
+        // 所以管理员把自己的二维码放这里可长期生效；assets/ 只是随包兜底。
         (function () {
             var img = q('licContactQr');
             var ph = q('licContactQrPh');
             if (!img || !ph) return;
-            ph.style.display = 'none';
-            img.style.display = '';
-            img.addEventListener('error', function () {
+
+            var cands = [
+                'collect/contact-qr.png',
+                'collect/contact-qr.jpg',
+                'assets/contact-qr.png',
+                'assets/contact-qr.jpg'
+            ];
+            var idx = 0;
+
+            function showPh() {
                 img.style.display = 'none';
                 ph.style.display = 'flex';
-            });
+            }
+            function tryNext() {
+                if (idx >= cands.length) { showPh(); return; }
+                var src = cands[idx++];
+                img.onerror = tryNext;
+                img.onload = function () {
+                    img.onerror = null;
+                    img.onload = null;
+                    ph.style.display = 'none';
+                    img.style.display = '';
+                };
+                ph.style.display = 'flex';
+                img.style.display = 'none';
+                img.src = src + '?v=' + Date.now();   // 换图后不被缓存卡住
+            }
+            tryNext();
         })();
         // 微信号（如需写死，改这一处即可）
         (function () {
