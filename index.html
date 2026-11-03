@@ -2407,7 +2407,8 @@
 /* 二维码放大查看层 */
 .lic-qr-zoom{
     position:fixed;left:0;top:0;right:0;bottom:0;
-    z-index:2147483000;
+    /* 必须高于 .lic-modal-mask 的 2147483100，否则大图会被申请弹窗盖住 */
+    z-index:2147483200;
     display:flex;align-items:center;justify-content:center;
     background:rgba(4,6,10,.86);
     cursor:zoom-out;padding:18px;box-sizing:border-box;

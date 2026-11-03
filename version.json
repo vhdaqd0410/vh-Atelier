@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.27",
-  "buildTime": "2026-11-03 16:04:00",
+  "version": "1.82.28",
+  "buildTime": "2026-11-03 16:45:42",
   "skipDirs": [
     "collect",
     "bin",

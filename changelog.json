@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.28",
+      "date": "2026-11-03",
+      "title": "修复二维码放大层被弹窗遮罩盖住",
+      "changes": [
+        {
+          "type": "impr",
+          "text": "放大层 z-index 提到 2147483200，高于申请弹窗遮罩的 2147483100；此前大图被盖住看不见"
+        },
+        {
+          "type": "impr",
+          "text": "回归测试新增遮挡检测断言（elementFromPoint 校验放大图确实在最上层）"
+        }
+      ]
+    },
+    {
       "version": "1.82.27",
       "date": "2026-11-03",
       "title": "授权界面：二维码可靠加载 + 点击放大",
