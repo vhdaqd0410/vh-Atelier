@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.27",
+      "date": "2026-11-03",
+      "title": "授权界面：二维码可靠加载 + 点击放大",
+      "changes": [
+        {
+          "type": "impr",
+          "text": "二维码改用 Node fs 直读文件转 data URL，不再依赖 file:// 相对路径；兼容 contact-qr.png.jpg 这类双扩展名文件，按文件头判真实格式"
+        },
+        {
+          "type": "impr",
+          "text": "点击二维码弹出大图查看层，Esc 或点任意处关闭；放大层不会误关申请弹窗"
+        },
+        {
+          "type": "impr",
+          "text": "二维码找不到时会在占位框提示应放到 collect 目录"
+        }
+      ]
+    },
+    {
       "version": "1.82.26",
       "date": "2026-11-03",
       "title": "注册改为独立弹窗，申请授权加入联系方式二维码",

@@ -534,41 +534,150 @@
             m.className = 'lic-msg' + (cls ? ' ' + cls : '');
         }
 
-        // 二维码：多候选路径依次尝试，全失败才显示占位（不出现破图）
-        // 顺序很重要：collect/ 是用户数据目录，在线更新不会覆盖，
-        // 所以管理员把自己的二维码放这里可长期生效；assets/ 只是随包兜底。
+        // 二维码：用 Node fs 直接读文件转 data URL。
+        // 不走 <img src="collect/xxx.png"> 的相对路径，原因有三个：
+        //   ① CEP 里 file:// 相对路径带查询串（?v=时间戳）在部分 CEF 版本上取不到文件；
+        //   ② 用户常把截图存成 contact-qr.png.jpg 这种双扩展名，写死候选名会漏；
+        //   ③ 扩展被在线更新覆盖后 assets/ 可能被换掉，collect/ 才是用户数据。
+        // 所以这里：扫 collect/ 与 assets/，找文件名以 contact-qr 开头的任意图片，
+        // 按文件头判真实格式（不认扩展名），读成 base64 塞给 img。
+        var _qrDataUrl = '';
         (function () {
             var img = q('licContactQr');
             var ph = q('licContactQrPh');
             if (!img || !ph) return;
 
-            var cands = [
-                'collect/contact-qr.png',
-                'collect/contact-qr.jpg',
-                'assets/contact-qr.png',
-                'assets/contact-qr.jpg'
-            ];
-            var idx = 0;
+            var fs = null, pathMod = null, extRoot = '';
+            try { fs = require('fs'); pathMod = require('path'); } catch (e) {}
+            try { extRoot = new CSInterface().getSystemPath(SystemPath.EXTENSION); } catch (e) {}
 
-            function showPh() {
+            function showPh(reason) {
                 img.style.display = 'none';
+                img.removeAttribute('src');
                 ph.style.display = 'flex';
+                if (reason) ph.title = reason;
             }
-            function tryNext() {
-                if (idx >= cands.length) { showPh(); return; }
-                var src = cands[idx++];
-                img.onerror = tryNext;
-                img.onload = function () {
-                    img.onerror = null;
-                    img.onload = null;
-                    ph.style.display = 'none';
-                    img.style.display = '';
-                };
-                ph.style.display = 'flex';
-                img.style.display = 'none';
-                img.src = src + '?v=' + Date.now();   // 换图后不被缓存卡住
+
+            if (!fs || !pathMod || !extRoot) {
+                showPh('当前环境读不到本地文件');
+                return;
             }
-            tryNext();
+
+            // 按文件头判真实图片格式（扩展名不可信）
+            function mimeOf(buf) {
+                if (!buf || buf.length < 4) return '';
+                if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
+                if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'image/png';
+                if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return 'image/gif';
+                if (buf.length > 12 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return 'image/webp';
+                if (buf.length > 4 && buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return 'image/avif';
+                return '';
+            }
+
+            var dirs = [pathMod.join(extRoot, 'collect'), pathMod.join(extRoot, 'assets')];
+            var found = null, tried = [];
+
+            for (var d = 0; d < dirs.length && !found; d++) {
+                var dir = dirs[d];
+                var names = [];
+                try {
+                    names = fs.readdirSync(dir);
+                } catch (e) { continue; }
+                // 只要 contact-qr 开头、且看起来是图片（含双扩展名 danger）
+                var hits = [];
+                for (var n = 0; n < names.length; n++) {
+                    var nm = names[n];
+                    if (nm.toLowerCase().indexOf('contact-qr') !== 0) continue;
+                    if (/\.(png|jpe?g|gif|webp|avif)$/i.test(nm) || /\.(png|jpe?g|gif|webp|avif)\.(png|jpe?g|gif|webp|avif)$/i.test(nm)) {
+                        hits.push(nm);
+                    }
+                }
+                // 名字完全匹配的优先，其余按字母序
+                hits.sort(function (a, b) {
+                    var ea = /\.png$/i.test(a) ? 0 : 1;
+                    var eb = /\.png$/i.test(b) ? 0 : 1;
+                    if (ea !== eb) return ea - eb;
+                    return a < b ? -1 : (a > b ? 1 : 0);
+                });
+                for (var k = 0; k < hits.length; k++) {
+                    var fp = pathMod.join(dir, hits[k]);
+                    tried.push(fp);
+                    try {
+                        var buf = fs.readFileSync(fp);
+                        var mt = mimeOf(buf);
+                        if (!mt) continue;
+                        _qrDataUrl = 'data:' + mt + ';base64,' + buf.toString('base64');
+                        found = fp;
+                        break;
+                    } catch (e) { /* 读失败继续下一个 */ }
+                }
+            }
+
+            if (!found) {
+                showPh('把 contact-qr.png 放进 collect 目录即可');
+                try { window.__vhLog && window.__vhLog.info('[授权] 未找到二维码文件，已扫：' + dirs.join(' | ')); } catch (e) {}
+                return;
+            }
+
+            img.onload = function () {
+                img.onload = null;
+                ph.style.display = 'none';
+                img.style.display = '';
+            };
+            img.onerror = function () {
+                img.onerror = null;
+                showPh('二维码文件读不出图像');
+                try { window.__vhLog && window.__vhLog.warn('[授权] 二维码解码失败：' + found); } catch (e) {}
+            };
+            ph.style.display = 'flex';
+            img.style.display = 'none';
+            img.src = _qrDataUrl;
+            try { window.__vhLog && window.__vhLog.info('[授权] 二维码已加载：' + found); } catch (e) {}
+        })();
+
+        // 点击二维码查看大图（92px 太小扫不出来，必须能放大）
+        (function () {
+            var img = q('licContactQr');
+            var box = img && img.parentNode;
+            if (!img || !box) return;
+
+            var zoomEl = null;
+            function closeZoom() {
+                if (!zoomEl) return;
+                if (zoomEl.parentNode) zoomEl.parentNode.removeChild(zoomEl);
+                zoomEl = null;
+                document.removeEventListener('keydown', onKey, true);
+            }
+            function onKey(ev) {
+                if (ev.key === 'Escape') { ev.stopPropagation(); closeZoom(); }
+            }
+            function openZoom() {
+                var src = img.src || _qrDataUrl;
+                if (!src || img.style.display === 'none') return;
+                if (zoomEl) closeZoom();
+                zoomEl = document.createElement('div');
+                zoomEl.className = 'lic-qr-zoom';
+                zoomEl.innerHTML =
+                    '<img alt="扫码添加管理员">' +
+                    '<div class="lic-qr-zoom-tip">点击任意处或按 Esc 关闭</div>';
+                var big = zoomEl.querySelector('img');
+                big.src = src;
+                zoomEl.addEventListener('click', function (ev) {
+                    ev.stopPropagation();
+                    closeZoom();
+                });
+                // 阻止点击穿透到 mask（mask 点空白会关掉整个申请弹窗）
+                zoomEl.addEventListener('mousedown', function (ev) { ev.stopPropagation(); });
+                document.body.appendChild(zoomEl);
+                document.addEventListener('keydown', onKey, true);
+            }
+
+            box.style.cursor = 'zoom-in';
+            box.title = '点击查看大图';
+            box.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openZoom();
+            });
         })();
         // 微信号（如需写死，改这一处即可）
         (function () {
