@@ -30,6 +30,31 @@
         } catch (e) {}
     }
 
+    // ==================== 复制 / 轻提示（本文件自带，不依赖 progress.js） ====================
+    // 客户版不加载 progress.js，而剧本的“选中即复制”、双击复制、点图标复制三个入口
+    // 全部走 window.__copyText。之前它只定义在 progress.js 里，导致复制完全失效。
+    window.__copyText = function (text) {
+        var s = String(text == null ? '' : text);
+        var done = false;
+        try {
+            var ta = document.createElement('textarea');
+            ta.value = s;
+            ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+            document.body.appendChild(ta);
+            ta.focus(); ta.select(); ta.setSelectionRange(0, s.length);
+            done = document.execCommand('copy');
+            document.body.removeChild(ta);
+        } catch (e) { done = false; }
+        if (!done) {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(s); done = true;
+                }
+            } catch (e2) { done = false; }
+        }
+        window.__copyFlash && window.__copyFlash(done ? '✅ 已复制' : '复制失败，请手动选中复制');
+    };
+
     // 转义（progress.js 里没有就用内置小函数）
     function escHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {

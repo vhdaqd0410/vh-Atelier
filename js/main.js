@@ -321,12 +321,16 @@
         }
         switchGroup('script');
     };
-    // 关闭剧本阅读：切回进度（按钮常驻，不隐藏）
+    // 关闭剧本阅读：切回上一个可用分组
+    // 客户版已删控进度板块，不能硬写 switchGroup('progress')（那会静默返回、停在原地）
     window.__atHideScriptGroup = function () {
         if (currentInGroup['script'] && groupBtns.length) {
             var active = null;
             groupBtns.forEach(function (b) { if (b.classList.contains('active')) active = b.dataset.group; });
-            if (active === 'script') switchGroup('progress');
+            if (active === 'script') {
+                var fallback = groups['progress'] ? 'progress' : (groups['media'] ? 'media' : null);
+                if (fallback) switchGroup(fallback);
+            }
         }
         delete currentInGroup['script'];
     };

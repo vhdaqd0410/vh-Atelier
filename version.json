@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.29",
-  "buildTime": "2026-11-03 16:45:42",
+  "version": "1.82.30",
+  "buildTime": "2026-11-06 17:20:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "注册体验重做：点「没有账号？注册并试用」现在弹出独立注册窗（邮箱 + 密码 + 确认密码），注册成功直接开通试用并显示实际有效期，不再要求先在上面的登录框填好账号密码。「申请授权」弹窗新增管理员联系方式二维码：把自己的二维码图片放到插件目录 collect/contact-qr.png 即可自动显示（该目录不会被在线更新覆盖），扫码即可加好友。同时修复授权界面事件重复绑定导致的弹窗叠层问题。"
+  "notes": "修复剧本复制失效（__copyText 原本只定义在已移除的 progress.js 里）；修复关闭剧本阅读器后切到不存在的分组；版本号与 manifest 对齐。"
 }

@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.30",
+      "date": "2026-11-06",
+      "title": "修复剧本复制失效与分组跳转",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "剧本面板「选中即复制」、双击复制、点击复制图标三个入口全部失效：__copyText 只定义在已从客户版移除的 progress.js 里，且调用处是 if 判空不兜底。现已把实现迁到 script.js 自身，含 execCommand 降级路径"
+        },
+        {
+          "type": "fix",
+          "text": "关闭剧本阅读器时 switchGroup('progress') 指向不存在的分组，静默返回停在原地。现改为按实际存在的分组自适应回退"
+        },
+        {
+          "type": "impr",
+          "text": "版本号与 manifest 对齐：此前 version.json 是 1.82.29、manifest 是 1.82.28，导致 PR 扩展管理器显示的版本与实际更新通道判定不一致"
+        }
+      ]
+    },
+    {
       "version": "1.82.28",
       "date": "2026-11-03",
       "title": "修复二维码放大层被弹窗遮罩盖住",
