@@ -387,42 +387,19 @@
                 }
                 row.appendChild(mainRow);
 
-                // ---- meta 行：时间 · 文件夹 · 分辨率 · 花费 · 时长 ----
-                var meta = document.createElement('div');
-                meta.className = 'en-task-meta';
-
-                var tm = document.createElement('span');
-                tm.textContent = '🕐 ' + fmtTime(t.CreatedAt);
-                meta.appendChild(tm);
-
-                var fd = document.createElement('span');
-                fd.className = 'en-task-folder';
-                fd.textContent = '📁 ' + (fmap ? fmap.name : ('文件夹' + fid));
-                fd.title = fmap ? ((fmap.name || '') + ' ' + (fmap.description || '')) : '';
-                meta.appendChild(fd);
-
-                if (t.resolution) {
-                    var rs = document.createElement('span');
-                    rs.textContent = '🎚 ' + t.resolution;
-                    meta.appendChild(rs);
-                }
-                if (t.costCents) {
-                    var cs = document.createElement('span');
-                    cs.textContent = '💰 ¥' + (t.costCents / 100).toFixed(2);
-                    meta.appendChild(cs);
-                }
-                if (t.outputDurationSeconds) {
-                    var ds = document.createElement('span');
-                    ds.textContent = '⏱ ' + Math.round(t.outputDurationSeconds) + 's';
-                    meta.appendChild(ds);
-                }
-                if (!done && t.progress !== undefined && t.progress !== null && t.progress > 0) {
-                    var pg = document.createElement('span');
-                    pg.textContent = '进度 ' + t.progress + '%';
-                    pg.style.color = '#ffd76a';
-                    meta.appendChild(pg);
-                }
-                row.appendChild(meta);
+                // 单行布局：状态已有，其余信息紧凑跟随（不再单独一行）
+                var meta = document.createElement('span');
+                meta.className = 'en-task-inline';
+                var parts = [];
+                if (t.CreatedAt) parts.push(fmtTime(t.CreatedAt));
+                parts.push(fmap ? fmap.name : ('文件夹' + fid));
+                if (t.resolution) parts.push(t.resolution);
+                if (t.costCents) parts.push('¥' + (t.costCents / 100).toFixed(2));
+                if (t.outputDurationSeconds) parts.push(Math.round(t.outputDurationSeconds) + 's');
+                if (!done && t.progress > 0) parts.push(t.progress + '%');
+                meta.textContent = parts.join(' · ');
+                meta.title = parts.join(' · ');
+                mainRow.insertBefore(meta, mainRow.children[mainRow.children.length - (done ? 1 : 0)] || null);
 
                 // 未完成的任务显示细进度条
                 if (!done && t.progress > 0 && t.progress < 100) {

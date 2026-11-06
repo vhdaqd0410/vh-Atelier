@@ -879,6 +879,18 @@
 
 .en-card-exp{min-width:22px !important;padding:0 5px !important;}
 </style>
+
+<style>
+/* 超分任务：单行紧凑布局 */
+#panel-upscale .en-task-inline{flex:0 1 auto;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:#7d8794;
+  margin-left:6px;user-select:text;}
+#panel-upscale .en-task-mainrow{display:flex;align-items:center;gap:5px;min-width:0;}
+#panel-upscale .en-task-name{flex:0 1 auto;min-width:40px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+#panel-upscale .en-task-state{flex:0 0 auto;}
+#panel-upscale .en-task{display:block;padding:4px 7px;}
+</style>
 </head>
 <body>
 

@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 保持一致",
   "versions": [
     {
+      "version": "2.14.0",
+      "date": "2026-11-06",
+      "title": "任务单行排版 + 更新按钮双保险",
+      "changes": [
+        {
+          "type": "impr",
+          "text": "超分任务改为单行：文件名 · 状态 · 时间/文件夹/分辨率/花费/时长 · 下载，行高从双行降到 40px"
+        },
+        {
+          "type": "fix",
+          "text": "更新按钮无响应：顶部四按钮增加 app.js 内的独立绑定（双保险），不再依赖 topbar.js 的执行时序"
+        },
+        {
+          "type": "impr",
+          "text": "更新按钮增加三级兜底：checkUpdateFlow → 内部 API → 宿主桥直连"
+        }
+      ]
+    },
+    {
       "version": "2.13.0",
       "date": "2026-11-06",
       "title": "任务排版对齐 PR + 最大化 + 缓存修复",

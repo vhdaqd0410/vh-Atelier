@@ -139,11 +139,39 @@
 
     // ---------- 更新 ----------
     function doUpdate() {
-        if (typeof window.checkUpdateFlow === 'function') {
-            window.checkUpdateFlow(false);
-        } else {
-            alert('更新功能未就绪');
+        // 不依赖 window 时序：多路径兜底
+        try {
+            if (typeof window.checkUpdateFlow === 'function') {
+                window.checkUpdateFlow(false);
+                return;
+            }
+        } catch (e) {}
+        try {
+            if (window.__appApi && typeof window.__appApi.checkUpdate === 'function') {
+                window.__appApi.checkUpdate(false);
+                return;
+            }
+        } catch (e) {}
+        // 最后兜底：直接走宿主桥，自己弹窗
+        var H = window.vhHost;
+        if (H && H.updateCheck) {
+            H.updateCheck().then(function (r) {
+                var d = (r && r.ok && r.data) ? r.data : {};
+                if (!d.newer) {
+                    alert('已是最新版本\n\n当前：' + (d.local || '?'));
+                    return;
+                }
+                if (confirm('发现新版本 ' + d.local + ' → ' + d.remote + '\n\n现在更新？')) {
+                    return H.updateRun(d).then(function (r2) {
+                        alert((r2 && r2.ok) ? '更新完成，请重开插件' : ('更新失败：' + ((r2 && r2.error) || '')));
+                    });
+                }
+            }).catch(function (e) {
+                alert('检查更新失败：' + (e.message || e));
+            });
+            return;
         }
+        alert('更新功能未就绪（宿主桥不可用）');
     }
 
     // ---------- 反馈 ----------
@@ -172,10 +200,11 @@
         if (bFb) bFb.addEventListener('click', goFeedback);
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', bind);
+    // 等 window.onload（此时所有脚本都已执行完），确保 app.js 的钩子已就位
+    if (document.readyState === 'complete') {
+        setTimeout(bind, 80);
     } else {
-        setTimeout(bind, 60);
+        window.addEventListener('load', function () { setTimeout(bind, 80); });
     }
 
     window.__vhTopBar = { openSite: openSite, showHistory: showHistory, doUpdate: doUpdate, goFeedback: goFeedback };

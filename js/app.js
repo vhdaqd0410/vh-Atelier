@@ -1688,6 +1688,7 @@ function safeStep(name, fn) {
 }
 
 async function init() {
+  try { bindTopButtonsSafe(); } catch (e) {}
   // 每一步独立容错，避免一处失败导致后续（尤其是连接状态）不执行
   safeStep('bindNav', bindNav);
   safeStep('bindTop', bindTop);
@@ -1758,6 +1759,50 @@ async function init() {
     var mm = window.__mllibPanel, mp = $('mllibEmpty');
     if (mp && !(mm && mm.hasData)) mp.style.display = '';
   } catch (e) {}
+}
+
+// 顶部按钮独立绑定（双保险：topbar.js 失效时仍可用）
+function bindTopButtonsSafe() {
+  try {
+    // 更新
+    var bu = document.getElementById('btnUpdate');
+    if (bu && !bu.__bound) {
+      bu.__bound = true;
+      bu.addEventListener('click', function () {
+        try { checkUpdateFlow(false); }
+        catch (e) { alert('更新出错：' + (e.message || e)); }
+      });
+    }
+    // 历史
+    var bh = document.getElementById('btnHistory');
+    if (bh && !bh.__bound) {
+      bh.__bound = true;
+      bh.addEventListener('click', function () {
+        try {
+          if (window.__vhTopBar && window.__vhTopBar.showHistory) window.__vhTopBar.showHistory();
+        } catch (e) { alert('历史打开失败：' + (e.message || e)); }
+      });
+    }
+    // 官网
+    var bs = document.getElementById('btnSite');
+    if (bs && !bs.__bound) {
+      bs.__bound = true;
+      bs.addEventListener('click', function () {
+        var H = window.vhHost;
+        var url = 'http://47.122.108.231:8888/';
+        if (H && H.openExternal) { try { H.openExternal(url); return; } catch (e) {} }
+        try { window.open(url, '_blank'); } catch (e) {}
+      });
+    }
+    // 反馈
+    var bf = document.getElementById('btnFeedback');
+    if (bf && !bf.__bound) {
+      bf.__bound = true;
+      bf.addEventListener('click', function () {
+        try { showPanel('feedback'); } catch (e) {}
+      });
+    }
+  } catch (e) { console.log('[topbtn] ' + e.message); }
 }
 
 window.addEventListener('DOMContentLoaded', init);

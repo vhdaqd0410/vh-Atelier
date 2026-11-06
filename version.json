@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.13.0",
+  "version": "2.14.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "删除误加的官网区块；超分任务排版与最大化照 PR 版实现；加强缓存清理避免按钮点了没反应。"
+  "notes": "超分任务改为单行紧凑排版；顶部四按钮增加独立绑定（双保险），修复更新按钮无响应。"
 }
