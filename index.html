@@ -891,6 +891,89 @@
 #panel-upscale .en-task-state{flex:0 0 auto;}
 #panel-upscale .en-task{display:block;padding:4px 7px;}
 </style>
+
+<style>
+/* ===== 关于页 ===== */
+.about-modal{
+  width:760px;max-width:calc(100vw - 40px);max-height:86vh;
+  background:#1e2229;border:1px solid #39414d;border-radius:12px;
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 24px 70px rgba(0,0,0,.75);
+}
+.about-head{
+  display:flex;align-items:center;gap:12px;padding:16px 20px;
+  border-bottom:1px solid #2b3340;
+  background:linear-gradient(180deg,rgba(83,125,150,.14),transparent);
+}
+.about-brand{flex:1;min-width:0;}
+.about-logo{
+  font-size:19px;font-weight:700;letter-spacing:.5px;
+  background:linear-gradient(92deg,#8ab4ff,#7fd68b);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.about-tag{font-size:11px;color:#7d8794;margin-top:3px;letter-spacing:.3px;}
+.about-head-right{display:flex;align-items:center;gap:7px;flex:0 0 auto;}
+.about-ver{
+  font-size:11px;color:#8ab4ff;background:rgba(138,180,255,.12);
+  border:1px solid rgba(138,180,255,.3);border-radius:5px;padding:2px 8px;
+  font-family:Consolas,monospace;
+}
+
+.about-body{padding:16px 20px 18px;overflow:auto;flex:1;}
+.about-intro{
+  font-size:12px;line-height:1.85;color:#a8b6c4;
+  padding:11px 13px;background:#161b21;border:1px solid #262e38;
+  border-left:3px solid #4a7fa6;border-radius:0 7px 7px 0;
+}
+.about-sec-title{
+  font-size:12px;font-weight:600;color:#dfe9f3;margin:18px 0 9px;
+  padding-left:8px;border-left:3px solid #537d96;
+}
+.about-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.about-card{
+  background:#161b21;border:1px solid #262e38;border-radius:8px;
+  padding:10px 12px;transition:border-color .15s,background .15s;
+}
+.about-card:hover{border-color:#39414d;background:#19202a;}
+.about-card-hd{display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+.about-ico{
+  width:22px;height:22px;flex:0 0 auto;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(83,125,150,.18);border-radius:6px;
+  font-size:12.5px;line-height:1;
+}
+.about-name{font-size:12.5px;font-weight:600;color:#dfe9f3;}
+.about-card-desc{font-size:11px;line-height:1.7;color:#8a97a5;}
+
+.about-list{display:flex;flex-direction:column;gap:6px;}
+.about-li{
+  font-size:11.5px;line-height:1.7;color:#9fb4c7;
+  padding:7px 11px;background:#161b21;border:1px solid #262e38;border-radius:6px;
+}
+.about-li b{color:#8ab4ff;font-weight:600;}
+
+.about-diag{margin-top:16px;border-top:1px solid #262e38;padding-top:10px;}
+.about-diag summary{
+  font-size:11px;color:#6f7c8a;cursor:pointer;user-select:none;
+  padding:3px 0;outline:none;
+}
+.about-diag summary:hover{color:#9fb4c7;}
+.about-diag .diag{
+  margin:8px 0 0;padding:9px 11px;background:#0e1116;border:1px solid #232a33;
+  border-radius:6px;font:10.5px/1.7 Consolas,monospace;color:#7d8794;
+  white-space:pre-wrap;max-height:180px;overflow:auto;
+}
+</style>
+
+<style>
+/* 通用弹层（关于/诊断等） */
+.overlay{
+  position:fixed;inset:0;z-index:100700;
+  background:rgba(0,0,0,.62);
+  display:flex;align-items:center;justify-content:center;
+  padding:16px;box-sizing:border-box;
+}
+</style>
 </head>
 <body>
 
@@ -1890,13 +1973,74 @@
 
 <!-- ==================== 关于弹层 ==================== -->
 <div class="overlay" id="aboutOverlay" style="display:none">
-  <div class="modal">
-    <div class="modal-head">
-      <span>关于 / 诊断</span>
-      <button class="tbtn" id="btnCheckUpdate" style="margin-right:6px;">检查更新</button>
-    <button class="tbtn" id="btnCloseAbout">关闭</button>
+  <div class="about-modal">
+    <div class="about-head">
+      <div class="about-brand">
+        <div class="about-logo">vh-Atelier</div>
+        <div class="about-tag">达芬奇版 · 影视后期工作台</div>
+      </div>
+      <div class="about-head-right">
+        <span class="about-ver" id="aboutVer">v?</span>
+        <button class="tbtn" id="btnCheckUpdate">检查更新</button>
+        <button class="tbtn" id="btnCloseAbout">关闭</button>
+      </div>
     </div>
-    <pre class="diag" id="aboutBody"></pre>
+
+    <div class="about-body" id="aboutBody">
+      <div class="about-intro">
+        面向短剧与漫剧量产的一体化工作台。素材、剧本、字幕、声音、审片、交付六大环节收进一个面板，
+        不必在多个软件之间来回切；能本地跑的都在本地跑，素材不出本机。
+      </div>
+
+      <div class="about-sec-title">核心工作台</div>
+      <div class="about-grid">
+        <div class="about-card">
+          <div class="about-card-hd"><span class="about-ico">🗂</span><span class="about-name">素材</span></div>
+          <div class="about-card-desc">目录树浏览，面包屑导航，双击展开；支持拖拽导入达芬奇媒体池。</div>
+        </div>
+        <div class="about-card">
+          <div class="about-card-hd"><span class="about-ico">📖</span><span class="about-name">剧本阅读</span></div>
+          <div class="about-card-desc">剧本分集阅读，章节跳转，字号行距可调，长文本不卡。</div>
+        </div>
+        <div class="about-card">
+          <div class="about-card-hd"><span class="about-ico">✨</span><span class="about-name">去字幕 / 超分</span></div>
+          <div class="about-card-desc">读序列自动导出上传云端处理，720P/1080P/2K 可选，完成后自动下载导入。内置超分站网页，可折叠展开。</div>
+        </div>
+        <div class="about-card">
+          <div class="about-card-hd"><span class="about-ico">💬</span><span class="about-name">字幕识别</span></div>
+          <div class="about-card-desc">Whisper 本地识别，结果可直接编辑、导入字幕轨、导出 SRT。</div>
+        </div>
+        <div class="about-card">
+          <div class="about-card-hd"><span class="about-ico">🎧</span><span class="about-name">声音</span></div>
+          <div class="about-card-desc">人声分离、Breeze 朗读、音效库、音乐库、网易云、短剧扒歌，六个板块收在声音组。</div>
+        </div>
+        <div class="about-card">
+          <div class="about-card-hd"><span class="about-ico">🎬</span><span class="about-name">审片</span></div>
+          <div class="about-card-desc">内嵌分秒帧，粘贴链接自动跳转；独立浏览器视图，不受内嵌限制。</div>
+        </div>
+        <div class="about-card">
+          <div class="about-card-hd"><span class="about-ico">📤</span><span class="about-name">多版本导出</span></div>
+          <div class="about-card-desc">一次配好多个版本（成片/无字幕/无音乐），批量串行渲染，自动归位字幕文件。</div>
+        </div>
+        <div class="about-card">
+          <div class="about-card-hd"><span class="about-ico">👤</span><span class="about-name">账号与授权</span></div>
+          <div class="about-card-desc">登录状态、到期时间、已授权插件、设备绑定、续期申请一站查看。</div>
+        </div>
+      </div>
+
+      <div class="about-sec-title">亮点</div>
+      <div class="about-list">
+        <div class="about-li"><b>本地优先</b>　人声分离、朗读、字幕识别全部本地运行，素材不上传</div>
+        <div class="about-li"><b>量产提效</b>　导出、超分、字幕一次配好批量跑，不用逐集手工操作</div>
+        <div class="about-li"><b>零配置</b>　模型与引擎已内嵌，装完即可用</div>
+        <div class="about-li"><b>在线更新</b>　代码在线升级，用户数据与模型不受影响</div>
+      </div>
+
+      <details class="about-diag">
+        <summary>运行环境与诊断</summary>
+        <pre class="diag" id="aboutDiag">读取中…</pre>
+      </details>
+    </div>
   </div>
 </div>
 

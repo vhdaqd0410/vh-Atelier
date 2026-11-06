@@ -1350,28 +1350,42 @@ async function previewSfxLocal(filePath) {
 // ==================== 关于 ====================
 
 async function showAbout() {
-  const body = $('aboutBody');
-  body.textContent = '读取中…';
-  $('aboutOverlay').style.display = 'flex';
+  // 只打开弹窗并填充「版本号 + 诊断区」，功能介绍是静态 HTML，不动它
+  var ov = $('aboutOverlay');
+  if (ov) ov.style.display = 'flex';
+
+  var diag = $('aboutDiag');
+  var verEl = $('aboutVer');
+  if (diag) diag.textContent = '读取中…';
+
   try {
-    const info = await call(H.appInfo);
-    const ping = await call(H.ping).catch(e => ({ error: e.message }));
-    body.textContent = [
-      '插件：vh-Atelier (DaVinci Resolve 版)',
-      '版本：' + info.pluginVersion,
-      '插件目录：' + info.pluginDir,
-      '',
-      '— 运行环境 —',
-      'Electron：' + info.electron,
-      'Node：' + info.node,
-      'Chromium：' + info.chrome,
-      '平台：' + info.platform + ' / ' + info.arch,
-      '',
-      '— Resolve 连接 —',
-      JSON.stringify(ping, null, 2)
-    ].join('\n');
+    const H = window.vhHost;
+    const info = H && H.appInfo ? await H.appInfo() : null;
+    const data = (info && info.data) ? info.data : {};
+    const ping = (H && H.ping) ? await H.ping().catch(e => ({ error: e.message })) : { error: '宿主桥不可用' };
+
+    if (verEl && data.pluginVersion) verEl.textContent = 'v' + data.pluginVersion;
+    // 顶部版本徽章也同步（原本显示 v? 说明初始化时没取到）
+    var topBadge = document.getElementById('verBadge');
+    if (topBadge && data.pluginVersion) topBadge.textContent = 'v' + data.pluginVersion;
+
+    if (diag) {
+      diag.textContent = [
+        '插件版本：' + (data.pluginVersion || '?'),
+        '插件目录：' + (data.pluginDir || '?'),
+        '',
+        '— 运行环境 —',
+        'Electron：' + (data.electron || '?'),
+        'Node：' + (data.node || '?'),
+        'Chromium：' + (data.chrome || '?'),
+        '平台：' + (data.platform || '?') + ' / ' + (data.arch || '?'),
+        '',
+        '— Resolve 连接 —',
+        JSON.stringify(ping, null, 2)
+      ].join('\n');
+    }
   } catch (e) {
-    body.textContent = '诊断失败：' + e.message;
+    if (diag) diag.textContent = '诊断读取失败：' + (e.message || e);
   }
 }
 
