@@ -46,10 +46,10 @@
     }
 
     var ROOT = extRoot();
-    var CFG_USER = ROOT ? path.join(ROOT, 'collect', 'feedback.json') : '';
-    var CFG_ROOT = ROOT ? path.join(ROOT, 'feedback.json') : '';
-    var CFG_SAMPLE = ROOT ? path.join(ROOT, 'feedback.example.json') : '';
-    var VER_FILE = ROOT ? path.join(ROOT, 'version.json') : '';
+    var CFG_USER = ROOT ? (path ? path.join(ROOT, 'collect', 'feedback.json') : '') : '';
+    var CFG_ROOT = ROOT ? (path ? path.join(ROOT, 'feedback.json') : '') : '';
+    var CFG_SAMPLE = ROOT ? (path ? path.join(ROOT, 'feedback.example.json') : '') : '';
+    var VER_FILE = ROOT ? (path ? path.join(ROOT, 'version.json') : '') : '';
 
     // 默认中转地址（自建反馈中心）
     var DEFAULT_ENDPOINT = 'http://47.122.108.231:17893/api/feedback';
@@ -103,7 +103,7 @@
             }
         } catch (e) {}
         try {
-            var f = ROOT ? path.join(ROOT, 'collect', 'error.log') : '';
+            var f = ROOT ? (path ? path.join(ROOT, 'collect', 'error.log') : '') : '';
             if (f && fs.existsSync(f)) {
                 var raw = fs.readFileSync(f, 'utf8').split('\n');
                 return raw.slice(-(maxLines || 40)).join('\n');

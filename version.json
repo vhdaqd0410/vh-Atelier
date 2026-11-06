@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "顶部新增官网/历史/更新/反馈四按钮（对齐 PR）；修复申请续期二维码不显示；超分任务列表显示时间/文件夹/分辨率/花费/时长；超分面板底部增加官网入口。"
+  "notes": "修复顶部四按钮（历史/更新/反馈全部可用）；修复申请续期二维码第二次打开不显示；超分面板底部内嵌超分网站（可折叠/展开/拖拽）；超分任务列表排版优化。"
 }

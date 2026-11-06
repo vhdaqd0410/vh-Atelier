@@ -4,6 +4,37 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 保持一致",
   "versions": [
     {
+      "version": "2.10.0",
+      "date": "2026-11-06",
+      "title": "顶部按钮修复 + 内嵌超分站 + 任务排版",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "历史按钮读取不到：改用 vhHost.fs 同步读取 changelog，路径取自 __vhExtRoot"
+        },
+        {
+          "type": "fix",
+          "text": "更新按钮点不开：checkUpdateFlow 未挂到 window，顶部按钮检测不到"
+        },
+        {
+          "type": "fix",
+          "text": "反馈按钮提示未加载：feedback.js 里 path 为 null 时崩溃，整个模块失效"
+        },
+        {
+          "type": "fix",
+          "text": "申请续期二维码第二次打开变空白：有缓存时没给新建的 img 赋值"
+        },
+        {
+          "type": "feat",
+          "text": "超分面板底部内嵌超分网站（subtitle.zztianqiao.com），支持折叠/展开/拖拽调高度"
+        },
+        {
+          "type": "impr",
+          "text": "超分任务列表改为卡片式布局，信息用网格排布，未完成任务显示进度条"
+        }
+      ]
+    },
+    {
       "version": "2.9.0",
       "date": "2026-11-06",
       "title": "顶部四按钮 + 二维码修复 + 任务详情",

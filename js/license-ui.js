@@ -956,7 +956,12 @@ window.__vhQrAsync = function () {
             var img = document.getElementById('licContactQr');
             var ph = document.getElementById('licContactQrPh');
             if (!img || !ph) return;
-            if (window.__vhQrCache) return;
+            // 有缓存也要给「新建的 img」赋值（关掉弹窗再打开时元素是新的），
+            // 否则第二次打开弹窗二维码就是空白。
+            if (window.__vhQrCache) {
+                apply({ url: window.__vhQrCache, path: '(cached)' });
+                return;
+            }
 
             function apply(found) {
                 if (!found) {

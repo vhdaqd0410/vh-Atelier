@@ -1435,6 +1435,12 @@ async function checkUpdateFlow(silent) {
   }
 }
 
+// showPanel 也挂全局（顶部反馈按钮要跳转）
+try { window.showPanel = showPanel; } catch (e) {}
+
+// 暴露给顶部按钮（topbar.js）调用
+window.checkUpdateFlow = checkUpdateFlow;
+
 // 登录成功后默认停在「账号」页（用户要求）
 (function () {
   function goAccount() {

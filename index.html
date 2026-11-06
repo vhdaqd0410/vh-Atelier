@@ -810,16 +810,32 @@
 </style>
 
 <style>
-/* 超分任务行（对齐 PR 版） */
-.en-task{display:flex;flex-direction:column;padding:5px 6px;border-bottom:1px dashed #232a33;}
-.en-task-mainrow{display:flex;align-items:center;gap:6px;}
+/* 超分任务行（优化排版） */
+.en-task{display:flex;flex-direction:column;gap:4px;padding:8px 9px;margin-bottom:6px;
+  background:#141a21;border:1px solid #232a33;border-radius:6px;transition:border-color .15s;}
+.en-task:hover{border-color:#33404e;}
+
+.en-task-mainrow{display:flex;align-items:center;gap:7px;}
 .en-task-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:#d6e2ee;font-weight:600;font-size:11px;}
-.en-task-state{flex:0 0 auto;font-weight:600;font-size:11px;}
-.en-task-meta{display:flex;align-items:center;gap:8px;margin-top:2px;font-size:10px;color:#8a97a5;}
-.en-task-folder{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7fb3d9;}
+  color:#dfe9f3;font-weight:600;font-size:12px;line-height:1.4;}
+
+.en-task-state{flex:0 0 auto;font-weight:600;font-size:10.5px;padding:1px 7px;border-radius:9px;
+  background:rgba(255,255,255,.05);white-space:nowrap;}
+
+.en-task-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));
+  gap:3px 10px;font-size:10.5px;color:#8a97a5;line-height:1.6;}
+.en-task-meta > span{display:flex;align-items:center;gap:3px;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.en-task-folder{color:#7fb3d9 !important;}
+
+.en-task-progress{height:3px;border-radius:2px;background:#1b2129;overflow:hidden;margin-top:1px;}
+.en-task-progress > i{display:block;height:100%;background:linear-gradient(90deg,#3d7f9e,#6cb6d8);}
+
 .en-task-dl{flex:0 0 auto;background:#1e3a2a !important;color:#7fd68b !important;
-  border:1px solid #2a5a3a !important;padding:1px 8px !important;font-size:10px !important;}
+  border:1px solid #2a5a3a !important;padding:2px 9px !important;font-size:10.5px !important;
+  border-radius:4px !important;cursor:pointer;}
+.en-task-dl:hover{background:#24462f !important;}
+
 </style>
 
 <style>
@@ -828,6 +844,19 @@
 .en-site-txt{flex:1;min-width:0;}
 .en-site-h{font-size:11.5px;font-weight:600;color:#cfd8e3;}
 .en-site-d{font-size:10.5px;color:#7d8794;margin-top:2px;}
+</style>
+
+<style>
+/* 超分站内嵌：分隔条 + 展开态 */
+.en-splitter{height:7px;margin:5px 0 2px;cursor:row-resize;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+.en-splitter-grip{width:52px;height:3px;border-radius:2px;background:#39414d;transition:background .15s;}
+.en-splitter:hover .en-splitter-grip,.en-splitter.active .en-splitter-grip{background:#5b7fa6;}
+/* 展开：隐藏操作区，内嵌站占满 */
+#panel-upscale.en-expanded .en-scroll{display:none !important;}
+#panel-upscale.en-expanded .en-splitter{display:none !important;}
+#panel-upscale.en-expanded #upscaleFrame{flex:1 1 auto !important;height:auto !important;}
+#panel-upscale{display:flex;flex-direction:column;}
+.en-scroll{flex:0 1 auto;min-height:0;overflow:auto;}
 </style>
 </head>
 <body>
@@ -1614,7 +1643,24 @@
       <div class="SCR-body" id="SCR-body"><div class="empty">选择一个剧本开始阅读</div></div>
     </div>
   </div>
-</div>
+<
+  <!-- 拖拽分隔条：上下拖动调整内嵌站高度 -->
+  <div class="en-splitter" id="upSplitter" title="上下拖动调整内嵌网站高度；双击还原默认">
+    <span class="en-splitter-grip"></span>
+  </div>
+
+  <!-- 超分站内嵌（折叠/展开，对齐 PR 版） -->
+  <div class="wb-nav" id="upNav" style="margin-top:4px;">
+    <button class="wb-nav-btn" id="upBack" title="后退">←</button>
+    <button class="wb-nav-btn" id="upFwd" title="前进">→</button>
+    <button class="wb-nav-btn" id="upReload" title="刷新">↻</button>
+    <button class="wb-nav-btn" id="btnUpscaleHome" title="回到超分站首页">🏠</button>
+    <button class="wb-nav-btn wb-nav-ext" id="upExternal" title="在外部浏览器打开">↗</button>
+    <input type="text" class="wb-nav-url" id="upUrl" placeholder="输入网址回车跳转">
+    <button class="wb-nav-btn" id="upExpand" title="展开：内嵌站占满整个面板（再点还原）">⤢</button>
+  </div>
+  <iframe id="upscaleFrame" style="flex:0 0 240px;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+/div>
 <div class="tab-panel" id="panel-upscale" style="display:none;">
   <div class="en-scroll">
 
@@ -1691,15 +1737,7 @@
     </div>
 
   
-    <!-- 底部官网入口（对齐 PR 版结构） -->
-    <div id="enSiteBlock" class="en-site-block">
-      <div class="en-site-txt">
-        <div class="en-site-h">vh-Atelier · 官网</div>
-        <div class="en-site-d">功能说明 · 截图 · 下载 · 提交需求</div>
-      </div>
-      <button id="enSiteBtn" class="site-btn" type="button">前往官网 ↗</button>
-    </div>
-</div>
+    
 </div>
 <div class="tab-panel" id="panel-shenpian" style="display:none;">
   <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">

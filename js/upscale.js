@@ -367,7 +367,10 @@
 
                 var stEl = document.createElement('span');
                 stEl.className = 'en-task-state';
-                stEl.style.color = taskColor(st);
+                var stColor = taskColor(st);
+                stEl.style.color = stColor;
+                stEl.style.border = '1px solid ' + stColor + '44';
+                stEl.style.background = stColor + '18';
                 stEl.textContent = taskStateLabel(st, mode);
                 mainRow.appendChild(stEl);
 
@@ -415,11 +418,21 @@
                 }
                 if (!done && t.progress !== undefined && t.progress !== null && t.progress > 0) {
                     var pg = document.createElement('span');
-                    pg.textContent = t.progress + '%';
+                    pg.textContent = '进度 ' + t.progress + '%';
                     pg.style.color = '#ffd76a';
                     meta.appendChild(pg);
                 }
                 row.appendChild(meta);
+
+                // 未完成的任务显示细进度条
+                if (!done && t.progress > 0 && t.progress < 100) {
+                    var pb = document.createElement('div');
+                    pb.className = 'en-task-progress';
+                    var pi = document.createElement('i');
+                    pi.style.width = Math.min(100, t.progress) + '%';
+                    pb.appendChild(pi);
+                    row.appendChild(pb);
+                }
 
                 box.appendChild(row);
             });
@@ -770,9 +783,147 @@
         bind();
         loadTimelines();
         loadPresets();
+        initSiteFrame();
         checkAccount();
         loadFolders();
         loadTasks();
+    }
+
+    // ==================== 内嵌超分站（折叠 / 展开 / 拖拽）====================
+    // 与 PR 版一致：导航条 + iframe + 可拖拽高度 + 展开占满面板
+    // 该站无 X-Frame-Options，可直接 iframe 内嵌
+    var SITE_HOME = 'http://subtitle.zztianqiao.com';
+
+    function initSiteFrame() {
+        var panel = document.getElementById('panel-upscale');
+        var frame = document.getElementById('upscaleFrame');
+        var splitter = document.getElementById('upSplitter');
+        var expandBtn = document.getElementById('upExpand');
+        if (!panel || !frame || !splitter) return;
+
+        var STORE_H = 'vh_upscale_frame_h';
+        var STORE_X = 'vh_upscale_expanded';
+        var DEFAULT_H = 240;
+        var MIN_TOP = 110;
+        var MIN_FRAME = 80;
+
+        var stack = [], idx = -1;
+
+        function clampH(h) {
+            var total = panel.clientHeight || 600;
+            var max = Math.max(MIN_FRAME, total - MIN_TOP);
+            if (h < MIN_FRAME) h = MIN_FRAME;
+            if (h > max) h = max;
+            return Math.round(h);
+        }
+        function applyH(h, save) {
+            h = clampH(h);
+            frame.style.flex = '0 0 ' + h + 'px';
+            frame.style.height = h + 'px';
+            if (save) { try { localStorage.setItem(STORE_H, String(h)); } catch (e) {} }
+            return h;
+        }
+        function isExpanded() { return panel.classList.contains('en-expanded'); }
+        function setExpanded(on, save) {
+            if (on) {
+                panel.classList.add('en-expanded');
+                if (expandBtn) { expandBtn.textContent = '⤡'; expandBtn.title = '还原：恢复操作区'; }
+            } else {
+                panel.classList.remove('en-expanded');
+                if (expandBtn) { expandBtn.textContent = '⤢'; expandBtn.title = '展开：内嵌站占满整个面板'; }
+                var saved = parseInt(localStorage.getItem(STORE_H) || DEFAULT_H, 10);
+                applyH(isNaN(saved) ? DEFAULT_H : saved, false);
+            }
+            if (save) { try { localStorage.setItem(STORE_X, on ? '1' : '0'); } catch (e) {} }
+        }
+
+        function syncUrl(u) {
+            var inp = document.getElementById('upUrl');
+            if (inp && u) inp.value = u;
+        }
+        function go(u, record) {
+            var url = String(u || '').trim();
+            if (!url) return;
+            if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+            frame.src = url;
+            syncUrl(url);
+            if (record !== false) {
+                stack = stack.slice(0, idx + 1);
+                stack.push(url);
+                idx = stack.length - 1;
+            }
+        }
+        function loadHome() { go(SITE_HOME); }
+
+        // 首次加载
+        loadHome();
+        // 恢复高度与展开态
+        var savedH = parseInt(localStorage.getItem(STORE_H) || DEFAULT_H, 10);
+        applyH(isNaN(savedH) ? DEFAULT_H : savedH, false);
+        if (localStorage.getItem(STORE_X) === '1') setExpanded(true, false);
+
+        // 拖拽
+        var dragging = false, startY = 0, startH = 0;
+        function onDown(e) {
+            if (isExpanded()) return;
+            dragging = true;
+            startY = e.clientY;
+            startH = frame.getBoundingClientRect().height;
+            splitter.classList.add('active');
+            document.body.style.cursor = 'row-resize';
+            try { e.preventDefault(); } catch (_) {}
+            frame.style.pointerEvents = 'none';
+        }
+        function onMove(e) {
+            if (!dragging) return;
+            applyH(startH + (startY - e.clientY), false);
+            try { e.preventDefault(); } catch (_) {}
+        }
+        function onUp() {
+            if (!dragging) return;
+            dragging = false;
+            splitter.classList.remove('active');
+            document.body.style.cursor = '';
+            frame.style.pointerEvents = '';
+            try { localStorage.setItem(STORE_H, String(Math.round(frame.getBoundingClientRect().height))); } catch (_) {}
+        }
+        splitter.addEventListener('mousedown', onDown);
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        splitter.addEventListener('dblclick', function () { applyH(DEFAULT_H, true); });
+
+        if (expandBtn) {
+            expandBtn.addEventListener('click', function () { setExpanded(!isExpanded(), true); });
+        }
+
+        // 导航按钮
+        var bBack = document.getElementById('upBack');
+        var bFwd = document.getElementById('upFwd');
+        var bReload = document.getElementById('upReload');
+        var bHome = document.getElementById('btnUpscaleHome');
+        var bExt = document.getElementById('upExternal');
+        var urlInp = document.getElementById('upUrl');
+
+        if (bBack) bBack.addEventListener('click', function () {
+            if (idx > 0) { idx--; frame.src = stack[idx]; syncUrl(stack[idx]); }
+        });
+        if (bFwd) bFwd.addEventListener('click', function () {
+            if (idx < stack.length - 1) { idx++; frame.src = stack[idx]; syncUrl(stack[idx]); }
+        });
+        if (bReload) bReload.addEventListener('click', function () {
+            try { frame.contentWindow.location.reload(); } catch (e) { frame.src = frame.src; }
+        });
+        if (bHome) bHome.addEventListener('click', loadHome);
+        if (bExt) bExt.addEventListener('click', function () {
+            var u = (urlInp && urlInp.value) || SITE_HOME;
+            if (H && H.openExternal) { try { H.openExternal(u); return; } catch (e) {} }
+            try { window.open(u, '_blank'); } catch (e) {}
+        });
+        if (urlInp) {
+            urlInp.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Enter') { ev.preventDefault(); go(urlInp.value); }
+            });
+        }
     }
 
     window.__upscalePanel = { init: init };

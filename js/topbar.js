@@ -21,24 +21,37 @@
 
     // ---------- 历史弹窗 ----------
     function loadChangelog() {
-        var H = window.vhHost;
-        if (!H || !H.readFileSync) return Promise.resolve(null);
+        // 达芬奇版：vhHost.fs 是同步垫片（readFileSync(p, enc) 带编码时直接返回字符串）。
+        // 插件根从 __vhExtRoot 拿（index.html 启动时注入）。
         try {
-            // 走宿主桥读插件目录下的 changelog.json
-            if (H.extRoot) {
-                return H.extRoot().then(function (r) {
-                    var root = (r && r.ok && r.data) ? String(r.data) : '';
-                    if (!root) return null;
-                    var p = root.replace(/\\/g, '/') + '/changelog.json';
-                    return H.readFileSync(p).then(function (rr) {
-                        if (!rr || !rr.ok) return null;
-                        var txt = typeof rr.data === 'string' ? rr.data : (rr.data && rr.data.content);
-                        if (!txt) return null;
-                        try { return JSON.parse(txt); } catch (e) { return null; }
-                    }).catch(function () { return null; });
+            var root = '';
+            try { if (window.__vhExtRoot) root = String(window.__vhExtRoot); } catch (e) {}
+            if (!root) return Promise.resolve(null);
+
+            var H = window.vhHost || {};
+            var fsShim = H.fs;
+            var p = root.replace(/\\/g, '/').replace(/\/+$/, '') + '/changelog.json';
+
+            // 1) 同步垫片（首选）
+            if (fsShim && fsShim.readFileSync) {
+                try {
+                    var txt = fsShim.readFileSync(p, 'utf8');
+                    if (typeof txt === 'string' && txt) {
+                        return Promise.resolve(JSON.parse(txt));
+                    }
+                } catch (e) { /* 继续尝试异步 */ }
+            }
+
+            // 2) 异步 IPC
+            if (H.readFileSync) {
+                return H.readFileSync(p).then(function (r) {
+                    if (!r || !r.ok) return null;
+                    var s = (typeof r.data === 'string') ? r.data : (r.data && r.data.content);
+                    if (!s) return null;
+                    try { return JSON.parse(s); } catch (e) { return null; }
                 }).catch(function () { return null; });
             }
-        } catch (e) {}
+        } catch (e) { /* 忽略 */ }
         return Promise.resolve(null);
     }
 
