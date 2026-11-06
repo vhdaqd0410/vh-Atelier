@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.23.0",
+  "version": "2.23.1",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修复大量操作提示静默（81 处 toast 因缺少全局钩子只写控制台）；移除已被 shenpian.js 覆盖且技术路线错误的 iframe-nav.js 死代码。"
+  "notes": "修复关于面板正文被\"正在检查更新\"整行替换的问题：updMsg 之前用 textContent 写 #aboutBody，会把功能介绍卡片抹掉。"
 }

@@ -1396,8 +1396,14 @@ async function showAbout() {
 // ==================== 在线更新 ====================
 
 function updMsg(text) {
-  const body = $('aboutBody');
-  if (body) body.textContent = text;
+  // 更新状态走顶部 toast，不再写进 #aboutBody。
+  // #aboutBody 里装的是整个「关于」面板的正式内容（功能介绍 + 卡片 + 亮点），
+  // 之前用 textContent 赋值会把整个面板抹掉只剩一行字。
+  // 自动检查更新一旦真跦通（之前服务端 bug 让它从未跦通），
+  // 打开关于面板就会变成只显示「正在检查更新…」。
+  var s = String(text == null ? '' : text);
+  if (window.__vhToast) { window.__vhToast(s); return; }
+  try { console.log('[update] ' + s); } catch (e) {}
 }
 
 /** 检查更新：有新版本则询问是否升级 */
