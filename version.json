@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.19.0",
+  "version": "2.20.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修复更新镜像缓存导致检测不到新版本；更新弹窗统一为版本历史样式。"
+  "notes": "更新过程改为在弹窗内实时显示：下载/解压日志、进度条、完成或失败结果。"
 }

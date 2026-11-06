@@ -1446,53 +1446,40 @@ async function checkUpdateFlow(silent) {
   if (silent) {
     D('[更新] 自动检查发现有新版本，弹窗');
   }
-  D('[更新] 弹确认窗');
-  let ok = false;
+  // 弹窗内完成整个更新流程（与 PR 版一致：不关窗、显示日志与进度）
+  var ok = false;
   try {
     ok = await showUpdConfirm(d);
-    D('[更新] 用户选择: ' + ok);
   } catch (e) {
-    D('[更新] 弹窗异常: ' + (e.message || e));
     if (!silent) updMsg('弹窗失败：' + (e.message || e));
     return;
   }
+  if (!ok) return;
 
-  if (!ok) { if (!silent) updMsg('已取消更新'); return; }
+  var UI = window.__updUI;
+  if (UI && UI.start) UI.start();
+  if (UI && UI.log) UI.log('开始更新 v' + d.local + ' → v' + d.remote);
 
-  D('[更新] 开始下载安装');
-  updMsg('正在下载并安装更新…\n\n请稍候，不要关闭插件。');
-
-  let r2;
+  var r2 = null;
   try {
     r2 = await H.updateRun(d);
-    D('[更新] updateRun 返回 ok=' + (r2 && r2.ok));
   } catch (e) {
-    D('[更新] updateRun 抛错: ' + (e.message || e));
-    updMsg('更新调用失败：' + (e.message || e));
+    if (UI && UI.done) UI.done(false, { error: (e.message || String(e)) });
     return;
   }
 
-  if (!r2 || !r2.ok) {
-    updMsg('更新失败：' + ((r2 && r2.error) || '未知错误') + '\n\n可重启 Resolve 后重试，或用部署包覆盖安装。');
-    D('[更新] 失败');
+  var d2 = (r2 && r2.data) ? r2.data : {};
+  var failed = (!r2 || !r2.ok) || (d2.ok === false);
+
+  if (failed) {
+    var em = (d2 && d2.error) || (r2 && r2.error) || '未知错误';
+    if (UI && UI.done) UI.done(false, { error: em });
     return;
   }
 
-  const d2 = r2.data || {};
-  if (d2.ok === false) {
-    updMsg('更新失败：' + (d2.error || '服务端返回失败') + '\n\n可重启 Resolve 后重试，或用部署包覆盖安装。');
-    D('[更新] 内层失败: ' + (d2.error || ''));
-    return;
+  if (UI && UI.done) {
+    UI.done(true, { count: d2.count || 0, version: d2.version || d.remote });
   }
-
-  D('[更新] 完成，文件数 ' + d2.count);
-  updMsg(
-    '✅ 更新完成\n\n' +
-    '已更新 ' + (d2.count || 0) + ' 个文件\n' +
-    '新版本：' + (d2.version || d.remote) + '\n' +
-    (d2.failedCount ? ('\n⚠ ' + d2.failedCount + ' 个文件写入失败（可能被占用）\n') : '') +
-    '\n请关闭插件面板并重新打开（或重启 Resolve）以生效。'
-  );
 }
 
 // showPanel 也挂全局（顶部反馈按钮要跳转）
@@ -1503,15 +1490,13 @@ window.checkUpdateFlow = checkUpdateFlow;
 
 /** 自绘更新确认弹窗（统一 UI，替代原生 confirm） */
 function showUpdConfirm(d) {
-  var D = function (m) { try { window.__vhDiagLog && window.__vhDiagLog(m); } catch (e) {} };
-  // kind: 'update' 有更新 | 'latest' 已是最新 | 'error' 检查失败
+  // 与 PR 版一致：弹窗不关闭，在弹窗里显示下载/解压/覆盖的日志、进度条与结果。
+  // resolve(true) 表示用户点了「立即更新」，由调用方执行；这里负责 UI。
   var kind = d.kind || 'update';
   return new Promise(function (resolve) {
-    D('[弹窗] 开始创建');
     var old = document.getElementById('updConfirmMask');
     if (old && old.parentNode) old.parentNode.removeChild(old);
 
-    // 与「版本更新历史」弹窗完全一致的视觉与结构
     var mask = document.createElement('div');
     mask.id = 'updConfirmMask';
     mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:100600;'
@@ -1522,80 +1507,128 @@ function showUpdConfirm(d) {
       + 'width:640px;max-width:100%;max-height:78vh;display:flex;flex-direction:column;'
       + 'box-shadow:0 16px 50px rgba(0,0,0,.7);';
 
+    var title = kind === 'latest' ? '已是最新版本'
+              : (kind === 'error' ? '检查更新失败' : '发现新版本');
+    var verLine = kind === 'latest'
+        ? ('v' + (d.remote || d.local || '?'))
+        : ('v' + (d.local || '?') + ' → v' + (d.remote || '?'));
+
     box.innerHTML =
         '<div style="display:flex;align-items:center;gap:8px;padding:12px 15px;'
       + 'border-bottom:1px solid #2b3340;">'
-      + '<span style="font-size:13.5px;font-weight:600;color:#e6eef6;">'
-      + (kind === 'latest' ? '已是最新版本' : (kind === 'error' ? '检查更新失败' : '发现新版本')) + '</span>'
-      + '<span style="font-size:11px;color:#7d8794;">'
-      + (kind === 'latest'
-          ? ('v' + (d.remote || d.local || '?'))
-          : ('v' + (d.local || '?') + ' → v' + (d.remote || '?'))) + '</span>'
+      + '<span id="updTitle" style="font-size:13.5px;font-weight:600;color:#e6eef6;">' + title + '</span>'
+      + '<span style="font-size:11px;color:#7d8794;">' + verLine + '</span>'
       + '<button id="updClose" class="secondary mini" style="margin-left:auto;">关闭</button>'
       + '</div>'
       + '<div id="updBody" style="padding:10px 15px;overflow:auto;flex:1;'
       + 'font-size:11.5px;color:#c3cfdb;line-height:1.7;"></div>'
-      + '<div style="display:flex;gap:8px;justify-content:flex-end;padding:10px 15px 13px;'
-      + 'border-top:1px solid #2b3340;">'
-      + (kind === 'update'
-          ? '<button id="updCancel" class="secondary mini">稍后</button>'
-            + '<button id="updOk" class="primary mini">立即更新</button>'
-          : '<button id="updOk" class="primary mini">知道了</button>')
-      + '</div>';
+      + '<div id="updFoot" style="display:flex;gap:8px;justify-content:flex-end;padding:10px 15px 13px;'
+      + 'border-top:1px solid #2b3340;"></div>';
 
     mask.appendChild(box);
     document.body.appendChild(mask);
 
-    // 内容区
-    var body = document.getElementById('updBody');
-    var html = '';
+    var bodyEl = document.getElementById('updBody');
+    var footEl = document.getElementById('updFoot');
 
+    // ---- 内容区 ----
+    var html = '';
     if (kind === 'latest') {
       html = '<div style="color:#8a97a5;padding:6px 0;">当前已是最新版本，无需更新。</div>';
-      if (body) body.innerHTML = html;
-      D('[弹窗] 已是最新');
     } else if (kind === 'error') {
       html = '<div style="color:#ff9a9a;padding:6px 0;">' + (d.error || '未知错误') + '</div>'
            + '<div style="font-size:10.5px;color:#7d8794;margin-top:10px;">'
            + '可检查网络后重试；多次失败可用部署包覆盖安装。</div>';
-      if (body) body.innerHTML = html;
-      D('[弹窗] 检查失败');
     } else {
-    if (d.buildTime) {
-      html += '<div style="font-size:11px;color:#6f7c8a;margin-bottom:8px;">发布时间 '
-           + d.buildTime + '</div>';
+      if (d.buildTime) html += '<div style="font-size:11px;color:#6f7c8a;margin-bottom:8px;">发布时间 ' + d.buildTime + '</div>';
+      if (d.notes) {
+        var lines = String(d.notes).split(/[\uff1b;\n]/).filter(function (x) { return x.trim(); });
+        html += '<div style="margin-bottom:6px;">更新内容</div><ul style="margin:0;padding-left:16px;">';
+        lines.forEach(function (l) { html += '<li style="margin:3px 0;">' + l.trim() + '</li>'; });
+        html += '</ul>';
+      }
+      html += '<div style="margin-top:12px;font-size:10.5px;color:#7d8794;">'
+           + '更新约需 1 分钟，完成后需重新打开插件面板。</div>';
     }
-    if (d.notes) {
-      var lines = String(d.notes).split(/[\uff1b;\n]/).filter(function (x) { return x.trim(); });
-      html += '<div style="margin-bottom:6px;">更新内容</div>';
-      html += '<ul style="margin:0;padding-left:16px;">';
-      lines.forEach(function (l) {
-        html += '<li style="margin:3px 0;">' + l.trim() + '</li>';
-      });
-      html += '</ul>';
-    } else {
-      html += '<div style="color:#8a97a5;">本次更新未提供说明。</div>';
-    }
-    html += '<div style="margin-top:12px;font-size:10.5px;color:#7d8794;">'
-         + '更新约需 1 分钟，完成后需重新打开插件面板。</div>';
-    if (body) body.innerHTML = html;
-    }
+    if (bodyEl) bodyEl.innerHTML = html;
 
-    D('[弹窗] 已挂到页面, mask=' + !!document.getElementById('updConfirmMask')
-      + ' bodyLen=' + (body ? body.innerHTML.length : 0));
-
-    function close(v) {
-      if (mask.parentNode) mask.parentNode.removeChild(mask);
-      D('[弹窗] 关闭, 返回值=' + v);
+    // ---- 按钮区 ----
+    function clearBtns() { if (footEl) footEl.innerHTML = ''; }
+    function addBtn(text, primary, fn, id) {
+      var b = document.createElement('button');
+      b.className = primary ? 'primary mini' : 'secondary mini';
+      b.textContent = text;
+      if (id) b.id = id;
+      b.addEventListener('click', fn);
+      if (footEl) footEl.appendChild(b);
+      return b;
+    }
+    // keepMask=true 时保留弹窗（用于「立即更新」后继续在窗内显示进度）
+    function close(v, keepMask) {
+      if (!keepMask && mask.parentNode) mask.parentNode.removeChild(mask);
       resolve(v);
     }
-    var bOk = document.getElementById('updOk');
-    var bCancel = document.getElementById('updCancel');
+
     var bClose = document.getElementById('updClose');
-    if (bOk) bOk.addEventListener('click', function () { close(true); });
-    if (bCancel) bCancel.addEventListener('click', function () { close(false); });
     if (bClose) bClose.addEventListener('click', function () { close(false); });
     mask.addEventListener('click', function (ev) { if (ev.target === mask) close(false); });
+
+    if (kind === 'update') {
+      addBtn('稍后', false, function () { close(false); }, 'updCancel');
+      addBtn('立即更新', true, function () { close(true, true); }, 'updOk');  // 保留弹窗
+    } else {
+      addBtn('知道了', true, function () { close(false); }, 'updOk');
+    }
+
+    // 供外部在更新过程中改 UI
+    window.__updUI = {
+      // 切换到「更新中」界面
+      start: function () {
+        if (bodyEl) {
+          bodyEl.innerHTML = '<div id="updLog" style="font:11px/1.6 Consolas,monospace;'
+            + 'background:#141414;border:1px solid #232a33;border-radius:4px;padding:7px 9px;'
+            + 'max-height:220px;overflow:auto;white-space:pre-wrap;color:#9fe0a0;"></div>'
+            + '<div style="height:5px;background:#1b1f26;border-radius:3px;margin-top:10px;overflow:hidden;">'
+            + '<div id="updBar" style="height:100%;width:0%;background:linear-gradient(90deg,#3d7f9e,#6cb6d8);'
+            + 'transition:width .25s;"></div></div>';
+        }
+        clearBtns();
+        var t = document.getElementById('updTitle');
+        if (t) t.textContent = '正在更新';
+        if (bClose) bClose.disabled = true;
+      },
+      log: function (msg) {
+        var el = document.getElementById('updLog');
+        if (el) {
+          el.textContent += msg + '\n';
+          el.scrollTop = el.scrollHeight;
+        }
+      },
+      progress: function (pct) {
+        var bar = document.getElementById('updBar');
+        if (bar) bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      },
+      done: function (ok, info) {
+        var t = document.getElementById('updTitle');
+        if (t) t.textContent = ok ? '更新完成' : '更新失败';
+        if (bClose) bClose.disabled = false;
+        clearBtns();
+        if (ok) {
+          window.__updUI.log('');
+          window.__updUI.log('✅ 更新完成，共 ' + (info.count || 0) + ' 个文件');
+          window.__updUI.progress(100);
+          addBtn('稍后', false, function () { close(false); }, 'updLater');
+          addBtn('重开面板', true, function () {
+            try { location.reload(); } catch (e) {}
+            close(false);
+          }, 'updReload');
+        } else {
+          window.__updUI.log('');
+          window.__updUI.log('✗ 更新失败：' + (info.error || '未知错误'));
+          addBtn('关闭', true, function () { close(false); }, 'updOkClose');
+        }
+      }
+    };
   });
 }
 
