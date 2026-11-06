@@ -4,6 +4,33 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.15",
+      "date": "2026-11-06",
+      "title": "新增「关于与诊断」面板",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "顶栏新增「关于」按钮，点开是完整功能介绍：品牌区、8 张核心工作台卡片（含进度与语音克隆）、4 条亮点"
+        },
+        {
+          "type": "feat",
+          "text": "可折叠「运行环境与诊断」：插件版本与分支、插件目录、构建时间、PR 宿主版本、CEP 版本、Chromium/Node、平台与 CPU/内存"
+        },
+        {
+          "type": "feat",
+          "text": "诊断区含 CosyVoice3 引擎状态：目录、_internal 运行时、cosyvoice 源码、模型权重（缺哪个文件会给数量）、Python 解释器，分就绪/部分缺失/未配置三态"
+        },
+        {
+          "type": "feat",
+          "text": "弹窗右上角「检查更新」直连既有更新模块；点遮罩空白处、Esc、关闭按钮三种方式退出；窄面板自动切单列"
+        },
+        {
+          "type": "note",
+          "text": "诊断只写 #aboutVer / #aboutDiag 两个独立容器，不碰功能介绍正文 —— 达芬奇版曾因更新状态用 textContent 写正文容器导致整个面板被替换成一行字"
+        }
+      ]
+    },
+    {
       "version": "1.82.14",
       "date": "2026-10-30",
       "title": "修复短剧第一集只有 10 秒、后续集数下载失败",
