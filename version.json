@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.20.0",
+  "version": "2.21.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "更新过程改为在弹窗内实时显示：下载/解压日志、进度条、完成或失败结果。"
+  "notes": "新增：超分任务与日志支持最大化；更新过程在弹窗内实时显示进度与结果；超分任务改为单行紧凑排版；修复授权遮罩阻塞界面。"
 }
