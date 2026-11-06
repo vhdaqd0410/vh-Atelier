@@ -107,16 +107,17 @@
     function unlock(info) {
         if (unlocked) return;
         unlocked = true;
-        if (maskEl && maskEl.parentNode) {
-            maskEl.style.opacity = '0';
-            setTimeout(function () {
-                if (maskEl && maskEl.parentNode) maskEl.parentNode.removeChild(maskEl);
-                maskEl = null;
-            }, 220);
-        }
-        onUnlockCallbacks.forEach(function (fn) {
-            try { fn(info); } catch (e) {}
-        });
+        // 统一走 hideMaskAndEnter：它内部会按 id 扫一遍，
+        // 避免 maskEl 变量没同步时遮罩残留、把整个界面挡住。
+        try {
+            if (maskEl && maskEl.parentNode) maskEl.style.opacity = '0';
+        } catch (e) {}
+        setTimeout(function () {
+            try { hideMaskAndEnter(); } catch (e) {}
+            try {
+                onUnlockCallbacks.forEach(function (fn) { try { fn(info); } catch (e) {} });
+            } catch (e) {}
+        }, 200);
         // 无论从哪条路径解锁（登录 / 卡密 / 自动登录 / 本地有效），
         // 都让账号面板重绘一次，避免显示过期的"未登录"。
         try {
@@ -817,42 +818,27 @@
     function start() {
         var st = LIC.localStatus();
 
-        // 有 token 且本地有效：先锁屏显示「正在校验」，
-        // 等服务器结果再决定放行 —— 这样管理员删号/停用后，
-        // 下次启动会立刻要求重新授权，而不是继续用本地缓存。
+        // 【核心原则】本地有效 → 立刻放行，不让校验阻塞界面。
+        // 之前是「先锁屏等服务器」，结果服务器慢或没网时遮罩一直盖着，
+        // 整个面板所有按钮都点不动（表现为更新按钮毫无反应）。
         if (st.canUse) {
-            buildMask();
-            msg('正在校验授权…', '');
+            unlocked = true;
+            hideMaskAndEnter();          // 先撤罩，界面马上可用
+            // 后台静默校验：只有明确失效才重新锁上
             LIC.verify().then(function (r) {
-                if (r && r.ok) {
-                    unlocked = true;
-                    hideMaskAndEnter();
-                    return;
-                }
-                // 失败：区分网络问题与账号问题
+                if (r && r.ok) return;
+                if (r && r.reason === 'net') return;   // 网络问题不打扰
+                if (r && r.reason === 'offline-expired') return;
+                // 服务端明确拒绝（删号/吊销/未开通/到期）→ 锁回去
+                try { LIC.logout({ forget: true }); } catch (e) {}
                 unlocked = false;
-                if (r && r.reason === 'net') {
-                    // 纯网络故障：本地仍有效就放行（离线宽限已由 verify 判断过）
-                    var off = LIC.canUseOffline();
-                    if (off && off.ok) {
-                        unlocked = true;
-                        hideMaskAndEnter();
-                        return;
-                    }
-                    msg('无法连接授权服务器，请检查网络后重试', 'err');
-                } else {
-                    // 账号被删 / 授权被吊销 / 未开通本插件 / 到期：清登录态并要求重新授权
-                    try { LIC.logout({ forget: true }); } catch (e) {}
-                    msg('授权已失效：' + ((r && r.msg) || '请联系管理员开通') + '。请重新登录或激活。', 'err');
-                }
-            }).catch(function () {
-                unlocked = false;
-                msg('授权校验出错，请重试', 'err');
-            });
+                buildMask();
+                msg('授权已失效：' + ((r && r.msg) || '请联系管理员开通') + '。请重新登录或激活。', 'err');
+            }).catch(function () { /* 校验异常不阻塞使用 */ });
             return;
         }
 
-        // 本地就不可用 → 直接显示遮罩
+        // 本地就不可用 → 显示遮罩
         buildMask();
         if (st.reason === 'expired') {
             msg('授权已到期（' + new Date(LIC.state().expiresAt).toLocaleDateString('zh-CN') +
@@ -868,10 +854,23 @@
 
     // 校验通过后撤掉遮罩，并触发一次「已解锁」回调（账号页等靠它刷新）
     function hideMaskAndEnter() {
+        // 不依赖 maskEl 变量（可能因作用域没同步），直接按 id 兜底删除，
+        // 否则遮罩会一直盖在页面上，所有按钮都点不动。
         try {
             if (maskEl && maskEl.parentNode) {
                 maskEl.parentNode.removeChild(maskEl);
-                maskEl = null;
+            }
+        } catch (e) {}
+        maskEl = null;
+        try {
+            var byId = document.getElementById('licMask');
+            if (byId && byId.parentNode) byId.parentNode.removeChild(byId);
+        } catch (e) {}
+        // 再扫一遍所有可能的遮罩节点
+        try {
+            var nodes = document.querySelectorAll('#licMask, .lic-mask');
+            for (var i = 0; i < nodes.length; i++) {
+                if (nodes[i].parentNode) nodes[i].parentNode.removeChild(nodes[i]);
             }
         } catch (e) {}
         try {
@@ -880,6 +879,28 @@
     }
 
     // 对外接口
+    // 【保险】若已授权却仍有遮罩残留，定时强制清除。
+    // 遮罩是 fixed 全屏 + 超高 z-index，一旦残留会让所有按钮失效，
+    // 这种"界面看着正常但点不动"的问题很难排查，所以加这道兜底。
+    (function () {
+        var tries = 0;
+        var timer = setInterval(function () {
+            tries++;
+            try {
+                var mask = document.getElementById('licMask');
+                if (!mask) { clearInterval(timer); return; }
+                var isOk = false;
+                try { isOk = LIC.localStatus().canUse; } catch (e) {}
+                if (isOk) {
+                    mask.parentNode && mask.parentNode.removeChild(mask);
+                    maskEl = null;
+                    console.log('[lic] 已授权但遮罩残留，已强制清除');
+                }
+            } catch (e) {}
+            if (tries > 20) clearInterval(timer);
+        }, 400);
+    })();
+
     window.__vhLicenseUI = {
         start: start,
         unlock: unlock,

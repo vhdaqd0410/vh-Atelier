@@ -1384,9 +1384,11 @@ function updMsg(text) {
 
 /** 检查更新：有新版本则询问是否升级 */
 async function checkUpdateFlow(silent) {
+  // 立刻给出可见反馈：即使后面失败，用户也知道按钮点到了
+  if (!silent) updMsg('正在检查更新…');
   const H = window.vhHost;
   if (!H || !H.updateCheck) {
-    if (!silent) updMsg('宿主桥不支持在线更新');
+    if (!silent) updMsg('宿主桥不支持在线更新（vhHost.updateCheck 缺失）');
     return;
   }
   if (!silent) updMsg('正在检查更新…');

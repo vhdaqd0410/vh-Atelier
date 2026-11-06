@@ -271,18 +271,20 @@
                 var j = null;
                 try { j = JSON.parse(txt); } catch (e) {}
                 if (!j) {
-                    // 服务器有响应但内容异常：属于服务端问题，按「拒绝」处理
+                    // 内容异常：只有 401/403 才算拒绝；5xx/其他视为服务端故障（走离线宽限）
                     var e1 = new Error('服务器返回异常（HTTP ' + xhr.status + '）');
                     e1.httpStatus = xhr.status;
-                    e1.denied = true;
+                    e1.denied = (xhr.status === 401 || xhr.status === 403);
                     reject(e1);
                     return;
                 }
                 if (j.ok) { resolve(j); return; }
-                // 服务端明确拒绝（401/403 等）：标记 denied，不再走离线宽限
+                // 服务端明确拒绝（401/403）：标记 denied，不再走离线宽限。
+                // 注意：不能用「所有非 ok」都算拒绝——服务器 5xx、维护、限流
+                // 都会走到这里，那样会把用户的 token 误清掉、遮罩弹出来。
                 var e2 = new Error(j.msg || j.error || ('HTTP ' + xhr.status));
                 e2.httpStatus = xhr.status;
-                e2.denied = true;
+                e2.denied = (xhr.status === 401 || xhr.status === 403);
                 reject(e2);
             };
             xhr.onerror = function () {
@@ -481,10 +483,15 @@
             // 必须立即失败并清掉本地 token，不能走离线宽限，
             // 否则「管理端删了账号，插件仍显示已授权」。
             if (e && e.denied) {
-                state.token = '';
-                state.receipt = null;
-                saveState();
-                return { ok: false, reason: 'denied', msg: e.message || '授权已失效', httpStatus: e.httpStatus };
+                // 双重确认：只有 401/403 才清 token
+                var code = e.httpStatus;
+                if (code === 401 || code === 403) {
+                    state.token = '';
+                    state.receipt = null;
+                    saveState();
+                    return { ok: false, reason: 'denied', msg: e.message || '授权已失效', httpStatus: code };
+                }
+                // 非 401/403 即使标了 denied 也不清，走离线宽限
             }
             // 只有真正的网络故障才走离线宽限
             var offline = canUseOffline();
