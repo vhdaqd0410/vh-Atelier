@@ -4,6 +4,33 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 保持一致",
   "versions": [
     {
+      "version": "2.11.0",
+      "date": "2026-11-06",
+      "title": "修复面板损坏 + 更新弹窗统一",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "超分面板与剧本面板打开空白：插入内嵌站时 HTML 结构错位，已从版本库重建"
+        },
+        {
+          "type": "impr",
+          "text": "更新确认弹窗改为插件统一风格，不再用系统原生对话框"
+        },
+        {
+          "type": "fix",
+          "text": "点更新后无任何反应：updateRun 返回的是 {ok,data}，data.ok=false 时未提示失败原因"
+        },
+        {
+          "type": "impr",
+          "text": "更新进度与结果同时显示在顶部状态栏，关于弹窗没开也能看到"
+        },
+        {
+          "type": "impr",
+          "text": "启动时清理更多缓存目录（Local Storage/Session/IndexedDB），避免加载旧代码"
+        }
+      ]
+    },
+    {
       "version": "2.10.0",
       "date": "2026-11-06",
       "title": "顶部按钮修复 + 内嵌超分站 + 任务排版",

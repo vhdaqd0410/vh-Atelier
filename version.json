@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修复顶部四按钮（历史/更新/反馈全部可用）；修复申请续期二维码第二次打开不显示；超分面板底部内嵌超分网站（可折叠/展开/拖拽）；超分任务列表排版优化。"
+  "notes": "修复超分面板与剧本面板被破坏（HTML 结构错位）；更新弹窗改为插件统一风格；更新失败会明确提示原因；强化启动缓存清理，避免加载旧代码。"
 }
