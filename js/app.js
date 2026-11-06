@@ -1406,23 +1406,22 @@ async function checkUpdateFlow(silent) {
       return;
     }
     // 有新版本
-    const ok = confirm(
-      '发现新版本\n\n' +
-      '当前：' + d.local + '\n' +
-      '最新：' + d.remote + '\n' +
-      (d.buildTime ? ('发布时间：' + d.buildTime + '\n') : '') +
-      (d.notes ? ('\n更新内容：\n' + d.notes.slice(0, 400) + '\n') : '') +
-      '\n现在更新？（约 1 分钟，完成后需重开插件）'
-    );
-    if (!ok) { updMsg('已取消更新'); return; }
+    const ok = await showUpdConfirm(d);
+    if (!ok) { if (!silent) updMsg('已取消更新'); return; }
 
     updMsg('正在下载并安装更新…\n\n请稍候，不要关闭插件。');
-    const r2 = await H.updateRun(d);
+    let r2;
+    try { r2 = await H.updateRun(d); }
+    catch (e) { updMsg('更新调用失败：' + (e.message || e)); return; }
     if (!r2 || !r2.ok) {
-      updMsg('更新失败：' + ((r2 && r2.error) || '未知错误'));
+      updMsg('更新失败：' + ((r2 && r2.error) || '未知错误') + '\n\n可重启 Resolve 后重试，或用部署包覆盖安装。');
       return;
     }
     const d2 = r2.data || {};
+    if (d2.ok === false) {
+      updMsg('更新失败：' + (d2.error || '服务端返回失败') + '\n\n可重启 Resolve 后重试，或用部署包覆盖安装。');
+      return;
+    }
     updMsg(
       '✅ 更新完成\n\n' +
       '已更新 ' + (d2.count || 0) + ' 个文件\n' +
@@ -1440,6 +1439,65 @@ try { window.showPanel = showPanel; } catch (e) {}
 
 // 暴露给顶部按钮（topbar.js）调用
 window.checkUpdateFlow = checkUpdateFlow;
+
+/** 自绘更新确认弹窗（统一 UI，替代原生 confirm） */
+function showUpdConfirm(d) {
+  return new Promise(function (resolve) {
+    var old = document.getElementById('updConfirmMask');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+
+    var mask = document.createElement('div');
+    mask.id = 'updConfirmMask';
+    mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:100500;'
+      + 'display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#1e2229;border:1px solid #39414d;border-radius:10px;'
+      + 'width:460px;max-width:100%;box-shadow:0 16px 50px rgba(0,0,0,.7);overflow:hidden;';
+
+    var notesHtml = '';
+    if (d.notes) {
+      var lines = String(d.notes).split(/[\uff1b;\n]/).filter(function (x) { return x.trim(); });
+      notesHtml = '<div style="margin-top:10px;padding:9px 11px;background:#161b21;'
+        + 'border:1px solid #262e38;border-radius:6px;max-height:150px;overflow:auto;">'
+        + '<div style="font-size:10.5px;color:#7d8794;margin-bottom:5px;">更新内容</div>'
+        + lines.map(function (l) {
+            return '<div style="font-size:11px;color:#c3cfdb;line-height:1.7;">\u00b7 ' + l.trim() + '</div>';
+          }).join('')
+        + '</div>';
+    }
+
+    box.innerHTML =
+      '<div style="padding:14px 16px 10px;border-bottom:1px solid #2b3340;">'
+      + '<div style="font-size:14px;font-weight:600;color:#e6eef6;">\u53d1\u73b0\u65b0\u7248\u672c</div>'
+      + '<div style="font-size:11px;color:#8a97a5;margin-top:4px;">'
+      + '\u5f53\u524d v' + d.local + ' \u2192 \u6700\u65b0 v' + d.remote
+      + (d.buildTime ? (' \u00b7 ' + d.buildTime) : '') + '</div>'
+      + '</div>'
+      + '<div style="padding:12px 16px;">'
+      + notesHtml
+      + '<div style="font-size:10.5px;color:#7d8794;margin-top:10px;">'
+      + '\u66f4\u65b0\u7ea6\u9700 1 \u5206\u949f\uff0c\u5b8c\u6210\u540e\u9700\u91cd\u65b0\u6253\u5f00\u63d2\u4ef6\u9762\u677f\u3002</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;padding:10px 16px 14px;">'
+      + '<button id="updCancel" class="secondary mini">\u7a0d\u540e</button>'
+      + '<button id="updOk" class="primary mini">\u7acb\u5373\u66f4\u65b0</button>'
+      + '</div>';
+
+    mask.appendChild(box);
+    document.body.appendChild(mask);
+
+    function close(v) {
+      if (mask.parentNode) mask.parentNode.removeChild(mask);
+      resolve(v);
+    }
+    var bOk = document.getElementById('updOk');
+    var bCancel = document.getElementById('updCancel');
+    if (bOk) bOk.addEventListener('click', function () { close(true); });
+    if (bCancel) bCancel.addEventListener('click', function () { close(false); });
+    mask.addEventListener('click', function (ev) { if (ev.target === mask) close(false); });
+  });
+}
 
 // 登录成功后默认停在「账号」页（用户要求）
 (function () {
