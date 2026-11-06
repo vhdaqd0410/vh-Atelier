@@ -1412,14 +1412,20 @@ async function checkUpdateFlow(silent) {
     D('[更新] updateCheck 返回 ok=' + (r && r.ok));
   } catch (e) {
     D('[更新] updateCheck 抛错: ' + (e.message || e));
-    if (!silent) updMsg('检查更新失败：' + (e.message || e));
+    if (!silent) {
+      try { await showUpdConfirm({ kind: 'error', local: '', remote: '', error: (e.message || String(e)) }); }
+      catch (e2) { updMsg('检查更新失败：' + (e.message || e)); }
+    }
     return;
   }
 
   if (!r || !r.ok) {
     const errMsg = (r && r.error) || '未知错误';
     D('[更新] 失败: ' + errMsg);
-    if (!silent) updMsg('检查失败：' + errMsg);
+    if (!silent) {
+      try { await showUpdConfirm({ kind: 'error', local: '', remote: '', error: errMsg }); }
+      catch (e) { updMsg('检查失败：' + errMsg); }
+    }
     return;
   }
 
@@ -1427,11 +1433,19 @@ async function checkUpdateFlow(silent) {
   D('[更新] local=' + d.local + ' remote=' + d.remote + ' newer=' + d.newer);
 
   if (!d.newer) {
-    if (!silent) updMsg('已是最新版本\n\n当前版本：' + d.local);
-    D('[更新] 已是最新');
+    D('[更新] 已是最新，弹窗告知');
+    if (!silent) {
+      try { await showUpdConfirm({ kind: 'latest', local: d.local, remote: d.remote }); }
+      catch (e) { updMsg('已是最新版本：' + d.local); }
+    }
     return;
   }
 
+  // 自动检查（silent）只在有新版本时才弹窗，避免每次启动都打扰；
+  // 手动检查（点按钮）任何结果都弹。
+  if (silent) {
+    D('[更新] 自动检查发现有新版本，弹窗');
+  }
   D('[更新] 弹确认窗');
   let ok = false;
   try {
@@ -1489,59 +1503,98 @@ window.checkUpdateFlow = checkUpdateFlow;
 
 /** 自绘更新确认弹窗（统一 UI，替代原生 confirm） */
 function showUpdConfirm(d) {
+  var D = function (m) { try { window.__vhDiagLog && window.__vhDiagLog(m); } catch (e) {} };
+  // kind: 'update' 有更新 | 'latest' 已是最新 | 'error' 检查失败
+  var kind = d.kind || 'update';
   return new Promise(function (resolve) {
+    D('[弹窗] 开始创建');
     var old = document.getElementById('updConfirmMask');
     if (old && old.parentNode) old.parentNode.removeChild(old);
 
+    // 与「版本更新历史」弹窗完全一致的视觉与结构
     var mask = document.createElement('div');
     mask.id = 'updConfirmMask';
-    mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:100500;'
+    mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:100600;'
       + 'display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
 
     var box = document.createElement('div');
     box.style.cssText = 'background:#1e2229;border:1px solid #39414d;border-radius:10px;'
-      + 'width:460px;max-width:100%;box-shadow:0 16px 50px rgba(0,0,0,.7);overflow:hidden;';
-
-    var notesHtml = '';
-    if (d.notes) {
-      var lines = String(d.notes).split(/[\uff1b;\n]/).filter(function (x) { return x.trim(); });
-      notesHtml = '<div style="margin-top:10px;padding:9px 11px;background:#161b21;'
-        + 'border:1px solid #262e38;border-radius:6px;max-height:150px;overflow:auto;">'
-        + '<div style="font-size:10.5px;color:#7d8794;margin-bottom:5px;">更新内容</div>'
-        + lines.map(function (l) {
-            return '<div style="font-size:11px;color:#c3cfdb;line-height:1.7;">\u00b7 ' + l.trim() + '</div>';
-          }).join('')
-        + '</div>';
-    }
+      + 'width:640px;max-width:100%;max-height:78vh;display:flex;flex-direction:column;'
+      + 'box-shadow:0 16px 50px rgba(0,0,0,.7);';
 
     box.innerHTML =
-      '<div style="padding:14px 16px 10px;border-bottom:1px solid #2b3340;">'
-      + '<div style="font-size:14px;font-weight:600;color:#e6eef6;">\u53d1\u73b0\u65b0\u7248\u672c</div>'
-      + '<div style="font-size:11px;color:#8a97a5;margin-top:4px;">'
-      + '\u5f53\u524d v' + d.local + ' \u2192 \u6700\u65b0 v' + d.remote
-      + (d.buildTime ? (' \u00b7 ' + d.buildTime) : '') + '</div>'
+        '<div style="display:flex;align-items:center;gap:8px;padding:12px 15px;'
+      + 'border-bottom:1px solid #2b3340;">'
+      + '<span style="font-size:13.5px;font-weight:600;color:#e6eef6;">'
+      + (kind === 'latest' ? '已是最新版本' : (kind === 'error' ? '检查更新失败' : '发现新版本')) + '</span>'
+      + '<span style="font-size:11px;color:#7d8794;">'
+      + (kind === 'latest'
+          ? ('v' + (d.remote || d.local || '?'))
+          : ('v' + (d.local || '?') + ' → v' + (d.remote || '?'))) + '</span>'
+      + '<button id="updClose" class="secondary mini" style="margin-left:auto;">关闭</button>'
       + '</div>'
-      + '<div style="padding:12px 16px;">'
-      + notesHtml
-      + '<div style="font-size:10.5px;color:#7d8794;margin-top:10px;">'
-      + '\u66f4\u65b0\u7ea6\u9700 1 \u5206\u949f\uff0c\u5b8c\u6210\u540e\u9700\u91cd\u65b0\u6253\u5f00\u63d2\u4ef6\u9762\u677f\u3002</div>'
-      + '</div>'
-      + '<div style="display:flex;gap:8px;justify-content:flex-end;padding:10px 16px 14px;">'
-      + '<button id="updCancel" class="secondary mini">\u7a0d\u540e</button>'
-      + '<button id="updOk" class="primary mini">\u7acb\u5373\u66f4\u65b0</button>'
+      + '<div id="updBody" style="padding:10px 15px;overflow:auto;flex:1;'
+      + 'font-size:11.5px;color:#c3cfdb;line-height:1.7;"></div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;padding:10px 15px 13px;'
+      + 'border-top:1px solid #2b3340;">'
+      + (kind === 'update'
+          ? '<button id="updCancel" class="secondary mini">稍后</button>'
+            + '<button id="updOk" class="primary mini">立即更新</button>'
+          : '<button id="updOk" class="primary mini">知道了</button>')
       + '</div>';
 
     mask.appendChild(box);
     document.body.appendChild(mask);
 
+    // 内容区
+    var body = document.getElementById('updBody');
+    var html = '';
+
+    if (kind === 'latest') {
+      html = '<div style="color:#8a97a5;padding:6px 0;">当前已是最新版本，无需更新。</div>';
+      if (body) body.innerHTML = html;
+      D('[弹窗] 已是最新');
+    } else if (kind === 'error') {
+      html = '<div style="color:#ff9a9a;padding:6px 0;">' + (d.error || '未知错误') + '</div>'
+           + '<div style="font-size:10.5px;color:#7d8794;margin-top:10px;">'
+           + '可检查网络后重试；多次失败可用部署包覆盖安装。</div>';
+      if (body) body.innerHTML = html;
+      D('[弹窗] 检查失败');
+    } else {
+    if (d.buildTime) {
+      html += '<div style="font-size:11px;color:#6f7c8a;margin-bottom:8px;">发布时间 '
+           + d.buildTime + '</div>';
+    }
+    if (d.notes) {
+      var lines = String(d.notes).split(/[\uff1b;\n]/).filter(function (x) { return x.trim(); });
+      html += '<div style="margin-bottom:6px;">更新内容</div>';
+      html += '<ul style="margin:0;padding-left:16px;">';
+      lines.forEach(function (l) {
+        html += '<li style="margin:3px 0;">' + l.trim() + '</li>';
+      });
+      html += '</ul>';
+    } else {
+      html += '<div style="color:#8a97a5;">本次更新未提供说明。</div>';
+    }
+    html += '<div style="margin-top:12px;font-size:10.5px;color:#7d8794;">'
+         + '更新约需 1 分钟，完成后需重新打开插件面板。</div>';
+    if (body) body.innerHTML = html;
+    }
+
+    D('[弹窗] 已挂到页面, mask=' + !!document.getElementById('updConfirmMask')
+      + ' bodyLen=' + (body ? body.innerHTML.length : 0));
+
     function close(v) {
       if (mask.parentNode) mask.parentNode.removeChild(mask);
+      D('[弹窗] 关闭, 返回值=' + v);
       resolve(v);
     }
     var bOk = document.getElementById('updOk');
     var bCancel = document.getElementById('updCancel');
+    var bClose = document.getElementById('updClose');
     if (bOk) bOk.addEventListener('click', function () { close(true); });
     if (bCancel) bCancel.addEventListener('click', function () { close(false); });
+    if (bClose) bClose.addEventListener('click', function () { close(false); });
     mask.addEventListener('click', function (ev) { if (ev.target === mask) close(false); });
   });
 }
