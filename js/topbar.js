@@ -193,8 +193,7 @@
         var bHis = $('btnHistory');
         if (bHis) bHis.addEventListener('click', showHistory);
 
-        var bUpd = $('btnUpdate');
-        if (bUpd) bUpd.addEventListener('click', doUpdate);
+        // 更新按钮由 app.js 的内联 onclick 处理，此处不重复绑定
 
         var bFb = $('btnFeedback');
         if (bFb) bFb.addEventListener('click', goFeedback);

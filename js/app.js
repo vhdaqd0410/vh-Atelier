@@ -1384,56 +1384,101 @@ function updMsg(text) {
 
 /** 检查更新：有新版本则询问是否升级 */
 async function checkUpdateFlow(silent) {
-  // 立刻给出可见反馈：即使后面失败，用户也知道按钮点到了
-  if (!silent) updMsg('正在检查更新…');
-  const H = window.vhHost;
-  if (!H || !H.updateCheck) {
-    if (!silent) updMsg('宿主桥不支持在线更新（vhHost.updateCheck 缺失）');
+  const D = function (m) { try { window.__vhDiagLog && window.__vhDiagLog(m); } catch (e) {} };
+  // 防抖：自动检查 + 按钮点击可能同时触发，会弹多个窗互相覆盖
+  if (window.__updRunning) {
+    D('[更新] 已有检查在进行，忽略');
     return;
   }
-  if (!silent) updMsg('正在检查更新…');
-  try {
-    const r = await H.updateCheck();
-    if (!r || !r.ok) {
-      if (!silent) updMsg('检查失败：' + ((r && r.error) || '未知错误'));
-      return;
-    }
-    const d = r.data || {};
-    if (!d.newer) {
-      if (!silent) {
-        updMsg('已是最新版本\n\n当前版本：' + d.local + '\n服务器版本：' + d.remote);
-      } else {
-        console.log('[update] 已是最新：' + d.local);
-      }
-      return;
-    }
-    // 有新版本
-    const ok = await showUpdConfirm(d);
-    if (!ok) { if (!silent) updMsg('已取消更新'); return; }
+  window.__updRunning = true;
+  setTimeout(function () { window.__updRunning = false; }, 10000);
 
-    updMsg('正在下载并安装更新…\n\n请稍候，不要关闭插件。');
-    let r2;
-    try { r2 = await H.updateRun(d); }
-    catch (e) { updMsg('更新调用失败：' + (e.message || e)); return; }
-    if (!r2 || !r2.ok) {
-      updMsg('更新失败：' + ((r2 && r2.error) || '未知错误') + '\n\n可重启 Resolve 后重试，或用部署包覆盖安装。');
-      return;
-    }
-    const d2 = r2.data || {};
-    if (d2.ok === false) {
-      updMsg('更新失败：' + (d2.error || '服务端返回失败') + '\n\n可重启 Resolve 后重试，或用部署包覆盖安装。');
-      return;
-    }
-    updMsg(
-      '✅ 更新完成\n\n' +
-      '已更新 ' + (d2.count || 0) + ' 个文件\n' +
-      '新版本：' + (d2.version || d.remote) + '\n' +
-      (d2.failedCount ? ('\n⚠ ' + d2.failedCount + ' 个文件写入失败（可能被占用）\n') : '') +
-      '\n请关闭插件面板并重新打开（或重启 Resolve）以生效。'
-    );
-  } catch (e) {
-    if (!silent) updMsg('更新出错：' + (e.message || e));
+  D('[更新] 进入 checkUpdateFlow silent=' + silent);
+
+  if (!silent) updMsg('正在检查更新…');
+
+  const H = window.vhHost;
+  D('[更新] vhHost=' + (H ? 'ok' : '缺失') + ' updateCheck=' + (H ? typeof H.updateCheck : 'N/A'));
+  if (!H || !H.updateCheck) {
+    if (!silent) updMsg('宿主桥不支持在线更新（vhHost.updateCheck 缺失）');
+    D('[更新] 中止：updateCheck 不存在');
+    return;
   }
+
+  D('[更新] 调用 H.updateCheck()');
+  let r;
+  try {
+    r = await H.updateCheck();
+    D('[更新] updateCheck 返回 ok=' + (r && r.ok));
+  } catch (e) {
+    D('[更新] updateCheck 抛错: ' + (e.message || e));
+    if (!silent) updMsg('检查更新失败：' + (e.message || e));
+    return;
+  }
+
+  if (!r || !r.ok) {
+    const errMsg = (r && r.error) || '未知错误';
+    D('[更新] 失败: ' + errMsg);
+    if (!silent) updMsg('检查失败：' + errMsg);
+    return;
+  }
+
+  const d = r.data || {};
+  D('[更新] local=' + d.local + ' remote=' + d.remote + ' newer=' + d.newer);
+
+  if (!d.newer) {
+    if (!silent) updMsg('已是最新版本\n\n当前版本：' + d.local);
+    D('[更新] 已是最新');
+    return;
+  }
+
+  D('[更新] 弹确认窗');
+  let ok = false;
+  try {
+    ok = await showUpdConfirm(d);
+    D('[更新] 用户选择: ' + ok);
+  } catch (e) {
+    D('[更新] 弹窗异常: ' + (e.message || e));
+    if (!silent) updMsg('弹窗失败：' + (e.message || e));
+    return;
+  }
+
+  if (!ok) { if (!silent) updMsg('已取消更新'); return; }
+
+  D('[更新] 开始下载安装');
+  updMsg('正在下载并安装更新…\n\n请稍候，不要关闭插件。');
+
+  let r2;
+  try {
+    r2 = await H.updateRun(d);
+    D('[更新] updateRun 返回 ok=' + (r2 && r2.ok));
+  } catch (e) {
+    D('[更新] updateRun 抛错: ' + (e.message || e));
+    updMsg('更新调用失败：' + (e.message || e));
+    return;
+  }
+
+  if (!r2 || !r2.ok) {
+    updMsg('更新失败：' + ((r2 && r2.error) || '未知错误') + '\n\n可重启 Resolve 后重试，或用部署包覆盖安装。');
+    D('[更新] 失败');
+    return;
+  }
+
+  const d2 = r2.data || {};
+  if (d2.ok === false) {
+    updMsg('更新失败：' + (d2.error || '服务端返回失败') + '\n\n可重启 Resolve 后重试，或用部署包覆盖安装。');
+    D('[更新] 内层失败: ' + (d2.error || ''));
+    return;
+  }
+
+  D('[更新] 完成，文件数 ' + d2.count);
+  updMsg(
+    '✅ 更新完成\n\n' +
+    '已更新 ' + (d2.count || 0) + ' 个文件\n' +
+    '新版本：' + (d2.version || d.remote) + '\n' +
+    (d2.failedCount ? ('\n⚠ ' + d2.failedCount + ' 个文件写入失败（可能被占用）\n') : '') +
+    '\n请关闭插件面板并重新打开（或重启 Resolve）以生效。'
+  );
 }
 
 // showPanel 也挂全局（顶部反馈按钮要跳转）
