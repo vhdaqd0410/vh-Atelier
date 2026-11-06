@@ -1,0 +1,229 @@
+{
+  "_说明": "达芬奇版版本更新历史。插件启动检查更新时读取，弹窗展示变更，并提供独立历史面板。",
+  "_字段": "versions[].changes[].type 支持 feat(新增) / fix(修复) / impr(改进) / note(说明)",
+  "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 保持一致",
+  "versions": [
+    {
+      "version": "2.9.0",
+      "date": "2026-11-06",
+      "title": "顶部四按钮 + 二维码修复 + 任务详情",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "顶部新增「官网 / 历史 / 更新 / 反馈」四个按钮，行为对齐 PR 客户版"
+        },
+        {
+          "type": "feat",
+          "text": "历史按钮展示完整版本变更记录（changelog）"
+        },
+        {
+          "type": "fix",
+          "text": "申请续期二维码不显示：读取函数被定义在弹窗内部，且 readdir 返回结构解析错"
+        },
+        {
+          "type": "feat",
+          "text": "超分任务列表显示时间/文件夹/分辨率/花费/时长，与 PR 一致"
+        },
+        {
+          "type": "feat",
+          "text": "超分面板底部增加官网入口区块"
+        }
+      ]
+    },
+    {
+      "version": "2.8.0",
+      "date": "2026-11-06",
+      "title": "接入在线更新",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "顶部「检查更新」按钮 + 版本徽章点击检查 + 启动静默检查"
+        },
+        {
+          "type": "feat",
+          "text": "主进程更新器（纯 Node zip 解压，630 文件约 20ms）"
+        },
+        {
+          "type": "feat",
+          "text": "大文件（ffmpeg/模型/breeze/ncm）排除在仓库外，随部署包分发"
+        },
+        {
+          "type": "impr",
+          "text": "服务端镜像回源改为 codeload 优先，解决 raw.githubusercontent 超时"
+        }
+      ]
+    },
+    {
+      "version": "2.7.0",
+      "date": "2026-11-05",
+      "title": "二维码随包分发 + 修复授权失效检测",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "管理员删号后插件仍显示已授权：服务端 401 不再走离线宽限，直接判失效并清 token"
+        },
+        {
+          "type": "feat",
+          "text": "启动强制校验授权，失效自动退出登录并提示重新授权"
+        },
+        {
+          "type": "fix",
+          "text": "申请续期二维码空白：无 fs 时自动转宿主桥异步读取"
+        },
+        {
+          "type": "feat",
+          "text": "二维码放入 assets/ 随包分发，别人安装也能看到"
+        }
+      ]
+    },
+    {
+      "version": "2.6.0",
+      "date": "2026-11-05",
+      "title": "超分面板补齐 PR 能力",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "导出预设下拉（读取 Resolve 渲染预设列表）"
+        },
+        {
+          "type": "feat",
+          "text": "设置弹窗：导出临时目录与下载目录记住，不用每次选"
+        },
+        {
+          "type": "fix",
+          "text": "上传失败：导出结果无完整路径，改为扫目录找本次产物"
+        },
+        {
+          "type": "fix",
+          "text": "删号后启动未检测授权"
+        }
+      ]
+    },
+    {
+      "version": "2.5.0",
+      "date": "2026-11-04",
+      "title": "超分文件夹与任务列表修复",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "上传文件夹与任务列表空白：Python 返回 JSON 数组，主进程只认对象，全部丢弃"
+        },
+        {
+          "type": "fix",
+          "text": "folderId 字段大小写错误导致文件夹名匹配不上"
+        },
+        {
+          "type": "feat",
+          "text": "任务列表显示进度百分比与所属文件夹"
+        }
+      ]
+    },
+    {
+      "version": "2.4.0",
+      "date": "2026-11-03",
+      "title": "分开授权 + 账号面板对齐 PR",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "达芬奇版独立插件 ID com.vh.atelier.resolve，与 PR 分开申请授权"
+        },
+        {
+          "type": "feat",
+          "text": "服务端 verify 增加插件范围校验"
+        },
+        {
+          "type": "impr",
+          "text": "账号面板改用 PR 原版 account-panel.js（环形进度/插件列表/设备/续期）"
+        },
+        {
+          "type": "feat",
+          "text": "超分支持读取区间（选中片段 / 游标片段），导出按 MarkIn/MarkOut 渲染指定区间"
+        },
+        {
+          "type": "feat",
+          "text": "管理台增加试用用户筛选"
+        }
+      ]
+    },
+    {
+      "version": "2.3.0",
+      "date": "2026-11-02",
+      "title": "修复授权模块未加载",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "license-ui.js 先于 license-client.js 加载导致授权模块失效"
+        },
+        {
+          "type": "fix",
+          "text": "path 为 null 时直接崩溃，整个授权 IIFE 中断"
+        },
+        {
+          "type": "feat",
+          "text": "朗读面板补波形显示与自动识别参考文字"
+        },
+        {
+          "type": "feat",
+          "text": "审片改用 WebContentsView（站点 X-Frame-Options 禁止 iframe）"
+        }
+      ]
+    },
+    {
+      "version": "2.2.0",
+      "date": "2026-11-01",
+      "title": "修复超分与账号面板",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "window.prompt 在 Electron 被禁用，账号设置改用自绘弹层"
+        },
+        {
+          "type": "fix",
+          "text": "时间线列表结构解析错误，读不到时间线"
+        },
+        {
+          "type": "feat",
+          "text": "账号面板实现真实功能（状态/到期/设备/续期/退出）"
+        }
+      ]
+    },
+    {
+      "version": "2.1.0",
+      "date": "2026-10-31",
+      "title": "新增 Breeze 朗读、审片、反馈、账号",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Breeze 朗读（本地 GGUF 引擎 + 2.35GB 模型内嵌）"
+        },
+        {
+          "type": "feat",
+          "text": "审片（分秒帧）内嵌浏览器"
+        },
+        {
+          "type": "feat",
+          "text": "反馈中心对齐 PR 客户版"
+        },
+        {
+          "type": "feat",
+          "text": "账号与授权（登录后可用）"
+        }
+      ]
+    },
+    {
+      "version": "2.0.0",
+      "date": "2026-10-30",
+      "title": "移除音乐聚合",
+      "changes": [
+        {
+          "type": "impr",
+          "text": "按需求下线音乐聚合板块（lxserver 64MB + 相关面板）"
+        },
+        {
+          "type": "impr",
+          "text": "安装目录从 420.9MB 降到 384.6MB"
+        }
+      ]
+    }
+  ]
+}

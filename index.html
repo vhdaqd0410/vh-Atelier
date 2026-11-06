@@ -797,6 +797,38 @@
 .en-clip-info{flex:1;min-width:0;font-size:11px;color:#8a97a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .en-clip-info.en-clip-ok{color:#7ddc9a;}
 </style>
+
+<style>
+/* 顶部官网按钮（对齐 PR 版） */
+.site-btn{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 11px;
+  font-size:11px;font-weight:600;font-family:inherit;color:#d9c9ff;
+  background:rgba(139,92,246,.16);border:1px solid rgba(139,92,246,.55);
+  border-radius:6px;cursor:pointer;white-space:nowrap;outline:none;flex:0 0 auto;
+  transition:background .16s,border-color .16s;}
+.site-btn:hover{background:rgba(139,92,246,.28);border-color:rgba(139,92,246,.85);}
+.site-btn svg{flex:0 0 auto;}
+</style>
+
+<style>
+/* 超分任务行（对齐 PR 版） */
+.en-task{display:flex;flex-direction:column;padding:5px 6px;border-bottom:1px dashed #232a33;}
+.en-task-mainrow{display:flex;align-items:center;gap:6px;}
+.en-task-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:#d6e2ee;font-weight:600;font-size:11px;}
+.en-task-state{flex:0 0 auto;font-weight:600;font-size:11px;}
+.en-task-meta{display:flex;align-items:center;gap:8px;margin-top:2px;font-size:10px;color:#8a97a5;}
+.en-task-folder{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7fb3d9;}
+.en-task-dl{flex:0 0 auto;background:#1e3a2a !important;color:#7fd68b !important;
+  border:1px solid #2a5a3a !important;padding:1px 8px !important;font-size:10px !important;}
+</style>
+
+<style>
+.en-site-block{display:flex;align-items:center;gap:10px;padding:9px 11px;margin-top:8px;
+  background:#161b21;border:1px solid #262e38;border-radius:7px;}
+.en-site-txt{flex:1;min-width:0;}
+.en-site-h{font-size:11.5px;font-weight:600;color:#cfd8e3;}
+.en-site-d{font-size:10.5px;color:#7d8794;margin-top:2px;}
+</style>
 </head>
 <body>
 
@@ -807,6 +839,14 @@
   <span class="sep"></span>
   <span class="ver-badge" id="verBadge" title="当前插件版本与加载时间">v?</span>
   <button type="button" id="btnRefreshTop" class="log-btn" title="重新读取当前项目">↻ 刷新</button>
+  <button type="button" id="btnSite" class="site-btn" title="打开官网：功能说明 / 截图 / 下载 / 提需求">
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9.2"/><path d="M2.8 12h18.4M12 2.8c2.5 3 3.8 5.9 3.8 9.2S14.5 18.2 12 21.2c-2.5-3-3.8-5.9-3.8-9.2S9.5 5.8 12 2.8z"/></svg>
+    官网<span class="sd"></span>
+  </button>
+  <span class="sep"></span>
+  <button type="button" id="btnHistory" class="log-btn" title="版本更新历史：每个版本改了什么、修了什么">📋 历史</button>
+  <button type="button" id="btnUpdate" class="log-btn" title="检查更新（从服务器拉取最新代码）">⬆ 更新</button>
+  <button type="button" id="btnFeedback" class="log-btn" title="在线反馈：提 Bug / 需求 / 意见">📮 反馈</button>
   <button type="button" id="btnAbout" class="log-btn" title="关于与诊断">ℹ 关于</button>
 </div>
 <div class="sub" id="subLine">连接中…</div>
@@ -1650,7 +1690,16 @@
       </div>
     </div>
 
-  </div>
+  
+    <!-- 底部官网入口（对齐 PR 版结构） -->
+    <div id="enSiteBlock" class="en-site-block">
+      <div class="en-site-txt">
+        <div class="en-site-h">vh-Atelier · 官网</div>
+        <div class="en-site-d">功能说明 · 截图 · 下载 · 提交需求</div>
+      </div>
+      <button id="enSiteBtn" class="site-btn" type="button">前往官网 ↗</button>
+    </div>
+</div>
 </div>
 <div class="tab-panel" id="panel-shenpian" style="display:none;">
   <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
@@ -1817,6 +1866,7 @@
 <script src="js/feedback-ui.js"></script>
 <script src="js/feedback.js"></script>
 <script src="js/wave-mini.js"></script>
+<script src="js/topbar.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -20,7 +20,7 @@
 
     function bindEls() {
         ['enSeqList', 'enRefSeq', 'enPreset', 'enFolder', 'enRes', 'enMode',
-         'enGrabClip', 'enClipSrc', 'enClipInfo', 'enPreset', 'enSettings',
+         'enGrabClip', 'enClipSrc', 'enClipInfo', 'enPreset', 'enSettings', 'enSiteBtn',
          'enGo', 'enStop', 'enAccount', 'enAccHint', 'enProgWrap', 'enProgFill',
          'enProgText', 'enProgPct', 'enActHint', 'enTaskList', 'enTaskHint',
          'enTaskRefresh', 'enTaskDlSel', 'enTaskPickAll', 'enLogList', 'enLogClear'
@@ -280,6 +280,33 @@
     }
 
     // ---------- 任务列表 ----------
+    // ---------- 任务显示辅助（对齐 PR）----------
+    function taskStateLabel(st, mode) {
+        var base = { pending: '待处理', queued: '排队中', running: (mode === 'erase' ? '处理中' : '超分中'),
+                     succeeded: '✅ 完成', failed: '❌ 失败' };
+        return base[st] || st || '';
+    }
+    function taskColor(st) {
+        if (st === 'succeeded') return '#7fd68b';
+        if (st === 'failed') return '#ff9a9a';
+        if (st === 'running') return '#ffd76a';
+        if (st === 'queued' || st === 'pending') return '#9a9a9a';
+        return '#9a9a9a';
+    }
+    function fmtTime(iso) {
+        try {
+            var d = new Date(String(iso || '').replace('T', ' ').replace(/\+08:00$/, ''));
+            if (isNaN(d.getTime())) return iso ? String(iso).slice(5, 16) : '';
+            function p2(x) { return x < 10 ? '0' + x : '' + x; }
+            return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+        } catch (e) { return ''; }
+    }
+    function prettyName(fn) {
+        var n = String(fn || '');
+        n = n.replace(/_nosub\.mp4$/i, '.mp4');
+        return n;
+    }
+
     function loadTasks() {
         if (!H || !H.pyEnhance) return;
         var mode = el.enMode ? el.enMode.value : 'enhance';
@@ -308,51 +335,92 @@
                 var id = String(t.ID != null ? t.ID : (t.id != null ? t.id : ''));
                 var st = String(t.status || '');
                 var done = (st === 'succeeded');
-                var fname = t.sourceFileName || t.outputFileName || t.name || t.fileName || ('任务 ' + id);
-                // 真实字段是 folderId（小写 d），兼容两种写法
+
+                // 文件夹名映射
+                var fmap = null;
                 var fid = (t.folderId !== undefined && t.folderId !== null) ? t.folderId
                         : (t.folderID !== undefined ? t.folderID : '');
-                var folder = folderList.filter(function (f) {
-                    return String(f.ID) === String(fid);
-                })[0];
-                var folderTxt = folder ? (' · ' + (folder.name || '')) : '';
+                for (var fi = 0; fi < folderList.length; fi++) {
+                    if (String(folderList[fi].ID) === String(fid)) { fmap = folderList[fi]; break; }
+                }
 
                 var row = document.createElement('div');
                 row.className = 'en-task';
 
-                var lab = document.createElement('label');
-                lab.className = 'en-task-pick';
+                // ---- 主行：勾选 + 文件名 + 状态 + 下载 ----
+                var mainRow = document.createElement('div');
+                mainRow.className = 'en-task-mainrow';
+
                 var cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.className = 'task-cb';
                 cb.value = id;
                 if (!done) cb.disabled = true;
-                lab.appendChild(cb);
+                mainRow.appendChild(cb);
 
-                var main = document.createElement('div');
-                main.className = 'en-task-main';
-                var t1 = document.createElement('div');
-                t1.className = 'en-task-t';
-                t1.textContent = fname;
-                t1.title = fname;
-                var t2 = document.createElement('div');
-                t2.className = 'en-task-s';
-                var pct = (t.progress !== undefined && t.progress !== null) ? (' ' + t.progress + '%') : '';
-                t2.textContent = (st || '未知') + pct + folderTxt;
-                main.appendChild(t1);
-                main.appendChild(t2);
+                var nm = document.createElement('span');
+                nm.className = 'en-task-name';
+                nm.textContent = prettyName(t.sourceFileName || t.outputFileName || t.name || ('任务 ' + id));
+                nm.title = (t.sourceFileName || '') + ' · 任务ID ' + id +
+                           (t.resultFileName ? ('\n结果: ' + t.resultFileName) : '');
+                mainRow.appendChild(nm);
 
-                row.appendChild(lab);
-                row.appendChild(main);
+                var stEl = document.createElement('span');
+                stEl.className = 'en-task-state';
+                stEl.style.color = taskColor(st);
+                stEl.textContent = taskStateLabel(st, mode);
+                mainRow.appendChild(stEl);
 
                 if (done) {
                     var btn = document.createElement('button');
-                    btn.className = 'secondary mini';
-                    btn.textContent = '⬇';
-                    btn.title = '下载到本地并导入';
-                    btn.addEventListener('click', function () { downloadTask(id); });
-                    row.appendChild(btn);
+                    btn.className = 'secondary mini en-task-dl';
+                    btn.textContent = '⬇ 下载';
+                    btn.title = '下载到本地并导入媒体池';
+                    btn.addEventListener('click', function (ev) {
+                        ev.stopPropagation();
+                        downloadTask(id);
+                    });
+                    mainRow.appendChild(btn);
                 }
+                row.appendChild(mainRow);
+
+                // ---- meta 行：时间 · 文件夹 · 分辨率 · 花费 · 时长 ----
+                var meta = document.createElement('div');
+                meta.className = 'en-task-meta';
+
+                var tm = document.createElement('span');
+                tm.textContent = '🕐 ' + fmtTime(t.CreatedAt);
+                meta.appendChild(tm);
+
+                var fd = document.createElement('span');
+                fd.className = 'en-task-folder';
+                fd.textContent = '📁 ' + (fmap ? fmap.name : ('文件夹' + fid));
+                fd.title = fmap ? ((fmap.name || '') + ' ' + (fmap.description || '')) : '';
+                meta.appendChild(fd);
+
+                if (t.resolution) {
+                    var rs = document.createElement('span');
+                    rs.textContent = '🎚 ' + t.resolution;
+                    meta.appendChild(rs);
+                }
+                if (t.costCents) {
+                    var cs = document.createElement('span');
+                    cs.textContent = '💰 ¥' + (t.costCents / 100).toFixed(2);
+                    meta.appendChild(cs);
+                }
+                if (t.outputDurationSeconds) {
+                    var ds = document.createElement('span');
+                    ds.textContent = '⏱ ' + Math.round(t.outputDurationSeconds) + 's';
+                    meta.appendChild(ds);
+                }
+                if (!done && t.progress !== undefined && t.progress !== null && t.progress > 0) {
+                    var pg = document.createElement('span');
+                    pg.textContent = t.progress + '%';
+                    pg.style.color = '#ffd76a';
+                    meta.appendChild(pg);
+                }
+                row.appendChild(meta);
+
                 box.appendChild(row);
             });
         }).catch(function (e) {
@@ -669,6 +737,13 @@
         if (el.enRefSeq) el.enRefSeq.addEventListener('click', loadTimelines);
         if (el.enGrabClip) el.enGrabClip.addEventListener('click', grabRange);
         if (el.enSettings) el.enSettings.addEventListener('click', openSettings);
+        if (el.enSiteBtn) {
+            el.enSiteBtn.addEventListener('click', function () {
+                var u = 'http://47.122.108.231:8888/';
+                if (H && H.openExternal) { try { H.openExternal(u); return; } catch (e) {} }
+                try { window.open(u, '_blank'); } catch (e) {}
+            });
+        }
         if (el.enGo) el.enGo.addEventListener('click', startBatch);
         if (el.enStop) el.enStop.addEventListener('click', stopAll);
         if (el.enAccount) el.enAccount.addEventListener('click', openAccountDialog);

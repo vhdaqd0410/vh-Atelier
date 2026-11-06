@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "接入在线更新：关于弹窗「检查更新」+ 版本徽章点击检查 + 启动静默检查。大文件（ffmpeg/模型/breeze/ncm）随部署包分发。"
+  "notes": "顶部新增官网/历史/更新/反馈四按钮（对齐 PR）；修复申请续期二维码不显示；超分任务列表显示时间/文件夹/分辨率/花费/时长；超分面板底部增加官网入口。"
 }

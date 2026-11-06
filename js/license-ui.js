@@ -660,65 +660,8 @@
         })();
 
         // 达芬奇：没有 fs，用宿主桥异步补载二维码（PR 版是同步读，这里补一条异步路径）
-        window.__vhQrAsync = function () {
-            var H = window.vhHost;
-            if (!H || !H.extRoot || !H.readFileSync) return;
-            var img = q('licContactQr');
-            var ph = q('licContactQrPh');
-            if (!img || !ph) return;
-            if (_qrDataUrl) return;   // 同步路径已成功
-
-            H.extRoot().then(function (r) {
-                if (!r || !r.ok || !r.data) return null;
-                var root = String(r.data).replace(/\\/g, '/').replace(/\/+$/, '');
-                var dirs = [root + '/collect', root + '/assets'];
-                // 依次找 contact-qr 开头的图片
-                var chain = Promise.resolve(null);
-                dirs.forEach(function (dir) {
-                    chain = chain.then(function (found) {
-                        if (found) return found;
-                        return (H.readdir ? H.readdir(dir) : Promise.resolve(null)).then(function (rr) {
-                            if (!rr || !rr.ok || !rr.data) return null;
-                            var names = (rr.data || []).filter(function (n) {
-                                return String(n).toLowerCase().indexOf('contact-qr') === 0;
-                            });
-                            names.sort(function (a, b) {
-                                var ea = /\.png$/i.test(a) ? 0 : 1;
-                                var eb = /\.png$/i.test(b) ? 0 : 1;
-                                if (ea !== eb) return ea - eb;
-                                return a < b ? -1 : (a > b ? 1 : 0);
-                            });
-                            var sub = Promise.resolve(null);
-                            names.forEach(function (n) {
-                                sub = sub.then(function (got) {
-                                    if (got) return got;
-                                    var fn = H.readImageDataUrl || H.readAudioDataUrl;
-                                    return fn(dir + '/' + n).then(function (d) {
-                                        if (!d || !d.ok || !d.data) return null;
-                                        var url = d.data.dataUrl || d.data;
-                                        var s = String(url);
-                                        if (s.indexOf('data:image') !== 0) return null;
-                                        return { url: s, path: dir + '/' + n };
-                                    }).catch(function () { return null; });
-                                });
-                            });
-                            return sub;
-                        }).catch(function () { return null; });
-                    });
-                });
-                return chain;
-            }).then(function (found) {
-                if (!found) {
-                    if (ph) { ph.title = '把 contact-qr.png 放进 collect 目录即可'; }
-                    return;
-                }
-                _qrDataUrl = found.url;
-                img.onload = function () { img.onload = null; if (ph) ph.style.display = 'none'; img.style.display = ''; };
-                img.onerror = function () { img.onerror = null; if (ph) { ph.style.display = 'flex'; } };
-                img.src = _qrDataUrl;
-                try { window.__vhLog && window.__vhLog.info('[授权] 二维码已加载(异步)：' + found.path); } catch (e) {}
-            }).catch(function () {});
-        };
+        // （__vhQrAsync 已提升到文件末尾的全局作用域）
+;;
 
         // 点击二维码查看大图（92px 太小扫不出来，必须能放大）
         (function () {
@@ -999,3 +942,139 @@
         setTimeout(boot, 100);
     }
 })();
+
+// ==================== 二维码异步读取（全局，供授权申请弹窗调用） ====================
+window.__vhQrCache = window.__vhQrCache || '';
+
+window.__vhQrAsync = function () {
+            // 达芬奇版读二维码：
+            //   · fsSync 只有 readdir/exists/isDir/stat/drives（无 readFile）
+            //   · 读文件必须用异步 readImageDataUrl
+            //   · readdir 返回 { ok, dirs:[{name,path}], files:[{name,path,ext,size}] }
+            var H = window.vhHost;
+            if (!H) return;
+            var img = document.getElementById('licContactQr');
+            var ph = document.getElementById('licContactQrPh');
+            if (!img || !ph) return;
+            if (window.__vhQrCache) return;
+
+            function apply(found) {
+                if (!found) {
+                    if (ph) { ph.style.display = 'flex'; ph.title = '把 contact-qr.png 放进 collect 或 assets 目录'; }
+                    return;
+                }
+                window.__vhQrCache = found.url;
+                img.onload = function () {
+                    img.onload = null;
+                    if (ph) ph.style.display = 'none';
+                    img.style.display = '';
+                };
+                img.onerror = function () { img.onerror = null; if (ph) ph.style.display = 'flex'; };
+                if (ph) ph.style.display = 'flex';
+                img.src = window.__vhQrCache;
+            }
+
+            // 候选文件名（按优先级）
+            function pickFiles(files) {
+                var hits = [];
+                (files || []).forEach(function (f) {
+                    var nm = (typeof f === 'string') ? f : (f.name || '');
+                    if (String(nm).toLowerCase().indexOf('contact-qr') !== 0) return;
+                    if (!/\.(png|jpe?g|gif|webp|avif)$/i.test(nm)) return;
+                    hits.push(f);
+                });
+                hits.sort(function (a, b) {
+                    var na = (typeof a === 'string') ? a : a.name;
+                    var nb = (typeof b === 'string') ? b : b.name;
+                    var ea = /\.png$/i.test(na) ? 0 : 1;
+                    var eb = /\.png$/i.test(nb) ? 0 : 1;
+                    if (ea !== eb) return ea - eb;
+                    return na < nb ? -1 : 1;
+                });
+                return hits;
+            }
+
+            function readOne(fp) {
+                if (!H.readImageDataUrl) return Promise.resolve(null);
+                return H.readImageDataUrl(fp).then(function (d) {
+                    if (!d || !d.ok || !d.data) return null;
+                    var u = d.data.dataUrl || d.data;
+                    if (String(u).indexOf('data:image') !== 0) return null;
+                    return { url: String(u), path: fp };
+                }).catch(function () { return null; });
+            }
+
+            // 同步列目录（fsSync 可用时）
+            function syncScan(dirs) {
+                var sync = H.fsSync;
+                if (!sync || !sync.ready || !sync.readdir) return null;
+                for (var d = 0; d < dirs.length; d++) {
+                    var res = null;
+                    try { res = sync.readdir(dirs[d]); } catch (e) { continue; }
+                    if (!res || !res.ok || !res.files) continue;
+                    var hits = pickFiles(res.files);
+                    if (hits.length) return hits[0].path || (dirs[d] + '/' + hits[0].name);
+                }
+                return null;
+            }
+
+            function go(root) {
+                if (!root) { apply(null); return; }
+                var base = String(root).replace(/\\/g, '/').replace(/\/+$/, '');
+                var dirs = [base + '/collect', base + '/assets'];
+
+                // 1) 同步列目录拿路径
+                var fp = syncScan(dirs);
+                if (fp) {
+                    readOne(fp).then(function (f) {
+                        if (f) { apply(f); return; }
+                        asyncScan(dirs);
+                    });
+                    return;
+                }
+                // 2) 异步列目录
+                asyncScan(dirs);
+            }
+
+            function asyncScan(dirs) {
+                if (!H.readdir) { apply(null); return; }
+                var chain = Promise.resolve(null);
+                dirs.forEach(function (dir) {
+                    chain = chain.then(function (got) {
+                        if (got) return got;
+                        return H.readdir(dir).then(function (rr) {
+                            if (!rr || !rr.ok) return null;
+                            var files = (rr.data && rr.data.files) ? rr.data.files
+                                      : (rr.files ? rr.files : []);
+                            var hits = pickFiles(files);
+                            if (!hits.length) return null;
+                            var first = hits[0];
+                            var path = (typeof first === 'string') ? (dir + '/' + first) : first.path;
+                            return readOne(path);
+                        }).catch(function () { return null; });
+                    });
+                });
+                chain.then(function (f) { apply(f); }).catch(function () { apply(null); });
+            }
+
+            // 拿插件根：优先 __vhExtRoot（index.html 注入），其次 getPaths，最后 extRoot
+            if (window.__vhExtRoot) { go(window.__vhExtRoot); return; }
+            if (H.getPaths) {
+                H.getPaths().then(function (r) {
+                    var root = (r && r.ok && r.data) ? (r.data.extRoot || r.data.pluginDir || '') : '';
+                    if (root) return go(root);
+                    return H.extRoot ? H.extRoot().then(function (r2) {
+                        go((r2 && r2.ok && r2.data) ? r2.data : '');
+                    }) : go('');
+                }).catch(function () { apply(null); });
+                return;
+            }
+            if (H.extRoot) {
+                H.extRoot().then(function (r) {
+                    go((r && r.ok && r.data) ? r.data : '');
+                }).catch(function () { apply(null); });
+                return;
+            }
+            apply(null);
+        };
+
