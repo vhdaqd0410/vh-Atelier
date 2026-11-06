@@ -4,6 +4,25 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 保持一致",
   "versions": [
     {
+      "version": "2.23.0",
+      "date": "2026-11-06",
+      "title": "修复提示静默 + 清理死代码",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "大量操作提示静默：bgm/media/musiclib/ncm/sfx/script 六个面板的 toast() 都去查 window.__vhToast，而项目里从未定义过它，81 处提示只写进控制台，界面上完全看不到。现由 app.js 把 toast 暴露为 __vhToast"
+        },
+        {
+          "type": "fix",
+          "text": "iframe-nav.js 整份是死代码：index.html 里它先于 shenpian.js 加载，两者都覆盖 window.__spAutoLoad 后者生效，其 init 永不执行、window.__nav_shenpian 永不定义；且它用的 iframe 方案对 mediatrack 站点无效（对方返回 X-Frame-Options）。已移除引用，文件备份在 data/_backup/deprecated"
+        },
+        {
+          "type": "impr",
+          "text": "toast 增加目标元素缺失保护，避免元素被移除时抛错中断调用方"
+        }
+      ]
+    },
+    {
       "version": "2.22.0",
       "date": "2026-11-06",
       "title": "关于页重做",

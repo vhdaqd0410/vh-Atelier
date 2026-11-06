@@ -54,11 +54,15 @@ function fmtTime(ts) {
 let toastTimer = null;
 function toast(msg, kind) {
   const el = $('toast');
+  if (!el) { try { console.log('[toast] ' + msg); } catch (e) {} return; }
   el.textContent = msg;
   el.className = 'toast show' + (kind ? ' ' + kind : '');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.className = 'toast'; }, 3200);
 }
+// 暴露给其它面板脚本（bgm/media/musiclib/ncm/sfx/script/iframe-nav 都查这个钩子）
+// 未暴露时它们只写 console.log，界面上完全看不到任何提示。
+window.__vhToast = toast;
 
 function logTo(boxId, msg, kind) {
   const box = $(boxId);
