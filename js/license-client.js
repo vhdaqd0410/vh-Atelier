@@ -224,16 +224,16 @@
             xhr.timeout = timeout || 15000;
             xhr.onreadystatechange = function () {
                 if (xhr.readyState !== 4) return;
-                if (xhr.status === 0) { reject(new Error('网络不可用')); return; }
+                if (xhr.status === 0) { var n0=new Error('网络不可用'); n0.network=true; reject(n0); return; }
                 var txt = xhr.responseText || '';
                 var j = null;
                 try { j = JSON.parse(txt); } catch (e) {}
-                if (!j) { reject(new Error('服务器返回异常（HTTP ' + xhr.status + '）')); return; }
+                if (!j) { var e1=new Error('服务器返回异常（HTTP ' + xhr.status + '）'); e1.httpStatus=xhr.status; e1.denied=true; reject(e1); return; }
                 if (j.ok) resolve(j);
-                else reject(new Error(j.msg || j.error || ('HTTP ' + xhr.status)));
+                else { var e2=new Error(j.msg || j.error || ('HTTP ' + xhr.status)); e2.httpStatus=xhr.status; e2.denied=true; reject(e2); }
             };
-            xhr.onerror = function () { reject(new Error('网络不可用')); };
-            xhr.ontimeout = function () { reject(new Error('连接超时')); };
+            xhr.onerror = function () { var e3=new Error('网络不可用'); e3.network=true; reject(e3); };
+            xhr.ontimeout = function () { var e4=new Error('连接超时'); e4.network=true; reject(e4); };
             xhr.send(JSON.stringify(body || {}));
         });
     }
@@ -416,7 +416,16 @@
                 return { ok: true, receipt: j.receipt, sigOk: sigOk };
             });
         }).catch(function (e) {
-            // 网络错误 → 走离线宽限
+            // 服务端明确拒绝（账号被删/授权吊销/未开通本插件/设备解绑）：
+            // 立即判失败并清除 token，不能走离线宽限，
+            // 否则管理端删了账号后插件仍显示已授权。
+            if (e && e.denied) {
+                state.token = '';
+                state.receipt = null;
+                saveState();
+                return { ok: false, reason: 'denied', msg: e.message || '授权已失效', httpStatus: e.httpStatus };
+            }
+            // 只有真正的网络故障才走离线宽限
             var offline = canUseOffline();
             if (offline.ok) {
                 return { ok: true, offline: true, remainDays: offline.remainDays };

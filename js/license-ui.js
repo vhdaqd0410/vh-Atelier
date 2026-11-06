@@ -786,24 +786,51 @@
 
 
     // ---------- 启动检查 ----------
+    // 校验通过后撤掉遮罩，并触发「已解锁」回调
+    function hideMaskAndEnter() {
+        try {
+            if (maskEl && maskEl.parentNode) {
+                maskEl.parentNode.removeChild(maskEl);
+                maskEl = null;
+            }
+        } catch (e) {}
+        try {
+            onUnlockCallbacks.forEach(function (fn) { try { fn(); } catch (e) {} });
+        } catch (e) {}
+    }
+
     function start() {
         var st = LIC.localStatus();
 
         // 有 token 且本地有效：直接用，后台静默校验（原有逻辑）
         if (st.canUse) {
-            // 本地看是有效的，后台异步校验一次（不阻塞）
-            unlocked = true;
+            // 启动时强制校验：先锁屏「正在校验」，等服务器结果再决定放行。
+            // 这样管理员删号/停用后，下次启动会立即要求重新授权。
+            buildMask();
+            msg('正在校验授权…', '');
             LIC.verify().then(function (r) {
-                if (!r.ok) {
-                    // 校验失败 → 重新锁上
-                    console.log('[lic] 后台校验失败：' + (r.msg || ''));
-                    if (r.reason !== 'net') {
-                        unlocked = false;
-                        buildMask();
-                        msg('授权校验失败：' + (r.msg || '') + '，请重新登录', 'err');
-                    }
+                if (r && r.ok) {
+                    unlocked = true;
+                    hideMaskAndEnter();
+                    return;
                 }
-            }).catch(function () {});
+                unlocked = false;
+                if (r && r.reason === 'net') {
+                    var off = LIC.canUseOffline ? LIC.canUseOffline() : { ok: false };
+                    if (off && off.ok) {
+                        unlocked = true;
+                        hideMaskAndEnter();
+                        return;
+                    }
+                    msg('无法连接授权服务器，请检查网络后重试', 'err');
+                } else {
+                    try { LIC.logout({ forget: true }); } catch (e) {}
+                    msg('授权已失效：' + ((r && r.msg) || '请联系管理员开通') + '。请重新登录或激活。', 'err');
+                }
+            }).catch(function () {
+                unlocked = false;
+                msg('授权校验出错，请重试', 'err');
+            });
             return;
         }
 
