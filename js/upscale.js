@@ -20,7 +20,7 @@
 
     function bindEls() {
         ['enSeqList', 'enRefSeq', 'enPreset', 'enFolder', 'enRes', 'enMode',
-         'enGrabClip', 'enClipSrc', 'enClipInfo', 'enPreset', 'enSettings', 'enSiteBtn',
+         'enGrabClip', 'enClipSrc', 'enClipInfo', 'enPreset', 'enSettings', 
          'enGo', 'enStop', 'enAccount', 'enAccHint', 'enProgWrap', 'enProgFill',
          'enProgText', 'enProgPct', 'enActHint', 'enTaskList', 'enTaskHint',
          'enTaskRefresh', 'enTaskDlSel', 'enTaskPickAll', 'enLogList', 'enLogClear'
@@ -750,13 +750,6 @@
         if (el.enRefSeq) el.enRefSeq.addEventListener('click', loadTimelines);
         if (el.enGrabClip) el.enGrabClip.addEventListener('click', grabRange);
         if (el.enSettings) el.enSettings.addEventListener('click', openSettings);
-        if (el.enSiteBtn) {
-            el.enSiteBtn.addEventListener('click', function () {
-                var u = 'http://47.122.108.231:8888/';
-                if (H && H.openExternal) { try { H.openExternal(u); return; } catch (e) {} }
-                try { window.open(u, '_blank'); } catch (e) {}
-            });
-        }
         if (el.enGo) el.enGo.addEventListener('click', startBatch);
         if (el.enStop) el.enStop.addEventListener('click', stopAll);
         if (el.enAccount) el.enAccount.addEventListener('click', openAccountDialog);
@@ -784,6 +777,7 @@
         loadTimelines();
         loadPresets();
         initSiteFrame();
+        bindExpand();
         checkAccount();
         loadFolders();
         loadTasks();
@@ -924,6 +918,55 @@
                 if (ev.key === 'Enter') { ev.preventDefault(); go(urlInp.value); }
             });
         }
+    }
+
+    // ===== 任务/日志最大化（照 PR 版 setCardExpanded）=====
+    var STORE_X = 'vh_upscale_expand';
+
+    function setCardExpanded(which, save) {
+        var panel = document.getElementById('panel-upscale');
+        if (!panel) return;
+        panel.classList.remove('en-exp-task');
+        panel.classList.remove('en-exp-log');
+
+        var taskBtn = document.getElementById('enTaskExpand');
+        var logBtn = document.getElementById('enLogExpand');
+        function restore(btn) {
+            if (btn) { btn.textContent = '⤢'; btn.title = '展开：占满面板（再点还原）'; }
+        }
+        restore(taskBtn); restore(logBtn);
+
+        if (!which) {
+            if (save) { try { localStorage.setItem(STORE_X, ''); } catch (e) {} }
+            return;
+        }
+        if (which === 'task') {
+            panel.classList.add('en-exp-task');
+            if (taskBtn) { taskBtn.textContent = '⤡'; taskBtn.title = '还原：恢复并排布局'; }
+        } else {
+            panel.classList.add('en-exp-log');
+            if (logBtn) { logBtn.textContent = '⤡'; logBtn.title = '还原：恢复并排布局'; }
+        }
+        if (save) { try { localStorage.setItem(STORE_X, which); } catch (e) {} }
+    }
+
+    function toggleCard(which) {
+        var panel = document.getElementById('panel-upscale');
+        if (!panel) return;
+        var already = panel.classList.contains(which === 'task' ? 'en-exp-task' : 'en-exp-log');
+        setCardExpanded(already ? '' : which, true);
+    }
+
+    function bindExpand() {
+        var taskBtn = document.getElementById('enTaskExpand');
+        var logBtn = document.getElementById('enLogExpand');
+        if (taskBtn) taskBtn.addEventListener('click', function () { toggleCard('task'); });
+        if (logBtn) logBtn.addEventListener('click', function () { toggleCard('log'); });
+
+        // 恢复上次状态
+        var saved = '';
+        try { saved = localStorage.getItem(STORE_X) || ''; } catch (e) {}
+        if (saved === 'task' || saved === 'log') setCardExpanded(saved, false);
     }
 
     window.__upscalePanel = { init: init };

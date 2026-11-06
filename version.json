@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.12.0",
+  "version": "2.13.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修复四个面板空白（超分/审片/账号/反馈）；更新弹窗改为统一风格并可正常使用；关于按钮恢复。"
+  "notes": "删除误加的官网区块；超分任务排版与最大化照 PR 版实现；加强缓存清理避免按钮点了没反应。"
 }

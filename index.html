@@ -810,32 +810,6 @@
 </style>
 
 <style>
-/* 超分任务行（优化排版） */
-.en-task{display:flex;flex-direction:column;gap:4px;padding:8px 9px;margin-bottom:6px;
-  background:#141a21;border:1px solid #232a33;border-radius:6px;transition:border-color .15s;}
-.en-task:hover{border-color:#33404e;}
-
-.en-task-mainrow{display:flex;align-items:center;gap:7px;}
-.en-task-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:#dfe9f3;font-weight:600;font-size:12px;line-height:1.4;}
-
-.en-task-state{flex:0 0 auto;font-weight:600;font-size:10.5px;padding:1px 7px;border-radius:9px;
-  background:rgba(255,255,255,.05);white-space:nowrap;}
-
-.en-task-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));
-  gap:3px 10px;font-size:10.5px;color:#8a97a5;line-height:1.6;}
-.en-task-meta > span{display:flex;align-items:center;gap:3px;min-width:0;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.en-task-folder{color:#7fb3d9 !important;}
-
-.en-task-progress{height:3px;border-radius:2px;background:#1b2129;overflow:hidden;margin-top:1px;}
-.en-task-progress > i{display:block;height:100%;background:linear-gradient(90deg,#3d7f9e,#6cb6d8);}
-
-.en-task-dl{flex:0 0 auto;background:#1e3a2a !important;color:#7fd68b !important;
-  border:1px solid #2a5a3a !important;padding:2px 9px !important;font-size:10.5px !important;
-  border-radius:4px !important;cursor:pointer;}
-.en-task-dl:hover{background:#24462f !important;}
-
 </style>
 
 <style>
@@ -857,6 +831,53 @@
 #panel-upscale.en-expanded #upscaleFrame{flex:1 1 auto !important;height:auto !important;}
 #panel-upscale{display:flex;flex-direction:column;}
 .en-scroll{flex:0 1 auto;min-height:0;overflow:auto;}
+</style>
+
+<style>
+/* ===== 超分任务/日志：照 PR 版结构 ===== */
+#panel-upscale .en-split{display:flex;gap:6px;flex:1 1 auto;min-height:0;}
+#panel-upscale .en-split .en-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;}
+#panel-upscale .en-split .en-col .en-card-head,
+#panel-upscale .en-split .en-col h2{flex:0 0 auto;}
+
+#panel-upscale .en-tasks{flex:1 1 auto;min-height:0;overflow-y:auto;background:#141a21;
+  border-radius:6px;padding:4px;}
+
+#panel-upscale .en-logbox{flex:1 1 auto;min-height:0;overflow-y:auto;
+  font:11px/1.5 Consolas,monospace;background:#141414;border:1px solid #232a33;
+  border-radius:4px;padding:4px 6px;color:#8a97a5;user-select:text;-webkit-user-select:text;
+  white-space:pre-wrap;word-break:break-all;}
+
+/* 任务条目：PR 的两行结构 */
+#panel-upscale .en-task{display:flex;flex-direction:column;padding:5px 7px;
+  border-bottom:1px dashed #232a33;}
+#panel-upscale .en-task:hover{background:#181f27;}
+#panel-upscale .en-task:last-child{border-bottom:none;}
+
+/* 最大化：任务占满 */
+#panel-upscale.en-exp-task .en-scroll,
+#panel-upscale.en-exp-log .en-scroll{overflow:hidden;}
+#panel-upscale.en-exp-task .en-card:not(#enTaskCard),
+#panel-upscale.en-exp-task #enLogCard,
+#panel-upscale.en-exp-task .en-splitter,
+#panel-upscale.en-exp-task #upNav,
+#panel-upscale.en-exp-task #upscaleFrame,
+#panel-upscale.en-exp-log .en-card:not(#enLogCard),
+#panel-upscale.en-exp-log #enTaskCard,
+#panel-upscale.en-exp-log .en-splitter,
+#panel-upscale.en-exp-log #upNav,
+#panel-upscale.en-exp-log #upscaleFrame{display:none !important;}
+
+#panel-upscale.en-exp-task .en-split,
+#panel-upscale.en-exp-log .en-split{height:100%;min-height:0;}
+
+#panel-upscale.en-exp-task #enTaskCard,
+#panel-upscale.en-exp-log #enLogCard{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+
+#panel-upscale.en-exp-task #enTaskList,
+#panel-upscale.en-exp-log #enLogList{flex:1 1 auto;max-height:none;overflow-y:auto;}
+
+.en-card-exp{min-width:22px !important;padding:0 5px !important;}
 </style>
 </head>
 <body>
@@ -1704,31 +1725,26 @@
 
     <!-- 卡2：任务 + 日志 -->
     <div class="en-split">
-      <div class="card en-col">
+      <div class="card en-col" id="enTaskCard">
         <h2>📥 超分任务
           <button id="enTaskDlSel" class="secondary mini" style="margin-left:auto;" disabled>⬇ 下载选中</button>
           <button id="enTaskRefresh" class="secondary mini">🔄</button>
+          <button id="enTaskExpand" class="secondary mini en-card-exp" title="展开：任务列表占满面板（再点还原）">⤢</button>
         </h2>
         <div id="enTaskHint" class="hint" style="margin-bottom:6px;"></div>
         <div id="enTaskList" class="en-tasks"><div class="hint" style="padding:6px;">暂无</div></div>
       </div>
-      <div class="card en-col">
+      <div class="card en-col" id="enLogCard">
         <h2>📋 运行日志
           <button id="enLogClear" class="secondary mini" style="margin-left:auto;">清空</button>
+          <button id="enLogExpand" class="secondary mini en-card-exp" title="展开：日志占满面板（再点还原）">⤢</button>
         </h2>
         <div id="enLogList" class="en-logbox"></div>
       </div>
     </div>
 
   
-    <!-- 底部官网入口（对齐 PR 版结构） -->
-    <div id="enSiteBlock" class="en-site-block">
-      <div class="en-site-txt">
-        <div class="en-site-h">vh-Atelier · 官网</div>
-        <div class="en-site-d">功能说明 · 截图 · 下载 · 提交需求</div>
-      </div>
-      <button id="enSiteBtn" class="site-btn" type="button">前往官网 ↗</button>
-    </div>
+    
 </div>
 
   <!-- 拖拽分隔条：上下拖动调整内嵌站高度 -->

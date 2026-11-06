@@ -1135,6 +1135,27 @@ function createWindow() {
     }
   } catch (e) { /* 忽略 */ }
 
+  // 彻底清一次存储与缓存：Resolve 会缓存插件页面，
+  // 改了代码但界面没变（表现为按钮点了没反应），大多是命中了旧缓存。
+  try {
+    const ses = mainWindow.webContents.session;
+    ses.clearCache().catch(function () {});
+    ses.clearStorageData({
+      storages: ['cachestorage', 'shadercache', 'serviceworkers']
+    }).catch(function () {});
+  } catch (e) { /* 忽略 */ }
+  // 拦截所有请求，强制不走缓存
+  try {
+    const ses2 = mainWindow.webContents.session;
+    ses2.webRequest.onBeforeSendHeaders(function (details, callback) {
+      try {
+        details.requestHeaders['Cache-Control'] = 'no-cache, no-store';
+        details.requestHeaders['Pragma'] = 'no-cache';
+      } catch (e) {}
+      callback({ requestHeaders: details.requestHeaders });
+    });
+  } catch (e) { /* 忽略 */ }
+
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.on('closed', () => {
     try { if (embedView) { embedView.webContents.close(); embedView = null; } } catch (e) {}
