@@ -907,9 +907,9 @@
   </button>
   <span class="sep"></span>
   <button type="button" id="btnHistory" class="log-btn" title="版本更新历史：每个版本改了什么、修了什么">📋 历史</button>
-  <button type="button" id="btnUpdate" class="log-btn" title="检查更新（从服务器拉取最新代码）">⬆ 更新</button>
+  <button type="button" id="btnUpdate" class="log-btn" title="检查更新（从服务器拉取最新代码）" onclick="try{vhTopUpdate()}catch(e){alert('更新出错: '+e.message)}">⬆ 更新</button>
   <button type="button" id="btnFeedback" class="log-btn" title="在线反馈：提 Bug / 需求 / 意见">📮 反馈</button>
-  <button type="button" id="btnAbout" class="log-btn" title="关于与诊断">ℹ 关于</button>
+  <button type="button" id="btnAbout" class="log-btn" title="关于与诊断" onclick="try{vhTopAbout()}catch(e){alert('关于出错: '+e.message)}">ℹ 关于</button>
 </div>
 <div class="sub" id="subLine">连接中…</div>
 

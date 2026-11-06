@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.15.0",
+  "version": "2.16.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修复授权遮罩残留导致所有按钮点不动（这也是一直点不动更新/关于按钮的真正原因）。"
+  "notes": "顶部按钮加内联 onclick 兜底，右下角加诊断浮层用于定位点击问题。"
 }
