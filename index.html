@@ -1,0 +1,1821 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>vh-Atelier · DaVinci Resolve</title>
+<link rel="stylesheet" href="css/atelier.css">
+<link rel="stylesheet" href="css/app.css">
+
+<style>
+/* ==== Breeze 朗读 ==== */
+.bz-prog-track{height:6px;background:#1b1f26;border-radius:3px;overflow:hidden;}
+.bz-prog-track > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#3d7f9e,#6cb6d8);transition:width .18s;}
+.bz-mprog{height:6px;background:#1b1f26;border-radius:3px;overflow:hidden;margin-top:8px;}
+.bz-mprog > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#8a6a2f,#d6a94a);}
+.bz-model-card{border:1px solid #4a3a20;background:#221c12;}
+.bz-empty{padding:18px 8px;text-align:center;color:#7d8794;font-size:12px;}
+.bz-line{font-family:Consolas,monospace;font-size:11px;color:#7d8794;padding:1px 0;white-space:pre-wrap;word-break:break-all;}
+.bz-logbox{max-height:130px;overflow:auto;background:#0e1116;border:1px solid #232a33;border-radius:4px;padding:6px;margin-top:8px;}
+</style>
+
+<style>
+/* ==== 内嵌站导航条（审片） ==== */
+.wb-nav{display:flex;align-items:center;gap:4px;padding:4px 6px;background:#12161c;border:1px solid #232a33;border-radius:6px;margin-bottom:5px;}
+.wb-nav-btn{background:#1b2129;border:1px solid #2b3440;color:#9fb4c7;border-radius:4px;min-width:24px;height:22px;font-size:12px;cursor:pointer;line-height:1;}
+.wb-nav-btn:hover{background:#232c37;color:#d8e4ee;}
+.wb-nav-btn:disabled{opacity:.35;cursor:default;}
+.wb-nav-url{flex:1;height:22px;background:#0e1116;border:1px solid #2b3440;border-radius:4px;color:#c8d6e2;font-size:11px;padding:0 6px;}
+.sp-parse-bar{display:flex;align-items:center;gap:5px;padding:4px 7px;margin-bottom:5px;background:#141a21;border:1px solid #232a33;border-radius:6px;}
+.sp-parse-ic{font-size:12px;opacity:.8;}
+.sp-parse-bar input{flex:1;height:22px;background:#0e1116;border:1px solid #2b3440;border-radius:4px;color:#c8d6e2;font-size:11px;padding:0 6px;}
+.sp-parse-bar input.sp-parse-hit{border-color:#3d7f9e;}
+</style>
+<style>
+
+/* ==== 反馈中心（客户版）==== */
+#panel-feedback{
+    padding:0;
+    display:flex;flex-direction:column;
+    height:calc(100vh - 130px);
+    background:#0f1115;
+}
+
+/* 顶部 */
+.fb-header{
+    display:flex;align-items:center;gap:10px;
+    padding:13px 14px 11px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    background:linear-gradient(180deg,rgba(83,125,150,.1),transparent);
+    flex:0 0 auto;
+}
+.fb-hd-left{flex:1;min-width:0;}
+.fb-hd-title{
+    display:block;font-size:14px;font-weight:700;color:#e8ecf4;
+    letter-spacing:.3px;
+}
+.fb-hd-sub{
+    display:block;font-size:10.5px;color:#6f7c8a;margin-top:3px;
+}
+.fb-hd-link{
+    flex:0 0 auto;
+    padding:5px 11px;
+    font-size:11px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:5px;
+    color:#9aa8b8;
+    cursor:pointer;
+    transition:all .14s;
+    white-space:nowrap;
+}
+.fb-hd-link:hover{background:rgba(255,255,255,.11);color:#e8ecf4;}
+
+/* 表单容器 */
+.fb-form{
+    flex:1;overflow-y:auto;
+    padding:14px 14px 20px;
+}
+
+/* 类型大按钮 */
+.fb-kinds{
+    display:grid;grid-template-columns:1fr 1fr 1fr;
+    gap:7px;margin-bottom:16px;
+}
+.fb-kind{
+    padding:11px 6px 9px;
+    text-align:center;
+    background:rgba(255,255,255,.035);
+    border:1.5px solid rgba(255,255,255,.08);
+    border-radius:8px;
+    cursor:pointer;
+    transition:all .16s;
+    color:#8a9bab;
+}
+.fb-kind:hover{
+    background:rgba(255,255,255,.07);
+    border-color:rgba(255,255,255,.16);
+}
+.fb-kind.active{
+    background:rgba(83,125,150,.22);
+    border-color:rgba(138,180,255,.55);
+    color:#eaf3ff;
+    box-shadow:0 0 0 1px rgba(138,180,255,.20) inset;
+}
+.fb-kind-ic{display:block;font-size:19px;line-height:1.2;margin-bottom:5px;}
+.fb-kind-t{display:block;font-size:11.5px;font-weight:600;}
+.fb-kind-d{
+    display:block;font-size:9px;color:#5a6675;margin-top:3px;
+    line-height:1.35;
+}
+.fb-kind.active .fb-kind-d{color:#8fb8d8;}
+
+/* 表单字段 */
+.fb-label{
+    display:block;
+    font-size:11px;color:#9aa8b8;
+    margin:0 0 6px;
+    font-weight:600;
+}
+.fb-req{color:#ff8a8a;margin-left:2px;}
+.fb-opt{color:#5a6675;font-weight:400;font-size:10px;}
+.fb-input{
+    width:100%;box-sizing:border-box;
+    padding:9px 11px;
+    font-size:12px;
+    font-family:inherit;
+    line-height:1.6;
+    background:rgba(0,0,0,.3);
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:6px;
+    color:#e8ecf4;
+    outline:none;
+    transition:border-color .15s, background .15s;
+    margin-bottom:2px;
+}
+.fb-input:focus{
+    border-color:rgba(138,180,255,.55);
+    background:rgba(0,0,0,.4);
+}
+.fb-input::placeholder{color:rgba(232,236,244,.24);}
+.fb-textarea{resize:vertical;min-height:96px;}
+
+.fb-counter{
+    text-align:right;
+    font-size:9.5px;color:#5a6675;
+    margin-bottom:14px;
+    font-family:Consolas,monospace;
+}
+.fb-counter.warn{color:#e0b96a;}
+
+/* 复选框 */
+.fb-check{
+    display:flex;align-items:flex-start;gap:7px;
+    padding:10px 11px;
+    margin:14px 0 0;
+    background:rgba(255,255,255,.025);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:6px;
+    cursor:pointer;
+    font-size:10.5px;
+    color:#8a9bab;
+    line-height:1.55;
+}
+.fb-check input{
+    flex:0 0 auto;margin:2px 0 0;cursor:pointer;
+    width:13px;height:13px;
+}
+.fb-check:hover{background:rgba(255,255,255,.045);}
+
+/* 提交大按钮 */
+.fb-submit{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;
+    margin-top:18px;
+    padding:13px 0;
+    font-size:14px;
+    font-weight:700;
+    color:#f0f7ff;
+    letter-spacing:.5px;
+    background:linear-gradient(180deg,#5a87a8,#3f6a87);
+    border:1px solid rgba(138,180,255,.38);
+    border-radius:8px;
+    cursor:pointer;
+    transition:all .16s;
+    box-shadow:0 3px 12px rgba(63,106,135,.35);
+}
+.fb-submit:hover{
+    background:linear-gradient(180deg,#6b9ab9,#4a7693);
+    box-shadow:0 4px 18px rgba(63,106,135,.5);
+    transform:translateY(-1px);
+}
+.fb-submit:active{transform:translateY(0);}
+.fb-submit:disabled{
+    opacity:.5;cursor:not-allowed;transform:none;
+    box-shadow:none;
+}
+.fb-submit-ic{font-size:16px;}
+
+/* 消息 */
+.fb-msg{
+    font-size:11.5px;line-height:1.7;
+    margin-top:12px;
+    min-height:18px;
+    color:#8a9bab;
+    white-space:pre-wrap;
+}
+.fb-msg.ok{color:#7fd68b;}
+.fb-msg.err{color:#ff8a8a;}
+
+/* 历史列表 */
+.fb-history{
+    flex:1;display:flex;flex-direction:column;
+    min-height:0;
+}
+.fb-hist-head{
+    display:flex;align-items:center;gap:8px;
+    padding:11px 14px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    flex:0 0 auto;
+}
+.fb-back{
+    flex:0 0 auto;
+    padding:5px 10px;
+    font-size:11px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:5px;
+    color:#9aa8b8;
+    cursor:pointer;
+}
+.fb-back:hover{background:rgba(255,255,255,.11);color:#e8ecf4;}
+.fb-hist-title{flex:1;font-size:12px;font-weight:600;color:#cfd8e3;text-align:center;}
+.fb-refresh{
+    flex:0 0 auto;
+    width:26px;height:26px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:5px;
+    color:#9aa8b8;
+    cursor:pointer;
+    font-size:13px;
+}
+.fb-refresh:hover{background:rgba(255,255,255,.11);}
+
+.fb-hist-list{
+    flex:1;overflow-y:auto;
+    padding:10px 14px 16px;
+}
+.fb-hist-item{
+    padding:10px 11px;
+    margin-bottom:8px;
+    background:rgba(255,255,255,.028);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:7px;
+}
+.fb-hist-top{
+    display:flex;align-items:center;gap:6px;
+    margin-bottom:5px;
+}
+.fb-hist-kind{
+    flex:0 0 auto;
+    padding:1px 6px;
+    font-size:9px;
+    border-radius:3px;
+    background:rgba(255,255,255,.07);
+    color:#9aa8b8;
+}
+.fb-hist-kind.bug{background:rgba(255,138,138,.15);color:#ff8a8a;}
+.fb-hist-kind.idea{background:rgba(224,185,106,.15);color:#e0b96a;}
+.fb-hist-kind.other{background:rgba(138,180,255,.15);color:#8ab4ff;}
+.fb-hist-status{
+    flex:0 0 auto;
+    font-size:9px;
+    padding:1px 6px;
+    border-radius:3px;
+}
+.fb-hist-status.pending{background:rgba(224,185,106,.14);color:#e0b96a;}
+.fb-hist-status.done{background:rgba(127,214,139,.14);color:#7fd68b;}
+.fb-hist-status.replied{background:rgba(138,180,255,.14);color:#8ab4ff;}
+.fb-hist-title-t{
+    flex:1;min-width:0;
+    font-size:11.5px;color:#cfd8e3;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.fb-hist-time{
+    flex:0 0 auto;
+    font-size:9px;color:#5a6675;
+}
+.fb-hist-detail{
+    font-size:10.5px;color:#7a8696;
+    line-height:1.6;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;
+}
+.fb-hist-reply{
+    margin-top:7px;padding:7px 9px;
+    background:rgba(127,214,139,.08);
+    border-left:2px solid rgba(127,214,139,.4);
+    border-radius:4px;
+    font-size:10.5px;color:#9fd0ab;
+    line-height:1.6;
+}
+.fb-empty{
+    text-align:center;
+    padding:36px 14px;
+    font-size:11px;
+    color:#5a6675;
+    line-height:1.8;
+}
+
+</style>
+<style>
+
+/* ==== 授权遮罩 ==== */
+#licMask{
+    position:fixed;inset:0;z-index:2147483000;
+    background:linear-gradient(160deg,#0b0e13 0%,#121821 60%,#0f141b 100%);
+    display:flex;align-items:center;justify-content:center;
+    padding:16px;box-sizing:border-box;
+    overflow:auto;
+    font-family:"Microsoft YaHei",-apple-system,sans-serif;
+    transition:opacity .22s ease;
+}
+.lic-box{
+    width:400px;
+    max-width:calc(100% - 24px);
+    box-sizing:border-box;
+    background:rgba(22,28,38,.96);
+    border:1px solid rgba(138,180,255,.16);
+    border-radius:12px;
+    box-shadow:0 24px 70px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.03) inset;
+    overflow:hidden;
+}
+.lic-head{
+    padding:22px 22px 16px;
+    text-align:center;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    background:linear-gradient(180deg, rgba(83,125,150,.13), transparent);
+}
+.lic-logo{
+    font-size:22px;font-weight:700;letter-spacing:.6px;
+    background:linear-gradient(92deg,#8ab4ff,#7fd68b);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.lic-sub{font-size:11px;color:#6f7c8a;margin-top:5px;letter-spacing:.5px;}
+.lic-body{padding:16px 22px 18px;}
+
+/* 模式切换 */
+.lic-tabs{
+    display:flex;gap:4px;margin-bottom:16px;
+    background:rgba(0,0,0,.28);border-radius:7px;padding:3px;
+}
+.lic-tab{
+    flex:1;padding:7px 0;font-size:12px;
+    background:transparent;border:none;border-radius:5px;
+    color:#8a9bab;cursor:pointer;transition:all .15s;
+}
+.lic-tab:hover{color:#cfd8e3;}
+.lic-tab.active{background:rgba(83,125,150,.55);color:#eaf3ff;font-weight:600;}
+
+/* 记住密码 / 自动登录 */
+.lic-remember{
+    display:flex;gap:16px;align-items:center;
+    margin-top:11px;
+}
+.lic-chk{
+    display:flex;align-items:center;gap:5px;
+    font-size:11px;color:#8a9bab;
+    cursor:pointer;user-select:none;
+}
+.lic-chk input{
+    width:12px;height:12px;margin:0;cursor:pointer;
+    accent-color:#5a87a8;
+}
+.lic-chk:hover{color:#cfd8e3;}
+
+/* 表单 */
+.lic-label{
+    display:block;font-size:11px;color:#8a9bab;margin:10px 0 5px;
+}
+.lic-input{
+    width:100%;max-width:100%;box-sizing:border-box;
+    display:block;
+    padding:9px 11px;font-size:12.5px;
+    background:rgba(0,0,0,.32);
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:6px;color:#e8ecf4;
+    outline:none;transition:border-color .15s;
+}
+.lic-input:focus{border-color:rgba(138,180,255,.55);}
+.lic-input::placeholder{color:rgba(232,236,244,.22);}
+
+.lic-btn{
+    width:100%;margin-top:14px;padding:10px 0;
+    font-size:13px;font-weight:600;border-radius:6px;
+    border:1px solid transparent;cursor:pointer;
+    transition:all .15s;
+}
+.lic-btn.primary{
+    background:linear-gradient(180deg,#5a87a8,#3f6a87);
+    border-color:rgba(138,180,255,.32);
+    color:#f0f7ff;
+}
+.lic-btn.primary:hover{background:linear-gradient(180deg,#6b9ab9,#4a7693);}
+.lic-btn.primary:disabled{opacity:.45;cursor:not-allowed;}
+.lic-btn.ghost{
+    background:rgba(255,255,255,.05);
+    border-color:rgba(255,255,255,.12);
+    color:#b8c4d2;font-weight:400;font-size:11.5px;
+    padding:6px 0;margin-top:0;
+}
+.lic-btn.ghost:hover{background:rgba(255,255,255,.1);}
+
+.lic-row{text-align:center;margin-top:10px;}
+.lic-link{
+    background:none;border:none;padding:0;
+    font-size:11px;color:#7fb3d5;cursor:pointer;
+    text-decoration:underline;text-underline-offset:2px;
+}
+.lic-link:hover{color:#9fd0ff;}
+
+.lic-hint{
+    font-size:10.5px;color:#6f7c8a;margin-top:10px;
+    line-height:1.6;
+}
+
+/* 消息 */
+.lic-msg{
+    margin-top:12px;font-size:11.5px;line-height:1.6;
+    min-height:18px;color:#8a9bab;
+    white-space:pre-wrap;word-break:break-word;
+}
+.lic-msg.ok{color:#7fd68b;}
+.lic-msg.err{color:#ff8a8a;}
+
+/* 底部 */
+.lic-foot{
+    margin-top:18px;padding-top:14px;
+    border-top:1px solid rgba(255,255,255,.06);
+}
+.lic-device{
+    display:flex;flex-direction:column;gap:3px;
+    font-size:10px;color:#6f7c8a;
+}
+.lic-device b{color:#9aa8b8;font-weight:600;}
+.lic-mono{
+    font-family:Consolas,monospace;
+    color:#6f7c8a;letter-spacing:.3px;
+}
+.lic-actions{
+    display:flex;gap:8px;margin-top:10px;
+}
+.lic-actions .lic-btn{flex:1;}
+
+/* ==== 账号与授权面板 ==== */
+.ac-header{
+    padding:12px 14px 10px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+}
+.ac-title{font-size:14px;font-weight:700;color:#e8ecf4;letter-spacing:.3px;}
+.ac-sub{display:block;font-size:10.5px;color:#6f7c8a;margin-top:3px;}
+.ac-wrap{padding:12px 14px;}
+
+/* 卡片 */
+.ac-card{
+    background:rgba(255,255,255,.028);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:8px;
+    padding:12px 13px;
+    margin-bottom:10px;
+}
+.ac-top{display:flex;align-items:center;gap:14px;}
+.ac-ring-wrap{flex:0 0 auto;width:72px;height:72px;}
+.ac-ring{width:72px;height:72px;}
+.ac-info{flex:1;min-width:0;}
+.ac-row{
+    display:flex;align-items:baseline;gap:8px;
+    font-size:11px;line-height:1.9;
+}
+.ac-row span{flex:0 0 52px;color:#6f7c8a;}
+.ac-row b{
+    flex:1;min-width:0;color:#cfd8e3;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ac-plan{color:#8ab4ff !important;}
+.ac-ok{color:#7fd68b !important;}
+.ac-err{color:#ff8a8a !important;}
+
+.ac-sec-title{
+    font-size:10.5px;color:#6f7c8a;
+    margin-bottom:7px;letter-spacing:.3px;
+}
+.ac-plugins{display:flex;flex-wrap:wrap;gap:5px;}
+.ac-tag{
+    display:inline-block;
+    padding:3px 8px;border-radius:4px;
+    font-size:10px;
+    background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.09);
+    color:#9aa8b8;
+}
+.ac-tag.cur{
+    background:rgba(127,214,139,.14);
+    border-color:rgba(127,214,139,.35);
+    color:#7fd68b;
+    font-weight:600;
+}
+.ac-none{font-size:11px;color:#6f7c8a;}
+
+/* 警告条 */
+.ac-warn{
+    padding:8px 11px;border-radius:6px;
+    font-size:11px;line-height:1.6;
+    margin-bottom:10px;
+}
+.ac-warn.warn{
+    background:rgba(224,185,106,.12);
+    border:1px solid rgba(224,185,106,.3);
+    color:#e0b96a;
+}
+.ac-warn.err{
+    background:rgba(255,138,138,.12);
+    border:1px solid rgba(255,138,138,.3);
+    color:#ff8a8a;
+}
+
+/* 按钮 */
+.ac-btns{
+    display:grid;grid-template-columns:1fr 1fr;
+    gap:7px;margin-top:12px;
+}
+.ac-btn{
+    padding:8px 10px;
+    font-size:11.5px;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:5px;
+    color:#b8c4d2;
+    cursor:pointer;
+    transition:all .14s;
+    white-space:nowrap;
+}
+.ac-btn:hover{background:rgba(255,255,255,.1);color:#e8ecf4;}
+.ac-btn:disabled{opacity:.45;cursor:not-allowed;}
+.ac-btn.primary{
+    background:linear-gradient(180deg,#5a87a8,#3f6a87);
+    border-color:rgba(138,180,255,.32);
+    color:#f0f7ff;
+}
+.ac-btn.danger{color:#ff9a9a;}
+.ac-btn.danger:hover{background:rgba(255,138,138,.12);border-color:rgba(255,138,138,.3);}
+
+/* 空状态 */
+.ac-empty{text-align:center;padding:34px 14px;}
+.ac-empty-ic{font-size:32px;opacity:.5;margin-bottom:10px;}
+.ac-empty-t{font-size:13px;color:#cfd8e3;margin-bottom:6px;}
+.ac-empty-d{font-size:11px;color:#6f7c8a;line-height:1.6;margin-bottom:16px;}
+.ac-empty .ac-btn{width:auto;padding:8px 24px;}
+
+.ac-msg{
+    font-size:11px;line-height:1.6;
+    padding:0 14px 12px;
+    color:#8a9bab;
+    white-space:pre-wrap;
+}
+.ac-msg.ok{color:#7fd68b;}
+.ac-msg.err{color:#ff8a8a;}
+.ac-msg.warn{color:#e0b96a;}
+
+.ac-logout-tip{
+    font-size:11.5px;color:#9aa8b8;
+    line-height:1.8;margin-bottom:14px;
+}
+
+/* ==== 通用弹窗（申请授权 / 退出确认）==== */
+.lic-modal-mask{
+    position:fixed;inset:0;z-index:2147483100;
+    background:rgba(0,0,0,.62);
+    display:flex;align-items:center;justify-content:center;
+    padding:16px;box-sizing:border-box;
+    animation:licFade .16s ease;
+}
+@keyframes licFade{from{opacity:0}to{opacity:1}}
+.lic-modal{
+    width:400px;max-width:100%;
+    max-height:calc(100vh - 32px);
+    display:flex;flex-direction:column;
+    background:#161c26;
+    border:1px solid rgba(138,180,255,.18);
+    border-radius:10px;
+    box-shadow:0 20px 60px rgba(0,0,0,.75);
+    overflow:hidden;
+}
+.lic-modal-head{
+    display:flex;align-items:center;
+    padding:12px 15px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    background:linear-gradient(180deg,rgba(83,125,150,.1),transparent);
+}
+.lic-modal-title{flex:1;font-size:13px;font-weight:700;color:#e8ecf4;}
+.lic-modal-x{
+    background:none;border:none;color:#6f7c8a;
+    font-size:15px;cursor:pointer;padding:0 4px;line-height:1;
+}
+.lic-modal-x:hover{color:#ff8a8a;}
+.lic-modal-body{padding:14px 15px 15px;overflow-y:auto;}
+.lic-modal-foot{display:flex;gap:8px;margin-top:14px;}
+
+/* 申请弹窗专用 */
+.lic-select{
+    appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,#6f7c8a 50%),
+                     linear-gradient(135deg,#6f7c8a 50%,transparent 50%);
+    background-position:calc(100% - 14px) calc(50% - 2px),
+                         calc(100% - 9px) calc(50% - 2px);
+    background-size:5px 5px, 5px 5px;
+    background-repeat:no-repeat;
+    padding-right:28px;
+    cursor:pointer;
+}
+.lic-textarea{
+    resize:vertical;min-height:62px;
+    font-family:inherit;line-height:1.6;
+}
+.lic-opt{color:#5a6675;font-size:9.5px;font-weight:400;}
+.lic-req-info{
+    background:rgba(0,0,0,.24);
+    border-radius:6px;
+    padding:9px 11px;
+    margin-bottom:12px;
+}
+.lic-req-row{
+    display:flex;align-items:baseline;gap:8px;
+    font-size:10.5px;line-height:1.9;
+}
+.lic-req-row span{flex:0 0 56px;color:#6f7c8a;}
+.lic-req-row b{
+    flex:1;min-width:0;color:#9aa8b8;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.lic-req-tip{
+    margin-top:12px;padding:9px 11px;
+    background:rgba(83,125,150,.1);
+    border-left:2px solid rgba(138,180,255,.4);
+    border-radius:4px;
+    font-size:10.5px;line-height:1.7;
+    color:#8a9bab;
+}
+.lic-req-tip b{color:#9fd0ff;}
+
+/* 注册弹窗：试用天数徽标 */
+.lic-reg-trial{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 12px;margin-bottom:4px;
+    background:linear-gradient(90deg,rgba(127,214,139,.12),rgba(127,214,139,.03));
+    border:1px solid rgba(127,214,139,.22);
+    border-radius:7px;
+}
+.lic-reg-trial-day{
+    flex:0 0 auto;font-size:24px;font-weight:800;line-height:1;
+    color:#7fd68b;
+}
+.lic-reg-trial-txt{
+    font-size:11px;line-height:1.6;color:#a8b6c4;
+}
+.lic-reg-trial-txt i{font-style:normal;color:#6f7c8a;font-size:10px;}
+.lic-rrow{
+    margin-top:12px;text-align:center;
+    font-size:10.5px;color:#6f7c8a;
+}
+
+/* 申请授权：联系方式二维码 */
+.lic-contact{
+    display:flex;align-items:center;gap:12px;
+    margin-top:12px;padding:11px;
+    background:rgba(0,0,0,.24);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:7px;
+}
+.lic-contact-qr{
+    flex:0 0 92px;width:92px;height:92px;
+    border-radius:6px;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;
+}
+.lic-contact-qr img{
+    width:100%;height:100%;object-fit:contain;display:block;
+    background:#fff;border-radius:6px;
+}
+.lic-contact-qr-ph{
+    display:none;
+    width:100%;height:100%;
+    align-items:center;justify-content:center;text-align:center;
+    font-size:9.5px;line-height:1.5;color:#8a9bab;
+    background:rgba(255,255,255,.06);border:1px dashed rgba(255,255,255,.18);
+    border-radius:6px;padding:4px;box-sizing:border-box;
+}
+.lic-contact-txt{flex:1;min-width:0;}
+.lic-contact-h{
+    font-size:11.5px;font-weight:700;color:#cfd8e3;margin-bottom:5px;
+}
+.lic-contact-d{
+    font-size:10px;line-height:1.7;color:#8a9bab;
+}
+.lic-contact-d b{color:#9fd0ff;font-weight:600;}
+.lic-contact-mono{
+    margin-top:4px;
+    font-family:Consolas,monospace;letter-spacing:.3px;
+}
+
+.lic-contact-qr{cursor:zoom-in;}
+.lic-contact-qr:hover img{outline:2px solid rgba(159,208,255,.5);outline-offset:1px;}
+.lic-contact-hint{font-size:9.5px;color:#6f8ea8;margin-top:3px;}
+
+/* 二维码放大查看层 */
+.lic-qr-zoom{
+    position:fixed;left:0;top:0;right:0;bottom:0;
+    /* 必须高于 .lic-modal-mask 的 2147483100，否则大图会被申请弹窗盖住 */
+    z-index:2147483200;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(4,6,10,.86);
+    cursor:zoom-out;padding:18px;box-sizing:border-box;
+}
+.lic-qr-zoom img{
+    max-width:100%;max-height:100%;
+    width:auto;height:auto;
+    background:#fff;padding:12px;border-radius:10px;
+    box-shadow:0 16px 48px rgba(0,0,0,.6);
+    image-rendering:-webkit-optimize-contrast;
+}
+.lic-qr-zoom-tip{
+    position:absolute;left:0;right:0;bottom:16px;text-align:center;
+    font-size:11px;color:#8a9bab;
+}
+
+
+</style>
+<script>
+// 达芬奇：把扩展根路径注入全局（授权/反馈模块读本地文件要用）
+(function () {
+    var H = window.vhHost;
+    if (!H || !H.extRoot) return;
+    H.extRoot().then(function (r) {
+        if (r && r.ok && r.data) window.__vhExtRoot = String(r.data);
+    }).catch(function () {});
+})();
+</script>
+
+<style>
+/* ==== 超分 / 去字幕 ==== */
+.en-scroll{display:flex;flex-direction:column;gap:8px;}
+.en-seqs{max-height:150px;overflow:auto;background:#0e1116;border:1px solid #232a33;border-radius:4px;padding:4px;}
+.en-seq{display:flex;align-items:center;gap:6px;padding:3px 5px;font-size:12px;color:#c8d6e2;cursor:pointer;border-radius:3px;}
+.en-seq:hover{background:#171e26;}
+.en-seq input{margin:0;}
+.en-row2{display:flex;gap:8px;flex-wrap:wrap;}
+.en-f{display:flex;flex-direction:column;gap:3px;flex:1;min-width:120px;}
+.en-f span{font-size:11px;color:#8a97a5;}
+.en-f select{height:26px;background:#0e1116;border:1px solid #2b3440;border-radius:4px;color:#c8d6e2;font-size:11.5px;padding:0 4px;}
+.en-acc-hint{font-size:11px;}
+.en-prog-bar{height:7px;background:#1b1f26;border-radius:4px;overflow:hidden;}
+.en-prog-fill{height:100%;width:0%;background:linear-gradient(90deg,#3d7f9e,#6cb6d8);transition:width .25s;}
+.en-prog-meta{display:flex;justify-content:space-between;font-size:11px;color:#8a97a5;margin-top:4px;}
+.en-split{display:flex;gap:8px;}
+.en-col{flex:1;min-width:0;}
+.en-tasks{max-height:260px;overflow:auto;}
+.en-task{display:flex;align-items:center;gap:6px;padding:5px 6px;border-bottom:1px solid #1b2129;}
+.en-task-pick input{margin:0;}
+.en-task-main{flex:1;min-width:0;}
+.en-task-t{font-size:12px;color:#d6e2ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.en-task-s{font-size:10.5px;color:#7d8794;}
+.en-logbox{max-height:260px;overflow:auto;font-family:Consolas,monospace;font-size:10.5px;color:#8a97a5;line-height:1.6;}
+.en-log-line{white-space:pre-wrap;word-break:break-all;}
+</style>
+
+<style>
+/* ==== 账号与授权面板 ==== */
+.ac-header{padding:10px 12px 6px;border-bottom:1px solid #232a33;margin-bottom:10px;}
+.ac-title{font-size:14px;font-weight:600;color:#dfe9f3;}
+.ac-sub{display:block;font-size:11px;color:#7d8794;margin-top:3px;}
+.ac-wrap{padding:2px 4px;}
+.ac-row{display:flex;align-items:flex-start;gap:10px;padding:7px 6px;border-bottom:1px solid #1b2129;}
+.ac-k{width:66px;flex:0 0 auto;font-size:11.5px;color:#7d8794;}
+.ac-v{flex:1;font-size:12px;color:#d6e2ee;word-break:break-all;}
+.ac-mono{font-family:Consolas,monospace;font-size:11px;color:#9fb4c7;}
+.ac-desc{margin-left:8px;font-size:11px;color:#8a97a5;}
+.ac-badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:600;}
+.ac-badge.ok{background:#1d3b2a;color:#7ddc9a;border:1px solid #2c5c40;}
+.ac-badge.warn{background:#3b331d;color:#e0c06a;border:1px solid #5c4c2c;}
+.ac-badge.off{background:#2b2b2b;color:#9a9a9a;border:1px solid #3d3d3d;}
+.ac-actions{display:flex;gap:7px;flex-wrap:wrap;padding:12px 6px 6px;}
+.ac-msg{padding:8px 10px;font-size:11.5px;color:#8a97a5;min-height:16px;}
+.ac-msg.ac-err{color:#ff9a9a;}
+.ac-msg.ac-ok{color:#7ddc9a;}
+</style>
+
+<style>
+.en-clip-row{display:flex;align-items:center;gap:6px;margin-top:7px;flex-wrap:nowrap;}
+.en-clip-info{flex:1;min-width:0;font-size:11px;color:#8a97a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.en-clip-info.en-clip-ok{color:#7ddc9a;}
+</style>
+</head>
+<body>
+
+<!-- ==================== 顶部栏（对齐 PR 版） ==================== -->
+<div class="top-head">
+  <h1>vh-Atelier</h1>
+  <span class="conn-dot" id="connDot" title="Resolve 连接状态"></span>
+  <span class="sep"></span>
+  <span class="ver-badge" id="verBadge" title="当前插件版本与加载时间">v?</span>
+  <button type="button" id="btnRefreshTop" class="log-btn" title="重新读取当前项目">↻ 刷新</button>
+  <button type="button" id="btnAbout" class="log-btn" title="关于与诊断">ℹ 关于</button>
+</div>
+<div class="sub" id="subLine">连接中…</div>
+
+<!-- ==================== 工作台分组（一级） ==================== -->
+<div class="ws-groups">
+  <button class="ws-group" data-group="media">🗂 素材</button>
+  <button class="ws-group" data-group="script">📖 剧本</button>
+  <button class="ws-group" data-group="upscale">✨ 超分</button>
+  <button class="ws-group" data-group="sub">字幕</button>
+  <button class="ws-group" data-group="audio">声音</button>
+  <button class="ws-group active" data-group="deliver">交付</button>
+  <button class="ws-group" data-group="shenpian">🎬 审片</button>
+  <button class="ws-group" data-group="account">👤 账号</button>
+  <button class="ws-group" data-group="feedback">📮 反馈</button>
+</div>
+
+<!-- ==================== 子标签（二级） ==================== -->
+<div class="tabs ws-subtabs" data-group="deliver">
+  <button class="tab active" data-tab="export">多版本导出</button>
+</div>
+<div class="tabs ws-subtabs" data-group="shenpian" style="display:none;">
+  <button class="tab active" data-tab="shenpian">审片（分秒帧）</button>
+</div>
+<div class="tabs ws-subtabs" data-group="account" style="display:none;">
+  <button class="tab active" data-tab="account">账号与授权</button>
+</div>
+<div class="tabs ws-subtabs" data-group="sub" style="display:none;">
+  <button class="tab" data-tab="subtitle">字幕识别</button>
+</div>
+<div class="tabs ws-subtabs" data-group="audio" style="display:none;">
+  <button class="tab" data-tab="sep">人声分离</button>
+        <button class="tab" data-tab="breeze">Breeze 朗读</button>
+  <button class="tab" data-tab="sfx">音效库</button>
+  <button class="tab" data-tab="musiclib">音乐库</button>
+  <button class="tab" data-tab="ncm">网易云</button>
+  <button class="tab" data-tab="bgm">短剧扒歌</button>
+</div>
+<div class="tabs ws-subtabs" data-group="media" style="display:none;">
+  <button class="tab" data-tab="media">素材导入</button>
+</div>
+<div class="tabs ws-subtabs" data-group="script" style="display:none;">
+  <button class="tab" data-tab="script">剧本阅读</button>
+</div>
+<div class="tabs ws-subtabs" data-group="upscale" style="display:none;">
+  <button class="tab" data-tab="upscale">去字幕 / 超分</button>
+</div>
+<div class="tabs ws-subtabs" data-group="feedback" style="display:none;">
+  <button class="tab" data-tab="feedback">反馈中心</button>
+</div>
+
+<!-- ==================== 面板：多版本导出 ==================== -->
+<div class="tab-panel" id="panel-export">
+  <div class="card">
+    <h2>交付结构</h2>
+    <div class="row">
+      <span class="lbl">交付根目录</span>
+      <input type="text" id="deliveryRoot" placeholder="例如 D:\交付\000交付" style="flex:1;">
+      <button class="tbtn" id="btnBrowseRoot">浏览</button>
+      <button class="tbtn on" id="btnAutofill">自动填充各版本路径</button>
+    </div>
+    <div class="mini" id="rootTip">扫描根目录下的子文件夹，按数字前缀匹配：0=成片 / 1=无字幕 / 2=无音乐无字幕 / 3=字幕</div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>时间线</h2>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="chkAllTimelines"><span>全选</span></label>
+        <span class="mini" id="tlCount"></span>
+      </div>
+      <div class="scroll tal" id="timelineList"><div class="empty">读取中…</div></div>
+      <div class="row" style="margin-top:8px;">
+        <label class="chk"><input type="checkbox" id="chkOpenDeliver" checked><span>导出后停留在交付页</span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>版本列表 <span class="mini" id="verCount"></span></h2>
+      <div class="scroll tal" id="versionList"></div>
+      <div class="row" style="margin-top:8px;">
+        <button class="tbtn" id="btnAddVersion">+ 添加版本</button>
+        <button class="tbtn" id="btnResetVersions">恢复默认三版本</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>导出进度 <span class="mini" id="progText">待命</span></h2>
+    <div class="prog-wrap"><div class="prog-bar" id="progBar"></div></div>
+    <div class="row">
+      <button class="tbtn on" id="btnStartExport">开始导出</button>
+      <button class="tbtn" id="btnStopExport" disabled>停止</button>
+      <span class="grow"></span>
+      <span class="mini" id="progEta"></span>
+    </div>
+    <div class="logbox" id="exportLog"></div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <h2>导出结果 <button class="tbtn" id="btnCopyResult" style="float:right">复制结果</button></h2>
+    <div class="scroll tal" id="resultList"></div>
+  </div>
+</div>
+
+<!-- ==================== 面板：字幕识别 ==================== -->
+<div class="tab-panel" id="panel-subtitle" style="display:none;">
+  <div class="card">
+    <h2>识别 <span class="mini" id="subStatus" style="float:right">待命</span></h2>
+    <div class="row">
+      <span class="lbl">时间线</span>
+      <select id="subTimeline" style="flex:1;"></select>
+      <button class="tbtn" id="btnRefreshSubTl" title="重新读取当前项目的时间线列表（新建/重命名时间线后用）">↻ 刷新时间线</button>
+      <button class="tbtn on" id="btnRecognize">开始识别</button>
+      <button class="tbtn" id="btnLoadSubs">读取现有字幕</button>
+    </div>
+    <div class="row">
+      <span class="lbl">每行字数</span>
+      <input type="number" id="subCharsPerLine" min="1" max="60" value="42" style="flex:0 0 76px;">
+      <span class="lbl">条间距(帧)</span>
+      <input type="number" id="subGap" min="0" max="10" value="0" style="flex:0 0 76px;">
+    </div>
+    <div class="logbox" id="subLog"></div>
+  </div>
+
+  <div class="card">
+    <h2>字幕列表 <span class="mini" id="subCount" style="float:right"></span></h2>
+    <div class="row">
+      <button class="tbtn" id="btnSubTranslate">翻译为中文</button>
+      <button class="tbtn" id="btnApplyDict">替换字典</button>
+      <span class="grow"></span>
+      <label class="chk"><input type="checkbox" id="chkSubDual" checked><span>显示译文</span></label>
+      <label class="chk"><input type="checkbox" id="chkSubBilingual"><span>导出双语</span></label>
+      <button class="tbtn on" id="btnExportSrt" disabled>导出 SRT</button>
+    </div>
+    <div class="scroll tal" id="subList">
+      <div class="empty">先选时间线，点「开始识别」或「读取现有字幕」。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>写回时间线字幕轨</h2>
+    <div class="row">
+      <button class="tbtn" id="btnWriteBack" disabled>把当前列表写回字幕轨</button>
+    </div>
+    <div class="mini" style="line-height:1.7;margin-top:6px;">
+      达芬奇脚本 API 无法为字幕条目指定定位，也无法改写已有条目的文本。
+      脚本写入的字幕会落在时间线末尾，落点需人工确认。
+      要精确定位，推荐用「导出 SRT」后手动导入，或直接用「开始识别」。
+    </div>
+    <div class="logbox" id="writeLog"></div>
+  </div>
+</div>
+
+<!-- ==================== 面板：人声分离 ==================== -->
+<div class="tab-panel" id="panel-sep" style="display:none;">
+  <div class="card" id="sndCapsCard">
+    <h2>本地引擎 <span class="mini" id="sndCaps" style="float:right">检测中…</span></h2>
+    <div class="mini" id="sndCapsDetail" style="line-height:1.7"></div>
+  </div>
+
+  <div class="card">
+    <h2>人声分离 <span class="mini" id="sepStatus" style="float:right">待命</span></h2>
+    <div class="row">
+      <span class="lbl">输入</span>
+      <input type="text" id="sepInput" placeholder="音频/视频文件，或用时间线选中片段" style="flex:1;">
+      <button class="tbtn" id="btnSepPick">选择文件</button>
+      <button class="tbtn" id="btnSepFromSel">用选中片段</button>
+    </div>
+    <div class="row">
+      <span class="lbl">起始(秒)</span>
+      <input type="number" id="sepStart" min="0" step="0.1" placeholder="整段" style="flex:0 0 90px;">
+      <span class="lbl">时长(秒)</span>
+      <input type="number" id="sepDur" min="0" step="0.1" placeholder="整段" style="flex:0 0 90px;">
+      <button class="tbtn on" id="btnSepRun">开始分离</button>
+    </div>
+    <div class="logbox" id="sepLog"></div>
+    <div id="sepResults"></div>
+  </div>
+</div>
+
+<!-- ==================== 面板：音效库（对齐 PR 版布局） ==================== -->
+<div class="tab-panel" id="panel-sfx" style="display:none;">
+  <div id="sfx-local">
+    <div class="sfx-toolbar">
+      <div class="tr">
+        <input type="text" id="sfxDir" placeholder="音效文件夹路径">
+        <button id="btnSfxBrowse" class="tbtn">浏览</button>
+        <button id="btnSfxScan" class="tbtn">扫描</button>
+      </div>
+      <div class="tr">
+        <input type="text" id="sfxSearch" placeholder="搜索音效名 / 文件夹名...">
+        <button id="btnSfxAll" class="tbtn on">浏览</button>
+        <button id="btnSfxFav" class="tbtn">★ 收藏</button>
+        <button id="btnSfxExcluded" class="tbtn" title="查看并管理已排除的目录">🚫 已排除<span id="sfxExcludedCnt"></span></button>
+        <span id="sfxCount" style="margin-left:auto;"></span>
+      </div>
+    </div>
+
+    <div class="mllib-body">
+      <div class="mllib-tree" id="sfxTree"></div>
+      <div class="mllib-main">
+        <div class="sfx-list" id="sfxList">
+          <div class="sfx-spacer" id="sfxSpacer"></div>
+          <div class="sfx-empty" id="sfxEmpty" style="display:none;">先选择音效库目录并「扫描」</div>
+        </div>
+        <div class="mllib-foot">
+          <span id="sfxStatus"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mllib-player" id="sfxPlayerBar" style="display:none;">
+      <div class="mlp-ctrl">
+        <button id="btnSfxPrev" class="mlp-btn" title="上一个">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+        </button>
+        <button id="btnSfxPlay" class="mlp-btn mlp-main" title="播放/暂停">
+          <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+        </button>
+        <button id="btnSfxNext" class="mlp-btn" title="下一个">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+        </button>
+      </div>
+      <div class="mlp-now">
+        <div class="mlp-title" id="sfxPlayerTitle">未在播放</div>
+        <div class="mlp-sub" id="sfxPlayerSub"></div>
+      </div>
+      <div class="mlp-bar">
+        <span class="ptime" id="sfxCur">0:00</span>
+        <div class="seek" id="sfxSeek"><div class="seek-fill" id="sfxSeekFill"></div></div>
+        <span class="ptime" id="sfxDur">0:00</span>
+      </div>
+      <div class="mlp-vol">
+        <button id="btnSfxVol" class="mlp-btn" title="静音/取消静音">
+          <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+          <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        </button>
+        <input type="range" id="sfxVol" class="mlp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+      </div>
+    </div>
+  </div>
+  <div id="sfxContextMenu"></div>
+</div>
+
+<!-- ==================== 面板：音乐库（对齐 PR 版布局） ==================== -->
+<div class="tab-panel" id="panel-musiclib" style="display:none;">
+  <div id="musiclib-local">
+    <div class="mllib-toolbar">
+      <div class="tr">
+        <input type="text" id="mllibDir" placeholder="音乐文件夹路径">
+        <button id="btnMllibBrowse" class="tbtn">浏览</button>
+        <button id="btnMllibScan" class="tbtn">扫描</button>
+      </div>
+      <div class="tr">
+        <input type="text" id="mllibSearch" placeholder="搜索当前目录...">
+        <span class="mini">排序</span>
+        <select id="mllibSort" style="flex:0 0 auto;max-width:110px;">
+          <option value="ctime">创建时间</option>
+          <option value="name">名称</option>
+          <option value="mtime">修改时间</option>
+          <option value="size">大小</option>
+          <option value="type">类型</option>
+        </select>
+        <button id="btnMllibSortDir" class="tbtn" title="切换升降序" style="padding:6px 8px;font-size:11px;">↓ 新→旧</button>
+        <button id="btnMllibExcluded" class="tbtn" title="查看并管理已排除的目录">🚫 已排除<span id="mllibExcludedCnt"></span></button>
+      </div>
+    </div>
+
+    <div class="mllib-body">
+      <div class="mllib-tree" id="mllibTree"></div>
+      <div class="mllib-main">
+        <div class="mllib-list" id="mllibList">
+          <div class="mllib-spacer" id="mllibSpacer"></div>
+          <div class="mllib-empty" id="mllibEmpty" style="display:none;">选择左侧目录查看音乐，或点「扫描」构建库</div>
+        </div>
+        <div class="mllib-foot">
+          <span id="mllibCount"></span>
+          <span id="mllibStatus"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mllib-player" id="mllibPlayer" style="display:none;">
+      <div class="mlp-ctrl">
+        <button id="btnMlPrev" class="mlp-btn" title="上一首">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+        </button>
+        <button id="btnMlPlay" class="mlp-btn mlp-main" title="播放/暂停">
+          <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+        </button>
+        <button id="btnMlNext" class="mlp-btn" title="下一首">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+        </button>
+      </div>
+      <div class="mlp-now">
+        <div class="mlp-title" id="mlpTitle">未在播放</div>
+        <div class="mlp-sub" id="mlpSub"></div>
+      </div>
+      <div class="mlp-bar">
+        <span class="ptime" id="mlpCur">0:00</span>
+        <div class="seek" id="mlpSeek"><div class="seek-fill" id="mlpSeekFill"></div></div>
+        <span class="ptime" id="mlpDur">0:00</span>
+      </div>
+      <div class="mlp-vol">
+        <button id="btnMlVol" class="mlp-btn" title="静音/取消静音">
+          <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+          <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        </button>
+        <input type="range" id="mlpVol" class="mlp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+      </div>
+    </div>
+  </div>
+  <div id="mllibContextMenu"></div>
+</div>
+
+<!-- ==================== 面板：网易云音乐 ==================== -->
+<div class="tab-panel" id="panel-ncm" style="display:none;">
+  <div class="card">
+    <h2>账号 <span class="mini" id="ncmLoginState" style="float:right">检测中…</span></h2>
+    <div id="ncmLoginBox"></div>
+  </div>
+
+  <div class="card">
+    <h2>搜索 <span class="mini" id="ncmCount" style="float:right"></span></h2>
+    <div class="row">
+      <select id="ncmSearchType" style="flex:0 0 100px;">
+        <option value="1">单曲</option>
+        <option value="1000">歌单</option>
+      </select>
+      <input type="text" id="ncmSearchKw" placeholder="歌名 / 歌手 / 歌单（回车搜索）" style="flex:1;">
+      <button class="tbtn on" id="btnNcmSearch">搜索</button>
+    </div>
+    <div class="row" style="margin-top:5px;">
+      <label class="chk" title="全选当前列表"><input type="checkbox" id="chkNcmSelAll"><span>全选</span></label>
+      <button class="tbtn on" id="btnNcmBatch" disabled>⬇ 批量下载(0)</button>
+      <button class="tbtn" id="btnNcmPickDir">📁 下载目录</button>
+      <button class="tbtn" id="btnNcmLyric">歌词</button>
+      <button class="tbtn" id="btnNcmIdentify">🎙 听歌识曲</button>
+      <button class="tbtn ghost" id="btnNcmIdentHist" title="查看识曲历史">🕘</button>
+      <span class="grow"></span>
+      <span class="mini">▶ 试听 · ⬇ 下载 · ⇥ 导入素材池</span>
+    </div>
+  </div>
+
+  <div class="card" style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0;">
+    <div class="scroll tal" id="ncmList" style="flex:1 1 auto;min-height:200px;">
+      <div class="empty">输入关键词后回车搜索</div>
+    </div>
+  </div>
+
+  <div class="ncm-lyric" id="ncmLyric" style="display:none;"></div>
+
+  <div class="ncm-player" id="ncmPlayer" style="display:none;">
+    <div class="mp-now">
+      <img id="ncmCover" class="mp-cover" alt="">
+      <div class="mp-meta">
+        <div class="mp-title" id="ncmTitle">未在播放</div>
+        <div class="mp-sub" id="ncmSub"></div>
+      </div>
+    </div>
+    <div class="mp-ctrl">
+      <button id="btnNcmPrev" class="mp-btn" title="上一首">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h2v12H6z"/><path d="M18 6l-8 6 8 6z"/></svg>
+      </button>
+      <button id="btnNcmPlay" class="mp-btn mp-main" title="播放/暂停">
+        <svg class="ic-play" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="ic-pause" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6z"/><path d="M14 5h4v14h-4z"/></svg>
+      </button>
+      <button id="btnNcmNext" class="mp-btn" title="下一首">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 6h2v12h-2z"/><path d="M6 6l8 6-8 6z"/></svg>
+      </button>
+    </div>
+    <div class="mp-bar">
+      <span class="ptime" id="ncmCur">0:00</span>
+      <div class="seek" id="ncmSeek"><div class="seek-fill" id="ncmSeekFill"></div></div>
+      <span class="ptime" id="ncmDur">0:00</span>
+    </div>
+    <div class="mp-side">
+      <button id="btnNcmVolBtn" class="mp-mode" title="静音/取消静音">
+        <svg class="ic-vol-on" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+        <svg class="ic-vol-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      </button>
+      <input type="range" id="ncmVol" class="mp-vol-slider" min="0" max="1" step="0.01" value="0.8">
+      <button id="btnNcmMode" class="mp-mode" title="列表循环"></button>
+      <button id="btnNcmLyric" class="mp-mode" title="歌词">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h10"/></svg>
+      </button>
+      <button id="btnNcmDlCur" class="mp-mode" title="下载当前歌曲">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M5 20h14"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="mini" id="ncmStatus" style="flex:0 0 auto;padding:2px 4px;"></div>
+</div>
+
+<!-- ==================== 面板：短剧扒歌 ==================== -->
+<div class="tab-panel" id="panel-bgm" style="display:none;">
+  <div class="bgm-scroll">
+
+    <!-- 顶部：服务状态 + 搜索 -->
+    <div class="card" style="padding:9px 11px;">
+      <div class="row" style="align-items:center;">
+        <span class="mini" id="bgmSrvState">服务未连接</span>
+        <span class="grow"></span>
+        <button class="tbtn ghost" id="btnBgmRefresh" title="重启本地服务">↻</button>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <input type="text" id="bgmKw" placeholder="输入剧名搜索，或粘贴分享链接" style="flex:1;">
+        <button class="tbtn on" id="btnBgmSearch">搜索</button>
+      </div>
+      <div id="bgmSearchHistWrap" style="display:none;margin-top:6px;">
+        <div class="row" style="align-items:center;">
+          <span class="mini">搜索历史</span><span class="grow"></span>
+          <span class="mini" id="btnBgmSearchHistClear" style="cursor:pointer;color:var(--fg-link);">清空</span>
+        </div>
+        <div id="bgmSearchHist" class="bgm-chips"></div>
+      </div>
+    </div>
+
+    <!-- 搜索结果 -->
+    <div id="bgmSearchWrap" class="card" style="display:none;">
+      <h2>搜索结果 <span class="mini" id="bgmCount" style="float:right"></span></h2>
+      <div id="bgmSearchList" class="bgm-list-min"><div class="empty">搜索中…</div></div>
+    </div>
+
+    <!-- ==================== 首页 ==================== -->
+    <div id="bgmHome">
+      <div class="card" id="bgmPlayHistWrap" style="display:none;">
+        <h2>接着看 <span class="mini" style="float:right"><span id="btnBgmPlayHistClear" style="cursor:pointer;">清空</span></span></h2>
+        <div id="bgmPlayHist" class="bgm-grid"></div>
+      </div>
+
+      <div class="card">
+        <h2>热门短剧 <span class="mini" style="float:right">点卡片进入播放</span></h2>
+        <div id="bgmRankTabs" class="bgm-tabrow"></div>
+        <div id="bgmRank" style="margin-top:6px;"><div class="empty">读取中…</div></div>
+      </div>
+
+      <div class="card">
+        <h2>我的收藏 <span class="mini" style="float:right">右上角 ☆ 收藏 / 右键更多</span></h2>
+        <div id="bgmFav" style="max-height:260px;overflow:auto;"><div class="mini" style="padding:8px;">还没有收藏</div></div>
+      </div>
+
+      <div class="card">
+        <h2>浏览记录 <span class="mini" style="float:right"><span id="btnBgmHistClear" style="cursor:pointer;">清空</span></span></h2>
+        <div id="bgmHist" style="max-height:260px;overflow:auto;"><div class="mini" style="padding:8px;">还没有记录</div></div>
+      </div>
+    </div>
+
+    <!-- ==================== 播放页 ==================== -->
+    <div id="bgmPlayerWrap" style="display:none;">
+      <div class="card" style="padding:8px;">
+        <div class="row" style="align-items:center;">
+          <button class="tbtn" id="btnBgmBack" title="返回首页">‹ 返回</button>
+          <span id="bgmEpMeta" class="mini"></span>
+          <span class="grow"></span>
+          <button class="tbtn" id="btnBgmImport">⇥ 导入素材池</button>
+        </div>
+      </div>
+
+      <!-- 播放器 -->
+      <div class="bgm-player">
+        <div class="bgm-player-head">
+          <span class="bgm-player-title" id="bgmPlayerTitle">未在播放</span>
+          <span class="grow"></span>
+          <label class="chk" title="播完自动下一集"><input type="checkbox" id="bgmAutoNext" checked><span>连播</span></label>
+          <button class="tbtn" id="btnBgmPlayerPrev" title="上一集">◀</button>
+          <button class="tbtn" id="btnBgmPlayerPlay" title="播放/暂停">⏯</button>
+          <button class="tbtn" id="btnBgmPlayerNext" title="下一集">▶</button>
+          <button class="tbtn" id="btnBgmPlayerClose" title="关闭播放器">✕</button>
+        </div>
+        <div class="bgm-player-stage">
+          <video id="bgmV" playsinline preload="metadata"></video>
+          <div id="bgmBuf" class="bgm-buf" style="display:none;">
+            <div class="bgm-buf-inner">
+              <div class="bgm-buf-spin"></div>
+              <div class="bgm-buf-msg" id="bgmBufMsg">准备播放…</div>
+              <div class="bgm-buf-bar" id="bgmBufBarWrap" style="display:none;"><div class="bgm-buf-fill" id="bgmBufFill"></div></div>
+              <div class="bgm-buf-sub" id="bgmBufSub"></div>
+              <button class="bgm-buf-cancel" id="bgmBufCancel" style="display:none;">取消</button>
+            </div>
+          </div>
+          <button id="bgmIdentifyFab" class="bgm-fab" title="听歌识曲：录 6 秒正在播放的声音">🎧</button>
+          <div id="bgmIdentifyPanel" class="bgm-fab-panel" style="display:none;">
+            <div class="row" style="align-items:center;">
+              <span class="mini" style="flex:1;">🎧 听歌识曲</span>
+              <button class="tbtn" id="btnBgmIdentifyClose" style="padding:1px 7px;font-size:11px;">✕</button>
+            </div>
+            <div id="bgmIdentifyProgress" class="mini" style="margin-top:4px;"></div>
+            <div id="bgmIdentifyResult" style="display:none;margin-top:4px;"></div>
+          </div>
+        </div>
+        <div class="bgm-player-bar">
+          <span class="ptime" id="bgmCur">0:00</span>
+          <div class="seek" id="bgmSeek"><div class="seek-fill" id="bgmFill"></div></div>
+          <span class="ptime" id="bgmDur">0:00</span>
+        </div>
+      </div>
+
+      <!-- 分集 -->
+      <div class="card" style="flex:1 1 auto;display:flex;flex-direction:column;min-height:0;">
+        <h2>分集 <span class="mini" style="float:right">双击播放 · 勾选可批量下载</span></h2>
+        <div class="row">
+          <button class="tbtn on" id="bgmDl" disabled>⬇ 下载并扒歌选中(0)</button>
+          <button class="tbtn" id="btnBgmAll">全选</button>
+          <button class="tbtn" id="btnBgmNone">全不选</button>
+          <span class="grow"></span>
+          <span class="mini" id="bgmProg"></span>
+        </div>
+        <div id="bgmEpList" class="bgm-list" style="flex:1 1 auto;min-height:220px;max-height:420px;overflow:auto;"></div>
+      </div>
+    </div>
+
+    <div class="mini" id="bgmStatus" style="padding:2px 4px;"></div>
+  </div>
+</div>
+
+
+
+<!-- ==================== 面板：语音克隆 ==================== -->
+
+
+<div class="tab-panel" id="panel-breeze" style="display:none;">
+
+        <!-- 1 · 模型状态 -->
+        <div class="card bz-model-card" id="bzModelCard" style="display:none;">
+            <h2>需要先下载语音模型</h2>
+            <div class="hint">首次使用需下载约 2.3 GB 模型，下载后可离线使用。建议网络稳定时进行。</div>
+            <div class="bz-mprog"><i id="bzModelBar"></i></div>
+            <div class="row" style="margin-top:8px;align-items:center;gap:8px;">
+                <span class="hint" id="bzModelStat" style="flex:1;margin:0;">尚未开始</span>
+                <button id="bzBtnDlModel" class="secondary mini">开始下载</button>
+            </div>
+        </div>
+
+        <!-- 2 · 选音色 -->
+        <div class="card">
+            <h2>1 · 选音色</h2>
+
+            <!-- 已保存音色 -->
+            <div class="row" style="align-items:center;gap:6px;">
+                <label style="margin:0;flex:1;">音色库</label>
+                <button id="bzBtnRefreshVoice" class="secondary mini" title="刷新音色列表">↻ 刷新</button>
+            </div>
+            <div class="row" style="margin-top:6px;">
+                <select id="bzVoiceSel" style="flex:1;">
+                    <option value="">（用下方参考音频）</option>
+                </select>
+                <button id="bzBtnUseVoice" class="secondary mini" disabled>使用</button>
+            </div>
+            <div class="hint" id="bzVoiceHint">选了音色就不用再上传参考音频和填逐字稿。</div>
+
+            <div class="vc-sep"><span>或新建音色</span></div>
+
+            <!-- 从时间轴抓取 -->
+            <div class="row" style="align-items:center;gap:6px;">
+                <label style="margin:0;flex:0 0 auto;">取材方式</label>
+                <select id="bzSrcSel" style="flex:1;">
+                    <option value="clip">选中片段</option>
+                    <option value="inout">入出点</option>
+                </select>
+                <button id="bzBtnGrab" class="secondary mini">抓取</button>
+            </div>
+            <div class="hint" id="bzGrabHint">先在时间轴选中一段人声（≤30 秒）。</div>
+
+            <!-- 入出点专用 -->
+            <div id="bzInOutRow" style="display:none;margin-top:8px;">
+                <div class="row" style="align-items:center;gap:6px;">
+                    <label style="margin:0;flex:0 0 auto;">取哪条轨</label>
+                    <select id="bzTrackSel" style="flex:1;">
+                        <option value="auto">自动（最完整）</option>
+                    </select>
+                    <button id="bzBtnRefreshTrack" class="secondary mini">↻</button>
+                </div>
+                <div class="row" style="margin-top:6px;align-items:center;gap:6px;">
+                    <label style="margin:0;flex:0 0 auto;">导出预设</label>
+                    <select id="bzPresetSel" style="flex:1;">
+                        <option value="">（点 ↻ 加载）</option>
+                    </select>
+                    <button id="bzBtnRefreshPreset" class="secondary mini">↻</button>
+                </div>
+            </div>
+
+            <!-- 参考音频 -->
+            <div class="ref-box" id="bzRefInfo" style="margin-top:10px;">尚未选择参考音频</div>
+            <div id="bzWaveBox" style="display:none;margin-top:8px;"></div>
+
+            <label style="margin-top:10px;">参考音频对应文字</label>
+            <div class="row" style="margin-top:4px;">
+                <input type="text" id="bzRefText" placeholder="音频里说了什么就填什么" style="flex:1;">
+                <button id="bzBtnAsr" class="secondary mini">自动识别</button>
+            </div>
+            <div class="hint" id="bzAsrHint">抓取后会自动识别文字，请核对错字；也可点「自动识别」重跑。</div>
+        </div>
+
+        <!-- 3 · 说什么 -->
+        <div class="card">
+            <h2>2 · 说什么</h2>
+            <div class="vc-modes" id="bzModeRow">
+                <button class="vc-mode active" data-mode="design">声音设计</button>
+                <button class="vc-mode" data-mode="clone">声音克隆</button>
+                <button class="vc-mode" data-mode="direct">语气导演</button>
+            </div>
+            <div class="hint" id="bzModeHint">声音设计：不需要参考音频，用一句话描述想要的嗓音。</div>
+
+            <label style="margin-top:10px;">要朗读的文字</label>
+            <textarea id="bzText" rows="3" placeholder="输入要合成的内容，中英文均可"></textarea>
+
+            <!-- 声音设计：描述 -->
+            <div id="bzDesignWrap">
+                <label style="margin-top:10px;">声音描述</label>
+                <input type="text" id="bzInstruction" placeholder="例如：低沉沙哑的中年男性，语速缓慢，带点沧桑感">
+                <div class="hint">越具体越好，例如年龄、性别、音色、语气、语速。</div>
+            </div>
+
+            <!-- 语气导演：语气指令 -->
+            <div id="bzDirectWrap" style="display:none;">
+                <label style="margin-top:10px;">语气指令</label>
+                <input type="text" id="bzDirectText" placeholder="例如：用悲伤的语气慢慢说 / 愤怒地大声喊">
+                <div class="vc-chips" style="margin-top:6px;">
+                    <span class="vc-chip" data-v="用悲伤的语气慢慢说">悲伤</span>
+                    <span class="vc-chip" data-v="愤怒地大声喊出来">愤怒</span>
+                    <span class="vc-chip" data-v="温柔地轻声细语">温柔</span>
+                    <span class="vc-chip" data-v="语速加快，显得很着急">急促</span>
+                    <span class="vc-chip" data-v="冷漠平淡地说">冷漠</span>
+                </div>
+            </div>
+
+            <div class="grid2" style="margin-top:10px;">
+                <div>
+                    <label>贴合度 <span id="bzCfgVal" style="color:#537d96;font-weight:600;">4</span></label>
+                    <input type="range" id="bzCfg" min="1" max="10" step="0.5" value="4">
+                </div>
+                <div>
+                    <label>随机种子</label>
+                    <div style="display:flex;gap:4px;">
+                        <input type="number" id="bzSeed" value="42" style="flex:1;">
+                        <button id="bzBtnDice" class="secondary mini" title="随机">🎲</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 保存音色 -->
+            <details id="bzSaveWrap" style="margin-top:10px;">
+                <summary style="cursor:pointer;font-size:12px;color:#9fb4c7;">保存当前参考音频为音色</summary>
+                <div class="row" style="margin-top:8px;">
+                    <input type="text" id="bzSaveName" placeholder="音色名称（可中文）" style="flex:1;">
+                    <button id="bzBtnSaveVoice" class="secondary mini">保存</button>
+                </div>
+                <div class="hint">保存后出现在上方「音色库」下拉里，下次直接选。</div>
+            </details>
+        </div>
+
+        <!-- 4 · 生成与结果 -->
+        <div class="card">
+            <h2>3 · 生成</h2>
+
+            <!-- 进度 -->
+            <div id="bzProgWrap" style="display:none;margin-bottom:10px;">
+                <div class="bz-prog-track"><i id="bzProgBar"></i></div>
+                <div class="hint" id="bzProgText" style="margin-top:6px;">准备中…</div>
+            </div>
+
+            <div class="row">
+                <button id="bzBtnGen" class="primary" style="flex:1;">开始生成</button>
+                <button id="bzBtnStop" class="secondary" disabled>停止</button>
+            </div>
+
+            <!-- 结果 -->
+            <div id="bzResultWrap" style="display:none;margin-top:12px;">
+                <div class="ref-box" id="bzResultInfo" style="margin:0;"></div>
+                <div id="bzResultWave" style="margin-top:8px;"></div>
+                <div class="row" style="margin-top:10px;">
+                    <button id="bzBtnInsert" class="secondary" style="flex:1;">送到时间轴</button>
+                </div>
+                <div class="hint" id="bzInsertHint" style="margin-top:6px;"></div>
+            </div>
+        </div>
+
+        <!-- 音频保存位置 -->
+        <div class="ao-mount" data-ao="breeze"></div>
+
+        <div class="hint" style="padding:8px 4px;color:#e0a04a;">
+            ⚠ Breeze 模型权重为研究/非商业许可，生成内容请勿用于商业交付项目。
+        </div>
+    </div>
+
+<!-- ==================== 面板：素材导入 ==================== -->
+<div class="tab-panel" id="panel-media" style="display:none;">
+  <div class="md-wrap">
+    <!-- 根目录行 -->
+    <div class="md-bar">
+      <select id="mdRootSel" style="flex:1;min-width:0;"></select>
+      <button id="mdAddRoot" class="tbtn" title="添加常用根目录">📁 设根…</button>
+      <button id="mdAddSubRoot" class="tbtn" title="把当前目录加入常用根">📌 存当前</button>
+      <button id="mdCollapse" class="tbtn" title="收起所有已展开的目录">⇱ 折叠全部</button>
+    </div>
+    <!-- 导入目标 -->
+    <div class="md-bar">
+      <span class="lbl">导入到素材池</span>
+      <input type="text" id="mdBinName" value="素材" style="flex:0 0 130px;">
+      <span class="grow"></span>
+      <span class="mini" id="mdStatus"></span>
+    </div>
+    <!-- 左树右列表 -->
+    <div class="md-body">
+      <div class="md-tree" id="mdTree"><div class="hint" style="padding:8px;">浏览目录</div></div>
+      <div class="md-files">
+        <div class="md-fhead" id="mdFHead"><span class="hint">← 选择左侧文件夹查看内容</span></div>
+        <div class="md-flist" id="mdFList"></div>
+      </div>
+    </div>
+    <!-- 底部工具栏 -->
+    <div class="md-bar">
+      <button id="mdImpSel" class="tbtn" disabled>⬆ 导入选中(0)</button>
+      <button id="mdImpFolder" class="tbtn" title="导入当前目录整个文件夹（递归）">📂 导入当前目录</button>
+      <span class="grow"></span>
+      <span class="mini">双击文件用系统程序打开 · 拖拽文件可直接放进时间线</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ==================== 占位面板（尚未移植，先占位保证排版完整） ==================== -->
+<div class="tab-panel" id="panel-script" style="display:none;">
+  <!-- 首页：选文件 / 最近打开 -->
+  <div class="SCR-home" id="SCR-home">
+    <div class="card">
+      <h2>剧本阅读 <span class="mini" id="SCR-status" style="float:right">待命</span></h2>
+      <div class="row">
+        <button class="tbtn on" id="SCR-btnPick">📖 选择剧本文件（docx / pdf / txt）</button>
+        <span class="grow"></span>
+      </div>
+      <div class="mini" style="line-height:1.7;margin-top:6px;">
+        解析在本机完成（Python 读 docx/pdf），不上传任何内容。
+        剧本按「第 N 集 / EPN」自动分集，可在左侧快速跳转。
+      </div>
+    </div>
+    <div class="card">
+      <h2>最近</h2>
+      <div id="SCR-recent"></div>
+    </div>
+  </div>
+
+  <!-- 阅读器 -->
+  <div class="SCR-reader" id="SCR-reader" style="display:none;">
+    <div class="SCR-bar">
+      <button class="tbtn" id="SCR-btnBack" title="返回首页">←</button>
+      <button class="tbtn" id="SCR-btnSwitch" title="换一个剧本">📂 换剧本</button>
+      <span class="SCR-file" id="SCR-fileName" title=""></span>
+      <span class="grow"></span>
+      <input type="text" id="SCR-search" class="SCR-search" placeholder="搜索台词（回车下一个，Shift+回车上一个）">
+      <span class="mini" id="SCR-hitInfo"></span>
+      <button class="tbtn" id="SCR-hitPrev" title="上一个匹配">↑</button>
+      <button class="tbtn" id="SCR-hitNext" title="下一个匹配">↓</button>
+      <label class="chk" title="显示中文译文"><input type="checkbox" id="SCR-chkZh"><span>译文</span></label>
+      <button class="tbtn" id="SCR-btnTranslate" title="逐行翻译为中文（需联网）">译</button>
+    </div>
+    <div class="SCR-main">
+      <div class="SCR-side" id="SCR-side"></div>
+      <div class="SCR-body" id="SCR-body"><div class="empty">选择一个剧本开始阅读</div></div>
+    </div>
+  </div>
+</div>
+<div class="tab-panel" id="panel-upscale" style="display:none;">
+  <div class="en-scroll">
+
+    <!-- 卡1：时间线 + 设置 -->
+    <div class="card">
+      <h2 style="display:flex;align-items:center;">
+        🎞 选择时间线 · 设置
+        <button id="enRefSeq" class="secondary mini" style="margin-left:auto;">🔄 刷新</button>
+      </h2>
+      <div id="enSeqList" class="en-seqs"><div class="hint" style="padding:4px 6px;">点「刷新」加载时间线</div></div>
+      <!-- 区间：处理整条时间线的某一段（不必先导出整集） -->
+      <div class="en-clip-row">
+        <button id="enGrabClip" class="secondary mini">✂ 读取区间</button>
+        <select id="enClipSrc" style="height:23px;background:#0e1116;border:1px solid #2b3440;border-radius:4px;color:#c8d6e2;font-size:11px;">
+          <option value="clip" selected>选中片段</option>
+          <option value="inout">游标/当前片段</option>
+        </select>
+        <span id="enClipInfo" class="en-clip-info">未读取</span>
+      </div>
+
+      <div class="en-row2" style="margin-top:8px;">
+        <label class="en-f"><span>处理类型</span>
+          <select id="enMode">
+            <option value="enhance" selected>⚡ 超分（去字幕底版）</option>
+            <option value="erase">🧹 去字幕（擦除硬字幕）</option>
+          </select>
+        </label>
+        <label class="en-f"><span>导出预设</span>
+          <select id="enPreset"><option value="">自动（首个预设）</option></select>
+        </label>
+        <label class="en-f"><span>上传文件夹</span>
+          <select id="enFolder"><option value="14086">超分（默认）</option></select>
+        </label>
+        <label class="en-f"><span>分辨率</span>
+          <select id="enRes">
+            <option value="720p" selected>720P · ¥2.5/分</option>
+            <option value="1080p">1080P · ¥5/分</option>
+            <option value="2k">2K · ¥10/分</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row" style="margin-top:10px;gap:6px;">
+        <button id="enGo" class="primary" style="flex:1;">🚀 导出并超分</button>
+        <button id="enStop" class="secondary" disabled>停止</button>
+        <button id="enAccount" class="secondary mini" title="设置超分站账号">⚙ 账号</button>
+        <button id="enSettings" class="secondary mini" title="设置输出目录">🗂 设置</button>
+      </div>
+      <div class="en-acc-hint" id="enAccHint" style="margin-top:6px;font-size:11px;color:#c9a86a;"></div>
+
+      <div id="enProgWrap" style="display:none;margin-top:10px;">
+        <div class="en-prog-bar"><div id="enProgFill" class="en-prog-fill"></div></div>
+        <div class="en-prog-meta"><span id="enProgText"></span><span id="enProgPct"></span></div>
+      </div>
+      <div class="en-act-hint" id="enActHint" style="margin-top:6px;font-size:11px;color:#9fb4c7;"></div>
+    </div>
+
+    <!-- 卡2：任务 + 日志 -->
+    <div class="en-split">
+      <div class="card en-col">
+        <h2>📥 超分任务
+          <button id="enTaskDlSel" class="secondary mini" style="margin-left:auto;" disabled>⬇ 下载选中</button>
+          <button id="enTaskRefresh" class="secondary mini">🔄</button>
+        </h2>
+        <div id="enTaskHint" class="hint" style="margin-bottom:6px;"></div>
+        <div id="enTaskList" class="en-tasks"><div class="hint" style="padding:6px;">暂无</div></div>
+      </div>
+      <div class="card en-col">
+        <h2>📋 运行日志
+          <button id="enLogClear" class="secondary mini" style="margin-left:auto;">清空</button>
+        </h2>
+        <div id="enLogList" class="en-logbox"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<div class="tab-panel" id="panel-shenpian" style="display:none;">
+  <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
+    <div class="wb-nav">
+      <button class="wb-nav-btn" id="spBack" title="后退">←</button>
+      <button class="wb-nav-btn" id="spFwd" title="前进">→</button>
+      <button class="wb-nav-btn" id="spReload" title="刷新当前页">↻</button>
+      <button class="wb-nav-btn" id="btnSpHome" title="回到分秒帧首页">🏠</button>
+      <button class="wb-nav-btn wb-nav-ext" id="spExternal" title="在外部浏览器打开">↗</button>
+      <input type="text" class="wb-nav-url" id="spUrl" placeholder="输入网址回车跳转">
+    </div>
+    <div class="sp-parse-bar" id="spParseBar">
+      <span class="sp-parse-ic">🔗</span>
+      <input type="text" id="spParseInput" placeholder="粘贴一段文字（含分秒帧链接），回车自动打开" autocomplete="off">
+      <button id="spParseBtn" class="secondary mini">打开</button>
+      <button id="spParsePaste" class="secondary mini" title="从剪贴板读取并打开">📋 粘贴打开</button>
+    </div>
+    <iframe id="spFrame" style="flex:1;width:100%;border:1px solid #333;border-radius:6px;background:#fff;" src="about:blank"></iframe>
+  </div>
+</div>
+
+<div class="tab-panel" id="panel-account" style="display:none;">
+        <div class="ac-header">
+            <span class="ac-title">账号与授权</span>
+            <span class="ac-sub">查看授权状态 · 续期 · 切换账号</span>
+        </div>
+        <div class="ac-wrap" id="acBody"></div>
+        <div class="ac-msg" id="acMsg"></div>
+    </div>
+
+<div class="tab-panel" id="panel-feedback" style="display:none;">
+        <div class="fb-header">
+            <div class="fb-hd-left">
+                <span class="fb-hd-title">意见反馈</span>
+                <span class="fb-hd-sub">遇到问题或有好建议，告诉我们</span>
+            </div>
+            <button class="fb-hd-link" id="fbBtnHistory">📋 我的反馈</button>
+        </div>
+
+        <!-- 主表单 -->
+        <div class="fb-form" id="fbFormWrap">
+
+            <!-- 类型选择（大按钮，显眼） -->
+            <div class="fb-kinds" id="fbKinds">
+                <button class="fb-kind active" data-kind="bug">
+                    <span class="fb-kind-ic">🐞</span>
+                    <span class="fb-kind-t">遇到问题</span>
+                    <span class="fb-kind-d">报错、崩溃、功能异常</span>
+                </button>
+                <button class="fb-kind" data-kind="idea">
+                    <span class="fb-kind-ic">💡</span>
+                    <span class="fb-kind-t">功能建议</span>
+                    <span class="fb-kind-d">想要的新功能、改进</span>
+                </button>
+                <button class="fb-kind" data-kind="other">
+                    <span class="fb-kind-ic">💬</span>
+                    <span class="fb-kind-t">其他</span>
+                    <span class="fb-kind-d">使用疑问、其他想法</span>
+                </button>
+            </div>
+
+            <!-- 标题 -->
+            <label class="fb-label">
+                一句话说明<span class="fb-req">*</span>
+            </label>
+            <input type="text" id="fbTitle" class="fb-input"
+                   placeholder="例如：多版本导出时提示找不到预设文件"
+                   maxlength="200">
+            <div class="fb-counter"><span id="fbTitleCount">0</span>/200</div>
+
+            <!-- 详细描述 -->
+            <label class="fb-label">
+                详细描述<span class="fb-opt">（建议写清楚，方便定位问题）</span>
+            </label>
+            <textarea id="fbDetail" class="fb-input fb-textarea" rows="6"
+                      placeholder="遇到问题时可以这样写：&#10;1. 我做了什么操作（点了哪个按钮、哪个板块）&#10;2. 期望的结果是什么&#10;3. 实际发生了什么（有报错信息就贴上来）&#10;4. 是否每次都这样"></textarea>
+            <div class="fb-counter"><span id="fbDetailCount">0</span>/15000</div>
+
+            <!-- 联系方式 -->
+            <label class="fb-label">
+                联系方式<span class="fb-opt">（选填，方便我们回复你）</span>
+            </label>
+            <input type="text" id="fbContact" class="fb-input"
+                   placeholder="邮箱 / 微信 / QQ，任填一个即可">
+
+            <!-- 附带日志 -->
+            <label class="fb-check">
+                <input type="checkbox" id="fbWithLogs" checked>
+                <span>附带运行日志（帮助定位问题，不含个人隐私）</span>
+            </label>
+
+            <!-- 提交 -->
+            <button class="fb-submit" id="fbBtnSubmit">
+                <span class="fb-submit-ic">📮</span>
+                <span class="fb-submit-t">提交反馈</span>
+            </button>
+
+            <div class="fb-msg" id="fbMsg"></div>
+        </div>
+
+        <!-- 我的反馈列表（默认隐藏） -->
+        <div class="fb-history" id="fbHistoryWrap" style="display:none;">
+            <div class="fb-hist-head">
+                <button class="fb-back" id="fbBtnBack">← 返回提交</button>
+                <span class="fb-hist-title">我的反馈</span>
+                <button class="fb-refresh" id="fbBtnRefreshList">↻</button>
+            </div>
+            <div class="fb-hist-list" id="fbHistList">
+                <div class="fb-empty">加载中…</div>
+            </div>
+        </div>
+    </div>
+
+<!-- ==================== 关于弹层 ==================== -->
+<div class="overlay" id="aboutOverlay" style="display:none">
+  <div class="modal">
+    <div class="modal-head">
+      <span>关于 / 诊断</span>
+      <button class="tbtn" id="btnCloseAbout">关闭</button>
+    </div>
+    <pre class="diag" id="aboutBody"></pre>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/wavesurfer.js"></script>
+<script src="js/clip-select.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/translate.js"></script>
+<script src="js/vh-menu.js"></script>
+<script src="js/vh-prompt.js"></script>
+<script src="js/vh-dict.js"></script>
+<script src="js/sfx.js"></script>
+<script src="js/musiclib.js"></script>
+<script src="js/media.js"></script>
+<script src="js/script.js"></script>
+<script src="js/ncm.js"></script>
+<script src="js/bgm.js"></script>
+<script src="js/breeze.js"></script>
+<script src="js/iframe-nav.js"></script>
+<script src="js/shenpian.js"></script>
+<script src="js/upscale.js"></script>
+<script src="js/feedback-panel.js"></script>
+<script>
+// 达芬奇：授权状态存在 collect/_license.json（主进程落盘）。
+// 必须在 license-client.js 之前读进内存，否则 loadState 拿不到、每次重启都要重新登录。
+(function () {
+    var H = window.vhHost;
+    if (!H || !H.loadLicenseState) return;
+    try {
+        H.loadLicenseState().then(function (r) {
+            if (r && r.ok && r.data && r.data.json) {
+                window.__vhLicFileCache = String(r.data.json);
+            }
+        }).catch(function () {});
+    } catch (e) {}
+})();
+</script>
+<script src="js/license-client.js"></script>
+<script src="js/license-ui.js"></script>
+<script src="js/account-panel.js"></script>
+<script src="js/feedback-ui.js"></script>
+<script src="js/feedback.js"></script>
+<script src="js/wave-mini.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

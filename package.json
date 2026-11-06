@@ -1,0 +1,10 @@
+{
+  "name": "vh-atelier-resolve",
+  "version": "2.7.0",
+  "pluginId": "com.vh.atelier",
+  "description": "vh-Atelier · DaVinci Resolve Workflow Integration Plugin",
+  "main": "main.js",
+  "author": "vhdaqd",
+  "license": "Private",
+  "dependencies": {}
+}

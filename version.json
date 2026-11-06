@@ -1,0 +1,30 @@
+{
+  "_说明": "达芬奇版版本信息。branch=resolve 是本插件独立的更新分支，与 PR 客户版 pro 分开。",
+  "repo": "vhdaqd0410/vh-Atelier",
+  "branch": "resolve",
+  "displayName": "vh-Atelier · DaVinci Resolve",
+  "pluginId": "com.vh.atelier.resolve",
+  "version": "2.7.0",
+  "mirrorBase": "http://47.122.108.231:17894",
+  "skipDirs": [
+    "collect",
+    "bin",
+    "models",
+    "engine",
+    "ncm",
+    "runtime",
+    "stubs",
+    "breeze",
+    "video",
+    "node_modules",
+    "data",
+    "cache",
+    "music",
+    "backups",
+    "cover_cache",
+    ".git",
+    "_tmp",
+    "_releases"
+  ],
+  "notes": "达芬奇版首次接入在线更新。新增 Breeze 朗读、审片（分秒帧）、账号授权、云端超分；启动强制校验授权，失效自动退出登录。"
+}

@@ -1,0 +1,28 @@
+# 大文件随部署包分发，不进仓库
+bin/
+models/
+breeze/
+ncm/
+runtime/
+stubs/
+video/
+engine/
+node_modules/
+
+# 用户数据与运行时（绝不入库）
+collect/
+data/
+cache/
+music/
+backups/
+cover_cache/
+*.log
+*.pyc
+__pycache__/
+_tmp/
+_releases/
+probe-result.json
+
+# 系统
+Thumbs.db
+.DS_Store
