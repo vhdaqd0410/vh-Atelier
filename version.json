@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.30",
-  "buildTime": "2026-11-06 17:20:00",
+  "version": "1.82.31",
+  "buildTime": "2026-11-06 18:40:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修复剧本复制失效（__copyText 原本只定义在已移除的 progress.js 里）；修复关闭剧本阅读器后切到不存在的分组；版本号与 manifest 对齐。"
+  "notes": "新增「关于与诊断」面板：顶栏「关于」按钮 + 弹窗，含品牌区、8 张功能卡片、亮点列表与可折叠运行诊断（插件版本/宿主环境/CEP/组件状态）。"
 }

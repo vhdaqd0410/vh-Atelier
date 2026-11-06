@@ -17,8 +17,82 @@
         <button type="button" id="btnUpdate" class="log-btn" title="检查更新（从 GitHub 拉取最新代码）">⬆ 更新</button>
         <button type="button" id="btnFeedback" class="log-btn" title="在线反馈：提 Bug / 需求 / 意见">📮 反馈</button>
         <button type="button" id="btnLogView" class="log-btn" title="查看运行日志">📄<span id="logBadge" class="log-badge" style="display:none;">0</span></button>
+        <button type="button" id="btnAbout" class="log-btn" title="关于与运行诊断">ℹ️ 关于</button>
     </div>
     <div class="sub">素材 · 剧本 · 超分 · 字幕 · 声音 · 审片 · 交付 · 进度 八工作台</div>
+
+    <!-- 关于与诊断（弹窗） -->
+    <div class="about-overlay" id="aboutOverlay" style="display:none;">
+      <div class="about-modal">
+        <div class="about-head">
+          <div class="about-brand">
+            <div class="about-logo">vh-Atelier</div>
+            <div class="about-tag">短剧与漫剧量产工作台 · Premiere Pro 插件</div>
+          </div>
+          <div class="about-head-right">
+            <span class="about-ver" id="aboutVer">v?</span>
+            <button type="button" class="about-btn" id="btnCheckUpdate">检查更新</button>
+            <button type="button" class="about-btn" id="btnCloseAbout">关闭</button>
+          </div>
+        </div>
+
+        <div class="about-body" id="aboutBody">
+          <div class="about-intro">
+            把短剧制作的整条链路收进 Premiere Pro。素材、剧本、超分、字幕、声音、审片、交付七个工作台共用一个面板，
+            不必在多个软件之间来回切；能本地跑的都在本地跑，素材不出本机。
+          </div>
+
+          <div class="about-sec-title">核心工作台</div>
+          <div class="about-grid">
+            <div class="about-card">
+              <div class="about-card-hd"><span class="about-ico">🗂️</span><span class="about-name">素材</span></div>
+              <div class="about-card-desc">目录树浏览，支持搜索与模糊匹配，双击展开，拖拽直接导入时间轴。</div>
+            </div>
+            <div class="about-card">
+              <div class="about-card-hd"><span class="about-ico">📖</span><span class="about-name">剧本阅读</span></div>
+              <div class="about-card-desc">docx/pdf/txt 解析在本机，按集切分；选中文字即弹复制按钮，双击直接复制整句台词。</div>
+            </div>
+            <div class="about-card">
+              <div class="about-card-hd"><span class="about-ico">✨</span><span class="about-name">去字幕 / 超分</span></div>
+              <div class="about-card-desc">读序列区间上传云端处理，720P/1080P/2K 可选，完成后自动下载导入。</div>
+            </div>
+            <div class="about-card">
+              <div class="about-card-hd"><span class="about-ico">📝</span><span class="about-name">字幕</span></div>
+              <div class="about-card-desc">本地识别与校对，结果可直接编辑、写回序列、导出 SRT。</div>
+            </div>
+            <div class="about-card">
+              <div class="about-card-hd"><span class="about-ico">🎙️</span><span class="about-name">声音</span></div>
+              <div class="about-card-desc">人声分离、Breeze 朗读、音效库、音乐库、网易云、短剧扒歌，六个板块收在声音组。</div>
+            </div>
+            <div class="about-card">
+              <div class="about-card-hd"><span class="about-ico">🎬</span><span class="about-name">审片</span></div>
+              <div class="about-card-desc">粘贴分秒帧链接自动解析跳转，应用内嵌，不用切窗口。</div>
+            </div>
+            <div class="about-card">
+              <div class="about-card-hd"><span class="about-ico">📤</span><span class="about-name">多版本交付</span></div>
+              <div class="about-card-desc">一次配好多个版本（成片/无字幕/无音乐），批量串行渲染，字幕 srt 自动归位。</div>
+            </div>
+            <div class="about-card">
+              <div class="about-card-hd"><span class="about-ico">🧩</span><span class="about-name">工具与组件</span></div>
+              <div class="about-card-desc">PR 版本转换、调色 XML、字体安装修复；模型与引擎组件状态就位检测。</div>
+            </div>
+          </div>
+
+          <div class="about-sec-title">亮点</div>
+          <div class="about-list">
+            <div class="about-li"><b>本地优先</b>　人声分离、朗读、字幕识别全部本地运行，素材不上传</div>
+            <div class="about-li"><b>量产提效</b>　导出、超分、字幕一次配好批量跑，不用逐集手动操作</div>
+            <div class="about-li"><b>与工作台联动</b>　进度面板读取视频工作台数据，缺集情况一目了然</div>
+            <div class="about-li"><b>在线更新</b>　代码在线升级，用户数据与模型不受影响</div>
+          </div>
+
+          <details class="about-diag">
+            <summary>运行环境与诊断</summary>
+            <pre class="diag" id="aboutDiag">读取中…</pre>
+          </details>
+        </div>
+      </div>
+    </div>
 
     <!-- 错误日志浮层 -->
     <div id="logOverlay" class="log-overlay" style="display:none;">
@@ -2797,6 +2871,7 @@
     <script src="js/iframe-nav.js"></script>
     <script src="js/components.js"></script>
     <script src="js/components-ui.js"></script>
+    <script src="js/about-panel.js"></script>
     <script src="js/feedback.js"></script>
     <script src="js/feedback-ui.js"></script>
     <script src="js/feedback-panel.js"></script>
