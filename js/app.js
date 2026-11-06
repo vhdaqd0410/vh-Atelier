@@ -1375,6 +1375,66 @@ async function showAbout() {
   }
 }
 
+// ==================== 在线更新 ====================
+
+function updMsg(text) {
+  const body = $('aboutBody');
+  if (body) body.textContent = text;
+}
+
+/** 检查更新：有新版本则询问是否升级 */
+async function checkUpdateFlow(silent) {
+  const H = window.vhHost;
+  if (!H || !H.updateCheck) {
+    if (!silent) updMsg('宿主桥不支持在线更新');
+    return;
+  }
+  if (!silent) updMsg('正在检查更新…');
+  try {
+    const r = await H.updateCheck();
+    if (!r || !r.ok) {
+      if (!silent) updMsg('检查失败：' + ((r && r.error) || '未知错误'));
+      return;
+    }
+    const d = r.data || {};
+    if (!d.newer) {
+      if (!silent) {
+        updMsg('已是最新版本\n\n当前版本：' + d.local + '\n服务器版本：' + d.remote);
+      } else {
+        console.log('[update] 已是最新：' + d.local);
+      }
+      return;
+    }
+    // 有新版本
+    const ok = confirm(
+      '发现新版本\n\n' +
+      '当前：' + d.local + '\n' +
+      '最新：' + d.remote + '\n' +
+      (d.buildTime ? ('发布时间：' + d.buildTime + '\n') : '') +
+      (d.notes ? ('\n更新内容：\n' + d.notes.slice(0, 400) + '\n') : '') +
+      '\n现在更新？（约 1 分钟，完成后需重开插件）'
+    );
+    if (!ok) { updMsg('已取消更新'); return; }
+
+    updMsg('正在下载并安装更新…\n\n请稍候，不要关闭插件。');
+    const r2 = await H.updateRun(d);
+    if (!r2 || !r2.ok) {
+      updMsg('更新失败：' + ((r2 && r2.error) || '未知错误'));
+      return;
+    }
+    const d2 = r2.data || {};
+    updMsg(
+      '✅ 更新完成\n\n' +
+      '已更新 ' + (d2.count || 0) + ' 个文件\n' +
+      '新版本：' + (d2.version || d.remote) + '\n' +
+      (d2.failedCount ? ('\n⚠ ' + d2.failedCount + ' 个文件写入失败（可能被占用）\n') : '') +
+      '\n请关闭插件面板并重新打开（或重启 Resolve）以生效。'
+    );
+  } catch (e) {
+    if (!silent) updMsg('更新出错：' + (e.message || e));
+  }
+}
+
 // 登录成功后默认停在「账号」页（用户要求）
 (function () {
   function goAccount() {
@@ -1398,6 +1458,9 @@ async function showAbout() {
 })();
 
 // ==================== 初始化 ====================
+// 启动后静默检查一次更新（不打扰用户，只在有新版本时提示）
+setTimeout(function () { try { checkUpdateFlow(true); } catch (e) {} }, 6000);
+
 
 /** 显示指定面板（panel-<tab>），同步子标签行与一级分组的选中态 */
 function showPanel(tab) {
@@ -1486,6 +1549,14 @@ function bindTop() {
   });
 
   $('btnAbout').addEventListener('click', showAbout);
+  const _bcu = $('btnCheckUpdate');
+  if (_bcu) _bcu.addEventListener('click', function () { checkUpdateFlow(false); });
+  const _vb = $('verBadge');
+  if (_vb) {
+    _vb.style.cursor = 'pointer';
+    _vb.title = '当前插件版本 · 点击检查更新';
+    _vb.addEventListener('click', function () { checkUpdateFlow(false); });
+  }
   $('btnCloseAbout').addEventListener('click', () => { $('aboutOverlay').style.display = 'none'; });
   $('aboutOverlay').addEventListener('click', (e) => {
     if (e.target.id === 'aboutOverlay') $('aboutOverlay').style.display = 'none';

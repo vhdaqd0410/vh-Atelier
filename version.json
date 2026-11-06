@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,5 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "达芬奇版首次接入在线更新。新增 Breeze 朗读、审片（分秒帧）、账号授权、云端超分；启动强制校验授权，失效自动退出登录。"
+  "notes": "接入在线更新：关于弹窗「检查更新」+ 版本徽章点击检查 + 启动静默检查。大文件（ffmpeg/模型/breeze/ncm）随部署包分发。"
 }
