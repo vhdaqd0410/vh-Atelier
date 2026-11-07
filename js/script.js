@@ -119,7 +119,8 @@
 
     var openBtn = document.createElement('button');
     openBtn.textContent = '📂  打开剧本文件…';
-    openBtn.style.cssText = 'display:block;width:100%;padding:12px;font-size:13px;font-weight:600;'
+    // flex:0 0 auto —— 父容器是 flex 列布局，不加这条按钮会被拉伸到占满整个面板高度
+    openBtn.style.cssText = 'display:block;flex:0 0 auto;width:100%;padding:12px;font-size:13px;font-weight:600;'
       + 'background:var(--accent,#537d96);color:#fff;border:none;border-radius:8px;cursor:pointer;margin-bottom:14px;';
     openBtn.addEventListener('click', function () { pickScript(); });
     box.appendChild(openBtn);

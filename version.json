@@ -4,7 +4,7 @@
   "branch": "resolve",
   "displayName": "vh-Atelier · DaVinci Resolve",
   "pluginId": "com.vh.atelier.resolve",
-  "version": "2.23.1",
+  "version": "2.23.2",
   "mirrorBase": "http://47.122.108.231:17894",
   "skipDirs": [
     "collect",
@@ -26,5 +26,6 @@
     "_tmp",
     "_releases"
   ],
-  "notes": "修复关于面板正文被\"正在检查更新\"整行替换的问题：updMsg 之前用 textContent 写 #aboutBody，会把功能介绍卡片抹掉。"
+  "notes": "修复剧本面板与素材面板的按钮/标题被 flex 拉伸成色块；修正子标签栏高度。",
+  "buildTime": "2026-11-06 21:30:00"
 }

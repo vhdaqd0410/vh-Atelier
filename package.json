@@ -1,6 +1,6 @@
 {
   "name": "vh-atelier-resolve",
-  "version": "2.23.1",
+  "version": "2.23.2",
   "pluginId": "com.vh.atelier",
   "description": "vh-Atelier · DaVinci Resolve Workflow Integration Plugin",
   "main": "main.js",

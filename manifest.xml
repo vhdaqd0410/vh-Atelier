@@ -3,7 +3,7 @@
     <Plugin>
         <Id>com.vh.atelier</Id>
         <Name>vh-Atelier</Name>
-        <Version>2.23.1</Version>
+        <Version>2.23.2</Version>
         <Description>AI 短剧批量制作工作台 · DaVinci Resolve 版</Description>
         <FilePath>main.js</FilePath>
     </Plugin>

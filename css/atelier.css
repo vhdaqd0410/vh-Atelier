@@ -4364,3 +4364,126 @@ button.danger{ background: var(--btn-danger-bg); color: #ffd9d9; border-color: t
 /* 树区/文件区在窄面板下的最小宽度保护 */
 #panel-netdisk .md-tree { min-width: 90px; }
 #panel-netdisk .md-files { min-width: 140px; }
+
+/* ===== 剧本面板布局修正 ===== */
+/* #panel-script 是 flex 列容器，而 .SCR-home / .card / h2 / button
+   都没有高度约束，浏览器会把剩余高度按比例分给它们，
+   结果按钮和标题被拉伸成整屏色块。
+   这里给它们显式声明「按内容高度」，并让外层可滚动。 */
+#panel-script .SCR-home{
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+#panel-script .SCR-home .card{
+  flex: 0 0 auto;
+}
+#panel-script .SCR-home .card h2{
+  flex: 0 0 auto;
+  line-height: 1.5;
+}
+#panel-script .SCR-home .row{
+  flex: 0 0 auto;
+}
+#panel-script .SCR-home .tbtn,
+#panel-script .SCR-home button{
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 0;
+  align-self: flex-start;
+}
+/* 关键：按钮和标题被拉伸，是因为 .card 内部也是 flex 列且没有行高约束。
+   显式给它们固定行高，彻底挡住 flex 的高度分配。 */
+#panel-script .SCR-home button{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.4;
+  padding: 8px 14px;
+}
+#panel-script .SCR-home #SCR-btnPick{
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 12.5px;
+}
+#panel-script .SCR-home .card{
+  display: block;      /* 不用 flex，避免高度分配 */
+}
+#panel-script .SCR-home .card h2{
+  display: block;
+  padding: 0;
+  margin: 0 0 8px;
+}
+/* 「最近」卡片里如果没有内容，别让它撑满 */
+#panel-script #SCR-recent:empty::after{
+  content: '暂无记录';
+  display: block;
+  font-size: 11.5px;
+  color: #6b7784;
+  padding: 6px 2px;
+}
+
+/* ===== 素材面板布局修正 ===== */
+/* .md-bar 是 flex 行，但里面的按钮没有高度约束；
+   面板如果被撑高，按钮会跟着被拉伸成整条色块。
+   这里统一给素材面板的按钮固定行高。 */
+#panel-media .md-bar{
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#panel-media .md-bar button,
+#panel-media .md-bar .tbtn{
+  flex: 0 0 auto;
+  height: 26px;
+  min-height: 26px;
+  max-height: 26px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 11px;
+  white-space: nowrap;
+}
+#panel-media .md-bar input[type="text"],
+#panel-media .md-bar select{
+  flex: 0 0 auto;
+  height: 26px;
+  min-height: 26px;
+}
+#panel-media .md-body{
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ===== 子标签栏高度修正 ===== */
+/* 症状：某个分组只有一个子标签时，那个标签会被拉成整行高度的大色块
+   （典型是「素材导入」变成一条通栏紫色按钮、把下面内容挤下去）。
+   原因：.tabs 是 flex 容器、.tab 是 flex:1，但没有高度约束，
+   而父级 .tab-panel 是 flex 列并占满高度，剩余高度就被分配给了这个按钮。
+   修法：给整条子标签栏和里面的按钮都钉死高度。 */
+.tabs.ws-subtabs{
+  flex: 0 0 auto;
+  align-items: center;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
+  box-sizing: border-box;
+}
+.tabs.ws-subtabs .tab{
+  flex: 0 1 auto;
+  height: 26px;
+  min-height: 26px;
+  max-height: 26px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
