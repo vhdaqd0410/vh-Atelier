@@ -4477,3 +4477,29 @@ button.danger{ background: var(--btn-danger-bg); color: #ffd9d9; border-color: t
   .about-grid{ grid-template-columns: 1fr; }
   .about-modal{ max-height: 92vh; }
 }
+
+/* ===== 子标签栏高度修正 ===== */
+/* 症状：某分组只有一个子标签时，该标签被拉成整行大色块（如「素材浏览」通栏紫条）。
+   原因：.tabs 是 flex 容器、.tab 是 flex:1，但没有高度约束，
+   而父级 .tab-panel 是 flex 列并占满高度，剩余高度就被分配给了这个按钮。 */
+.tabs.ws-subtabs{
+  flex: 0 0 auto;
+  align-items: center;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
+  box-sizing: border-box;
+}
+.tabs.ws-subtabs .tab{
+  flex: 0 1 auto;
+  height: 26px;
+  min-height: 26px;
+  max-height: 26px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}

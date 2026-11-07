@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.31",
-  "buildTime": "2026-11-06 18:40:00",
+  "version": "1.82.32",
+  "buildTime": "2026-11-06 21:30:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "新增「关于与诊断」面板：顶栏「关于」按钮 + 弹窗，含品牌区、8 张功能卡片、亮点列表与可折叠运行诊断（插件版本/宿主环境/CEP/组件状态）。"
+  "notes": "修复剧本库按钮被拉伸；修复单子标签时被拉成通栏色块；修正提示行仍写着已删除的「进度」板块。"
 }
