@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.15",
-  "buildTime": "2026-11-06 19:10:00",
+  "version": "1.82.16",
+  "buildTime": "2026-11-06 21:30:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "新增「关于与诊断」面板：顶栏「关于」按钮 + 弹窗，含品牌区、8 张功能卡片、亮点列表与可折叠运行诊断（插件版本/CosyVoice3 引擎状态/宿主环境）。"
+  "notes": "修复剧本库首页「打开剧本文件」按钮被拉伸成整屏色块。"
 }

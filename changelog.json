@@ -4,6 +4,17 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.82.16",
+      "date": "2026-11-06",
+      "title": "修复面板按钮被拉伸成色块",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "剧本库首页「打开剧本文件」按钮被拉伸占满整个面板：父容器是 flex 列且没有高度约束。已给按钮加 flex:0 0 auto"
+        }
+      ]
+    },
+    {
       "version": "1.82.15",
       "date": "2026-11-06",
       "title": "新增「关于与诊断」面板",
