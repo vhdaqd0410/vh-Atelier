@@ -994,6 +994,27 @@
   white-space:pre-wrap;max-height:190px;overflow:auto;
 }
 </style>
+
+<style>
+/* 超分任务/日志卡片头：按钮不挤压标题 */
+#panel-upscale .card > h2{
+  display:flex;align-items:center;gap:5px;flex-wrap:nowrap;
+}
+#panel-upscale .card > h2 > button{
+  flex:0 0 auto;
+}
+#panel-upscale .card > h2 > button[style*="margin-left:auto"]{
+  margin-left:auto !important;
+}
+/* 任务/日志容器不塌陷 */
+#panel-upscale .en-split{
+  min-height:220px;
+}
+#panel-upscale .en-tasks,
+#panel-upscale .en-logbox{
+  min-height:150px;
+}
+</style>
 </head>
 <body>
 
@@ -1023,7 +1044,7 @@
   <button class="ws-group" data-group="upscale">✨ 超分</button>
   <button class="ws-group" data-group="sub">字幕</button>
   <button class="ws-group" data-group="audio">声音</button>
-  <button class="ws-group active" data-group="deliver">交付</button>
+  <button class="ws-group" data-group="deliver">交付</button>
   <button class="ws-group" data-group="shenpian">🎬 审片</button>
   <button class="ws-group" data-group="account">👤 账号</button>
   <button class="ws-group" data-group="feedback">📮 反馈</button>
@@ -1809,10 +1830,10 @@
           </select>
         </label>
         <label class="en-f"><span>导出预设</span>
-          <select id="enPreset"><option value="">自动（首个预设）</option></select>
+          <select id="enPreset" style="min-width:118px;"><option value="">自动（首个预设）</option></select>
         </label>
         <label class="en-f"><span>上传文件夹</span>
-          <select id="enFolder"><option value="14086">超分（默认）</option></select>
+          <select id="enFolder" style="min-width:140px;"><option value="14086">超分（默认）</option></select>
         </label>
         <label class="en-f"><span>分辨率</span>
           <select id="enRes">
@@ -1824,8 +1845,8 @@
       </div>
 
       <div class="row" style="margin-top:10px;gap:6px;">
-        <button id="enGo" class="primary" style="flex:1;">🚀 导出并超分</button>
-        <button id="enStop" class="secondary" disabled>停止</button>
+        <button id="enGo" class="primary" style="flex:0 1 auto;min-width:132px;">🚀 导出并超分</button>
+        <button id="enStop" class="secondary mini" disabled>停止</button>
         <button id="enAccount" class="secondary mini" title="设置超分站账号">⚙ 账号</button>
         <button id="enSettings" class="secondary mini" title="设置输出目录">🗂 设置</button>
       </div>

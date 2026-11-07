@@ -1657,6 +1657,8 @@ function showUpdConfirm(d) {
 }
 
 // 登录成功后默认停在「账号」页（用户要求）
+// 注意：只在「本次会话内真正发生了登录/解锁」时才跳，
+// 已授权用户每次打开面板不应该被强制切到账号页。
 (function () {
   function goAccount() {
     try {
@@ -1666,13 +1668,16 @@ function showUpdConfirm(d) {
   function watch() {
     var UI = window.__vhLicenseUI;
     if (!UI) { setTimeout(watch, 400); return; }
+    // 只在解锁回调里跳转（真实登录动作触发），不再用 isUnlocked 兜底
     if (UI.onUnlock) {
-      UI.onUnlock(function () { setTimeout(goAccount, 200); });
+      UI.onUnlock(function () {
+        // 首次打开已完成本地校验的情况，unlock 也会触发一次；
+        // 用标记保证一个会话只跳一次
+        if (window.__accountJumped) return;
+        window.__accountJumped = true;
+        setTimeout(goAccount, 200);
+      });
     }
-    // 已经解锁（本地有效）：直接切
-    try {
-      if (UI.isUnlocked && UI.isUnlocked()) setTimeout(goAccount, 300);
-    } catch (e) {}
   }
   window.__firstAfterLogin = true;
   setTimeout(watch, 300);
@@ -1871,7 +1876,9 @@ async function init() {
   // 连接状态优先建立，失败也明确可见
   // 版本徽标：优先用 sys:version（含构建时间），拿不到则退回 appInfo
   try {
-    const v = await call(H.getVersion);
+    // call() 返回 {ok, data}，真实版本在 data 里
+    const raw = await call(H.getVersion);
+    const v = (raw && raw.ok && raw.data) ? raw.data : raw;
     const badge = $('verBadge');
     if (badge) {
       const bt = v && v.buildTime ? new Date(v.buildTime) : null;

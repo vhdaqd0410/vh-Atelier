@@ -4487,3 +4487,12 @@ button.danger{ background: var(--btn-danger-bg); color: #ffd9d9; border-color: t
   white-space: nowrap;
   box-sizing: border-box;
 }
+
+
+/* ==== 单标签组：隐藏子标签行 ==== */
+/*
+ * 一级分组里只有一个子标签时（素材/剧本/超分/字幕/交付/审片/账号/反馈），
+ * 那行标签只会把分组名再重复一遍，和面板标题撞车，是纯冗余。
+ * 用 :has 精确命中「只有一个 .tab 的 ws-subtabs」，不动多标签组（声音 6 个）。
+ */
+.tabs.ws-subtabs:has(> .tab:only-child){ display: none !important; }
