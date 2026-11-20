@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.32",
-  "buildTime": "2026-11-06 21:30:00",
+  "version": "1.82.33",
+  "buildTime": "2026-11-20 18:45:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修复剧本库按钮被拉伸；修复单子标签时被拉成通栏色块；修正提示行仍写着已删除的「进度」板块。"
+  "notes": "字幕识别改用 faster-whisper：词级时间戳 + VAD，气口正确断开"
 }

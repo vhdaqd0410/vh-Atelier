@@ -8,7 +8,7 @@
     var path = require('path');
     var childProcess = require('child_process');
 
-    var API = 'http://127.0.0.1:17892';
+    var API = 'http://127.0.0.1:17895';
     var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
     var videoDir = path.join(extRoot, 'collect', 'video');
     var videoSvcDir = path.join(extRoot, 'video');
@@ -17,6 +17,7 @@
 
     // 本地服务句柄（共享模块：探活 / HTTP 调用 / node 查找）
     var svc = window.__vhLocalSvc.create({
+        extRoot: extRoot,
         base: API,
         name: '视频下载',
         defaultTimeout: 8000,

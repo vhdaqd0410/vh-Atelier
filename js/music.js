@@ -17,6 +17,7 @@
 
     // 本地服务句柄（共享模块：探活 / HTTP 调用 / node 查找）
     var svc = window.__vhLocalSvc.create({
+        extRoot: extRoot,
         base: API,
         name: '网易云',
         defaultTimeout: 8000,

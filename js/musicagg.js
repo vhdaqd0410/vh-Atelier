@@ -70,8 +70,10 @@
 
     // ---------- 本地服务管理 ----------
     function findNode() {
-        var cands = ['C:\\Program Files\\nodejs\\node.exe', 'C:\\Program Files (x86)\\nodejs\\node.exe'];
-        for (var i = 0; i < cands.length; i++) { if (fs.existsSync(cands[i])) return cands[i]; }
+        // 便携运行时优先（随部署包下发，客户机无需预装 Node）
+        var cands = [path.join(extRoot, 'runtime', 'node', 'node.exe'),
+                     'C:\\Program Files\\nodejs\\node.exe', 'C:\\Program Files (x86)\\nodejs\\node.exe'];
+        for (var i = 0; i < cands.length; i++) { try { if (fs.existsSync(cands[i])) return cands[i]; } catch (e) {} }
         try {
             var w = childProcess.spawnSync('where', ['node'], { encoding: 'utf8' });
             if (w.status === 0 && w.stdout) {

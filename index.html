@@ -191,9 +191,18 @@
             <div class="note" style="margin-top:4px;">入点/出点：先在时间轴按 I / O 设置范围；选中片段：先在时间轴点选块</div>
             <label style="margin-top:10px;">模型</label>
             <select id="selModel">
-                <option value="funasr-zh">FunASR（中文·paraformer，1.2GB）</option>
-                <option value="ggml-large-v3-q5_0.bin">large-v3（英文/多语言，1.0GB）</option>
+                <option value="fw-medium" selected>faster-whisper medium（推荐，词级时间·气口准确）</option>
+                <option value="fw-large-v3">faster-whisper large-v3（更准，需先下载模型）</option>
+                <option value="fw-small">faster-whisper small（更快，准确率略低）</option>
+                <option value="funasr-zh">FunASR（中文·paraformer，仅在特殊情况下使用）</option>
             </select>
+            <label style="margin-top:10px;">气口阈值（秒）</label>
+            <div class="row">
+                <input type="text" id="inpGap" value="0.45" style="flex:0 0 80px;text-align:center;">
+                <span class="note" style="margin:0;flex:1;">
+                    停顿超过这个时长就断句。0.4~0.5 适合正常对白；语速快可调到 0.3。
+                </span>
+            </div>
             <div class="note" style="margin-top:4px;">中文→FunASR（paraformer，断句细、抗噪强）；英文/其他→whisper large-v3</div>
             <div class="check-row">
                 <input type="checkbox" id="chkGpu" checked>

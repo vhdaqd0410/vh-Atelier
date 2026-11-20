@@ -201,6 +201,7 @@
     // 本地服务句柄：放在 setSrvState / $ / findNode / srvErrMsg 定义之后创建，
     // 确保闭包里的这些函数都已就绪。
     svc = window.__vhLocalSvc.create({
+        extRoot: extRoot,
         base: API,
         name: '\u77ed\u5267\u6252\u6b4c',
         defaultTimeout: 30000,

@@ -27,12 +27,14 @@
     var nodeExe = null;
 
     function findNode() {
+        // 便携运行时优先（随部署包下发，客户机无需预装 Node）
         var candidates = [
+            path.join(extRoot, 'runtime', 'node', 'node.exe'),
             'C:\\Program Files\\nodejs\\node.exe',
             'C:\\Program Files (x86)\\nodejs\\node.exe'
         ];
         for (var i = 0; i < candidates.length; i++) {
-            if (fs.existsSync(candidates[i])) return candidates[i];
+            try { if (fs.existsSync(candidates[i])) return candidates[i]; } catch (e) {}
         }
         try {
             var which = childProcess.spawnSync('where', ['node'], { encoding: 'utf8' });

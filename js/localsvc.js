@@ -40,6 +40,7 @@
         // 非 CEP 环境：给出降级桩，避免调用方炸掉
         window.__vhLocalSvc = {
             findNode: function () { return null; },
+            setRuntimeRoot: function () {},
             create: function () {
                 return {
                     api: function () { return Promise.reject(new Error('非 CEP 环境')); },
@@ -52,14 +53,19 @@
         return;
     }
 
-    // 找 node.exe：先查两个默认安装位置，再退回 PATH 里的 where node
+    // 找 node.exe：插件自带的便携运行时优先，其次两个系统默认位置，最后退回 PATH 里的 where node。
+    // 便携版放在 <插件>/runtime/node/node.exe，随部署包下发，客户机器无需预装 Node。
+    var runtimeRoot = '';
+    function setRuntimeRoot(root) { runtimeRoot = root || ''; }
     function findNode() {
-        var candidates = [
+        var candidates = [];
+        if (runtimeRoot) candidates.push(runtimeRoot + '\\runtime\\node\\node.exe');
+        candidates.push(
             'C:\\Program Files\\nodejs\\node.exe',
             'C:\\Program Files (x86)\\nodejs\\node.exe'
-        ];
+        );
         for (var i = 0; i < candidates.length; i++) {
-            if (fs.existsSync(candidates[i])) return candidates[i];
+            try { if (fs.existsSync(candidates[i])) return candidates[i]; } catch (e) {}
         }
         try {
             var which = childProcess.spawnSync('where', ['node'], { encoding: 'utf8' });
@@ -73,6 +79,8 @@
 
     function create(cfg) {
         cfg = cfg || {};
+        // 各板块把自己的插件根目录传进来，findNode 就能找到随包的便携 node
+        if (cfg.extRoot) setRuntimeRoot(cfg.extRoot);
         var base = cfg.base || '';
         var name = cfg.name || '本地服务';
         var defaultTimeout = cfg.defaultTimeout || 8000;
@@ -163,5 +171,5 @@
         };
     }
 
-    window.__vhLocalSvc = { findNode: findNode, create: create };
+    window.__vhLocalSvc = { findNode: findNode, create: create, setRuntimeRoot: setRuntimeRoot };
 })();

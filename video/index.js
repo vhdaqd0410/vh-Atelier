@@ -26,7 +26,7 @@ const GV_ENABLED = process.env.VH_GV === '1'
 const GV_DISABLED_MSG = '免登录通道已停用（greenvideo 接口下线并启用验证码）。'
   + '请配置浏览器 Cookie 后重试，或换用支持直链的地址。'
 
-const PORT = 17892
+const PORT = 17895
 const HOST = '127.0.0.1'
 
 const YTDLP = path.join(__dirname, '..', 'bin', 'yt-dlp.exe')
