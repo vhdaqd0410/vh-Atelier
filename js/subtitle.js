@@ -292,19 +292,37 @@
             useGpu = false;  // 纯 CPU 版无 GPU 能力
             if (lang !== 'zh') setStatus('未检测到可用 CUDA 环境，英文已降级纯 CPU 模式', 'warn');
         }
-        var modelPath = path.join(extRoot, 'models', modelName);
-        if (!fs.existsSync(modelPath)) modelPath = path.join(legacyExt, 'models', modelName);
+        // modelPath 只对 whisper.cpp 有意义（它是 .bin 文件名）。
+        // faster-whisper 的模型由它自己按名字去 HuggingFace 缓存里找，
+        // 不要把 fw-medium 拼成路径，否则会去找 models/fw-medium 并报"模型缺失"。
+        var modelPath = '';
+        if (String(modelName).indexOf('fw-') !== 0) {
+            modelPath = path.join(extRoot, 'models', modelName);
+            if (!fs.existsSync(modelPath)) modelPath = path.join(legacyExt, 'models', modelName);
+        }
         var funasrCli = path.join(extRoot, 'py', 'funasr_cli.py');
         var funasrModelDir = path.join(extRoot, 'models', 'funasr');
         if (!fs.existsSync(funasrModelDir)) funasrModelDir = path.join(legacyExt, 'models', 'funasr');
 
         if (!fs.existsSync(ffmpegPath)) { setStatus('FFmpeg 缺失: ' + ffmpegPath, 'err'); return; }
-        if (lang === 'zh') {
+        // 前置校验改为按「实际要用的引擎」判断。
+        // 旧逻辑是「中文→FunASR，其他→whisper.cpp」，不认识 fw-* 新模型值，
+        // 会把 fw-medium 当成 whisper 的模型文件名去找文件，报"模型缺失"。
+        if (useFunasrEngine()) {
             if (!fs.existsSync(funasrCli)) { setStatus('FunASR 脚本缺失: ' + funasrCli, 'err'); return; }
             if (!fs.existsSync(funasrModelDir)) { setStatus('FunASR 模型缺失: ' + funasrModelDir, 'err'); return; }
         } else {
-            if (!fs.existsSync(whisperPath)) { setStatus('Whisper 缺失: ' + whisperPath, 'err'); return; }
-            if (!fs.existsSync(modelPath)) { setStatus('模型缺失: ' + modelPath, 'err'); return; }
+            // faster-whisper 路径：只需 Python + CLI 脚本，模型由它自己下载/缓存
+            var fwEnv = fasterWhisperReady();
+            if (!fwEnv.ok) {
+                // Python 或脚本缺失时，退回原生 whisper（如果装了）
+                if (fs.existsSync(whisperPath) && fs.existsSync(modelPath)) {
+                    setStatus('faster-whisper 不可用（' + fwEnv.reason + '），改用 whisper.cpp', 'warn');
+                } else {
+                    setStatus('识别引擎不可用：' + fwEnv.reason, 'err');
+                    return;
+                }
+            }
         }
 
         stopRequested = false;
@@ -380,8 +398,11 @@
             var total = valid.length;
             setProgress(5, '准备识别 ' + total + ' 个序列');
 
-            // 中文走 FunASR 批量模式：先全部混音，再一次性识别（模型只加载一次）
-            if (lang === 'zh') {
+            // 引擎选择：
+            //   只有用户在模型下拉里显式选了 funasr-* 才走 FunASR 批量模式；
+            //   其余（含中文、自动检测）统一走 faster-whisper
+            //   —— 它给词级时间戳 + VAD，气口能正确断开。
+            if (useFunasrEngine()) {
                 transcribeZhBatch(valid, totalAudioSec);
             } else {
                 var doneSec = 0;
@@ -551,7 +572,34 @@
                     cb({ seqId: meta.seqId, name: meta.seqName, status: 'err', error: '混音未生成 wav' });
                     return;
                 }
-                runWhisper(meta, wavPath, srtPath, whisperPath, modelPath, lang, useGpu, tmpDir, cb);
+                // 改用 faster-whisper：词级时间戳 + VAD，气口能正确断开。
+                // 旧的 runWhisper 保留，作为新引擎不可用时的兜底。
+                var fw = fasterWhisperReady();
+                if (fw.ok) {
+                    var outJson = path.join(tmpDir, 'fw_' + meta.seqId.slice(0, 8) + '.json');
+                    try { if (fs.existsSync(outJson)) fs.unlinkSync(outJson); } catch (e2) {}
+                    runFasterWhisper(meta, wavPath, outJson, {
+                        model: fwModelName(lang),
+                        lang: (lang === 'zh') ? 'zh' : (lang === 'auto' ? 'auto' : lang),
+                        gap: (function () {
+                            var g = parseFloat(el.inpGap && el.inpGap.value);
+                            if (!isFinite(g) || g <= 0) g = 0.45;
+                            if (g < 0.15) g = 0.15;
+                            if (g > 2.0) g = 2.0;
+                            return g;
+                        })(),
+                        useGpu: useGpu
+                    }, function (res) {
+                        // 新引擎失败时退回原生 whisper，保证不会比之前更差
+                        if (res && res.status === 'err') {
+                            runWhisper(meta, wavPath, srtPath, whisperPath, modelPath, lang, useGpu, tmpDir, cb);
+                            return;
+                        }
+                        cb(res);
+                    });
+                } else {
+                    runWhisper(meta, wavPath, srtPath, whisperPath, modelPath, lang, useGpu, tmpDir, cb);
+                }
             });
         }
 
@@ -605,6 +653,98 @@
             }
         });
     }
+
+    // ====================================================================
+    // faster-whisper 识别（新方案）
+    // --------------------------------------------------------------------
+    // 为什么用它替换 whisper.cpp：
+    //   旧实现直接把 whisper 生成的 SRT 写回时间轴，不做时间轴重建，
+    //   结果是字幕首尾相接铺满、气口处也有字。
+    //   faster-whisper 能给出**词级时间戳**，配合 VAD 后
+    //   在真实停顿处自然断开，气口就留出来了。
+    //
+    // 中英文都走这条链路：--lang auto 让模型自己判断语种。
+    // ====================================================================
+    // 语言 → faster-whisper 模型档位
+    // medium 对短剧对白够用；要更高准确率可改 large-v3（需先下载模型）
+    // 本次识别是否走 FunASR（仅当用户在下拉里显式选了 funasr-zh）
+    function useFunasrEngine() {
+        try {
+            return String(el.selModel && el.selModel.value || '').indexOf('funasr') === 0;
+        } catch (e) { return false; }
+    }
+
+    // 从模型下拉解析 faster-whisper 档位：fw-medium → medium
+    function fwModelName(lang) {
+        var v = '';
+        try { v = String(el.selModel && el.selModel.value || ''); } catch (e) {}
+        if (v.indexOf('fw-') === 0) return v.slice(3);
+        return 'medium';
+    }
+
+    function fasterWhisperReady() {
+        var py = detectPython();
+        if (!py) return { ok: false, reason: '未找到 Python' };
+        var cli = path.join(extRoot, 'py', 'faster_whisper_cli.py');
+        if (!fs.existsSync(cli)) return { ok: false, reason: '缺少 py/faster_whisper_cli.py' };
+        return { ok: true, py: py, cli: cli };
+    }
+
+    function runFasterWhisper(meta, wavPath, outJson, opts, cb) {
+        var env = fasterWhisperReady();
+        if (!env.ok) { cb({ seqId: meta.seqId, name: meta.seqName, status: 'err',
+                            error: env.reason }); return; }
+
+        var model = (opts && opts.model) || 'medium';
+        var lang = (opts && opts.lang) || 'auto';
+        var gap = (opts && opts.gap) || 0.45;
+        var device = (opts && opts.useGpu) ? 'cuda' : 'cpu';
+
+        var args = [env.cli,
+            '--wav', wavPath,
+            '--out', outJson,
+            '--model', model,
+            '--lang', lang,
+            '--gap', String(gap),
+            '--device', device];
+
+        setStatus('识别中 [' + meta.name + '] 加载模型…', '');
+        var proc = child_process.execFile(env.py, args, {
+            cwd: path.dirname(env.cli),
+            timeout: 3600000,
+            maxBuffer: 1024 * 1024 * 80
+        }, function (error, stdout, stderr) {
+            if (stopRequested) { cb({ seqId: meta.seqId, name: meta.seqName, status: 'stopped' }); return; }
+            if (error) {
+                cb({ seqId: meta.seqId, name: meta.seqName, status: 'err',
+                     error: '识别失败: ' + (error.message || '') + ' ' +
+                            String(stderr || '').slice(-300) });
+                return;
+            }
+            var data = null;
+            try { data = JSON.parse(fs.readFileSync(outJson, 'utf8')); } catch (e) {}
+            if (!data || !data.ok) {
+                cb({ seqId: meta.seqId, name: meta.seqName, status: 'err',
+                     error: (data && data.error) || '识别结果解析失败' });
+                return;
+            }
+            var subs = data.segments || [];
+            cb({ seqId: meta.seqId, name: meta.seqName, status: 'ok',
+                 count: subs.length, subtitles: subs,
+                 lang: data.lang, device: data.device });
+        });
+
+        if (proc && proc.stderr) {
+            proc.stderr.on('data', function (chunk) {
+                var t = String(chunk);
+                var m = t.match(/(\d{1,3})%/);
+                if (m) setStatus('识别中 [' + meta.name + '] ' + m[1] + '%…', '');
+            });
+        }
+        return proc;
+    }
+
+
 
     // 检测 CUDA 版 whisper 是否可用：关键 DLL 存在 + 能成功执行 --help（验证驱动兼容）
     function detectCudaAvailable(cudaWhisperPath) {
@@ -1256,10 +1396,15 @@
     function syncModelByLang() {
         var lang = el.selLang.value;
         if (lang === 'zh') {
-            el.selModel.value = 'funasr-zh';
-            el.selModel.disabled = true;
+            // 中文默认也走 faster-whisper（时间轴更准，气口能断开）。
+            // funasr 仍保留在模型下拉里，需要时手动选。
+            el.selModel.value = 'fw-medium';
+            el.selModel.disabled = false;
+        } else if (lang === 'auto') {
+            el.selModel.value = 'fw-medium';
+            el.selModel.disabled = false;
         } else {
-            el.selModel.value = 'ggml-large-v3-q5_0.bin';
+            el.selModel.value = 'fw-medium';
             el.selModel.disabled = false;
         }
     }
@@ -1300,6 +1445,7 @@
         var t = bridge.runTranslate(subtitles, mode, function (done, total) {
             targetBtn.textContent = '翻译中 ' + done + '/' + total + '…';
         }, function (err, res) {
+            var cacheHitN = (res && res.cacheHit) || 0;
             if (err) {
                 transBusy = false;
                 targetBtn.disabled = false;
@@ -1320,6 +1466,7 @@
                         var data = JSON.parse(result);
                         if (data.ok) {
                             var note = failCount > 0 ? '（' + failCount + ' 条失败保留英文）' : '';
+                            if (cacheHitN > 0) note += '（复用已有译文 ' + cacheHitN + ' 条）';
                             setStatus('已翻译 ' + outSubs.length + ' 条并回写' + suffix + '轨（' + data.fileName + '）' + note, 'ok');
                         } else {
                             setStatus('翻译完成但回写失败: ' + (data.error || result), 'err');
@@ -1332,7 +1479,7 @@
                     targetBtn.textContent = label;
                 });
             });
-        });
+        }, { seqName: seqName });
         // 记录当前任务（未来可扩展取消）
         window.__activeTransTask = t;
     }
@@ -1359,5 +1506,12 @@
             syncSubtitles(newSubs || []);
             return subtitles.length;
         }
+    };
+
+    // 切到字幕识别面板时自动刷新序列列表（序列可能在 PR 里新建/改名）
+    window.__subtitleOnShow = function () {
+        try {
+            if (typeof refreshSequences === 'function') refreshSequences();
+        } catch (e) {}
     };
 })();

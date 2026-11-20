@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.16",
-  "buildTime": "2026-11-06 21:30:00",
+  "version": "1.82.21",
+  "buildTime": "2026-11-20 18:44:57",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修复剧本库首页「打开剧本文件」按钮被拉伸成整屏色块。"
+  "notes": "字幕识别改用 faster-whisper：词级时间戳 + VAD，气口正确断开，字幕不再铺满时间轴"
 }

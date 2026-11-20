@@ -126,6 +126,7 @@
         <button class="ws-group" data-group="deliver">交付</button>
         <button class="ws-group" data-group="feedback">📮 反馈</button>
         <button class="ws-group" data-group="prconv">🔧 工具</button>
+        <button class="ws-group" data-group="ai">🤖 AI 助手</button>
         <button class="ws-group" data-group="admin">⚙ 管理<span id="adminBadge" class="ws-badge" style="display:none;">0</span></button>
     </div>
 
@@ -163,6 +164,11 @@
     <div class="tabs ws-subtabs" data-group="prconv" style="display:none;">
         <button class="tab active" data-tab="prconv">PR 版本转换</button>
         <button class="tab" data-tab="colorxml">调色 XML</button>
+    
+        <button class="tab" data-tab="batchxml">批量导出 XML</button>
+    </div>
+    <div class="tabs ws-subtabs" data-group="ai" style="display:none;">
+        <button class="tab" data-tab="ai">💬 对话</button>
     </div>
 
     <!-- ==================== 板块一：字幕识别 ==================== -->
@@ -195,15 +201,27 @@
             <div class="note" style="margin-top:4px;">入点/出点：先在时间轴按 I / O 设置范围；选中片段：先在时间轴点选块</div>
             <label style="margin-top:10px;">模型</label>
             <select id="selModel">
-                <option value="funasr-zh">FunASR（中文·paraformer，1.2GB）</option>
-                <option value="ggml-large-v3-q5_0.bin">large-v3（英文/多语言，1.0GB）</option>
+                <option value="fw-medium" selected>faster-whisper medium（推荐，词级时间·气口准确）</option>
+                <option value="fw-large-v3">faster-whisper large-v3（更准，需先下载模型）</option>
+                <option value="fw-small">faster-whisper small（更快，准确率略低）</option>
+                <option value="funasr-zh">FunASR（中文·paraformer，仅在特殊情况下使用）</option>
             </select>
-            <div class="note" style="margin-top:4px;">中文→FunASR（paraformer，断句细、抗噪强）；英文/其他→whisper large-v3</div>
+            <div class="note" style="margin-top:4px;">
+                默认走 faster-whisper：用词级时间戳配合 VAD，在真实停顿处断句，
+                不会有字幕铺满整段的问题。中英文都适用。
+            </div>
+            <label style="margin-top:10px;">气口阈值（秒）</label>
+            <div class="row">
+                <input type="text" id="inpGap" value="0.45" style="flex:0 0 80px;text-align:center;">
+                <span class="note" style="margin:0;flex:1;">
+                    停顿超过这个时长就断句。0.4~0.5 适合正常对白；语速快、停顿短可调到 0.3。
+                </span>
+            </div>
             <div class="check-row">
                 <input type="checkbox" id="chkGpu" checked>
                 <label for="chkGpu" style="margin:0; display:inline;">使用 GPU 加速（NVIDIA CUDA）</label>
             </div>
-            <div class="note" style="margin-top:4px;">GPU 仅对英文 whisper 生效；中文 FunASR 纯 CPU 已比实时快 30 倍</div>
+            <div class="note" style="margin-top:4px;">faster-whisper 支持 GPU（CUDA float16），速度约为 CPU 的数倍</div>
         </div>
 
         <div class="card">
@@ -1349,6 +1367,15 @@
                         <span style="flex:1;"></span>
                     </div>
 
+                    <!-- 分区一点五：在线看（不落盘、不转码） -->
+                    <div class="bgm-zone-title" style="margin-top:12px;">▶️ 在线看 · 不占盘</div>
+                    <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;flex-wrap:wrap;">
+                        <button id="btnBgmPlayNow" class="tbtn primary" title="直接播第一集（已下载则播本地）">▶ 立即播放</button>
+                        <input type="number" id="bgmPlayEpNo" placeholder="集" style="width:52px;" min="1" value="1" title="要播的集号">
+                        <span style="font-size:11px;color:var(--muted);">集</span>
+                        <span id="bgmPlayHint" style="font-size:11px;color:var(--muted);flex:1;"></span>
+                    </div>
+
                     <!-- 分区二：下载（拿视频文件） -->
                     <div class="bgm-zone-title" style="margin-top:12px;">📥 下载 · 拿视频</div>
                     <div class="tr" style="display:flex;gap:6px;margin-top:6px;align-items:center;">
@@ -1661,9 +1688,13 @@
             </div>
             <label style="margin-top:10px;">剧本 docx（台词标准答案）</label>
             <div class="row">
-                <button id="ckPickDocx" class="secondary">选择剧本目录…</button>
+                <button id="ckPickDocx" class="secondary">从剧本板块选择…</button>
                 <span class="ck-path" id="ckDocxPath">未选择</span>
                 <span class="ck-srt-badge" id="ckDocxBadge">✓ 已选择</span>
+            </div>
+            <div class="hint" style="margin-top:4px;">
+                自动列出剧本板块打开过的剧本；也可以在剧本面板打开一个新剧本，这里会立即出现。
+                <a href="javascript:void 0" id="ckDocxBrowse" style="color:#8fb8e8;">仍要手动找文件？</a>
             </div>
             <div id="ckDocxList" style="display:none;"></div>
             <label style="margin-top:10px;">校对集数</label>
@@ -1697,9 +1728,18 @@
 
         <div class="card">
             <h2>3 · 执行校对</h2>
-            <div class="row">
-                <button id="ckRun">开始校对</button>
-                <button id="ckDictOnly" class="secondary">只套用字典（敏感词替换）</button>
+            <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin:0;">
+                <button id="ckRun" style="flex:1 1 120px;min-width:0;">开始校对</button>
+                <button id="ckAICheck" class="secondary" style="flex:1 1 110px;min-width:0;white-space:nowrap;" title="在规则校对之上，让 AI 再看一遍语义与通顺度">🤖 AI 复核</button>
+                <button id="ckDictOnly" class="secondary" style="flex:1 1 140px;min-width:0;">只套用字典</button>
+            </div>
+            <div class="row" id="ckAICheckRow" style="margin-top:6px;display:none;align-items:center;gap:8px;">
+                <span id="ckAIProgress" style="font-size:11px;color:var(--muted);flex:1;"></span>
+                <button id="ckAIStop" class="secondary mini" style="display:none;">停止</button>
+            </div>
+            <div class="hint" style="margin-top:4px;">
+                AI 复核会读取「剧本面板打开过的剧本」与当前字幕，只报规则查不出的问题（听错字、不通顺、断句）。
+                结果会合并到下面的差异列表，仍需你逐条勾选确认。
             </div>
             <div class="row" style="margin-top:6px;">
                 <button id="ckTranslate" class="secondary">翻译成中文（剧情参考）</button>
@@ -1848,7 +1888,49 @@
         </div>
     </div>
     <!-- ==================== PR 工具：调色 XML 清理 ==================== -->
-    <div class="tab-panel" id="panel-colorxml" style="display:none;">
+        <!-- ==================== 批量导出 XML ==================== -->
+    <div class="tab-panel" id="panel-batchxml" style="display:none;">
+        <div class="card">
+            <h2>1 · 选择序列</h2>
+            <div class="row">
+                <button id="bxRefresh" class="secondary">↻ 读取工程序列</button>
+                <button id="bxAll" class="secondary mini">全选</button>
+                <button id="bxNone" class="secondary mini">全不选</button>
+                <span class="ck-path" id="bxCount">未读取</span>
+            </div>
+            <div id="bxList" style="margin-top:8px;max-height:260px;overflow:auto;"></div>
+        </div>
+
+        <div class="card">
+            <h2>2 · 导出设置</h2>
+            <div class="row">
+                <label style="flex:0 0 auto;">输出目录</label>
+                <input type="text" id="bxOutDir" placeholder="留空则导出到工程所在目录" style="flex:1;">
+                <button id="bxPickDir" class="secondary">浏览…</button>
+            </div>
+            <div class="hint" style="margin-top:6px;">
+                每个序列导出为「序列名.xml」，用 Final Cut Pro XML 格式，达芬奇 / 其他软件可直接导入。
+                已存在的同名文件会被覆盖。
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>3 · 执行</h2>
+            <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button id="bxRun" style="flex:1 1 140px;">开始批量导出</button>
+                <button id="bxStop" class="secondary" style="flex:0 0 auto;display:none;">停止</button>
+            </div>
+            <div class="row" id="bxProgressRow" style="margin-top:8px;display:none;align-items:center;gap:8px;">
+                <div style="flex:1;height:6px;background:#151515;border-radius:3px;overflow:hidden;">
+                    <div id="bxBar" style="height:100%;width:0;background:linear-gradient(90deg,#537d96,#7fb0cc);transition:width .2s;"></div>
+                </div>
+                <span id="bxPct" style="font-size:11px;color:#8ec4e0;min-width:64px;text-align:right;">0%</span>
+            </div>
+            <div id="bxResult" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
+<div class="tab-panel" id="panel-colorxml" style="display:none;">
         <div class="cx-layout">
 
             <!-- 左：配置 -->
@@ -1982,7 +2064,58 @@
     </div>
 
     <!-- ==================== 管理（内嵌授权管理台；主插件专用，不参与授权管控） ==================== -->
-    <div class="tab-panel" id="panel-admin" style="display:none;">
+        <!-- ==================== AI 助手（对话） ==================== -->
+    <div class="tab-panel" id="panel-ai" style="display:none;">
+        <div class="ai-wrap">
+            <div class="ai-top">
+                <span class="ai-model" id="aiModelLabel">未配置</span>
+                <span class="ai-status" id="aiStatus"></span>
+                <span class="ai-spacer"></span>
+                <button class="wb-nav-btn" id="aiNewChat" title="新对话">＋ 新对话</button>
+                <button class="wb-nav-btn" id="aiCfgBtn" title="模型设置">⚙ 设置</button>
+            </div>
+
+            <div class="ai-msgs" id="aiMsgs">
+                <div class="ai-empty" id="aiEmpty">
+                    <div class="ai-empty-ico">💬</div>
+                    <div class="ai-empty-t">有什么想问的？</div>
+                    <div class="ai-empty-d">可以问剪辑、剧本、字幕、导出相关的问题，也可以让我帮你理思路。</div>
+                </div>
+            </div>
+
+            <div class="ai-composer">
+                <textarea id="aiInput" rows="1" placeholder="输入问题，Enter 发送，Shift+Enter 换行"></textarea>
+                <button class="ai-send" id="aiSend" title="发送">发送</button>
+                <button class="ai-stop" id="aiStop" title="停止生成" style="display:none;">停止</button>
+            </div>
+            <div class="ai-foot">
+                <span id="aiFootHint">对话保存在本机，不会自动上传</span>
+            </div>
+        </div>
+
+        <!-- 设置弹层 -->
+        <div class="ai-cfg-mask" id="aiCfgMask" style="display:none;">
+            <div class="ai-cfg">
+                <div class="ai-cfg-h">模型设置<button class="wb-nav-btn" id="aiCfgClose" style="margin-left:auto;">✕</button></div>
+                <label>接口地址（OpenAI 兼容，例如 https://你的中转/v1）</label>
+                <input id="aiCfgBase" type="text" placeholder="https://api.example.com/v1">
+                <label>API 密钥</label>
+                <input id="aiCfgKey" type="password" placeholder="sk-...">
+                <label>模型名</label>
+                <input id="aiCfgModel" type="text" placeholder="deepseek-chat">
+                <label>温度（0-2，默认 0.7）</label>
+                <input id="aiCfgTemp" type="number" min="0" max="2" step="0.1" value="0.7">
+                <div class="ai-cfg-note">密钥只保存在本机 collect/ai_config.json，不会写进更新包。</div>
+                <div class="ai-cfg-btns">
+                    <button class="ai-btn-sec" id="aiCfgTest">测试连接</button>
+                    <button class="ai-btn-pri" id="aiCfgSave">保存</button>
+                </div>
+                <div id="aiCfgMsg" class="ai-cfg-msg"></div>
+            </div>
+        </div>
+    </div>
+
+<div class="tab-panel" id="panel-admin" style="display:none;">
         <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);">
             <div class="wb-nav">
                 <button class="wb-nav-btn" id="adNavReload" title="刷新页面">↻</button>
@@ -2424,6 +2557,159 @@
 .ao-card h2{margin-bottom:6px;}
 .ao-card .row{margin:0;}
 .ao-card .hint{margin-top:7px;line-height:1.6;word-break:break-all;}
+
+/* ==================== AI 助手面板样式 ==================== */
+.ai-wrap{
+    display:flex;flex-direction:column;
+    height:calc(100vh - 150px);min-height:380px;
+    background:#141418;border:1px solid #2c2938;border-radius:10px;overflow:hidden;
+}
+.ai-top{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;border-bottom:1px solid #262430;background:#1a1820;flex:0 0 auto;
+}
+.ai-model{
+    font-size:11.5px;color:#b9a8e8;background:#2a2238;
+    border:1px solid #463a5e;border-radius:20px;padding:3px 10px;
+    max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ai-model-warn{color:#e0b060;border-color:#5a4526;background:#2c2418;}
+.ai-status{font-size:11px;color:#8a8798;}
+.ai-status.busy{color:#8fb8e8;}
+.ai-status.err{color:#ef8a8a;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ai-status.warn{color:#e0b060;}
+.ai-spacer{margin-left:auto;}
+
+.ai-msgs{
+    flex:1;overflow-y:auto;padding:16px 14px 8px;
+    display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth;
+}
+.ai-msgs::-webkit-scrollbar{width:8px;}
+.ai-msgs::-webkit-scrollbar-thumb{background:#3a3646;border-radius:4px;}
+
+.ai-msg{display:flex;gap:10px;align-items:flex-start;}
+.ai-msg.me{flex-direction:row-reverse;}
+.ai-av{
+    flex:0 0 auto;width:26px;height:26px;border-radius:50%;
+    display:grid;place-items:center;font-size:11px;font-weight:600;
+    background:#2e2740;color:#bda8f0;border:1px solid #443a5e;margin-top:2px;
+}
+.ai-msg.me .ai-av{background:#243044;color:#9cc4f0;border-color:#354a68;}
+.ai-bub{
+    max-width:calc(100% - 60px);
+    padding:10px 13px;border-radius:10px;font-size:13px;line-height:1.75;
+    background:#1d1b24;border:1px solid #2c2938;color:#d8d6e2;
+    word-break:break-word;overflow-wrap:anywhere;
+}
+.ai-msg.me .ai-bub{background:#232b3a;border-color:#33405a;color:#dde6f2;}
+.ai-bub p{margin:0 0 6px;}
+.ai-bub p:last-child{margin-bottom:0;}
+.ai-bub strong{color:#fff;font-weight:600;}
+.ai-ic{
+    background:#2a2634;border:1px solid #3b3549;border-radius:4px;
+    padding:1px 5px;font-family:Consolas,monospace;font-size:12px;color:#c9b8f0;
+}
+.ai-code{
+    background:#12111a;border:1px solid #302b3d;border-radius:7px;
+    padding:10px 12px;margin:8px 0;overflow-x:auto;
+}
+.ai-code code{font-family:Consolas,monospace;font-size:12px;color:#b9d8c0;white-space:pre;}
+.ai-caret{
+    display:inline-block;width:7px;height:14px;background:#8b6fe0;
+    vertical-align:text-bottom;margin-left:2px;animation:aiblink .9s steps(2) infinite;
+}
+@keyframes aiblink{0%,50%{opacity:1}51%,100%{opacity:0}}
+.ai-err{color:#ef8a8a;margin:0!important;}
+
+.ai-empty{
+    margin:auto;text-align:center;padding:24px 16px;color:#7d7a8c;max-width:440px;
+}
+.ai-empty-ico{font-size:30px;margin-bottom:8px;opacity:.8;}
+.ai-empty-t{font-size:14px;color:#c6c3d2;margin-bottom:6px;}
+.ai-empty-d{font-size:12px;line-height:1.8;margin-bottom:16px;}
+.ai-chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+.ai-chips button{
+    padding:6px 12px;border-radius:16px;border:1px solid #3a3448;
+    background:#1c1a24;color:#a9a4b8;font-size:11.5px;cursor:pointer;transition:.15s;
+}
+.ai-chips button:hover{color:#cbbdf0;border-color:#5a4a7a;background:#241f30;}
+
+.ai-composer{
+    flex:0 0 auto;display:flex;gap:8px;align-items:flex-end;
+    padding:10px 12px;border-top:1px solid #262430;background:#17151d;
+}
+.ai-composer textarea{
+    flex:1;resize:none;min-height:38px;max-height:140px;
+    padding:9px 12px;border-radius:9px;border:1px solid #34303f;
+    background:#100f15;color:#e6e3ee;font-size:13px;line-height:1.6;
+    font-family:inherit;outline:none;
+}
+.ai-composer textarea:focus{border-color:#6a58a0;}
+.ai-send,.ai-stop{
+    flex:0 0 auto;height:38px;padding:0 18px;border-radius:9px;
+    font-size:13px;cursor:pointer;border:1px solid transparent;transition:.15s;
+}
+.ai-send{background:#6d54b8;color:#fff;}
+.ai-send:hover{background:#7d62cc;}
+.ai-stop{background:#3a2028;color:#ef9a9a;border-color:#5a3038;}
+.ai-stop:hover{background:#4a2630;}
+
+.ai-foot{
+    flex:0 0 auto;padding:0 12px 8px;background:#17151d;
+    font-size:10.5px;color:#635f70;
+}
+
+/* 设置弹层 */
+.ai-cfg-mask{
+    position:fixed;inset:0;background:rgba(6,5,10,.72);
+    display:flex;align-items:center;justify-content:center;z-index:900;padding:20px;
+}
+.ai-cfg{
+    width:min(440px,100%);max-height:88vh;overflow-y:auto;
+    background:#1a1822;border:1px solid #3d3550;border-radius:12px;
+    padding:18px;display:flex;flex-direction:column;gap:8px;
+    box-shadow:0 18px 50px rgba(0,0,0,.6);
+}
+.ai-cfg-h{
+    display:flex;align-items:center;font-size:14px;font-weight:600;
+    color:#e6e3ee;margin-bottom:6px;
+}
+.ai-cfg label{font-size:11.5px;color:#9a95aa;margin-top:6px;}
+.ai-cfg input{
+    padding:9px 11px;border-radius:8px;border:1px solid #35303f;
+    background:#100f15;color:#e6e3ee;font-size:12.5px;outline:none;
+}
+.ai-cfg input:focus{border-color:#6a58a0;}
+.ai-cfg-note{font-size:10.5px;color:#6f6a7d;line-height:1.7;margin-top:4px;}
+.ai-cfg-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
+.ai-btn-sec,.ai-btn-pri{
+    padding:8px 16px;border-radius:8px;font-size:12.5px;cursor:pointer;
+    border:1px solid #3a3448;background:#221f2b;color:#b9b4c8;transition:.15s;
+}
+.ai-btn-sec:hover{color:#d5cfec;border-color:#544a6e;}
+.ai-btn-pri{background:#6d54b8;border-color:#6d54b8;color:#fff;}
+.ai-btn-pri:hover{background:#7d62cc;}
+.ai-cfg-msg{font-size:11.5px;min-height:16px;color:#8a8798;margin-top:6px;}
+.ai-cfg-msg.ok{color:#7fd68b;}
+.ai-cfg-msg.err{color:#ef8a8a;}
+
+@media (max-width:520px){
+    .ai-bub{max-width:calc(100% - 44px);font-size:12.5px;}
+    .ai-top{padding:7px 9px;gap:6px;}
+    .ai-model{max-width:130px;font-size:10.5px;}
+    .ai-send,.ai-stop{padding:0 13px;height:36px;}
+}
+
+/* ===== AI 复核差异条目 ===== */
+.ck-issue.ck-ai-asr{border-left-color:#c084fc;}
+.ck-issue.ck-ai-fluency{border-left-color:#7dd3fc;}
+.ck-issue.ck-ai-split{border-left-color:#fbbf24;}
+.ck-tag-ai-asr{background:rgba(192,132,252,.16);color:#d8b4fe;border-color:rgba(192,132,252,.4);}
+.ck-tag-ai-fluency{background:rgba(125,211,252,.16);color:#bae6fd;border-color:rgba(125,211,252,.4);}
+.ck-tag-ai-split{background:rgba(251,191,36,.16);color:#fcd34d;border-color:rgba(251,191,36,.4);}
+.ck-ai-reason{font-size:11px;color:#a9a4b8;margin-top:3px;}
+.ck-ai-reason:before{content:'AI 判断：';opacity:.7;}
+
 </style>
 
     <!-- ==================== 素材库（浏览素材并导入 PR 项目） ==================== -->
@@ -2495,6 +2781,7 @@
     <script src="js/sfx-capture.js"></script>
     <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
+    <script src="js/bgm-online.js"></script>
     <script src="js/bgm.js"></script>
     <script src="js/export.js"></script>
     <script src="js/en-shared.js"></script>
@@ -2503,6 +2790,8 @@
     <script src="js/vsr.js"></script>
     <script src="js/vsr-ui.js"></script>
     <script src="js/media.js"></script>
+    <script src="js/ai-check.js"></script>
+    <script src="js/batch-xml.js"></script>
     <script src="js/check.js"></script>
     <script src="js/script.js"></script>
     <script src="js/progress.js"></script>
@@ -2521,6 +2810,7 @@
     <script src="js/font-fix-ui.js"></script>
     <script src="js/tool-panel.js"></script>
     <script src="js/about-panel.js"></script>
+    <script src="js/ai-chat.js"></script>
 
     <script>
     // ==================== 面板尾部逻辑（统一收拢） ====================

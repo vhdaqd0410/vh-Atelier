@@ -1,19 +1,48 @@
 // vh-Atelier 第 5 板块：字幕校对（对剧本核对字幕，全局词级对齐）
 // 流程：选 SRT → 选剧本 docx → 填集数 → 校对 → 差异清单打勾 → 应用修正 → 回写
 (function () {
-    var csInterface = new CSInterface();
-    var fs = require('fs');
-    var path = require('path');
-    var os = require('os');
-    var child_process = require('child_process');
+    // 容错：任意一项取不到都不要让整个模块崩掉，否则面板会完全无响应。
+    // 正常 CEP 环境下这些都存在；浏览器调试或环境异常时给出可读提示。
+    var nodeMissing = false;
+    var csInterface = null;
+    try { csInterface = new CSInterface(); } catch (e0) {}
 
-    var extRoot = csInterface.getSystemPath(SystemPath.EXTENSION);
+    var fs, path, os, child_process;
+    try {
+        fs = require('fs');
+        path = require('path');
+        os = require('os');
+        child_process = require('child_process');
+    } catch (e1) {
+        nodeMissing = true;
+        // 提供最小占位，保证后续逻辑不会因 undefined 抛错
+        fs = { existsSync: function () { return false; }, readFileSync: function () { return ''; },
+               writeFileSync: function () {}, mkdirSync: function () {}, readdirSync: function () { return []; } };
+        path = { join: function () { return Array.prototype.join.call(arguments, '/'); },
+                 basename: function (x) { return String(x).split(/[\\/]/).pop(); },
+                 dirname: function (x) { return String(x).replace(/[\\/][^\\/]*$/, ''); },
+                 extname: function (x) { var m = String(x).match(/\.[^.]*$/); return m ? m[0] : ''; } };
+        os = { tmpdir: function () { return ''; } };
+        child_process = { spawnSync: function () { return { stdout: '', stderr: 'Node 不可用', status: -1 }; } };
+    }
+
+    var extRoot = '';
+    try {
+        extRoot = (csInterface && csInterface.getSystemPath) ? csInterface.getSystemPath(SystemPath.EXTENSION) : '';
+    } catch (e2) { extRoot = ''; }
 
     // 状态
     var srtPath = null;       // 选中的 srt 文件（文件对话框或项目面板）
     var docxPath = null;      // 选中的剧本 docx
     var docxDir = null;       // 剧本目录（记忆用）
     var issues = [];          // 差异清单
+
+    // HTML 转义（渲染剧本/字幕文本到 innerHTML 时用）
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
     var checked = {};         // { idx: true } 打勾集合
     var resultJsonPath = null;
     var currentEpisode = '';  // 当前集数（推断或手填，供修正导出命名）
@@ -29,6 +58,11 @@
         docxPathLabel: document.getElementById('ckDocxPath'),
         docxBadge: document.getElementById('ckDocxBadge'),
         docxList: document.getElementById('ckDocxList'),
+        btnAICheck: document.getElementById('ckAICheck'),
+        aiCheckRow: document.getElementById('ckAICheckRow'),
+        aiProgress: document.getElementById('ckAIProgress'),
+        aiStop: document.getElementById('ckAIStop'),
+        btnRun: document.getElementById('ckRun'),
         inpEpisode: document.getElementById('ckEpisode'),
         btnCheck: document.getElementById('ckRun'),
         btnApply: document.getElementById('ckApply'),
@@ -424,14 +458,16 @@
         var files = [];
         try {
             files = fs.readdirSync(dir).filter(function (f) {
-                return f.toLowerCase().slice(-5) === '.docx' && f.charAt(0) !== '~';
+                var low = f.toLowerCase();
+                if (f.charAt(0) === '~') return false;
+                return low.slice(-5) === '.docx' || low.slice(-5) === '.docm';
             });
         } catch (e) {
             setStatus('读取目录失败: ' + e.message, 'err');
             return;
         }
         if (files.length === 0) {
-            setStatus('该目录里没有 .docx 文件', 'warn');
+            setStatus('该目录里没有 .docx / .docm 文件', 'warn');
             el.docxList.style.display = 'none';
             el.docxList.innerHTML = '';
             return;
@@ -458,6 +494,211 @@
         });
         el.docxList.style.display = 'block';
         setStatus('目录里有 ' + files.length + ' 个 docx，请点选一个', 'warn');
+    }
+
+    // ---------- 从剧本板块里选剧本（替代每次翻目录）----------
+    // 数据源就是剧本面板自己的记录：
+    //   vh_script_recent  ：打开过的剧本（去重、按时间倒序）
+    //   vh_script_reading ：当前正在读的那一份
+    // 这样你在剧本面板打开一个剧本，切回来这里就能直接点。
+    function collectScriptCandidates() {
+        var out = [];
+        var seen = {};
+        // 拿不到 fs 时退化为「不校验文件是否存在」，仍然把记录列出来
+        var hasFs = false;
+        try { hasFs = !!(fs && fs.existsSync); } catch (e0) { hasFs = false; }
+        function alive(p) {
+            if (!p) return false;
+            if (!hasFs) return true;
+            try { return fs.existsSync(p); } catch (e1) { return true; }
+        }
+        function baseName(p) {
+            try { return path.basename(p); } catch (e2) { return String(p).split(/[\\/]/).pop(); }
+        }
+        function push(item) {
+            if (!item || !item.path || seen[item.path]) return;
+            seen[item.path] = 1;
+            out.push(item);
+        }
+        var sc = window.__vhScript || {};
+        // 1) 当前正在读的放最前
+        try {
+            var cur = sc.getReadingScript ? sc.getReadingScript() : null;
+            if (cur && cur.path && alive(cur.path)) {
+                push({ path: cur.path, name: baseName(cur.path), project: '', tag: '正在读' });
+            }
+        } catch (e) {}
+        // 2) 最近打开过的
+        try {
+            var rec = sc.getRecentScripts ? sc.getRecentScripts() : null;
+            if (!rec) {
+                try { rec = JSON.parse(localStorage.getItem('vh_script_recent') || '[]'); } catch (e2) { rec = []; }
+            }
+            (rec || []).forEach(function (r) {
+                if (r && r.path && alive(r.path)) {
+                    push({ path: r.path, name: r.name || baseName(r.path), project: r.project || '', tag: '最近' });
+                }
+            });
+        } catch (e3) {}
+        return out;
+    }
+
+    // 渲染剧本候选列表（点击即选中）
+    function renderScriptPicker() {
+        var list = collectScriptCandidates();
+        el.docxList.innerHTML = '';
+        if (!list.length) {
+            el.docxList.innerHTML = '<div class="hint" style="padding:8px 2px;">' +
+                '剧本板块还没有打开过剧本。去「📖 剧本」打开一份，回来这里就能直接选。' +
+                '<br>也可以点下面的「仍要手动找文件」。</div>';
+            el.docxList.style.display = 'block';
+            return;
+        }
+        list.forEach(function (it) {
+            var btn = document.createElement('button');
+            btn.className = 'ck-docx-item';
+            if (docxPath === it.path) btn.classList.add('sel');
+            btn.innerHTML = '<span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+                + esc(it.name) + '</span>'
+                + (it.tag ? '<span style="flex:0 0 auto;font-size:10px;opacity:.65;margin-left:8px;">' + it.tag + '</span>' : '');
+            btn.title = it.path + (it.project ? ('  · ' + it.project) : '');
+            btn.addEventListener('click', function () {
+                docxPath = it.path;
+                el.docxPathLabel.textContent = it.name;
+                el.docxPathLabel.title = it.path;
+                var all = el.docxList.querySelectorAll('.ck-docx-item');
+                for (var i = 0; i < all.length; i++) all[i].classList.remove('sel');
+                btn.classList.add('sel');
+                refreshBadges();
+                saveMemory();
+                setStatus('已选剧本：' + it.name, 'ok');
+                // 选完立刻收起列表，避免占满面板；并把焦点送到「校对集数」
+                try {
+                    el.docxList.style.display = 'none';
+                    el.docxList.innerHTML = '';
+                    if (el.inpEpisode) {
+                        el.inpEpisode.focus();
+                        el.inpEpisode.select();
+                        // 滚到可视区（面板可能是长滚动容器）
+                        if (el.inpEpisode.scrollIntoView) {
+                            el.inpEpisode.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                        }
+                    }
+                } catch (e4) {}
+            });
+            el.docxList.appendChild(btn);
+        });
+        el.docxList.style.display = 'block';
+        setStatus('剧本板块里有 ' + list.length + ' 份剧本，点一个选中', '');
+    }
+
+
+    // ---------- AI 复核（语义层，规则校对之上）----------
+    // 取当前字幕全文：优先内存（识别板块），否则读 srt 文件
+    function currentSubsForAI() {
+        var bridge = window.__subtitleBridge;
+        var cur = bridge ? bridge.getCurrent() : null;
+        if (cur && cur.subtitles && cur.subtitles.length) {
+            return cur.subtitles.map(function (x) {
+                return { start: x.start, end: x.end, text: x.text };
+            });
+        }
+        try { return parseSRT(fs.readFileSync(srtPath, 'utf8')); } catch (e) { return []; }
+    }
+
+    // 把规则校对的差异按字幕序号归组，供 AI 参考"哪些已经查过了"
+    function knownIssuesBySub() {
+        var map = {};
+        (issues || []).forEach(function (it) {
+            if (it.subIdx == null) return;
+            (map[it.subIdx] = map[it.subIdx] || []).push(it);
+        });
+        return map;
+    }
+
+    function runAICheck() {
+        if (!srtPath) { setStatus('请先选择字幕（识别完字幕或读取 SRT）', 'err'); return; }
+        if (!window.__vhAICheck) { setStatus('AI 复核模块未加载', 'err'); return; }
+
+        var cfg = window.__vhAICheck.readConfig();
+        if (!cfg) {
+            setStatus('还没配置 AI 模型：去「🤖 AI 助手 → ⚙ 设置」填接口地址/密钥/模型', 'err');
+            return;
+        }
+
+        var subs = currentSubsForAI();
+        if (!subs.length) { setStatus('拿不到当前字幕内容', 'err'); return; }
+
+        // 已由规则查出的字幕，标注一下让模型别重复报
+        var known = knownIssuesBySub();
+        var pairs = subs.map(function (x, i) {
+            var notes = (known[i] || []).map(function (k) {
+                return k.type === 'replace' ? (k.from + '→' + k.to) : k.type;
+            }).join(',');
+            return {
+                idx: i,
+                sub: String(x.text || '').trim(),
+                script: '',                       // 剧本原文（规则校对已对齐，这里作为参考留给模型）
+                hint: notes || ''
+            };
+        }).filter(function (x) { return x.sub; });
+
+        if (!pairs.length) { setStatus('字幕是空的', 'err'); return; }
+
+        el.btnAICheck.disabled = true;
+        el.btnRun.disabled = true;
+        el.aiCheckRow.style.display = '';
+        el.aiStop.style.display = '';
+        el.aiProgress.textContent = '准备中…';
+
+        window.__vhAICheck.run(
+            { pairs: pairs, mode: 'typo-only' },
+            function (done, total, note) {
+                var pct = total ? Math.round(done / total * 100) : 0;
+                el.aiProgress.textContent = (note || 'AI 复核中') + '　' + pct + '%（' + done + '/' + total + '）';
+            },
+            function (err, items) {
+                el.btnAICheck.disabled = false;
+                el.btnRun.disabled = false;
+                el.aiStop.style.display = 'none';
+
+                if (err) {
+                    el.aiProgress.textContent = '❌ ' + err.message;
+                    setStatus('AI 复核失败：' + err.message, 'err');
+                    return;
+                }
+
+                items = items || [];
+                if (!items.length) {
+                    el.aiProgress.textContent = '✅ AI 未发现额外问题';
+                    setStatus('AI 复核完成：没有发现规则之外的问题', 'ok');
+                    return;
+                }
+
+                // 转成和规则差异同构的条目，直接并进列表
+                var added = 0;
+                items.forEach(function (x) {
+                    var sub = subs[x.idx] || {};
+                    issues.push({
+                        type: x.type === 'SPLIT' ? 'ai-split' : (x.type === 'ASR' ? 'ai-asr' : 'ai-fluency'),
+                        subIdx: x.idx,
+                        subStart: sub.start || '',
+                        subEnd: sub.end || '',
+                        before: x.before,
+                        after: x.after,
+                        fixedText: x.after,
+                        aiReason: x.reason,
+                        source: 'ai'
+                    });
+                    added++;
+                });
+
+                renderIssues();
+                el.applyRow.style.display = '';
+                el.aiProgress.textContent = '✅ AI 追加 ' + added + ' 条建议，请逐条确认';
+                setStatus('AI 复核完成：新增 ' + added + ' 条建议（未自动应用）', 'ok');
+            }
+        );
     }
 
     // ---------- 读取项目面板当前选中的字幕（方案 B）----------
@@ -594,6 +835,10 @@
         if (t === 'replace') return '听错';
         if (t === 'insert') return '漏词';
         if (t === 'delete') return '多余';
+        // AI 复核补充的类型
+        if (t === 'ai-asr') return 'AI·听错';
+        if (t === 'ai-fluency') return 'AI·不通顺';
+        if (t === 'ai-split') return 'AI·断句';
         return t;
     }
 
@@ -652,6 +897,14 @@
             cur.className = 'ck-cur';
             cur.innerHTML = '<span class="ck-lbl">当前</span>' + escapeHtml(it.subText || '');
             body.appendChild(cur);
+
+            // AI 判断理由（仅 AI 复核条目有）
+            if (it.aiReason) {
+                var why = document.createElement('div');
+                why.className = 'ck-ai-reason';
+                why.textContent = it.aiReason;
+                body.appendChild(why);
+            }
 
             // 修正后（仅 replace / insert 有 fixedText）
             if (it.fixedText) {
@@ -991,6 +1244,11 @@
     }
 
     // ---------- 事件 ----------
+    // 环境不完整时给出明确提示，而不是让按钮点了没反应
+    if (nodeMissing) {
+        try { setStatus('当前环境缺少 Node 支持，字幕校对不可用（请从 PR 里打开插件）', 'err'); } catch (e3) {}
+    }
+
     el.btnPickSelected.addEventListener('click', pickSelectedSrt);
 
     el.btnPickSrt.addEventListener('click', function () {
@@ -1005,10 +1263,25 @@
     });
 
     el.btnPickDocx.addEventListener('click', function () {
-        pickDocxDir();
+        renderScriptPicker();
     });
+    // 手动找文件（保留原目录扫描能力，作为兜底）
+    var browseLink = document.getElementById('ckDocxBrowse');
+    if (browseLink) {
+        browseLink.addEventListener('click', function () {
+            pickDocxDir();
+        });
+    }
 
     el.btnCheck.addEventListener('click', runCheck);
+    if (el.btnAICheck) el.btnAICheck.addEventListener('click', runAICheck);
+    if (el.aiStop) el.aiStop.addEventListener('click', function () {
+        if (window.__vhAICheck && window.__vhAICheck.stop) window.__vhAICheck.stop();
+        el.aiProgress.textContent = '已停止';
+        el.btnAICheck.disabled = false;
+        el.btnRun.disabled = false;
+        el.aiStop.style.display = 'none';
+    });
     el.btnApply.addEventListener('click', applyChecked);
     el.btnDictOnly.addEventListener('click', applyDictOnly);
     el.btnExportFixed.addEventListener('click', exportFixedSrt);

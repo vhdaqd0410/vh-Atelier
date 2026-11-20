@@ -16,7 +16,7 @@ const os = require('os')
 const { spawn, spawnSync } = require('child_process')
 
 const VERSION = '1.0.0'
-const PORT = 17891
+const PORT = Number(process.env.VH_BGM_PORT) || 17891   // VH_BGM_PORT 仅供本地调试并行起实例，正常固定 17891
 const EXT_ROOT = path.resolve(__dirname, '..')
 const NCM_DIR = path.join(EXT_ROOT, 'ncm')
 const COOKIE_FILE = path.join(NCM_DIR, '.ncm_cookie')
@@ -398,15 +398,93 @@ async function getSeries(seriesId) {
 // 端口与协议不变，只是 getVideo 的取地址顺序变了。
 // ════════════════════════════════════════════════════════════════════
 
-// 采集源清单。权重高的先试（实测命中率：暴风 5/5、极速 4/5、非凡 3/5、魔都 3/5）
+// 采集源清单（2026-11 实测校准）
+//   kind: single = 每集一条 m3u8，可直接精确到集；merged = 合并集需按时间轴切片；page = 只给 /play/ 网页，归一化后变合并集
+//   order 越小越优先；dead=true 的源保留在表里但不参与搜索（记录实测结论，便于日后回查）
+// 2026-11-18 重新实测校准（35 个候选源里活下来 11 个）
+// 覆盖排行（12 部短剧样本）：无尽 8、极速/光速/金鹰/量子 7、魔都 4、非凡/360/iKun 3、如意 2、百度云 1
+// kind: single = 每集一条 m3u8（能精确到集）；page = /play/ 网页，归一化后是合并集
 const DRAMA_SOURCES = [
-  { id: 'bfzy', name: '暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod/' },
-  { id: 'jszy', name: '极速资源', api: 'https://jszyapi.com/api.php/provide/vod/' },
-  { id: 'ffzy', name: '非凡影视', api: 'https://cj.ffzyapi.com/api.php/provide/vod/' },
-  { id: 'mdzy', name: '魔都资源', api: 'https://www.mdzyapi.com/api.php/provide/vod/' },
-  { id: 'rycj', name: '如意资源', api: 'https://cj.rycjapi.com/api.php/provide/vod/' },
-  { id: '360 ', name: '360资源', api: 'https://360zy.com/api.php/provide/vod/' },
+  // 覆盖最高，单集粒度，优先
+  { id: 'wujin', name: '无尽资源', api: 'https://api.wujinapi.me/api.php/provide/vod/', kind: 'single', order: 1 },
+  { id: 'mdzy', name: '魔都资源', api: 'https://www.mdzyapi.com/api.php/provide/vod/', kind: 'single', order: 2 },
+  { id: 'lzzy', name: '量子资源', api: 'https://cj.lziapi.com/api.php/provide/vod/', kind: 'single', order: 3 },
+  { id: 'rycj', name: '如意资源', api: 'https://cj.rycjapi.com/api.php/provide/vod/', kind: 'single', order: 4 },
+  { id: 'ffzy', name: '非凡影视', api: 'https://cj.ffzyapi.com/api.php/provide/vod/', kind: 'single', order: 5 },
+  { id: 'zy360', name: '360资源', api: 'https://360zy.com/api.php/provide/vod/', kind: 'single', order: 6 },
+  { id: 'ikun', name: 'iKun资源', api: 'https://ikunzyapi.com/api.php/provide/vod/', kind: 'single', order: 7 },
+  { id: 'bdzy', name: '百度云资源', api: 'https://api.apibdzy.com/api.php/provide/vod/', kind: 'single', order: 8 },
+  // 合并集源：覆盖也不错，单集源全失败时才用
+  { id: 'jszy', name: '极速资源', api: 'https://jszyapi.com/api.php/provide/vod/', kind: 'page', order: 21 },
+  { id: 'gszy', name: '光速资源', api: 'https://api.guangsuapi.com/api.php/provide/vod/', kind: 'page', order: 22 },
+  { id: 'jyzy', name: '金鹰资源', api: 'https://jinyingzy.com/api.php/provide/vod/', kind: 'page', order: 23 },
+  // 实测死亡：暴风 m3u8 全线 404 + API 偶发 TLS EOF
+  { id: 'bfzy', name: '暴风资源', api: 'https://bfzyapi.com/api.php/provide/vod/', kind: 'single', order: 90, dead: true },
 ]
+
+// 参与搜索的源（按 order 升序）
+const ACTIVE_SOURCES = DRAMA_SOURCES.filter(s => !s.dead).sort((a, b) => a.order - b.order)
+
+// ── 播放地址归一化 ────────────────────────────────────────────
+// 采集站的 vod_play_url 可能给四种东西：
+//   1) 直链 m3u8              → 原样用
+//   2) /play/xxx 播放页       → 页面内嵌的就是 /play/xxx/index.m3u8，直接拼
+//   3) /share/xxx 分享页      → 实测多为 404（非凡），交给探活判定失败
+//   4) 多线路 "a$$$720P$b"    → 取第一段
+// 只做确定性字符串转换，不发网络请求；能不能播由 probePlayable 判定。
+function normalizePlayUrl(raw) {
+  let u = String(raw || '').trim()
+  if (!u) return ''
+  if (u.indexOf('$$$') >= 0) u = u.split('$$$')[0].trim()
+  if (!/^https?:\/\//i.test(u)) return ''
+  if (/\.m3u8(\?|$)/i.test(u)) return u
+  if (/\/play\/[^/?#]+\/?(\?|$)/i.test(u)) {
+    return u.replace(/[?#].*$/, '').replace(/\/$/, '') + '/index.m3u8'
+  }
+  return u
+}
+
+// 探活：头部取 2KB 判断是不是真 m3u8。超时短，任何失败都返回 false，不抛。
+function probePlayable(url, timeoutMs) {
+  return new Promise((resolve) => {
+    let target
+    try { target = normalizePlayUrl(url) } catch (e) { return resolve(false) }
+    if (!target) return resolve(false)
+    let u
+    try { u = new URL(target) } catch (e) { return resolve(false) }
+    const mod = u.protocol === 'https:' ? https : http
+    let done = false
+    const finish = (v) => { if (!done) { done = true; resolve(v) } }
+    const req = mod.get({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: { 'User-Agent': DRAMA_UA, 'Accept': '*/*', 'Range': 'bytes=0-2047' },
+      timeout: timeoutMs || 6000,
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume()
+        try {
+          const loc = /^https?:\/\//i.test(res.headers.location)
+            ? res.headers.location
+            : new URL(res.headers.location, target).toString()
+          return probePlayable(loc, timeoutMs).then(finish, () => finish(false))
+        } catch (e) { return finish(false) }
+      }
+      if (res.statusCode !== 200 && res.statusCode !== 206) { res.resume(); return finish(false) }
+      const chunks = []
+      let size = 0
+      res.on('data', (d) => { chunks.push(d); size += d.length; if (size > 2048) { try { res.destroy() } catch (e) {} } })
+      res.on('end', () => {
+        const head = Buffer.concat(chunks).toString('utf8', 0, 512)
+        finish(head.replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U'))
+      })
+      res.on('error', () => finish(false))
+    })
+    req.on('error', () => finish(false))
+    req.on('timeout', () => { try { req.destroy() } catch (e) {} finish(false) })
+  })
+}
 
 const DRAMA_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
 
@@ -449,71 +527,367 @@ function parsePlayUrl(playUrl) {
     const i = seg.indexOf('$')
     if (i < 0) continue
     const label = seg.slice(0, i)
-    const url = seg.slice(i + 1).trim()
-    if (!/^https?:\/\//i.test(url)) continue
+    const raw = seg.slice(i + 1).trim()
+    if (!/^https?:\/\//i.test(raw)) continue
     const m = /(\d+)/.exec(label)
     if (!m) continue
-    out.push({ ep: parseInt(m[1], 10), label: label, url: url })
+    // 归一化后才是真正能喂给播放器/ffmpeg 的地址（/play/xxx → /play/xxx/index.m3u8）
+    const url = normalizePlayUrl(raw)
+    // 合并集形如「第1-20集」，记下区间终点，供 resolveFromSource 做时间轴切片
+    const rng = /(\d+)\s*[-–~]\s*(\d+)/.exec(label)
+    const epTo = rng ? parseInt(rng[2], 10) : 0
+    out.push({ ep: parseInt(m[1], 10), epTo: epTo, label: label, url: url, raw: raw })
   }
   return out
 }
 
-// 搜采集源。返回 { source, title, eps: [{ep,url}], count }
-function searchDramaOnce(seriesName) {
-  if (!seriesName) return Promise.resolve(null)
-  const key = normTitle(seriesName)
-  const c = dramaSearchCache.get(key)
-  if (c && Date.now() - c.at < 30 * 60 * 1000) return Promise.resolve(c.hit)
+// 向单个采集源要一部剧的分集表。失败/未命中/无分集都返回 null。
+async function queryOneSource(src, seriesName) {
+  // 原名搜不到时去掉「第N季/第N部/第N集」再试一次（实测对系列短剧有效）
+  const tries = [seriesName]
+  const stripped = String(seriesName || '').replace(/第[一二三四五六七八九十百\d]+[季部集期]$/, '').trim()
+  if (stripped && stripped !== seriesName) tries.push(stripped)
 
-  return new Promise((resolve) => {
-    let idx = 0
-    const next = () => {
-      if (idx >= DRAMA_SOURCES.length) { resolve(null); return }
-      const src = DRAMA_SOURCES[idx++]
-      const url = src.api + '?ac=detail&wd=' + encodeURIComponent(seriesName)
-      fetchTextWithUA(url, DRAMA_UA, 15000).then((txt) => {
-        let j = null
-        try { j = JSON.parse(txt) } catch (e) { j = null }
-        const list = (j && j.list) || []
-        if (!list.length) { next(); return }
-        const best = pickBestDrama(list, seriesName)
-        if (!best) { next(); return }
-        const eps = parsePlayUrl(best.vod_play_url)
-        if (!eps.length) { next(); return }
-        const hit = {
-          source: src.name,
-          sourceId: src.id,
-          title: best.vod_name,
-          remarks: best.vod_remarks || '',
-          eps: eps.sort((a, b) => a.ep - b.ep),
-          count: eps.length,
-        }
-        dramaSearchCache.set(key, { at: Date.now(), hit: hit })
-        resolve(hit)
-      }).catch(() => { next() })
+  for (const kw of tries) {
+    const url = src.api + '?ac=detail&wd=' + encodeURIComponent(kw)
+    let txt
+    try { txt = await fetchTextWithUA(url, DRAMA_UA, 12000) } catch (e) { continue }
+    let j = null
+    try { j = JSON.parse(txt) } catch (e) { continue }
+    const list = (j && j.list) || []
+    if (!list.length) continue
+    const best = pickBestDrama(list, kw)
+    if (!best) continue
+    // 季号校验：原名带「第N季」时必须匹配同一季，否则会串季
+    const wantSeason = /第([一二三四五六七八九十\d]+)季/.exec(seriesName)
+    if (wantSeason && kw === stripped) {
+      const gotSeason = /第([一二三四五六七八九十\d]+)季/.exec(best.vod_name || '')
+      if (gotSeason && gotSeason[1] !== wantSeason[1]) continue
     }
-    next()
-  })
+    const eps = parsePlayUrl(best.vod_play_url)
+    if (!eps.length) continue
+    return {
+      source: src.name,
+      sourceId: src.id,
+      kind: src.kind || 'single',
+      order: src.order || 50,
+      title: best.vod_name,
+      remarks: best.vod_remarks || '',
+      eps: eps.sort((a, b) => a.ep - b.ep),
+      count: eps.length,
+    }
+  }
+  return null
 }
 
-// 取指定集的播放地址
-async function resolveFromSource(seriesName, epNo) {
-  if (!seriesName) return null
-  const hit = await searchDramaOnce(seriesName)
-  if (!hit) return null
-  let e = hit.eps.find(x => x.ep === epNo)
-  // 合并集（"第1-40集$url"）只解析出起点集号；落在区间内时用起点那条
-  if (!e) {
-    for (const x of hit.eps) {
-      const m = /(\d+)\s*[-–~]\s*(\d+)/.exec(x.label || '')
-      if (m) {
-        const a = parseInt(m[1], 10), b = parseInt(m[2], 10)
-        if (epNo >= a && epNo <= b) { e = { ep: epNo, url: x.url, label: x.label + '（合并集）' }; break }
+// 按剧缓存「所有源的完整分集表」。不再只留一个源——留全部，
+// 这样某一集在 A 源失效时还能换 B 源，这是"能搜到但放不出来"的根治办法。
+const normOrder = (hits) => hits.slice().sort((a, b) => {
+  // 单集源优先（能精确到集），再按 order
+  const ka = a.kind === 'single' ? 0 : 1
+  const kb = b.kind === 'single' ? 0 : 1
+  if (ka !== kb) return ka - kb
+  return (a.order || 50) - (b.order || 50)
+})
+
+// 搜索所有源，但只等 SOFT_WAIT 毫秒。
+// 为什么不等全部：11 个源里只要有 1 个卡 13 秒，Promise.all 就整体 13 秒，
+// 而用户第一次点播放等 13 秒是不可接受的。慢源的结果继续在后台补进缓存，
+// 本次先用已拿到的源取流；下次点同一部剧时缓存里已经有全量结果。
+// 两级等待：目标是在「不让用户久等」和「必须拿到单集源」之间取平衡。
+//   L1 FAST_WAIT 毫秒内只要出现单集源就立刻返回（常见情况，约 1~3 秒）
+//   L2 若到 FAST_WAIT 仍无单集源，继续等到 SLOW_WAIT（等魔都这类慢源）
+const FAST_WAIT = 3000
+const SLOW_WAIT = 9000
+
+async function searchAllSources(seriesName) {
+  if (!seriesName) return []
+  const key = normTitle(seriesName)
+  const c = dramaSearchCache.get(key)
+  // 缓存命中：完整结果直接用；partial 的只在没有单集源时复用（避免一直用残缺结果）
+  if (c && Date.now() - c.at < 30 * 60 * 1000) {
+    const hasSingle = (c.hits || []).some(h => h.kind === 'single')
+    if (!c.partial || hasSingle) return c.hits || []
+  }
+
+  const collected = []
+  let done = false
+  const tasks = ACTIVE_SOURCES.map(s =>
+    queryOneSource(s, seriesName)
+      .then(h => { if (h) collected.push(h) })
+      .catch(() => {})
+  )
+  const all = Promise.all(tasks).then(() => { done = true })
+
+  const hasSingle = () => collected.some(h => h.kind === 'single')
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+
+  // L1：等到出现单集源，或 FAST_WAIT 到时
+  const l1End = Date.now() + FAST_WAIT
+  while (!done && !hasSingle() && Date.now() < l1End) await sleep(120)
+  // L2：还没有单集源就继续等（最多到 SLOW_WAIT 总时长）
+  if (!hasSingle()) {
+    const l2End = Date.now() + Math.max(0, SLOW_WAIT - FAST_WAIT)
+    while (!done && !hasSingle() && Date.now() < l2End) await sleep(150)
+  }
+  // 已有单集源但还想更全：非阻塞，让后台继续收集
+
+  const hits = normOrder(collected)
+  if (!done) {
+    dramaSearchCache.set(key, { at: Date.now(), hits, partial: true })
+    all.then(() => {
+      const full = normOrder(collected)
+      dramaSearchCache.set(key, { at: Date.now(), hits: full, partial: false })
+    })
+  } else {
+    dramaSearchCache.set(key, { at: Date.now(), hits, partial: false })
+  }
+  return hits
+}
+
+// 兼容旧调用点：返回第一个可用的源（不做探活，仅用于「有没有这部剧」判断）
+async function searchDramaOnce(seriesName) {
+  const hits = await searchAllSources(seriesName)
+  return hits.length ? hits[0] : null
+}
+
+// 单集取流：逐源探活，命中即用。
+//   - 偏好：上次成功的源排最前（preferredSource）
+//   - 缓存：同一集 10 分钟内复用，重复点不重复探测
+//   - 全失败返回 null，并在结果里带上各源的失败原因
+const episodeCache = new Map()   // "normTitle|ep" -> { at, hit, triedAll }
+const EPISODE_CACHE_MS = 10 * 60 * 1000
+// 每部剧记住上次成功的源，下次优先试它，减少探测延迟
+const preferredSource = new Map()  // normTitle -> sourceId
+
+async function resolveEpisodePlayable(seriesName, epNo) {
+  if (!seriesName) return { ok: false, msg: '缺少剧名' }
+  const titleKey = normTitle(seriesName)
+  const ck = titleKey + '|' + epNo
+  const cached = episodeCache.get(ck)
+  if (cached && Date.now() - cached.at < EPISODE_CACHE_MS) return cached.result
+
+  const hits = await searchAllSources(seriesName)
+  if (!hits.length) {
+    const r = { ok: false, msg: '采集源没有这部剧（红果自制剧常不在采集站片库）', tried: [] }
+    episodeCache.set(ck, { at: Date.now(), result: r })
+    return r
+  }
+
+  // 排序：kind 优先（单集 >> 合并集），其次偏好源，最后 order。
+  // 注意顺序不能反 —— 偏好优先级如果压过 kind，上次选中过合并集源，
+  // 这次就会继续用合并集，用户点第 1 集还是看到整段合集。
+  const pref = preferredSource.get(titleKey)
+  const ordered = hits.slice().sort((a, b) => {
+    const ka = a.kind === 'single' ? 0 : 1
+    const kb = b.kind === 'single' ? 0 : 1
+    if (ka !== kb) return ka - kb          // 1) 单集源永远在前
+    if (pref) {                             // 2) 同类源内部，偏好优先
+      if (a.sourceId === pref && b.sourceId !== pref) return -1
+      if (b.sourceId === pref && a.sourceId !== pref) return 1
+    }
+    return (a.order || 50) - (b.order || 50)   // 3) 再按 order
+  })
+
+  const tried = []
+  // 竞速式并发，但分两轮：先只探「单集源」，全失败才探「合并集源」。
+  // 为什么必须分轮：单集源能给到精确的某一集，合并集源给的是"第1-20集"整段。
+  // 如果混在一起竞速，响应快的合并集源会抢先，用户点第1集却看到 39 分钟合集。
+  const race = (list) => new Promise((resolve) => {
+    if (!list.length) return resolve(null)
+    let pending = list.length
+    const results = []
+    for (const t of list) {
+      t.p.then((r) => {
+        pending--
+        results.push({ t, r })
+        if (r.ok) return resolve({ h: t.h, e: t.e, r })
+        tried.push({ source: t.h.source, msg: r.msg })
+        if (pending === 0) resolve(null)
+      }).catch(() => {
+        pending--
+        if (pending === 0) resolve(null)
+      })
+    }
+  })
+
+  const buildTasks = (list) => {
+    const out = []
+    for (const h of list) {
+      const e = findEpisodeEntry(h, epNo)
+      if (!e) { tried.push({ source: h.source, msg: '该源无此集' }); continue }
+      out.push({ h, e, p: probeStreamFull(e.url, 5000) })
+    }
+    return out
+  }
+
+  const singleSrc = ordered.filter(h => h.kind === 'single')
+  const mergedSrc = ordered.filter(h => h.kind !== 'single')
+
+  let winner = await race(buildTasks(singleSrc))
+  if (!winner) winner = await race(buildTasks(mergedSrc))
+
+  if (!winner && !singleSrc.length && !mergedSrc.length) {
+    const r = { ok: false, msg: '这部剧所有源都没有第 ' + epNo + ' 集', tried }
+    episodeCache.set(ck, { at: Date.now(), result: r })
+    return r
+  }
+
+  if (winner) {
+    const { h, e } = winner
+    preferredSource.set(titleKey, h.sourceId)
+    const result = {
+      ok: true,
+      url: e.url,
+      label: e.label,
+      source: h.source,
+      sourceId: h.sourceId,
+      title: h.title,
+      count: h.count,
+      kind: h.kind || 'single',
+      ep: e.ep,
+      epTo: e.epTo || 0,
+      isMerged: !!(e.epTo && e.epTo > e.ep),
+      tried: tried,
+    }
+    episodeCache.set(ck, { at: Date.now(), result })
+    return result
+  }
+
+  const r = {
+    ok: false,
+    msg: '这部剧在 ' + hits.length + ' 个源里都取不到第 ' + epNo + ' 集',
+    tried: tried,
+  }
+  episodeCache.set(ck, { at: Date.now(), result: r })
+  return r
+}
+
+// 在某个源的分集表里找第 epNo 集（含合并集区间匹配）
+function findEpisodeEntry(hit, epNo) {
+  const direct = hit.eps.find(x => x.ep === epNo)
+  if (direct) return direct
+  for (const x of hit.eps) {
+    const m = /(\d+)\s*[-–~]\s*(\d+)/.exec(x.label || '')
+    if (m) {
+      const a = parseInt(m[1], 10), b = parseInt(m[2], 10)
+      if (epNo >= a && epNo <= b) {
+        return { ep: x.ep, epTo: parseInt(m[2], 10), label: x.label + '（合并集）', url: x.url }
       }
     }
   }
-  if (!e) return null
-  return { url: e.url, label: e.label, source: hit.source, title: hit.title, count: hit.count }
+  return null
+}
+
+// 完整探测一条流：master → 子清单 → AES key → 首分片。
+// 只看 master 是不是 m3u8 不够——子清单 404、key 取不到、分片 403 都会导致播不了。
+async function probeStreamFull(url, timeoutMs) {
+  const target = normalizePlayUrl(url)
+  if (!target) return { ok: false, msg: '地址为空' }
+  try {
+    const first = await httpGetHead(target, timeoutMs || 5000)
+    if (!first.ok) return { ok: false, msg: '主清单 ' + first.msg }
+    let body = first.text
+    let base = target
+    if (!body.trimStart().startsWith('#EXTM3U')) return { ok: false, msg: '非 m3u8' }
+    // master → 取子清单
+    if (body.indexOf('#EXT-X-STREAM-INF') >= 0) {
+      const subs = body.split(/\r?\n/).map(l => l.trim()).filter(l => l && l[0] !== '#')
+      if (!subs.length) return { ok: false, msg: '主清单无子流' }
+      const sub = new URL(subs[0], base).toString()
+      const r2 = await httpGetHead(sub, timeoutMs || 5000)
+      if (!r2.ok) return { ok: false, msg: '子清单 ' + r2.msg }
+      if (!r2.text.trimStart().startsWith('#EXTM3U')) return { ok: false, msg: '子清单非 m3u8' }
+      body = r2.text
+      base = sub
+    }
+    // AES key
+    const km = /#EXT-X-KEY:[^\n]*URI="([^"]+)"/.exec(body)
+    if (km) {
+      const kurl = new URL(km[1], base).toString()
+      const kr = await httpGetHead(kurl, timeoutMs || 5000)
+      if (!kr.ok) return { ok: false, msg: 'AES key ' + kr.msg }
+      if (kr.buf.length !== 16) return { ok: false, msg: 'AES key 长度异常' }
+    }
+    // 首分片
+    const segs = body.split(/\r?\n/).map(l => l.trim()).filter(l => l && l[0] !== '#')
+    if (!segs.length) return { ok: false, msg: '无分片' }
+    const seg = new URL(segs[0], base).toString()
+    const sr = await httpGetHead(seg, timeoutMs || 5000, 'bytes=0-1023')
+    if (!sr.ok) return { ok: false, msg: '分片 ' + sr.msg }
+    if (sr.buf.length < 100) return { ok: false, msg: '分片过小' }
+    return { ok: true, segCount: segs.length }
+  } catch (e) {
+    return { ok: false, msg: String(e.message || e).slice(0, 30) }
+  }
+}
+
+// 轻量 HTTP GET（取前 2~4KB 即可判断），返回 {ok, status, text, buf, msg}
+function httpGetHead(url, timeoutMs, range) {
+  return new Promise((resolve) => {
+    let u
+    try { u = new URL(url) } catch (e) { return resolve({ ok: false, msg: '地址非法' }) }
+    if (!/^https?:$/.test(u.protocol)) return resolve({ ok: false, msg: '协议不支持' })
+    const mod = u.protocol === 'https:' ? https : http
+    const headers = { 'User-Agent': DRAMA_UA, 'Accept': '*/*' }
+    headers['Range'] = range || 'bytes=0-4095'
+    let done = false
+    const finish = (v) => { if (!done) { done = true; resolve(v) } }
+    const req = mod.get({
+      hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      headers,
+      timeout: timeoutMs || 5000,
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume()
+        let loc = res.headers.location
+        try { if (!/^https?:/i.test(loc)) loc = new URL(loc, url).toString() } catch (e) {}
+        return httpGetHead(loc, timeoutMs, range).then(finish, () => finish({ ok: false, msg: '重定向失败' }))
+      }
+      if (res.statusCode !== 200 && res.statusCode !== 206) {
+        res.resume()
+        return finish({ ok: false, status: res.statusCode, msg: 'HTTP ' + res.statusCode })
+      }
+      const chunks = []
+      let size = 0
+      res.on('data', (d) => {
+        chunks.push(d); size += d.length
+        if (size >= 4096) { try { res.destroy() } catch (e) {} }
+      })
+      const doneRead = () => {
+        const buf = Buffer.concat(chunks)
+        let text = buf.toString('utf8')
+        if (text.indexOf('\ufffd') >= 0) {
+          try { text = buf.toString('latin1') } catch (e) {}
+        }
+        finish({ ok: true, status: res.statusCode, buf, text })
+      }
+      res.on('end', doneRead)
+      res.on('close', doneRead)
+      res.on('error', () => finish({ ok: false, msg: '读取中断' }))
+    })
+    req.on('error', (e) => finish({ ok: false, msg: 'ERR ' + (e.code || '').slice(0, 12) }))
+    req.on('timeout', () => { try { req.destroy() } catch (e) {} finish({ ok: false, msg: '超时' }) })
+  })
+}
+
+// 兼容旧调用点（下载链路仍在用）：退化为「取第一个能探通的源」
+async function resolveFromSource(seriesName, epNo) {
+  const r = await resolveEpisodePlayable(seriesName, epNo)
+  if (!r.ok) return null
+  return {
+    url: r.url,
+    label: r.label,
+    source: r.source,
+    title: r.title,
+    count: r.count,
+    kind: r.kind,
+    ep: r.ep,
+    epTo: r.epTo,
+    isMerged: r.isMerged,
+  }
 }
 
 // 带 UA 的文本抓取（采集站需要浏览器 UA，否则返回空）
@@ -886,6 +1260,155 @@ async function maybeQueueTranscode(filePath) {
 
 // ── 本地视频供给（支持 Range，供 <video> 拖动进度）──
 // 若带 h264=1 则自动转码后再供给（部分机器 HEVC 黑屏的兜底）
+// ══════════════════════════════════════════════════════════════════
+// 在线播放通道
+// ══════════════════════════════════════════════════════════════════
+// 设计要点：采集源的 m3u8/shard/key 实测都带 Access-Control-Allow-Origin: *，
+// 理论上前端可直连。但我们仍走本地代理，原因有三：
+//   1) 保留 UA/Referer，部分源按 UA 拦（直连时浏览器 UA 可能被拒）
+//   2) 改写 m3u8 内容里的相对路径 —— hls.js 以「响应 URL」为基准解析相对路径，
+//      经代理后基准变成 127.0.0.1，根相对路径会全拼错（影视板块踩过这个坑）
+//   3) 统一 30 分钟内的 manifest 缓存，减少对源站的重复请求
+
+const STREAM_UA = DRAMA_UA
+// 每个 manifest 缓存：url -> { at, body, ctype }
+const streamCache = new Map()
+const STREAM_CACHE_MS = 30 * 1000   // manifest 变（合并集除外）不频繁，30 秒够用
+
+function streamCachePrune() {
+  if (streamCache.size < 200) return
+  const now = Date.now()
+  for (const [k, v] of streamCache) { if (now - v.at > STREAM_CACHE_MS) streamCache.delete(k) }
+}
+
+// 把 m3u8 文本里的所有地址改写成经代理的绝对地址
+//   - 子清单/分片：/proxy?url=<abs>
+//   - EXT-X-KEY 的 URI：同样改写（AES key 必须能取到，否则 hls.js 解密失败）
+//   - 已经是绝对地址的保持；相对地址按 baseUrl 解析
+function rewriteM3u8(text, baseUrl) {
+  const toAbs = (ref) => {
+    if (!ref) return ''
+    if (/^https?:\/\//i.test(ref)) return ref
+    try { return new URL(ref, baseUrl).toString() } catch (e) { return ref }
+  }
+  const wrap = (abs) => '/stream?url=' + encodeURIComponent(abs)
+  return text.split(/\r?\n/).map((line) => {
+    const t = line.trim()
+    if (!t) return line
+    // 标签行：只处理 EXT-X-KEY 的 URI="..."
+    if (t.startsWith('#')) {
+      if (t.indexOf('URI="') >= 0) {
+        return line.replace(/URI="([^"]+)"/g, (m, uri) => 'URI="' + wrap(toAbs(uri)) + '"')
+      }
+      return line
+    }
+    // 地址行
+    return wrap(toAbs(t))
+  }).join('\n')
+}
+
+// 抓远程资源并跟随重定向（返回 {status, headers, stream}）
+function fetchRemote(url, req, res, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let u
+    try { u = new URL(url) } catch (e) { return reject(new Error('bad url')) }
+    if (!/^https?:$/.test(u.protocol)) return reject(new Error('bad protocol'))
+    const mod = u.protocol === 'https:' ? https : http
+    const headers = {
+      'User-Agent': STREAM_UA,
+      'Accept': '*/*',
+      'Accept-Language': 'zh-CN,zh;q=0.9',
+    }
+    // 透传 Range，让分片支持断点与 seek
+    if (req && req.headers && req.headers.range) headers['Range'] = req.headers.range
+    const r = mod.get({
+      hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search, headers: headers, timeout: timeoutMs || 20000,
+    }, (up) => {
+      if (up.statusCode >= 300 && up.statusCode < 400 && up.headers.location) {
+        up.resume()
+        let loc = up.headers.location
+        if (!/^https?:\/\//i.test(loc)) { try { loc = new URL(loc, url).toString() } catch (e) {} }
+        return fetchRemote(loc, req, res, timeoutMs).then(resolve, reject)
+      }
+      resolve({ status: up.statusCode, headers: up.headers, stream: up })
+    })
+    r.on('error', reject)
+    r.on('timeout', () => { try { r.destroy() } catch (e) {} reject(new Error('timeout')) })
+  })
+}
+
+// /stream 处理器：m3u8 走改写，其余（.ts/key）原样 pipe
+async function handleStream(req, res, url) {
+  if (!url || !/^https?:\/\//i.test(url)) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' }); return res.end('bad url')
+  }
+  let target = url
+  try { target = normalizePlayUrl(url) } catch (e) {}
+
+  // 判是不是 m3u8：看路径后缀，也看查询里是否带 m3u8
+  const looksM3u8 = /\.m3u8(\?|$)/i.test(target)
+
+  const cached = streamCache.get(target)
+  if (looksM3u8 && cached && Date.now() - cached.at < STREAM_CACHE_MS) {
+    res.writeHead(200, {
+      'Content-Type': 'application/vnd.apple.mpegurl',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-store',
+    })
+    return res.end(cached.body)
+  }
+
+  let up
+  try {
+    up = await fetchRemote(target, req, res, 20000)
+  } catch (e) {
+    res.writeHead(502, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' })
+    return res.end('upstream error: ' + String(e.message || e))
+  }
+  if (up.status >= 400) {
+    try { up.stream.resume() } catch (e) {}
+    res.writeHead(up.status, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' })
+    return res.end('upstream ' + up.status)
+  }
+
+  const ct = String(up.headers['content-type'] || '')
+  const isM3u8 = looksM3u8 || /mpegurl/i.test(ct)
+
+  if (isM3u8) {
+    const chunks = []
+    up.stream.on('data', (d) => chunks.push(d))
+    up.stream.on('error', () => {
+      if (!res.headersSent) { res.writeHead(502, { 'Access-Control-Allow-Origin': '*' }); res.end('stream error') }
+    })
+    up.stream.on('end', () => {
+      let txt = Buffer.concat(chunks).toString('utf8')
+      if (txt.indexOf('\ufffd') >= 0) {
+        try { txt = Buffer.concat(chunks).toString('latin1') } catch (e) {}
+      }
+      const rewritten = rewriteM3u8(txt, target)
+      streamCachePrune()
+      streamCache.set(target, { at: Date.now(), body: rewritten })
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.apple.mpegurl',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-store',
+      })
+      res.end(rewritten)
+    })
+    return
+  }
+
+  // 非 m3u8（分片 / key）：透传状态与关键头，直接 pipe
+  const out = { 'Access-Control-Allow-Origin': '*', 'Accept-Ranges': 'bytes' }
+  if (up.headers['content-type']) out['Content-Type'] = up.headers['content-type']
+  if (up.headers['content-length']) out['Content-Length'] = up.headers['content-length']
+  if (up.headers['content-range']) out['Content-Range'] = up.headers['content-range']
+  res.writeHead(up.status, out)
+  up.stream.pipe(res)
+  up.stream.on('error', () => { try { res.end() } catch (e) {} })
+}
+
 function serveVideo(req, res, filePath) {
   let st
   try { st = fs.statSync(filePath) } catch (e) {
@@ -1745,6 +2268,96 @@ const server = http.createServer(async (req, res) => {
       const vid = u.searchParams.get('vid') || ''
       const info = await resolveWebVideo(sid, vid || null)
       return send(res, 200, { code: 0, data: info })
+    }
+
+    // 在线播放：给定剧名 + 集号，返回可直接喂给 hls.js 的地址（已改成走本机代理）
+    // 这是「未下载也能看」的入口，不落盘、不转码。
+    if (p === '/play-url') {
+      const name = u.searchParams.get('name') || ''
+      const epNo = parseInt(u.searchParams.get('ep') || '0', 10)
+      const sid = u.searchParams.get('series_id') || ''
+      if (!name && !sid) return send(res, 200, { code: -1, msg: '缺少 name 或 series_id' })
+      let seriesName = name
+      // 只给 series_id 时，先从官网取剧名
+      if (!seriesName && sid) {
+        try {
+          const info = await getSeries(sid)
+          seriesName = info.name || ''
+        } catch (e) {}
+      }
+      if (!seriesName) return send(res, 200, { code: -1, msg: '拿不到剧名，无法匹配采集源' })
+      // 逐集探活：按源优先级依次试，命中即用。某集在某源失效会自动换下一个源。
+      let r = null
+      try {
+        r = await resolveEpisodePlayable(seriesName, epNo || 1)
+      } catch (e) {
+        return send(res, 200, { code: -1, msg: '采集源查询失败：' + String(e.message || e).slice(0, 60) })
+      }
+      if (!r || !r.ok) {
+        return send(res, 200, {
+          code: -1,
+          msg: (r && r.msg) || '未找到可播片源',
+          // 把每个源的失败原因带回前端，便于排查到底是"没有这部剧"还是"源挂了"
+          tried: (r && r.tried) || [],
+        })
+      }
+      return send(res, 200, {
+        code: 0,
+        data: {
+          url: '/stream?url=' + encodeURIComponent(r.url),
+          rawUrl: r.url,
+          source: r.source,
+          title: r.title,
+          episode: r.ep,
+          episodeTo: r.epTo || 0,
+          isMerged: !!r.isMerged,
+          count: r.count,
+          kind: r.kind || 'single',
+          // 前面失败过几个源，供界面提示"已自动切换 N 个源"
+          switched: (r.tried || []).length,
+        },
+      })
+    }
+
+    if (p === '/stream') {
+      const target = u.searchParams.get('url') || ''
+      return handleStream(req, res, target)
+    }
+
+    // 调试：看某个剧名在各源的实际搜索结果（排查"为什么没选单集源"）
+    if (p === '/debug-sources') {
+      const name = u.searchParams.get('name') || ''
+      if (!name) return send(res, 200, { code: -1, msg: '缺少 name' })
+      const key = normTitle(name)
+      dramaSearchCache.delete(key)
+      const t0 = Date.now()
+      const hits = await searchAllSources(name)
+      const ms = Date.now() - t0
+      const cached = dramaSearchCache.get(key)
+      return send(res, 200, {
+        code: 0,
+        data: {
+          ms: ms,
+          partial: !!(cached && cached.partial),
+          count: hits.length,
+          hits: hits.map(h => ({
+            source: h.source, kind: h.kind, order: h.order,
+            eps: h.count, title: h.title,
+          })),
+        },
+      })
+    }
+
+    // 清掉某一集的取流缓存 + 该剧的源偏好，逼下次重新逐源探测（前端播放失败时调）
+    if (p === '/reset-episode') {
+      const name = u.searchParams.get('name') || ''
+      const epNo = parseInt(u.searchParams.get('ep') || '0', 10)
+      if (!name) return send(res, 200, { code: -1, msg: '缺少 name' })
+      const key = normTitle(name)
+      if (epNo) episodeCache.delete(key + '|' + epNo)
+      // 偏好源也清掉，否则会一直优先试那个已经挂掉的源
+      preferredSource.delete(key)
+      return send(res, 200, { code: 0, msg: '已清除该集缓存' })
     }
 
     if (p === '/transcode' && req.method === 'POST') {

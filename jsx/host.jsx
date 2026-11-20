@@ -2111,6 +2111,31 @@ function fcExportXML(seqName, outPath) {
     } catch (e) { return "ERR:" + e; }
 }
 
+// 批量导出专用：导出 XML 并自动关掉 PR 的「转换报告」对话框。
+// 为什么要这样：exportAsFinalCutProXML 成功后 PR 会弹一个转换报告，
+// 必须点确定才继续。批量导出时会卡在每一个上，等于要人守着点。
+// JSX 层没有 API 能禁用该弹窗，只能导出后立刻发一个回车把它确认掉。
+function fcExportXMLQuiet(seqName, outPath, waitMs) {
+    var r = fcExportXML(seqName, outPath);
+    if (r.indexOf('OK:') !== 0) return r;
+
+    // 用 SendKeys 发回车确认「转换报告」；失败不影响导出结果
+    try {
+        var vb = new File(Folder.temp.fsName + "/vh_enter.vbs");
+        if (!vb.exists) {
+            vb.open('w');
+            vb.write('WScript.Sleep ' + (waitMs || 600) + '\r\n' +
+                     'Set s = CreateObject("WScript.Shell")\r\n' +
+                     's.SendKeys "{ENTER}"\r\n');
+            vb.close();
+        }
+        vb.execute();
+    } catch (e) {
+        // 拿不到就拉倒，用户手动点也不影响文件已生成
+    }
+    return r;
+}
+
 // 取当前工程目录（导出 XML 的默认落点）
 function fcProjectDir() {
     try {

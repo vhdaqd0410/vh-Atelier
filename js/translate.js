@@ -29,17 +29,26 @@
     }
 
     // 串行翻译循环（带 250ms 间隔防限流）
-    function runTranslate(subs, mode, onProgress, onDone) {
+    // opts: { seqName } 可选，用于翻译缓存（同一序列下次直接复用译文）
+    function runTranslate(subs, mode, onProgress, onDone, opts) {
         if (!subs || subs.length === 0) { onDone(new Error('没有可翻译的字幕')); return; }
         var outSubs = [];
         var failCount = 0;
+        var cacheHit = 0;
         var i = 0;
         var cancelled = false;
+        var seqName = (opts && opts.seqName) || '';
+        var cache = window.__transCache || null;
+        var pending = [];      // 本轮新翻译的 [原文, 译文]，结束时一次性写盘
 
         function next() {
             if (cancelled) return;
             if (i >= subs.length) {
-                onDone(null, { outSubs: outSubs, failCount: failCount });
+                // 把本轮新翻译的写进缓存，下次打开直接命中
+                if (cache && seqName && pending.length) {
+                    try { cache.put(seqName, mode, pending); } catch (e0) {}
+                }
+                onDone(null, { outSubs: outSubs, failCount: failCount, cacheHit: cacheHit });
                 return;
             }
             var idx = i;
@@ -49,12 +58,30 @@
             if (!text) {
                 outSubs[idx] = { start: src.start, end: src.end, text: '' };
                 if (onProgress) onProgress(i, subs.length);
-                setTimeout(next, 30);
+                setTimeout(next, 20);
                 return;
             }
+
+            // 先查缓存：命中就不发请求（省时间也不消耗免费额度）
+            var cached = null;
+            if (cache && seqName) {
+                try { cached = cache.get(seqName, mode, text); } catch (e1) { cached = null; }
+            }
+            if (cached) {
+                cacheHit++;
+                outSubs[idx] = {
+                    start: src.start, end: src.end,
+                    text: (mode === 'bilingual') ? (text + '\n' + cached) : cached
+                };
+                if (onProgress) onProgress(i, subs.length);
+                setTimeout(next, 10);
+                return;
+            }
+
             translateEnZh(text, function (err, zh) {
                 var zhText = err ? text : String(zh).trim();
                 if (err) failCount++;
+                else pending.push([text, zhText]);
                 if (mode === 'bilingual') {
                     outSubs[idx] = { start: src.start, end: src.end, text: text + '\n' + zhText };
                 } else {

@@ -34,6 +34,37 @@ def is_punct(c):
 
 
 _model = None
+_vad_model = None
+
+
+def get_vad_model():
+    """独立加载 VAD 模型。
+
+    为什么必须独立跑：
+      实测识别结果里只有 key/text/timestamp 三个字段，不带 VAD 段；
+      sentence_timestamp=True 也不一定返回 sentence_info。
+      而 FunASR 的逐字符 timestamp 是按音素均匀分的（相邻间隔最大仅 140ms），
+      里面没有停顿信息。所以气口只能靠单独跑 VAD 得到。
+    """
+    global _vad_model
+    if _vad_model is None:
+        _vad_model = AutoModel(model=MODEL_VAD, disable_update=True)
+    return _vad_model
+
+
+def vad_segments_of(wav):
+    """跑一次 VAD，返回 [(start_ms, end_ms), ...]。"""
+    try:
+        m = get_vad_model()
+        r = m.generate(input=wav)
+        for d in (r or []):
+            segs = d.get('value') or d.get('vadsegments') or []
+            got = _norm_segs(segs)
+            if got:
+                return got
+    except Exception as e:
+        print('[warn] VAD 失败：%s' % e, file=sys.stderr)
+    return []
 
 
 def get_model():
@@ -100,16 +131,188 @@ def cut_sentences(text, ts):
     return subs
 
 
+
+# ============================================================================
+# 字幕时间轴重建
+# ----------------------------------------------------------------------------
+# 关键事实（实测得出，不要凭直觉改）：
+#   FunASR 返回的逐字符 timestamp 是**按音素均匀分配**的，不是真实发声时间。
+#   实测相邻字符间隔最大仅 140ms、平均 28ms —— 里面根本没有停顿信息。
+#   所以「按字符间隔找气口」这条路走不通，切了也没效果。
+#
+# 正确做法：单独跑 VAD 拿到真实语音段，字幕只在语音段内分布，
+#   段与段之间自然留空。这样画面里没人说话的地方就不会有字幕。
+# ============================================================================
+
+# 一条字幕最长时间（秒）。超过就按标点/停顿再拆，避免一条吞掉半屏。
+MAX_SUB_DUR = 7.0
+# 字幕首尾内缩，避免相邻两条在视觉上贴死
+LEAD_PAD = 0.06
+TAIL_PAD = 0.10
+# 单条最短时长，太短的碎片不与前一条强行合并（宁可短也不要丢内容）
+MIN_DUR = 0.20
+
+
+def assign_to_vad_segments(base_subs, vad_segs):
+    """按 VAD 语音段裁剪字幕，并在气口处把跨段字幕切开。
+
+    实测事实：FunASR 一条字幕的时间跨度可能**横穿静音区**
+    （例：0.23 → 7.25，而 3.24~4.72 是静音）。
+    说明字符时间戳把停顿也摊进去了。
+
+    所以不能只按"中点归属"（那条会被整条丢掉），而要做：
+      · 字幕完全落在某个语音段内 → 保留
+      · 字幕横跨静音 → 在静音处**一分为二**，文字按时间比例分配
+      · 字幕完全在静音里 → 丢弃
+
+    base_subs: cut_sentences 产物
+    vad_segs:  [(start_ms, end_ms), ...]
+    """
+    if not base_subs:
+        return []
+    if not vad_segs:
+        return base_subs
+
+    segs = [(a / 1000.0, b / 1000.0) for (a, b) in vad_segs]
+    segs.sort()
+
+    out = []
+    for sub in base_subs:
+        st, en = sub['start'], sub['end']
+        txt = sub['text']
+        if en <= st:
+            continue
+
+        # 找出这条字幕与各语音段的重叠部分
+        pieces = []
+        for (a, b) in segs:
+            oa, ob = max(st, a), min(en, b)
+            if ob - oa >= 0.05:
+                pieces.append((oa, ob))
+        if not pieces:
+            continue          # 整条都在静音里
+
+        if len(pieces) == 1 and pieces[0][0] <= st + 0.01 and pieces[0][1] >= en - 0.01:
+            out.append({'start': round(st, 3), 'end': round(en, 3), 'text': txt})
+            continue
+
+        # 跨段：按各段时长占比分配文字
+        total = sum(pb - pa for pa, pb in pieces)
+        if total <= 0:
+            continue
+        n = len(txt)
+        cursor = 0
+        for k, (pa, pb) in enumerate(pieces):
+            if k == len(pieces) - 1:
+                seg_txt = txt[cursor:]
+            else:
+                ratio = (pb - pa) / total
+                take = max(1, int(round(n * ratio)))
+                seg_txt = txt[cursor:cursor + take]
+                cursor += take
+            seg_txt = seg_txt.strip()
+            if seg_txt:
+                out.append({'start': round(pa, 3), 'end': round(pb, 3), 'text': seg_txt})
+    return out
+
+
+def polish_timing(subs, lead=LEAD_PAD, tail=TAIL_PAD, min_dur=MIN_DUR):
+    """首尾内缩，避免相邻字幕贴死。"""
+    if not subs:
+        return subs
+    out = []
+    for s in subs:
+        st, en = float(s['start']), float(s['end'])
+        st2, en2 = st + lead, en - tail
+        if en2 - st2 < min_dur:
+            st2, en2 = st, en
+        if en2 <= st2:
+            st2, en2 = st, max(st + 0.12, en)
+        out.append({'start': round(st2, 3), 'end': round(en2, 3), 'text': s['text']})
+    return out
+
+
 def recognize_one(model, wav):
-    """识别单个 wav，返回字幕列表"""
+    """识别单个 wav，返回字幕列表。
+
+    时间轴策略（按重要性排序）：
+
+    1. 先跑 VAD 拿真实语音段。FunASR 的逐字符 timestamp 是按音素均匀分配的，
+       不含停顿信息（实测相邻间隔最大仅 140ms），不能用来判断气口。
+       只有 VAD 能给出"哪里真的没声音"。
+
+    2. 在每一个语音段内部按标点切句，字幕只落在语音段内。
+       段与段之间自然留空 —— 这就是"气口处不应该有字幕"的实现方式。
+
+    3. 单条字幕超过 MAX_SUB_DUR 时按时间均分拆开，避免一条吞掉半屏。
+
+    4. 最后首尾内缩，避免相邻两条视觉上贴死。
+    """
+    # 先拿真实语音段（含气口）——这是字幕不铺满整段的基础
+    vad_segs_cache = vad_segments_of(wav)
+
     res = model.generate(input=wav, batch_size_s=300)
     subs = []
+
     for d in res:
         text = d.get('text', '') or ''
         ts = d.get('timestamp', []) or []
-        if text and ts:
-            subs.extend(cut_sentences(text, ts))
-    return subs
+        if not text or not ts:
+            continue
+
+        # 整段按标点切一次（文字断句以此为准）
+        base = cut_sentences(text, ts)
+        # 再按 VAD 语音段做时间裁剪（气口在这里被保留）
+        subs.extend(assign_to_vad_segments(base, vad_segs_cache))
+
+    # 按时间排序 + 首尾内缩
+    subs.sort(key=lambda x: (x['start'], x['end']))
+    return polish_timing(subs)
+
+
+def get_vad_segments(d):
+    """从识别结果里取出 VAD 语音段，单位毫秒。返回 [(start_ms, end_ms), ...]。
+
+    FunASR 把 VAD 结果放在 sentence_info 或 vadsegments 里，字段名随版本变化，
+    这里做多重兜底，取不到就返回空列表（调用方会降级处理）。
+    """
+    # 1) 常见：结果里直接带 vadsegments
+    for key in ('vadsegments', 'vad_segments', 'vadseg'):
+        segs = d.get(key)
+        if segs:
+            got = _norm_segs(segs)
+            if got:
+                return got
+
+    # 2) sentence_info（开了 sentence_timestamp 时才有）——它按标点分，
+    #    但边界仍基于 VAD，可作为次优近似
+    si = d.get('sentence_info')
+    if si:
+        got = [(float(x.get('start', 0)), float(x.get('end', 0)))
+               for x in si if x.get('end', 0) > x.get('start', 0)]
+        if got:
+            return got
+
+    return []
+
+
+def _norm_segs(segs):
+    """把各种形态的 VAD 段统一成 [(start_ms, end_ms), ...]。"""
+    out = []
+    for item in segs:
+        try:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                a, b = float(item[0]), float(item[1])
+            elif isinstance(item, dict):
+                a = float(item.get('start', item.get('start_ms', 0)))
+                b = float(item.get('end', item.get('end_ms', 0)))
+            else:
+                continue
+            if b > a:
+                out.append((a, b))
+        except Exception:
+            continue
+    return out
 
 
 def main():

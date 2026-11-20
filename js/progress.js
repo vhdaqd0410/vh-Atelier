@@ -2,10 +2,24 @@
 // 数据源：视频工作台 Flask 服务（127.0.0.1:8089），token 在 backend/config.yaml 的 web.api_secret
 // 本面板只读展示：本月概览 + 组内进行中项目（集数进度/状态/剧名）
 (function () {
-    var fs = require('fs');
-    var path = require('path');
-    var os = require('os');
-    var child_process = require('child_process');
+    // 容错：Node 不可用时不要让整个面板静默失效，否则用户只看到「检测中…」永远不动。
+    var nodeOk = true;
+    var fs, path, os, child_process;
+    try {
+        fs = require('fs');
+        path = require('path');
+        os = require('os');
+        child_process = require('child_process');
+    } catch (e0) {
+        nodeOk = false;
+        fs = { existsSync: function () { return false; }, readFileSync: function () { return ''; },
+               writeFileSync: function () {}, mkdirSync: function () {}, readdirSync: function () { return []; } };
+        path = { join: function () { return Array.prototype.join.call(arguments, '/'); },
+                 dirname: function (x) { return String(x).replace(/[\\/][^\\/]*$/, ''); },
+                 basename: function (x) { return String(x).split(/[\\/]/).pop(); } };
+        os = { homedir: function () { return ''; }, tmpdir: function () { return ''; } };
+        child_process = { spawnSync: function () { return {}; } };
+    }
     var csInterface = (typeof window.__adobe_cep__ !== 'undefined') ? new CSInterface() : null;
 
     var WB_PORT = 8089;
@@ -708,33 +722,46 @@
                 opsMain.appendChild(rfBtn);
             }
 
-            // 📁 组内NAS
-            if (p.group_path) {
-                var gBtn = document.createElement('button');
-                gBtn.type = 'button';
-                gBtn.className = 'prg-open-btn prg-ops-icon';
-                gBtn.textContent = '📁 组内';
-                gBtn.title = '打开组内 NAS 项目目录';
-                gBtn.addEventListener('click', function (ev) {
-                    ev.stopPropagation();
-                    openProjFolder(p.name || '', 'group_root');
-                });
-                opsMore.appendChild(gBtn);
-            }
+            // ---------- 三个"打开位置"按钮：始终显示，点了才判断可用性 ----------
+            // 之前是「有路径才显示」，导致新项目/未同步项目看不到按钮，以为功能没做。
+            // 现在一律显示，不可用时给明确原因，比按钮凭空消失更好排查。
+
+            // 📁 组内 NAS
+            var gBtn = document.createElement('button');
+            gBtn.type = 'button';
+            gBtn.className = 'prg-open-btn prg-ops-icon';
+            gBtn.textContent = '📁 组内';
+            gBtn.title = '打开该项目在组内 NAS 的位置';
+            if (!p.group_path) gBtn.title = '打开组内 NAS 位置（该项目尚未同步到组内时可能失败）';
+            gBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openProjFolder(p.name || '', 'group_root');
+            });
+            opsMore.appendChild(gBtn);
 
             // 🏢 制作部
-            if (p.production_path) {
-                var pBtn = document.createElement('button');
-                pBtn.type = 'button';
-                pBtn.className = 'prg-open-btn prg-ops-icon';
-                pBtn.textContent = '🏢 制作部';
-                pBtn.title = '打开制作部项目目录';
-                pBtn.addEventListener('click', function (ev) {
-                    ev.stopPropagation();
-                    openProjFolder(p.name || '', 'prod');
-                });
-                opsMore.appendChild(pBtn);
-            }
+            var pBtn = document.createElement('button');
+            pBtn.type = 'button';
+            pBtn.className = 'prg-open-btn prg-ops-icon';
+            pBtn.textContent = '🏢 制作部';
+            pBtn.title = '打开该项目在制作部的位置';
+            pBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openProjFolder(p.name || '', 'production');
+            });
+            opsMore.appendChild(pBtn);
+
+            // 📂 本地（建本地创建的那个目录）
+            var locBtn = document.createElement('button');
+            locBtn.type = 'button';
+            locBtn.className = 'prg-open-btn prg-ops-icon';
+            locBtn.textContent = '📂 本地';
+            locBtn.title = '在资源管理器中打开该项目的本地文件夹（建本地生成的位置）';
+            locBtn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                openLocalProjFolder(p.name || '');
+            });
+            opsMore.appendChild(locBtn);
 
             var scriptBtn = document.createElement('button');
             scriptBtn.type = 'button';
@@ -1043,6 +1070,97 @@
             });
             el.statusText.textContent = '已刷新 ' + okN + '/' + names.length + ' 个剪辑中项目 · ' + new Date().toLocaleTimeString();
         });
+    }
+
+    // ---------- 打开本地项目文件夹 ----------
+    // 本地项目根目录由视频工作台设置决定（settings.local_project_root），
+    // 目录名格式是「三位序号-项目名」，序号由工作台创建时分配。
+    // 所以不能靠猜，必须先问工作台要路径。
+    function openLocalProjFolder(projectName) {
+        if (!projectName) { el.statusText.textContent = '项目名为空'; return; }
+        el.statusText.textContent = '正在定位「' + projectName + '」的本地目录…';
+
+        // 优先走工作台的新接口（local），由工作台算准路径
+        apiPost('/api/project/' + encodeURIComponent(projectName) + '/open_folder',
+                { which: 'local' }, function (err, data) {
+            if (!err && data && data.ok) {
+                el.statusText.textContent = '已打开本地：' + (data.path || projectName);
+                return;
+            }
+            // 工作台还没升级到支持 local → 插件自己算
+            openLocalByFallback(projectName, (data && data.message) || (err && err.message));
+        });
+    }
+
+    // 兜底：读工作台的 local_project_root，扫描目录找「序号-项目名」里项目名匹配的那个
+    function openLocalByFallback(projectName, why) {
+        var fs2, path2;
+        try { fs2 = require('fs'); path2 = require('path'); } catch (e) {
+            el.statusText.textContent = '打开失败：Node 不可用';
+            return;
+        }
+        var root = localRootFromWorkingBay();
+        if (!root || !fs2.existsSync(root)) {
+            el.statusText.textContent = '打开失败：取不到本地项目盘根目录' +
+                (why ? '（' + why + '）' : '');
+            return;
+        }
+        var target = findLocalDirByProject(root, projectName, fs2, path2);
+        if (!target) {
+            el.statusText.textContent = '没找到「' + projectName + '」的本地项目文件夹（' + root + '）';
+            return;
+        }
+        try {
+            require('child_process').spawnSync('explorer.exe', [target], { windowsHide: true });
+            el.statusText.textContent = '已打开本地：' + target;
+        } catch (e2) {
+            el.statusText.textContent = '打开失败：' + e2.message;
+        }
+    }
+
+    // 从工作台设置接口取 local_project_root
+    function localRootFromWorkingBay() {
+        var val = null;
+        try {
+            var sec = readSecret();
+            if (!sec) return null;
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', WB_BASE + '/api/settings?key=' + encodeURIComponent(sec), false); // 同步，点按钮就要立刻响应
+            xhr.send(null);
+            if (xhr.status === 200) {
+                var j = JSON.parse(xhr.responseText);
+                var st = (j && j.settings) || j || {};
+                val = st.local_project_root || null;
+            }
+        } catch (e) {}
+        return val;
+    }
+
+    // 在根目录里找「序号-项目名」，项目名做归一化匹配（去掉序号、空格、括号）
+    function findLocalDirByProject(root, projectName, fs2, path2) {
+        var want = normKey(projectName);
+        var best = null;
+        var bestScore = 0;
+        var dirs = [];
+        try { dirs = fs2.readdirSync(root); } catch (e) { return null; }
+        dirs.forEach(function (d) {
+            var full = path2.join(root, d);
+            try { if (!fs2.statSync(full).isDirectory()) return; } catch (e1) { return; }
+            var base = d.replace(/^\d{1,4}[-_\s]*/, '');   // 去掉前导序号
+            var k = normKey(base);
+            var score = 0;
+            if (k === want) score = 100;
+            else if (k.indexOf(want) >= 0 || want.indexOf(k) >= 0) score = 70;
+            if (score > bestScore) { bestScore = score; best = full; }
+        });
+        return best;
+    }
+
+    function normKey(s) {
+        return String(s || '')
+            .toLowerCase()
+            .replace(/[\s\-_（）()《》【】\[\]]/g, '')
+            .replace(/^\d+/, '');
     }
 
     // 打开项目目录（which: group_root=组内NAS / prod=制作部）

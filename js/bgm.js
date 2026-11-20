@@ -1746,13 +1746,14 @@
                 '<span class="bgm-item-idx">' + ep + '</span>' +
                 '<div class="bgm-item-main"><div class="bgm-item-name">第 ' + ep + ' 集</div>' +
                 '<div class="bgm-item-sub">' + (local ? '✔ 已下载 ' + local.sizeMB + 'MB' : '未下载') + '</div></div>' +
-                (local ? '<span class="bgm-item-act bgm-playnow">播放</span>' : '') +
+                '<span class="bgm-item-act bgm-playnow">' + (local ? '播放' : '在线看') + '</span>' +
                 '<span class="bgm-item-act bgm-watch">' + (local ? '重下' : '下载') + '</span>' +
                 (cached ? '<span class="bgm-item-act bgm-repick">重扒</span>' : '') +
                 '<span class="bgm-item-act bgm-pick primary">' + pickLabel + '</span>' +
                 (local ? '<span class="bgm-item-act bgm-more" title="更多操作">⋯</span>' : '');
             var pn = el.querySelector('.bgm-playnow');
             if (pn) pn.addEventListener('click', function (ev) { ev.stopPropagation(); playEpisode(ep, v); });
+            // 未下载时「在线看」不写盘、不转码；已下载时 playEpisode 内部走本地文件
             el.querySelector('.bgm-watch').addEventListener('click', function (ev) {
                 ev.stopPropagation(); downloadEpisode(v, ep);
             });
@@ -1771,10 +1772,10 @@
                     toggleEpMore(ev, el, ep, local);
                 });
             }
-            // 双击 = 下载（未下）/ 播放（已下）
+            // 双击 = 播放。已下载播本地；未下载走在线流（不落盘）。
+            // 想要下载请点右侧「下载」按钮，双击不再隐式触发下载。
             el.addEventListener('dblclick', function () {
-                // 已下载 → 直接播；未下载 → 下载完自动播（autoPlay=ep）
-                if (local) playEpisode(ep, v); else downloadEpisode(v, ep, true);
+                playEpisode(ep, v);
             });
             // 已下载的集：整行可拖进 PR（拖时排除按钮区）
             if (local) {
@@ -2132,15 +2133,69 @@
 
     function playEpisode(ep, vid) {
         if (!localMap[ep]) {
-            // 未下载：立刻在播放器画面区亮遮罩（以前只有 2.2 秒的 flash 浮字，
-            // 且进度条在面板底部，视线焦点处是黑屏，用户感觉不到反馈）
+            // 未下载：先试在线流（不落盘、不转码），拿不到再降级去下载。
             showPlayer();
-            bufEp = ep;   // 标记：用户正在等这一集
-            bufShow('正在下载第 ' + ep + ' 集', { pct: 0, sub: '下载完成后将自动播放', cancellable: true });
-            downloadEpisode(vid, ep, true);
+            bufEp = ep;
+            bufShow('正在获取在线片源…', { pct: null, sub: '第 ' + ep + ' 集' });
+            playOnlineOrDownload(ep, vid);
             return;
         }
         playLocal(ep);
+    }
+
+    // 纯在线播放：/play-url 拿到 m3u8 → hls.js 直接播，全程不落盘、不转码。
+    // 拿不到片源时只报错，不自动转下载（下载由用户点「下载」按钮显式触发）。
+    function playOnlineOrDownload(ep, vid) {
+        if (!window.vhBgmOnline) {
+            bufShow('在线播放模块未加载', { error: true, pct: null, sub: '请关闭面板重开或重启 PR 后重试' });
+            return;
+        }
+        var seriesName = (curSeries && curSeries.name) || '';
+        var seriesId = (curSeries && curSeries.series_id) || '';
+        var started = false;
+        window.vhBgmOnline.play({
+            ep: ep,
+            seriesName: seriesName,
+            seriesId: seriesId,
+            onStatus: function (msg) {
+                bufShow(msg, { pct: null, sub: '第 ' + ep + ' 集 · 在线播放' });
+            }
+        }).then(function (d) {
+            started = true;
+            bufHide();
+            playEp = ep;
+            lastPlayPos = 0;
+            var t = $('bgmPlayerTitle');
+            if (t) t.textContent = seriesName + ' 第 ' + ep + ' 集' + (d && d.isMerged ? '（合集中）' : '');
+            var v = $('bgmV');
+            if (v) bindOnlineBar(ep, v);
+        }).catch(function (e) {
+            if (started) return;
+            // 纯在线模式：不再偷偷转去下载，把原因说清楚让用户决定。
+            var why = (e && e.message) ? String(e.message).slice(0, 60) : '未知原因';
+            bufShow('第 ' + ep + ' 集在线片源不可用', {
+                error: true,
+                pct: null,
+                sub: why + ' · 可试其他集或点「下载」按钮'
+            });
+        });
+    }
+
+    // 在线播放时进度条/时间显示跟着 video 走（本地播放原有 syncBar 只认 playLocal 流程）
+    function bindOnlineBar(ep, v) {
+        try {
+            if (v.__vlBound) return;
+            v.__vlBound = true;
+            var upd = function () {
+                var cur = $('bgmBarCur'), dur = $('bgmBarDur'), fill = $('bgmBarFill');
+                var t = v.currentTime || 0, D = v.duration || 0;
+                if (cur) cur.textContent = fmtTime(t);
+                if (dur) dur.textContent = fmtTime(D);
+                if (fill && D > 0) fill.style.width = Math.min(100, (t / D) * 100) + '%';
+            };
+            v.addEventListener('timeupdate', upd);
+            v.addEventListener('loadedmetadata', upd);
+        } catch (e) {}
     }
 
     // ============ 就绪前遮罩 ============
@@ -2283,6 +2338,13 @@
         var v = $('bgmV');
         if (!v) return;
         if (inlineAudio) { try { inlineAudio.pause(); } catch (e) {} }
+        // 从在线流切回本地文件前，必须销毁 hls 实例并摘掉它的 src，
+        // 否则 hls 会继续往同一个 <video> 推流，本地文件播不出来（两路抢流）。
+        try {
+            if (v.dataset.online === '1' && window.vhBgmOnline) {
+                window.vhBgmOnline.stop();
+            }
+        } catch (e) {}
         v.dataset.ep = String(ep);
         // 播放前先确保有 H.264 版：HEVC 原文件在 CEP 里会直接报错/黑屏。
         if (loc.hasH264) {
@@ -2413,10 +2475,11 @@
         if (ep < 1 || ep > vids.length) return;
         var vid = vids[ep - 1];
         if (localMap[ep]) { playLocal(ep); return; }
+        // 未下载：切到在线播放（不落盘）。上/下一集、连播都走这里。
         showPlayer();
         bufEp = ep;
-        bufShow('正在下载第 ' + ep + ' 集', { pct: 0, sub: '下载完成后将自动播放', cancellable: true });
-        downloadEpisode(vid, ep, true);
+        bufShow('正在切到第 ' + ep + ' 集…', { pct: null, sub: '在线播放' });
+        playEpisode(ep, vid);
     }
 
     // ---------- 预加载下一集 ----------
@@ -2424,24 +2487,11 @@
     // 注意：只预下载、不预转码 —— 预转码会与用户可能立即的播放争抢 CPU，
     // 且转码很快（实测约 2s），播时再转完全来得及。
     var preloadEp = 0;
+    // 在线播放模式下不再预下载下一集。
+    // 原实现会在当前集播完前静默把下一集下到本地（占盘、占带宽，且用户在纯在线
+    // 场景下根本不需要）。保留空实现，避免调用点报错。
     function preloadNext() {
-        if (!curSeries || !playEp) return;
-        var vids = curSeries.vid_list || [];
-        var next = playEp + 1;
-        if (next < 1 || next > vids.length) return;
-        if (localMap[next]) return;          // 已有，不重复
-        if (preloadEp === next) return;      // 已在预加载中
-        if (pendingAutoPlay) return;         // 用户点播正在下载，不抢
-        preloadEp = next;
-        try {
-            post('/download', {
-                series_id: curSeries.series_id, vid: vids[next - 1],
-                name: curSeries.name, ep: next,
-            }, 60000).then(function () {
-                preloadEp = 0;
-                refreshLocal();   // 静默刷新本地列表（不聚焦）
-            }).catch(function () { preloadEp = 0; });
-        } catch (e) { preloadEp = 0; }
+        return;
     }
 
     function closePlayer() {
@@ -4118,6 +4168,18 @@ startBgm('/single', { input: p, start: null, end: null, mode: 'accomp' },
         on('btnBgmPickDir', startBatchByDir, 'click');
         var ob = $('btnBgmOnlineBatch');
         if (ob) ob.addEventListener('click', startOnlineBatch);
+        // 「▶ 立即播放」：已下载播本地，未下载走在线流。不落盘、不转码。
+        var pnw = $('btnBgmPlayNow');
+        if (pnw) pnw.addEventListener('click', function () {
+            if (!curSeries) { flash('先选一部剧'); return; }
+            var ip = $('bgmPlayEpNo');
+            var ep = parseInt((ip && ip.value) || '1', 10);
+            var total = (curSeries.vid_list || []).length;
+            if (!ep || ep < 1) ep = 1;
+            if (total && ep > total) { flash('超过总集数 ' + total); return; }
+            var vid = (curSeries.vid_list || [])[ep - 1] || '';
+            playEpisode(ep, vid);
+        });
         on('btnBgmCancel', stopJob, 'click');
         on('btnBgmToLib', toPlaylist, 'click');
         on('bgmIdentifyFab', function () {

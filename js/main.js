@@ -16,10 +16,11 @@
         script: document.getElementById('panel-script'),
         shenpian: document.getElementById('panel-shenpian'),
         upscale: document.getElementById('panel-upscale'),
-        prconv: document.getElementById('panel-prconv'),
+        prconv: document.getElementById('panel-prconv'), batchxml: document.getElementById('panel-batchxml'),
         colorxml: document.getElementById('panel-colorxml'),
         breeze: document.getElementById('panel-breeze'),
         feedback: document.getElementById('panel-feedback'),
+        ai: document.getElementById('panel-ai'),
         admin: document.getElementById('panel-admin')
     };
 
@@ -33,8 +34,9 @@
         script: { members: ['script'], default: 'script' },
         shenpian: { members: ['shenpian'], default: 'shenpian' },
         upscale: { members: ['upscale'], default: 'upscale' },
-        prconv: { members: ['prconv', 'colorxml'], default: 'prconv' },
+        prconv: { members: ['prconv', 'colorxml', 'batchxml'], default: 'prconv' },
         feedback: { members: ['feedback'], default: 'feedback' },
+        ai: { members: ['ai'], default: 'ai' },
         admin: { members: ['admin'], default: 'admin' }
     };
     // tab 归属映射
@@ -140,6 +142,16 @@
         }
         if (name === 'music' && window.__musicOnShow) {
             try { window.__musicOnShow(); } catch (e) {}
+        }
+        // 字幕识别：切到时刷新序列列表（PR 里可能新建/改名过序列）
+        if (name === 'subtitle' && window.__subtitleOnShow) {
+            try { window.__subtitleOnShow(); } catch (e) {}
+        }
+        if (name === 'batchxml' && window.__vhBatchXml && window.__vhBatchXml.onShow) {
+            try { window.__vhBatchXml.onShow(); } catch (e) {}
+        }
+        if (name === 'ai' && window.__vhAI && window.__vhAI.onShow) {
+            try { window.__vhAI.onShow(); } catch (e) {}
         }
         if (name === 'bgm' && window.__bgmOnShow) {
             try { window.__bgmOnShow(); } catch (e) {}

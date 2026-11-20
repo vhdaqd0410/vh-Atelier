@@ -71,6 +71,44 @@
         });
     }
 
+    // 建完后可一键打开本地文件夹
+    function openProjectFolder(dirPath) {
+        try {
+            var cp = require('child_process');
+            cp.spawnSync('explorer.exe', [dirPath], { windowsHide: true });
+        } catch (e) {}
+    }
+    function projectLocalDir(projectName) {
+        try {
+            if (window.__vhScript && window.__vhScript.findLocalProjectDir) {
+                return window.__vhScript.findLocalProjectDir(projectName);
+            }
+        } catch (e) {}
+        return null;
+    }
+    // 在进度弹窗里挂一个「打开本地文件夹」按钮（建完才显示）
+    function mountOpenFolderBtn(projectName) {
+        var box = document.querySelector('#vhLocalProjMask');
+        if (!box) return;
+        var stage = document.getElementById('vhLpStage');
+        if (!stage || document.getElementById('vhLpOpenFolder')) return;
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-top:10px;display:flex;gap:8px;';
+        var b = document.createElement('button');
+        b.id = 'vhLpOpenFolder';
+        b.type = 'button';
+        b.textContent = '📂 打开本地文件夹';
+        b.style.cssText = 'display:none;background:#2b3a45;border:1px solid #46606f;color:#bcd9e8;' +
+            'border-radius:5px;padding:5px 12px;font-size:11.5px;cursor:pointer;';
+        b.onclick = function () {
+            var dir = projectLocalDir(projectName);
+            if (dir) openProjectFolder(dir);
+            else { try { b.textContent = '没找到本地文件夹'; } catch (e) {} }
+        };
+        wrap.appendChild(b);
+        stage.parentNode.insertBefore(wrap, stage.nextSibling);
+    }
+
     function closeModal() {
         if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
         overlay = null;
@@ -148,12 +186,18 @@
                         if (msg) setProgress(null, null, msg, false);
                         setProgress(null, null, '现在可以点该项目的「📥 素材」把素材导入 PR 素材箱，' +
                             '或点「🎬 工程」打开工程文件。', false);
+                        // 建完直接给「打开文件夹」的入口，省得再去资源管理器里翻
+                        try {
+                            var opened = document.getElementById('vhLpOpenFolder');
+                            if (opened) opened.style.display = '';
+                        } catch (e2) {}
                         deps.setStatus && deps.setStatus('本地项目创建成功：' + projectName);
                         setProgress(null, null, '', true);
                     } else {
                         setProgress('❌ 创建失败', 0, t.message || '未知错误', true);
                         deps.setStatus && deps.setStatus('创建失败：' + (t.message || ''));
                     }
+                    try { mountOpenFolderBtn(projectName); } catch (e3) {}
                     try { if (deps.onDone) deps.onDone(st === 'done'); } catch (e) {}
                     return;
                 }

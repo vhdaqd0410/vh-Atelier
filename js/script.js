@@ -109,7 +109,7 @@
                         walk(full, depth + 1);
                     } else {
                         var low = en.toLowerCase();
-                        if (low.endsWith('.docx') || low.endsWith('.pdf')) {
+                        if (low.endsWith('.docx') || low.endsWith('.docm') || low.endsWith('.pdf')) {
                             found.push(full);
                         }
                     }
@@ -313,7 +313,7 @@
     function browseScriptFile(projectName, addToMark) {
         var result;
         try {
-            result = window.cep.fs.showOpenDialogEx(false, false, '选择剧本 docx/pdf', '', [], '', '选择');
+            result = window.cep.fs.showOpenDialogEx(false, false, '选择剧本 docx / docm / pdf', '', ['docx','docm','pdf'], '', '选择');
         } catch (e) {
             showScriptMsg('打开文件选择失败: ' + e.message);
             return;
@@ -553,7 +553,7 @@
         if (recents.length === 0 && fixed.length === 0) {
             var tip = document.createElement('div');
             tip.style.cssText = 'padding:18px;text-align:center;font-size:12px;color:var(--muted);background:#202020;border:1px dashed #3a3a3a;border-radius:8px;line-height:1.8;';
-            tip.innerHTML = '还没有剧本记录。<br>点上方「📂 打开剧本文件…」选一个 docx / pdf 开始，<br>或从视频工作台项目卡片里点「剧本」打开。<br><br>打开过的会自动出现在「最近阅读」，方便下次直接点。';
+            tip.innerHTML = '还没有剧本记录。<br>点上方「📂 打开剧本文件…」选一个 docx / docm / pdf 开始，<br>或从视频工作台项目卡片里点「剧本」打开。<br><br>打开过的会自动出现在「最近阅读」，方便下次直接点。';
             box.appendChild(tip);
         }
 
@@ -1414,6 +1414,15 @@
         openScriptForProject: openScriptForProject,
         loadScriptDocx: loadScriptDocx,
         showScriptHome: showScriptHome,
-        showScriptPanel: showScriptPanel
+        showScriptPanel: showScriptPanel,
+        // 供其它面板复用：按项目名解析本地项目目录、找剧本
+        findLocalProjectDir: findLocalProjectDir,
+        findScriptDocxList: findScriptDocxList,
+        // 已打开的剧本（最近一条 + 全部最近记录），字幕校对用它选剧本
+        getRecentScripts: loadRecentScripts,
+        getReadingScript: function () {
+            try { return JSON.parse(localStorage.getItem(SCRIPT_READING_KEY) || 'null'); }
+            catch (e) { return null; }
+        }
     };
 })();
