@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.33",
-  "buildTime": "2026-11-20 18:45:00",
+  "version": "1.82.34",
+  "buildTime": "2026-11-21 09:32:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "字幕识别改用 faster-whisper：词级时间戳 + VAD，气口正确断开"
+  "notes": "字幕识别支持首次使用自动下载模型；部署包内置 CPU 版依赖，GPU 加速包按需安装"
 }

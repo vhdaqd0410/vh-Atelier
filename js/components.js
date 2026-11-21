@@ -33,6 +33,42 @@
     // unzip: 下载后是否需要解压（true=zip，false=单文件）
     var COMPONENTS = [
         {
+            id: 'fw-medium',
+            name: '字幕识别模型 · faster-whisper medium',
+            desc: '新识别引擎的模型（词级时间戳 + VAD，气口准确）。首次使用会自动下载',
+            size: '约 1.5 GB',
+            dir: 'models/faster-whisper/medium',
+            check: function () {
+                var need = ['config.json', 'model.bin', 'tokenizer.json', 'vocabulary.txt'];
+                var d = path.join(extRoot, 'models', 'faster-whisper', 'medium');
+                for (var i = 0; i < need.length; i++) {
+                    try {
+                        var f = path.join(d, need[i]);
+                        if (!fs.existsSync(f) || fs.statSync(f).size === 0) return false;
+                    } catch (e) { return false; }
+                }
+                return true;
+            },
+            hint: '识别时如果缺失会自动弹出下载提示，也可手动点「下载」'
+        },
+        {
+            id: 'fw-cuda',
+            name: 'NVIDIA GPU 加速包（可选）',
+            desc: 'CUDA 运算库，装上后识别更快。仅在使用 NVIDIA 显卡时有用',
+            size: '约 1.1 GB',
+            dir: 'runtime/python/Lib/site-packages',
+            check: function () {
+                // 只要 CUDA 核心库在就算已装
+                try {
+                    var sp = path.join(extRoot, 'runtime', 'python', 'Lib', 'site-packages');
+                    return fs.existsSync(path.join(sp, 'ctranslate2', 'cublasLt64_12.dll')) ||
+                           fs.existsSync(path.join(sp, 'ctranslate2', 'cublas64_12.dll'));
+                } catch (e) { return false; }
+            },
+            hint: '检测到 NVIDIA 显卡时才建议安装；没有显卡可以跳过，用 CPU 也能跑',
+            optional: true
+        },
+        {
             id: 'funasr',
             name: '字幕识别模型',
             desc: '本地字幕识别（Paraformer + 标点 + VAD）',
