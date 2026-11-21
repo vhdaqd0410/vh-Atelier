@@ -396,4 +396,29 @@
         });
     }
 
+    // ---------- 自启动 ----------
+    // 之前 bind() 只定义没调用，所以组件列表一直空白。
+    // 这里暴露入口并立即初始化；DOM 未就绪时等就绪再跑。
+    window.__vhComponentsUI = { bind: bind, render: render };
+
+    function autoStart() {
+        try {
+            initEl();
+            if (el.list) {
+                bind();
+                return true;
+            }
+        } catch (e) {
+            try { console.error('[components-ui] 初始化失败: ' + e.message); } catch (e2) {}
+        }
+        return false;
+    }
+
+    if (!autoStart()) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', autoStart);
+        } else {
+            setTimeout(autoStart, 300);
+        }
+    }
 })();

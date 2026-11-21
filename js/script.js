@@ -12,6 +12,11 @@
     var child_process = require('child_process');
 
     // 插件根目录（js/ 的上一级），供定位 py/ 等资源
+    // 翻译缓存状态（顶层声明，供 openScriptReader 与持久化函数共用）
+    var __transCacheFile = null;
+    var __curScriptPath = null;
+    var __transDebug = [];
+
     var extRoot = (function () {
         try {
             if (typeof __dirname !== 'undefined') {
@@ -715,14 +720,19 @@
         var translating = false;
         var transMap = {};           // 批量翻译缓存：'__'+epkey -> {台词行:译文}
         var lineTransMap = {};       // 单句翻译缓存
+        // 注意：下面这三个变量必须在 loadTransCache 之前声明并赋值，
+        // 否则 var 提升只带来 undefined，loadTransCache 里的赋值到不了模块级，
+        // saveTransCache 会因 !__curScriptPath 直接 return（表现为从不落盘）。
+        __transCacheFile = null;
+        __curScriptPath = null;
+        __transDebug = [];
         // 加载本剧本的翻译缓存：上次翻译过的，这次打开直接可用，不用再翻一遍
         loadTransCache(docxPath);
 
     // ---------- 翻译缓存持久化 ----------
     // 按剧本文件路径分文件存，避免 localStorage 5MB 限制。
-    var __transCacheFile = null;
-    var __curScriptPath = null;
-    var __transDebug = [];
+    // 这三个变量在 script.js 顶层（IIFE 内）声明，供 openScriptReader 与
+    // 持久化函数共用，不能在这里重复 var 声明。
 
     function __tlog(msg) {
         try {

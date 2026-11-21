@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "2.1.1",
-  "buildTime": "2026-11-21 18:00:00",
+  "version": "2.1.2",
+  "buildTime": "2026-11-21 18:40:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修组件面板空白；修翻译缓存不落盘"
+  "notes": "修组件面板初始化未接线；修翻译缓存变量作用域"
 }

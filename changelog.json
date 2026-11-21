@@ -4,6 +4,21 @@
  "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
  "versions": [
   {
+   "version": "2.1.2",
+   "date": "2026-11-21",
+   "title": "修组件面板空白与翻译不保存",
+   "changes": [
+    {
+     "type": "fix",
+     "text": "修组件面板一直空白：components-ui 的 bind() 只定义从未调用，渲染逻辑一次都没执行；现已接上并自启动"
+    },
+    {
+     "type": "fix",
+     "text": "修翻译结果关掉就丢：缓存变量声明在调用之后，var 提升只带来 undefined，导致保存时判定无路径直接返回、从不写盘"
+    }
+   ]
+  },
+  {
    "version": "2.1.1",
    "date": "2026-11-21",
    "title": "修组件面板空白、翻译结果不保存",
