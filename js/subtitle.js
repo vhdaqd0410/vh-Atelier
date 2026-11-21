@@ -1211,6 +1211,14 @@
     // 识别前确保模型就位；缺失时询问并下载
     function ensureFwModel(model, cb) {
         if (fwModelReady(model)) { cb(null); return; }
+        // 模型在但运行库不在（从组件面板单独下过模型的情况），先补库
+        if (!fwEngineReady(true)) {
+            installFwEngine(function (e) {
+                if (e) { cb(e); return; }
+                ensureFwModel(model, cb);
+            });
+            return;
+        }
         var size = fwModelSizeText(model);
         var ok = confirm('识别模型「' + model + '」还没下载（' + size + '）。\n\n' +
                          '现在下载？需要联网，下载期间请勿关闭 PR。\n' +
@@ -2079,10 +2087,20 @@
     // 组件面板的「fw-medium / fw-cuda」没有静态 url，走这里的 py 脚本下载。
     window.__vhSubtitleDownloadModel = function (model, onProgress, onDone) {
         // onProgress 期望收到 {pct, text, meta}
-        var origBytes = dlBytes;
-        downloadFwModel(model, function (err) {
-            if (onDone) onDone(err || null);
-        });
+        // 注意：模型下载脚本只用标准库，不需要 faster_whisper；
+        // 所以必须先补齐运行库，否则会出现「模型下好了但识别说组件缺失」。
+        if (!fwEngineReady(true)) {
+            installFwEngine(function (e) {
+                if (e) { if (onDone) onDone(e); return; }
+                downloadFwModel(model, function (err) {
+                    if (onDone) onDone(err || null);
+                });
+            });
+        } else {
+            downloadFwModel(model, function (err) {
+                if (onDone) onDone(err || null);
+            });
+        }
         // 把下载状态桥接到组件面板的回调
         var t = setInterval(function () {
             if (!dlState.active) { clearInterval(t); return; }
