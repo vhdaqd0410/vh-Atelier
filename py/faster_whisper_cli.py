@@ -33,6 +33,24 @@ sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+def emit_result(args, obj):
+    """统一出口：成功失败都写 --out 文件，保证 JS 侧一定能读到原因。"""
+    try:
+        out = getattr(args, "out", "") or ""
+        if out:
+            d = os.path.dirname(os.path.abspath(out))
+            if d and not os.path.isdir(d):
+                os.makedirs(d, exist_ok=True)
+            with open(out, "w", encoding="utf-8") as f:
+                json.dump(obj, f, ensure_ascii=False)
+    except Exception as e:
+        log("[warn] 写输出文件失败：%s" % e)
+    try:
+        print(json.dumps(obj, ensure_ascii=False))
+    except Exception:
+        pass
+
+
 def log(msg):
     print(msg, file=sys.stderr, flush=True)
 
@@ -159,7 +177,8 @@ def main():
     try:
         from faster_whisper import WhisperModel
     except Exception as e:
-        print(json.dumps({"ok": False, "error": "faster-whisper 未安装：%s" % e}, ensure_ascii=False))
+        emit_result(args, {"ok": False, "error": "faster-whisper 未安装：%s" % e,
+                           "hint": "组件未装好，请在「组件」面板点在线下载，或检查 site-packages"})
         return
 
     # 模型路径：优先用插件自带目录（models/faster-whisper/<model>），
@@ -208,7 +227,8 @@ def main():
             device, compute_type = "cpu", "int8"
             model = WhisperModel(model_ref, device=device, compute_type=compute_type)
         else:
-            print(json.dumps({"ok": False, "error": "模型加载失败：%s" % e}, ensure_ascii=False))
+            emit_result(args, {"ok": False, "error": "模型加载失败：%s" % e,
+                               "model": model_ref})
             return
 
     lang = None if args.lang in ("auto", "", None) else args.lang
@@ -247,11 +267,12 @@ def main():
                     beam_size=5, condition_on_previous_text=False)
                 raw = list(segments_iter)
             except Exception as e2:
-                print(json.dumps({"ok": False, "error": "识别失败（CPU 重试也失败）：%s" % e2},
-                                 ensure_ascii=False))
+                emit_result(args, {"ok": False,
+                                   "error": "识别失败（CPU 重试也失败）：%s" % e2})
                 return
         else:
-            print(json.dumps({"ok": False, "error": "识别失败：%s" % e}, ensure_ascii=False))
+            emit_result(args, {"ok": False, "error": "识别失败：%s" % e,
+                               "device": device})
             return
 
     # 收集词级时间
@@ -286,8 +307,7 @@ def main():
         "gapThreshold": args.gap,
         "segments": segments,
     }
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False)
+    emit_result(args, result)
     print(json.dumps({"ok": True, "count": len(segments), "lang": result["lang"],
                       "device": device}, ensure_ascii=False))
 

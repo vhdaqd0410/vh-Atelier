@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.31",
-  "buildTime": "2026-11-21 15:10:00",
+  "version": "1.82.32",
+  "buildTime": "2026-11-21 15:40:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "CUDA库缺失时自动降级CPU；fw模型失败不再静默兜底"
+  "notes": "识别失败显示真实原因；新增环境自检"
 }

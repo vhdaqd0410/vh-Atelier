@@ -31,6 +31,7 @@
         selModel: document.getElementById('selModel'),
         chkGpu: document.getElementById('chkGpu'),
         batch: document.getElementById('btnBatch'),
+        btnDiag: document.getElementById('btnDiag'),
         stop: document.getElementById('btnStop'),
         progressWrap: document.getElementById('wsProgressWrap'),
         progressFill: document.getElementById('wsProgressFill'),
@@ -1155,6 +1156,126 @@
         setProgress(-1, '');
     }
 
+    // ---------- 环境自检：一键导出诊断报告 ----------
+    // 目的：出问题时不用再猜，直接看报告就知道缺什么。
+    function runDiag() {
+        var lines = [];
+        function add(k, v) { lines.push(k + '：' + v); }
+
+        add('时间', new Date().toLocaleString());
+        add('插件目录', extRoot);
+
+        // 版本
+        try {
+            var vf = path.join(extRoot, 'version.json');
+            add('插件版本', fs.existsSync(vf) ? String(JSON.parse(fs.readFileSync(vf, 'utf8')).version) : '未找到 version.json');
+        } catch (e) { add('插件版本', '读取失败 ' + e.message); }
+
+        // Python
+        var bundledPy = path.join(extRoot, 'runtime', 'python', 'python.exe');
+        add('便携 Python', fs.existsSync(bundledPy) ? bundledPy : '不存在');
+        var py = detectPython();
+        add('实际使用的 Python', py || '未找到');
+
+        // 依赖库
+        var spDir = path.join(extRoot, 'runtime', 'python', 'Lib', 'site-packages');
+        add('site-packages', fs.existsSync(spDir) ? spDir : '不存在');
+        ['faster_whisper', 'ctranslate2', 'av', 'numpy', 'yaml', 'onnxruntime', 'huggingface_hub']
+            .forEach(function (n) {
+                var d = path.join(spDir, n);
+                add('  库 ' + n, fs.existsSync(d) ? '有' : '缺');
+            });
+        var cublas = path.join(spDir, 'ctranslate2', 'cublasLt64_12.dll');
+        add('  CUDA 库 cublasLt', fs.existsSync(cublas) ? ('有 ' + Math.round(fs.statSync(cublas).size / 1048576) + ' MB') : '缺（无 GPU 加速）');
+
+        // 实测 import
+        if (py) {
+            try {
+                var r1 = child_process.spawnSync(py, ['-c', 'import faster_whisper, ctranslate2; print("OK")'],
+                    { timeout: 30000, windowsHide: true, encoding: 'utf8' });
+                add('import 实测', (r1 && r1.status === 0) ? '成功' :
+                    ('失败：' + String((r1 && r1.stderr) || (r1 && r1.error) || '').slice(-300)));
+            } catch (e) { add('import 实测', '异常 ' + e.message); }
+
+            try {
+                var r2 = child_process.spawnSync(py, ['-c',
+                    'import ctranslate2; print(ctranslate2.get_cuda_device_count())'],
+                    { timeout: 30000, windowsHide: true, encoding: 'utf8' });
+                add('CUDA 设备数', (r2 && r2.status === 0) ? String(r2.stdout || '').trim() :
+                    ('不可用：' + String((r2 && r2.stderr) || '').slice(-200)));
+            } catch (e) { add('CUDA 设备数', '异常'); }
+        }
+
+        // 模型
+        var mroot = path.join(extRoot, 'models', 'faster-whisper');
+        try {
+            if (fs.existsSync(mroot)) {
+                fs.readdirSync(mroot).forEach(function (m) {
+                    var d = path.join(mroot, m);
+                    var sz = 0;
+                    try {
+                        fs.readdirSync(d).forEach(function (f) {
+                            try { sz += fs.statSync(path.join(d, f)).size; } catch (e) {}
+                        });
+                    } catch (e) {}
+                    var okAll = fwModelReady(m);
+                    add('  模型 ' + m, (okAll ? '完整' : '不完整') + '，' + Math.round(sz / 1048576) + ' MB');
+                });
+            } else { add('模型目录', '不存在'); }
+        } catch (e) { add('模型目录', '读取失败'); }
+
+        // 引擎判定
+        add('引擎判定 fwEngineReady', String(fwEngineReady(true)));
+        add('引擎诊断 fwEngineDiag', fwEngineDiag());
+
+        // ffmpeg
+        var ff = path.join(extRoot, 'bin', 'ffmpeg-win32-x64.exe');
+        add('ffmpeg', fs.existsSync(ff) ? ('有 ' + Math.round(fs.statSync(ff).size / 1048576) + ' MB') : '缺');
+
+        // 最近错误
+        try {
+            var logf = path.join(extRoot, 'collect', 'error.log');
+            if (fs.existsSync(logf)) {
+                var txt = fs.readFileSync(logf, 'utf8');
+                var tail = txt.split('\n').filter(function (l) { return l.trim(); }).slice(-12).join('\n');
+                lines.push('');
+                lines.push('---- 最近错误日志（最后 12 行）----');
+                lines.push(tail);
+            }
+        } catch (e) {}
+
+        // 写出报告
+        var outDir = path.join(extRoot, 'collect');
+        try { if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
+        var stamp = String(Date.now());
+        var outFile = path.join(outDir, 'diag_' + stamp + '.txt');
+        var body = lines.join('\n');
+        try {
+            fs.writeFileSync(outFile, body, 'utf8');
+        } catch (e) {
+            setStatus('诊断报告写入失败：' + e.message, 'err');
+            return;
+        }
+
+        // 显示在下载反馈区，方便直接复制
+        dlReset && dlReset('diag', '环境自检报告');
+        try {
+            var box = document.getElementById('dlResult');
+            if (box) {
+                box.style.display = 'block';
+                box.innerHTML = '<div style="white-space:pre-wrap;font-size:11px;line-height:1.6;' +
+                    'max-height:280px;overflow:auto;color:#cfd8e3;font-family:Consolas,monospace;">' +
+                    escapeHtml(body) + '</div>';
+            }
+            var t = document.getElementById('dlText');
+            if (t) { t.textContent = '已保存：' + outFile; t.className = 'dl-ok'; }
+            var f = document.getElementById('dlFill');
+            if (f) f.style.width = '100%';
+        } catch (e) {}
+
+        setStatus('环境自检完成，报告已保存：' + outFile, 'ok');
+    }
+
     // 确保引擎依赖就位（缺失自动安装），cb(err)
     function ensureFwEngine(cb) {
         if (fwEngineReady(true)) {
@@ -1321,8 +1442,16 @@
             }
             var data = null;
             try { data = JSON.parse(fs.readFileSync(outJson, 'utf8')); } catch (e) {}
+            if (!data) {
+                // 文件没写出来时，兜底解析 stdout（CLI 出错可能只打印 JSON）
+                var so = String(stdout || '').trim();
+                var m = so.match(/\{[\s\S]*\}\s*$/);
+                if (m) { try { data = JSON.parse(m[0]); } catch (e2) {} }
+            }
             if (!data || !data.ok) {
-                var msg2 = (data && data.error) || '识别结果解析失败';
+                var msg2 = (data && data.error) || '识别结果解析失败（脚本没有输出结果文件）';
+                var tail = String(stderr || '').trim();
+                if (tail) msg2 += '　stderr: ' + tail.slice(-300);
                 try {
                     if (window.__vhLog && window.__vhLog.err) {
                         window.__vhLog.err('[subtitle] ' + msg2 + ' | py=' + env.py +
@@ -1995,6 +2124,7 @@
     el.refreshSeq.addEventListener('click', refreshSequences);
     el.toggleAll.addEventListener('click', toggleAll);
     el.batch.addEventListener('click', runBatch);
+        if (el.btnDiag) el.btnDiag.addEventListener('click', runDiag);
     el.writeBack.addEventListener('click', writeBack);
     el.exportSrt.addEventListener('click', exportSrt);
     el.toCheck.addEventListener('click', function () {
