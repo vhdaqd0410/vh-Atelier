@@ -715,6 +715,68 @@
         var translating = false;
         var transMap = {};           // 批量翻译缓存：'__'+epkey -> {台词行:译文}
         var lineTransMap = {};       // 单句翻译缓存
+        // 加载本剧本的翻译缓存：上次翻译过的，这次打开直接可用，不用再翻一遍
+        loadTransCache(docxPath);
+
+    // ---------- 翻译缓存持久化 ----------
+    // 按剧本文件路径分文件存，避免 localStorage 5MB 限制。
+    // 存 collect/trans_cache/<路径hash>.json，结构：
+    //   { "batch": {"__3": {"原文": "译文"}}, "line": {"原文": "译文"} }
+    var __transCacheFile = null;
+    var __curScriptPath = null;
+    var __transCacheDirty = false;
+
+    function transCachePathFor(srcPath) {
+        var crypto = null;
+        try { crypto = require('crypto'); } catch (e) {}
+        var key;
+        if (crypto && crypto.createHash) {
+            key = crypto.createHash('md5').update(String(srcPath || 'unknown')).digest('hex');
+        } else {
+            // 无 crypto 时退化为简单哈希
+            var h = 0, str = String(srcPath || 'unknown');
+            for (var i = 0; i < str.length; i++) { h = ((h << 5) - h + str.charCodeAt(i)) | 0; }
+            key = 'h' + Math.abs(h).toString(16);
+        }
+        var dir = path.join(extRoot, 'collect', 'trans_cache');
+        return { dir: dir, file: path.join(dir, key + '.json') };
+    }
+
+    function loadTransCache(srcPath) {
+        try {
+            __curScriptPath = srcPath || null;
+            var info = transCachePathFor(srcPath);
+            __transCacheFile = info.file;
+            if (!fs.existsSync(info.file)) return;
+            var raw = fs.readFileSync(info.file, 'utf8');
+            var obj = JSON.parse(raw);
+            if (obj && obj.batch) {
+                Object.keys(obj.batch).forEach(function (k) { transMap[k] = obj.batch[k]; });
+            }
+            if (obj && obj.line) {
+                Object.keys(obj.line).forEach(function (k) { lineTransMap[k] = obj.line[k]; });
+            }
+        } catch (e) {}
+    }
+
+    function saveTransCache() {
+        // 关键：__transCacheFile 只在 loadTransCache 里赋值，
+        // 首次翻译（还没加载过缓存）时它是 null，会导致永远不落盘。
+        // 所以这里自己算一次路径。
+        try {
+            if (!__transCacheFile) {
+                if (!__curScriptPath) return;
+                __transCacheFile = transCachePathFor(__curScriptPath).file;
+            }
+            var dir = path.dirname(__transCacheFile);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            var out = { batch: transMap, line: lineTransMap, savedAt: Date.now() };
+            fs.writeFileSync(__transCacheFile, JSON.stringify(out), 'utf8');
+            __transCacheDirty = false;
+        } catch (e) {}
+    }
+
+
         var searchKeyword = '';      // 关键词搜索（非集号时）
         var searchHits = [];         // 当前命中的 <mark> 元素列表
         var hitIdx = -1;             // 当前定位到第几个命中（0 基）
@@ -1329,7 +1391,12 @@
         function doTranslate() {
             if (translating) return;
             var key = curEp ? String(curEp) : 'all';
-            if (transMap['__' + key]) { curEpKey = key; render(); transState.textContent = '（已翻译）'; return; }
+            if (transMap['__' + key]) {
+                curEpKey = key;
+                render();
+                transState.textContent = '（已翻译，读自本地缓存）';
+                return;
+            }
             var targets = [];
             epLines(curEp).forEach(function (x) {
                 if (x.type !== 'dialogue') return;
@@ -1347,8 +1414,9 @@
                     transMap['__' + key] = results;
                     translating = false;
                     transBtn.disabled = false;
-                    transState.textContent = '已翻译 ' + targets.length + ' 条';
+                    transState.textContent = '已翻译 ' + targets.length + ' 条（已保存）';
                     curEpKey = key;
+                    saveTransCache();     // 落盘，下次打开直接可用
                     render();
                     return;
                 }
