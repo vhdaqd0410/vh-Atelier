@@ -4,6 +4,25 @@
  "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
  "versions": [
   {
+   "version": "1.82.31",
+   "date": "2026-11-21",
+   "title": "CUDA 库缺失时自动降级 CPU",
+   "changes": [
+    {
+     "type": "fix",
+     "text": "修勾选 GPU 但 CUDA 库缺失时识别直接失败：原兜底只覆盖模型加载，cublas 报错发生在更早阶段，捕获不到。现在先探测 CUDA 可用性，不可用自动降级 CPU"
+    },
+    {
+     "type": "fix",
+     "text": "GPU 推理中途失败（显存不足等）也会自动降级 CPU 重试一次，不再直接报错"
+    },
+    {
+     "type": "fix",
+     "text": "faster-whisper 失败时不再静默退回 whisper.cpp 掩盖真实原因，改为直接报出实际问题"
+    }
+   ]
+  },
+  {
    "version": "1.82.30",
    "date": "2026-11-21",
    "title": "修「安装完成但关键文件仍缺失」误报",
