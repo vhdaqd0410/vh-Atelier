@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.36",
-  "buildTime": "2026-11-21 10:45:00",
+  "version": "1.82.37",
+  "buildTime": "2026-11-21 11:30:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "下载进度与成败反馈；修主版引擎误判"
+  "notes": "修便携Python路径；识别失败落日志"
 }

@@ -101,9 +101,15 @@
         var os = require('os');
         var child_process = require('child_process');
         var candidates = [];
-        if (extRoot) candidates.push(path.join(extRoot, 'runtime', 'python.exe'));
+        if (extRoot) {
+            // 部署包里便携 Python 在 runtime/python/python.exe（有一层目录），
+            // 不是 runtime/python.exe。两个都试，兼容不同打包方式。
+            candidates.push(path.join(extRoot, 'runtime', 'python', 'python.exe'));
+            candidates.push(path.join(extRoot, 'runtime', 'python.exe'));
+        }
         candidates.push(
             path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
+            path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python312', 'python.exe'),
             path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python313', 'python.exe'),
             'python',
             'py'
