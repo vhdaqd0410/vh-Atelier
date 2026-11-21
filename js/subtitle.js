@@ -605,8 +605,29 @@
                         })(),
                         useGpu: useGpu
                     }, function (res) {
-                        // 新引擎失败时退回原生 whisper，保证不会比之前更差
+                        // fw-* 模型只能用 faster-whisper 跑；
+                        // 退回 whisper.cpp 时 modelPath 是空，必然失败且会掩盖真实原因。
+                        // 所以这里直接返回真实错误，不再静默兜底。
                         if (res && res.status === 'err') {
+                            var isFwModel = String(modelName).indexOf('fw-') === 0;
+                            if (isFwModel) {
+                                var why = res.error || '未知错误';
+                                try {
+                                    if (window.__vhLog && window.__vhLog.err) {
+                                        window.__vhLog.err('[subtitle] faster-whisper 失败（不兜底）: ' +
+                                            why + ' | py=' + fw.py + ' | model=' + mName +
+                                            ' | gpu=' + (useGpu ? 'on' : 'off'));
+                                    }
+                                } catch (e) {}
+                                cb({
+                                    seqId: meta.seqId, name: meta.seqName, status: 'err',
+                                    error: '识别失败：' + why +
+                                           '　（引擎 faster-whisper，设备 ' + (useGpu ? 'GPU' : 'CPU') +
+                                           '，模型 ' + mName + '）'
+                                });
+                                return;
+                            }
+                            // 非 fw 模型才退回 whisper.cpp
                             runWhisper(meta, wavPath, srtPath, whisperPath, modelPath, lang, useGpu, tmpDir, cb);
                             return;
                         }

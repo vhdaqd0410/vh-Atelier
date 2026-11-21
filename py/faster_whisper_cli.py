@@ -177,13 +177,39 @@ def main():
     if not compute_type:
         compute_type = "float16" if device == "cuda" else "int8"
 
+    # 先探测 CUDA 能不能真用。
+    # 踩过的坑：cublas64_12.dll 缺失时，异常发生在构造模型之前，
+    # 只 try 住 WhisperModel(...) 捕获不到，会直接失败而不是降级。
+    if device == "cuda":
+        cuda_ok, cuda_why = False, ""
+        try:
+            import ctranslate2 as _ct2
+            n = _ct2.get_cuda_device_count()
+            if n <= 0:
+                cuda_why = "未检测到可用 CUDA 设备"
+            else:
+                cuda_ok = True
+        except Exception as e:
+            cuda_why = str(e)[:160]
+        if not cuda_ok:
+            log("[warn] CUDA 不可用（%s），自动改用 CPU" % cuda_why)
+            print(json.dumps({"info": "cuda_unavailable", "reason": cuda_why,
+                              "fallback": "cpu"}, ensure_ascii=False))
+            device, compute_type = "cpu", "int8"
+
     try:
         model = WhisperModel(model_ref, device=device, compute_type=compute_type)
     except Exception as e:
-        # GPU 不可用就退回 CPU
-        log("[warn] %s 加载失败：%s，改用 CPU int8" % (device, e))
-        device, compute_type = "cpu", "int8"
-        model = WhisperModel(model_ref, device=device, compute_type=compute_type)
+        if device != "cpu":
+            # GPU 加载失败就退回 CPU
+            log("[warn] %s 加载失败：%s，改用 CPU int8" % (device, e))
+            print(json.dumps({"info": "load_fallback", "reason": str(e)[:160],
+                              "fallback": "cpu"}, ensure_ascii=False))
+            device, compute_type = "cpu", "int8"
+            model = WhisperModel(model_ref, device=device, compute_type=compute_type)
+        else:
+            print(json.dumps({"ok": False, "error": "模型加载失败：%s" % e}, ensure_ascii=False))
+            return
 
     lang = None if args.lang in ("auto", "", None) else args.lang
 
@@ -202,8 +228,31 @@ def main():
         )
         raw = list(segments_iter)
     except Exception as e:
-        print(json.dumps({"ok": False, "error": "识别失败：%s" % e}, ensure_ascii=False))
-        return
+        emsg = str(e)
+        # 显存不足 / CUDA 库问题：降级 CPU 再试一次，不要直接失败
+        gpu_related = any(k in emsg.lower() for k in
+                          ["cuda", "cublas", "cudnn", "out of memory", "gpu", "device"])
+        if device != "cpu" and gpu_related:
+            log("[warn] GPU 推理失败（%s），改用 CPU 重试" % emsg[:120])
+            print(json.dumps({"info": "transcribe_fallback", "reason": emsg[:160],
+                              "fallback": "cpu"}, ensure_ascii=False))
+            device, compute_type = "cpu", "int8"
+            try:
+                model = WhisperModel(model_ref, device="cpu", compute_type="int8")
+                segments_iter, info = model.transcribe(
+                    args.wav, language=lang, word_timestamps=True, vad_filter=True,
+                    vad_parameters=dict(
+                        min_silence_duration_ms=int(args.gap * 1000),
+                        speech_pad_ms=100),
+                    beam_size=5, condition_on_previous_text=False)
+                raw = list(segments_iter)
+            except Exception as e2:
+                print(json.dumps({"ok": False, "error": "识别失败（CPU 重试也失败）：%s" % e2},
+                                 ensure_ascii=False))
+                return
+        else:
+            print(json.dumps({"ok": False, "error": "识别失败：%s" % e}, ensure_ascii=False))
+            return
 
     # 收集词级时间
     words = []
