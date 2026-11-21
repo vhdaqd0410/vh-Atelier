@@ -1102,16 +1102,29 @@
         }, function (error, stdout, stderr) {
             if (stopRequested) { cb({ seqId: meta.seqId, name: meta.seqName, status: 'stopped' }); return; }
             if (error) {
-                cb({ seqId: meta.seqId, name: meta.seqName, status: 'err',
-                     error: '识别失败: ' + (error.message || '') + ' ' +
-                            String(stderr || '').slice(-300) });
+                var detail = '识别失败: ' + (error.message || '') + ' ' + String(stderr || '').slice(-300);
+                // 落盘诊断：下次直接看 collect/error.log 定位，不靠猜
+                try {
+                    if (window.__vhLog && window.__vhLog.err) {
+                        window.__vhLog.err('[subtitle] ' + detail +
+                            ' | py=' + env.py + ' | model=' + model +
+                            ' | device=' + device + ' | seq=' + meta.seqName);
+                    }
+                } catch (e) {}
+                cb({ seqId: meta.seqId, name: meta.seqName, status: 'err', error: detail });
                 return;
             }
             var data = null;
             try { data = JSON.parse(fs.readFileSync(outJson, 'utf8')); } catch (e) {}
             if (!data || !data.ok) {
-                cb({ seqId: meta.seqId, name: meta.seqName, status: 'err',
-                     error: (data && data.error) || '识别结果解析失败' });
+                var msg2 = (data && data.error) || '识别结果解析失败';
+                try {
+                    if (window.__vhLog && window.__vhLog.err) {
+                        window.__vhLog.err('[subtitle] ' + msg2 + ' | py=' + env.py +
+                            ' | model=' + model + ' | out=' + outJson);
+                    }
+                } catch (e) {}
+                cb({ seqId: meta.seqId, name: meta.seqName, status: 'err', error: msg2 });
                 return;
             }
             var subs = data.segments || [];
