@@ -4,6 +4,21 @@
  "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
  "versions": [
   {
+   "version": "1.82.26",
+   "date": "2026-11-21",
+   "title": "修复识别失败；失败原因直接显示在界面",
+   "changes": [
+    {
+     "type": "fix",
+     "text": "修复客户版识别必然失败：识别调用少接了 faster-whisper，实际走了 whisper.cpp 而模型路径为空，导致每次报错"
+    },
+    {
+     "type": "impr",
+     "text": "识别失败时把具体原因直接显示在结果条目下方，不用再悬停查看；状态栏也带出第一条失败原因"
+    }
+   ]
+  },
+  {
    "version": "1.82.25",
    "date": "2026-11-21",
    "title": "修复便携 Python 路径，识别失败写入日志",

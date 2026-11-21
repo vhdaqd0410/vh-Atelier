@@ -1185,7 +1185,15 @@
             el.progressTime.textContent = '总耗时 ' + fmtDuration(totalElapsed) + ' · 剩余 0:00';
         }
         var okCount = batchResults.filter(function (r) { return r.status === 'ok'; }).length;
-        setStatus('批量完成：成功 ' + okCount + '/' + batchResults.length + ' 个序列', 'ok');
+        var totalN = batchResults.length;
+        var failList = batchResults.filter(function (r) { return r.status === 'err'; });
+        if (failList.length > 0) {
+            var firstErr = String(failList[0].error || '').slice(0, 120);
+            setStatus('批量完成：成功 ' + okCount + '/' + totalN + ' 个序列' +
+                      '　失败 ' + failList.length + ' 个：' + firstErr, 'err');
+        } else {
+            setStatus('批量完成：成功 ' + okCount + '/' + totalN + ' 个序列', 'ok');
+        }
         renderBatchResults();
         el.resultCard.style.display = 'block';
     }
@@ -1208,6 +1216,13 @@
                 tag.className = 'err-tag';
                 tag.textContent = '✗ 失败';
                 div.title = r.error;
+                // 错误原因直接显示，不要只放在 title 里（悬停才见等于看不见）
+                var why = document.createElement('div');
+                why.className = 'err-why';
+                why.style.cssText = 'font-size:11px;color:#ff8f8f;margin-top:4px;' +
+                                    'line-height:1.5;word-break:break-all;opacity:.92;';
+                why.textContent = String(r.error || '未知错误').slice(0, 260);
+                div.appendChild(why);
             } else {
                 tag.className = 'err-tag';
                 tag.textContent = '已停止';
