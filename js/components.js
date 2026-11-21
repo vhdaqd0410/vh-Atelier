@@ -7,17 +7,25 @@
     'use strict';
 
     var fs, path, os2, https, http, childProcess;
+    // 核心模块必须能拿到，否则功能无从谈起
     try {
         fs = require('fs');
         path = require('path');
         os2 = require('os');
-        https = require('https');
-        http = require('http');
         childProcess = require('child_process');
     } catch (e) {
-        window.__vhComponents = { list: [], check: function () { return {}; } };
+        window.__vhComponents = {
+            list: [],
+            check: function () { return {}; },
+            checkAll: function () { return {}; },
+            _error: '核心模块加载失败：' + (e && e.message)
+        };
         return;
     }
+    // http/https 是可选模块：部分 CEP 环境取不到。
+    // 本插件的下载走子进程（py 脚本 / PowerShell），不依赖它们，缺失不影响使用。
+    try { https = require('https'); } catch (e) { https = null; }
+    try { http = require('http'); } catch (e) { http = null; }
 
     var extRoot = '';
     try {

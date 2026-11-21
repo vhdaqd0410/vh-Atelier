@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <ExtensionManifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     ExtensionBundleId="com.vh.atelier.pro"
-    ExtensionBundleVersion="2.1.0"
+    ExtensionBundleVersion="2.1.1"
     Version="6.0">
 
     <ExtensionList>
-        <Extension Id="com.vh.atelier.pro.panel" Version="2.1.0"/>
-        <Extension Id="com.vh.atelier.pro.bg" Version="2.1.0"/>
+        <Extension Id="com.vh.atelier.pro.panel" Version="2.1.1"/>
+        <Extension Id="com.vh.atelier.pro.bg" Version="2.1.1"/>
     </ExtensionList>
 
     <ExecutionEnvironment>

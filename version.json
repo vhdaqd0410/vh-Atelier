@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "2.1.0",
-  "buildTime": "2026-11-21 17:40:00",
+  "version": "2.1.1",
+  "buildTime": "2026-11-21 18:00:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "组件支持本地压缩包安装；Breeze自动启动；扒歌同步主版"
+  "notes": "修组件面板空白；修翻译缓存不落盘"
 }

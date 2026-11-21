@@ -720,24 +720,29 @@
 
     // ---------- 翻译缓存持久化 ----------
     // 按剧本文件路径分文件存，避免 localStorage 5MB 限制。
-    // 存 collect/trans_cache/<路径hash>.json，结构：
-    //   { "batch": {"__3": {"原文": "译文"}}, "line": {"原文": "译文"} }
     var __transCacheFile = null;
     var __curScriptPath = null;
-    var __transCacheDirty = false;
+    var __transDebug = [];
 
+    function __tlog(msg) {
+        try {
+            __transDebug.push(msg);
+            if (__transDebug.length > 50) __transDebug.shift();
+            if (window.console && console.log) console.log('[trans] ' + msg);
+        } catch (e) {}
+    }
+
+    // 生成缓存路径。不用 require('crypto')：CEP 环境不一定拿得到，
+    // 一抛错就会被上层 catch 吞掉，表现为「永远不落盘」。
     function transCachePathFor(srcPath) {
-        var crypto = null;
-        try { crypto = require('crypto'); } catch (e) {}
-        var key;
-        if (crypto && crypto.createHash) {
-            key = crypto.createHash('md5').update(String(srcPath || 'unknown')).digest('hex');
-        } else {
-            // 无 crypto 时退化为简单哈希
-            var h = 0, str = String(srcPath || 'unknown');
-            for (var i = 0; i < str.length; i++) { h = ((h << 5) - h + str.charCodeAt(i)) | 0; }
-            key = 'h' + Math.abs(h).toString(16);
+        var s = String(srcPath || 'unknown');
+        var h1 = 5381, h2 = 0;
+        for (var i = 0; i < s.length; i++) {
+            var c = s.charCodeAt(i);
+            h1 = ((h1 << 5) + h1 + c) | 0;
+            h2 = (c + (h2 << 6) + (h2 << 16) - h2) | 0;
         }
+        var key = 'k' + (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16);
         var dir = path.join(extRoot, 'collect', 'trans_cache');
         return { dir: dir, file: path.join(dir, key + '.json') };
     }
@@ -747,35 +752,45 @@
             __curScriptPath = srcPath || null;
             var info = transCachePathFor(srcPath);
             __transCacheFile = info.file;
-            if (!fs.existsSync(info.file)) return;
+            __tlog('加载 ' + info.file);
+            if (!fs.existsSync(info.file)) {
+                __tlog('缓存文件不存在（首次翻译）');
+                return;
+            }
             var raw = fs.readFileSync(info.file, 'utf8');
             var obj = JSON.parse(raw);
+            var nk = 0;
             if (obj && obj.batch) {
-                Object.keys(obj.batch).forEach(function (k) { transMap[k] = obj.batch[k]; });
+                Object.keys(obj.batch).forEach(function (k) { transMap[k] = obj.batch[k]; nk++; });
             }
             if (obj && obj.line) {
-                Object.keys(obj.line).forEach(function (k) { lineTransMap[k] = obj.line[k]; });
+                Object.keys(obj.line).forEach(function (k) { lineTransMap[k] = obj.line[k]; nk++; });
             }
-        } catch (e) {}
+            __tlog('已加载 ' + nk + ' 个集数缓存');
+        } catch (e) {
+            __tlog('加载失败: ' + (e && e.message));
+        }
     }
 
     function saveTransCache() {
-        // 关键：__transCacheFile 只在 loadTransCache 里赋值，
-        // 首次翻译（还没加载过缓存）时它是 null，会导致永远不落盘。
-        // 所以这里自己算一次路径。
         try {
             if (!__transCacheFile) {
-                if (!__curScriptPath) return;
+                if (!__curScriptPath) { __tlog('保存跳过：无剧本路径'); return; }
                 __transCacheFile = transCachePathFor(__curScriptPath).file;
             }
             var dir = path.dirname(__transCacheFile);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             var out = { batch: transMap, line: lineTransMap, savedAt: Date.now() };
-            fs.writeFileSync(__transCacheFile, JSON.stringify(out), 'utf8');
-            __transCacheDirty = false;
-        } catch (e) {}
+            var txt = JSON.stringify(out);
+            fs.writeFileSync(__transCacheFile, txt, 'utf8');
+            __tlog('已保存 ' + (txt.length / 1024).toFixed(1) + ' KB → ' + __transCacheFile);
+        } catch (e) {
+            __tlog('保存失败: ' + (e && e.message));
+        }
     }
 
+    // 供排查：控制台执行 __vhTransDebug 可看最近记录
+    try { window.__vhTransDebug = __transDebug; } catch (e) {}
 
         var searchKeyword = '';      // 关键词搜索（非集号时）
         var searchHits = [];         // 当前命中的 <mark> 元素列表
