@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.34",
-  "buildTime": "2026-11-21 09:32:00",
+  "version": "1.82.35",
+  "buildTime": "2026-11-21 10:15:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "字幕识别支持首次使用自动下载模型；部署包内置 CPU 版依赖，GPU 加速包按需安装"
+  "notes": "字幕识别引擎增量补装 + 模型自动下载"
 }

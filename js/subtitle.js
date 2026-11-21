@@ -273,6 +273,14 @@
 
         // 先确认 faster-whisper 模型就位（缺失则提示下载）
         if (!useFunasrEngine()) {
+            // 先补库（77MB 增量包），再补模型（4GB）——顺序不能反
+            if (!fwEngineReady()) {
+                ensureFwEngine(function (e1) {
+                    if (e1) { setBusy(false); return; }
+                    runBatch();
+                });
+                return;
+            }
             var needModel = fwModelName(lang);
             if (!fwModelReady(needModel)) {
                 ensureFwModel(needModel, function (err) {
@@ -692,6 +700,83 @@
         var map = { tiny: '约 150MB', base: '约 145MB', small: '约 490MB',
                     medium: '约 1.5GB', 'large-v3': '约 3.1GB' };
         return map[model] || '未知大小';
+    }
+
+    // ---------- 识别引擎依赖的自检与增量安装 ----------
+    // 老版本用户通过「在线更新」拿不到 runtime/ 下的库（更新机制跳过大目录），
+    // 但实际只差 66MB 增量包。这里：一进面板就静默检查，缺了自动补。
+    function fwEngineReady() {
+        var need = [
+            'runtime/python/Lib/site-packages/faster_whisper/__init__.py',
+            'runtime/python/Lib/site-packages/ctranslate2/ctranslate2.dll'
+        ];
+        for (var i = 0; i < need.length; i++) {
+            var f = path.join(extRoot, need[i].replace(/\//g, path.sep));
+            try { if (!fs.existsSync(f) || fs.statSync(f).size === 0) return false; }
+            catch (e) { return false; }
+        }
+        return true;
+    }
+
+    // 下载并安装增量包，进度打到状态栏
+    function installFwEngine(onDone) {
+        var pyr = detectPython();
+        if (!pyr) { onDone(new Error('未找到 Python')); return; }
+        var cli = path.join(extRoot, 'py', 'fw_engine_install.py');
+        if (!fs.existsSync(cli)) { onDone(new Error('缺少 py/fw_engine_install.py')); return; }
+
+        setStatus('正在下载识别引擎组件（约 66MB），首次使用需要等待…', '');
+        setProgress(2, '下载识别引擎');
+
+        var proc = child_process.execFile(pyr, [cli, '--install'], {
+            cwd: path.dirname(cli),
+            timeout: 1800000,
+            maxBuffer: 1024 * 1024 * 20
+        }, function (err, stdout, stderr) {
+            var data = null;
+            try { data = JSON.parse(String(stdout || '').trim().split('\n').pop()); } catch (e) {}
+            if (err || !data || !data.ok) {
+                onDone(new Error((data && data.error) || (err && err.message) || '安装失败'));
+                return;
+            }
+            setProgress(100, '识别引擎就绪');
+            onDone(null, data);
+        });
+
+        if (proc && proc.stderr) {
+            proc.stderr.on('data', function (chunk) {
+                String(chunk).split('\n').forEach(function (line) {
+                    line = line.trim();
+                    if (line.indexOf('PROGRESS ') !== 0) return;
+                    var parts = line.split(' ');
+                    var stage = parts[1] || '';
+                    var pct = parseInt(parts[2], 10) || 0;
+                    var note = parts.slice(3).join(' ');
+                    if (stage === 'download') {
+                        setProgress(3 + Math.round(pct * 0.82), '下载识别引擎 ' + pct + '%  ' + note);
+                    } else if (stage === 'extract') {
+                        setProgress(85 + Math.round(pct * 0.14), '解压组件 ' + pct + '%');
+                    }
+                });
+            });
+        }
+        return proc;
+    }
+
+    // 确保引擎依赖就位（缺失自动安装），cb(err)
+    function ensureFwEngine(cb) {
+        if (fwEngineReady()) { cb(null); return; }
+        // 静默安装：文案说明清楚，不弹确认框（只 66MB，且不装就用不了）
+        setStatus('识别引擎组件缺失，正在自动补齐…', 'warn');
+        installFwEngine(function (err) {
+            if (err) {
+                setStatus('识别引擎补齐失败：' + err.message, 'err');
+                cb(err);
+                return;
+            }
+            setStatus('识别引擎已就绪', 'ok');
+            cb(null);
+        });
     }
 
     // 启动下载，进度打到状态栏
