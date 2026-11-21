@@ -78,20 +78,23 @@
                 row.appendChild(okTag);
             } else {
                 // 有在线地址才显示「在线下载」；只有网盘时直接给网盘按钮
-                if (c.url) {
+                if (c.url || c.dl) {
                     var btnDl = document.createElement('button');
                     btnDl.className = 'secondary mini';
                     btnDl.textContent = '⬇ 在线下载';
                     btnDl.style.cssText = 'flex:1;font-size:11px;';
-                    btnDl.addEventListener('click', function () { startDownload(c, card, btnDl); });
+                    btnDl.addEventListener('click', function () {
+                        if (c.dl) startCustomDownload(c, card, btnDl);
+                        else startDownload(c, card, btnDl);
+                    });
                     row.appendChild(btnDl);
                 }
 
                 var btnNd = document.createElement('button');
                 btnNd.className = 'secondary mini';
-                btnNd.textContent = c.url ? '📁 网盘' : '📁 网盘下载';
-                btnNd.style.cssText = (c.url ? 'flex:0 0 auto;' : 'flex:1;') + 'font-size:11px;';
-                if (!c.url) {
+                btnNd.textContent = (c.url || c.dl) ? '📁 网盘' : '📁 网盘下载';
+                btnNd.style.cssText = ((c.url || c.dl) ? 'flex:0 0 auto;' : 'flex:1;') + 'font-size:11px;';
+                if (!(c.url || c.dl)) {
                     btnNd.style.background = 'linear-gradient(180deg,#537d96,#3f6a87)';
                     btnNd.style.borderColor = 'rgba(138,180,255,.32)';
                     btnNd.style.color = '#f0f7ff';
@@ -114,6 +117,45 @@
 
             el.list.appendChild(card);
         });
+    }
+
+    // 走组件自定义下载动作（py 脚本，带字节级进度）
+    function startCustomDownload(c, card, btn) {
+        var prog = card.querySelector('.cp-prog');
+        var bar = prog.querySelector('i');
+        var txt = prog.querySelector('.cp-prog-text');
+        prog.style.display = '';
+        btn.disabled = true;
+        btn.textContent = '下载中…';
+        txt.style.color = '#8a9bab';
+        txt.textContent = '正在连接下载源…';
+
+        c.dl(
+            function (st) {
+                // st: {pct, text, meta}
+                var pct = st && (st.pct != null ? st.pct : st.percent) || 0;
+                bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+                var msg = (st && (st.meta || st.text)) || '';
+                txt.textContent = (st && st.text ? st.text + '　' : '') + msg;
+            },
+            function (err) {
+                if (err) {
+                    txt.textContent = '下载失败：' + (err.message || err);
+                    txt.style.color = '#ff8a8a';
+                    btn.disabled = false;
+                    btn.textContent = '重试';
+                } else {
+                    bar.style.width = '100%';
+                    txt.textContent = '✓ 完成';
+                    txt.style.color = '#7fd68b';
+                    btn.textContent = '已安装';
+                    setTimeout(function () {
+                        render();
+                        try { window.dispatchEvent(new Event('vhComponentsReady')); } catch (e) {}
+                    }, 900);
+                }
+            }
+        );
     }
 
     function startDownload(c, card, btn) {

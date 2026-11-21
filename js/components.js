@@ -49,7 +49,14 @@
                 }
                 return true;
             },
-            hint: '识别时如果缺失会自动弹出下载提示，也可手动点「下载」'
+            hint: '识别时如果缺失会自动弹出下载提示，也可手动点「下载」',
+            // 没有静态 url，改走 py 脚本下载（带字节级进度）
+            dl: function (onProgress, onDone) {
+                if (window.__vhSubtitleDownloadModel) {
+                    return window.__vhSubtitleDownloadModel('medium', onProgress, onDone);
+                }
+                onDone && onDone(new Error('下载模块未就绪，请到「字幕」面板点识别自动下载'));
+            }
         },
         {
             id: 'fw-cuda',
@@ -66,7 +73,13 @@
                 } catch (e) { return false; }
             },
             hint: '检测到 NVIDIA 显卡时才建议安装；没有显卡可以跳过，用 CPU 也能跑',
-            optional: true
+            optional: true,
+            dl: function (onProgress, onDone) {
+                if (window.__vhSubtitleInstallEngine) {
+                    return window.__vhSubtitleInstallEngine(onProgress, onDone);
+                }
+                onDone && onDone(new Error('下载模块未就绪，请到「字幕」面板操作'));
+            }
         },
         {
             id: 'funasr',
