@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.23",
-  "buildTime": "2026-11-21 10:15:00",
+  "version": "1.82.24",
+  "buildTime": "2026-11-21 10:45:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "字幕识别引擎增量补装 + 模型自动下载"
+  "notes": "下载进度与成败反馈；修主版引擎误判"
 }

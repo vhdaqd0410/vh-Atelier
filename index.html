@@ -238,6 +238,20 @@
             <div id="wsStatus"></div>
         </div>
 
+        <div class="card" id="dlBox" style="display:none;">
+            <h2 id="dlTitle">下载中</h2>
+            <div class="progress-wrap" style="margin-top:0;">
+                <div class="progress-bar"><div class="fill" id="dlFill" style="width:0%"></div></div>
+                <div id="dlText" style="margin-top:6px;">准备中…</div>
+                <div id="dlMeta" style="margin-top:2px;"></div>
+            </div>
+            <div id="dlResult" style="display:none;"></div>
+            <div class="row" style="margin-top:8px;" id="dlActions">
+                <button id="btnDlRetry" class="secondary" style="display:none;">重试</button>
+                <button id="btnDlClose" class="secondary" style="display:none;">关闭</button>
+            </div>
+        </div>
+
         <div class="card" id="resultCard" style="display:none;">
             <h2>4 · 识别结果</h2>
             <div id="resultSummary"></div>

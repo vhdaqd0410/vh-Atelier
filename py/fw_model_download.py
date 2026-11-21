@@ -24,6 +24,7 @@ import os
 import shutil
 import sys
 import time
+import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -59,6 +60,77 @@ def progress(stage, pct, note=""):
     """进度打到 stderr，前端按行读取。"""
     print("PROGRESS %s %d %s" % (stage, int(pct), note), file=sys.stderr, flush=True)
 
+
+
+
+def fmt_bytes(n):
+    """人类可读体积。"""
+    if not n:
+        return "0 B"
+    n = float(n)
+    for unit in ["B", "KB", "MB", "GB"]:
+        if n < 1024:
+            return ("%.0f %s" % (n, unit)) if unit == "B" else ("%.1f %s" % (n, unit))
+        n /= 1024.0
+    return "%.1f TB" % n
+
+
+class _Redirect308(urllib.request.HTTPRedirectHandler):
+    """urllib 默认只跟 301/302/303/307，hf-mirror 用的是 308，这里补上。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if code in (307, 308):
+            import urllib.request as _u
+            new = _u.Request(
+                newurl,
+                headers={k: v for k, v in req.headers.items()
+                         if k.lower() not in ("content-length", "content-type")},
+                origin_req_host=req.origin_req_host,
+                unverifiable=True,
+                method=req.get_method(),
+            )
+            return new
+        return urllib.request.HTTPRedirectHandler.redirect_request(
+            self, req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_Redirect308())
+
+
+def get_remote_size(url):
+    """拿文件大小。HEAD 优先，失败退到 Range GET。
+
+    必须跟 308：hf-mirror.com 对 HEAD 返回 308，
+    urllib 默认不跟随，会导致总长恒为 0（进度条算不出百分比）。
+    """
+    # 1) HEAD
+    try:
+        req = urllib.request.Request(url, method="HEAD",
+                                     headers={"User-Agent": "vh-atelier/1.0"})
+        with _OPENER.open(req, timeout=15) as r:
+            n = int(r.headers.get("Content-Length") or 0)
+            if n > 0:
+                return n
+    except Exception:
+        pass
+    # 2) Range GET，从 Content-Range 读总长
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "vh-atelier/1.0",
+            "Range": "bytes=0-0",
+        })
+        with _OPENER.open(req, timeout=20) as r:
+            cr = r.headers.get("Content-Range") or ""
+            if "/" in cr:
+                tail = cr.rsplit("/", 1)[-1].strip()
+                if tail.isdigit():
+                    return int(tail)
+            n = int(r.headers.get("Content-Length") or 0)
+            if n > 0:
+                return n
+    except Exception:
+        pass
+    return 0
 
 def model_dir(model):
     return os.path.join(MODEL_ROOT, model)
@@ -99,7 +171,7 @@ def download_file(url, dest, on_bytes=None, tries=3):
                 "User-Agent": "vh-atelier/1.0",
                 # hf 的 CDN 需要跟随重定向
             })
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with _OPENER.open(req, timeout=60) as r:
                 total = int(r.headers.get("Content-Length") or 0)
                 got = 0
                 with open(tmp, "wb") as f:
@@ -166,18 +238,61 @@ def ensure_model(model, mirror=None):
             if not keep:
                 keep = REQUIRED
 
-            done = 0
+            # 进度口径：优先按字节（model.bin 占 99%，按文件数算会卡在 25%）。
+            # HEAD 探测失败时退化为按文件数，绝不出现 >100% 或 "0 B" 总长。
+            file_sizes = {}
+            total_bytes = 0
+            for fname in keep:
+                sz = get_remote_size("%s/%s/resolve/main/%s" % (base, repo, fname))
+                file_sizes[fname] = sz
+                total_bytes += sz
+            by_bytes = total_bytes > 0
+            if not by_bytes:
+                total_bytes = len(keep)     # 退化：用文件个数当总量
+
+            def _pct(done, total):
+                """百分比永远 clamp 在 0~100。"""
+                try:
+                    v = int(done * 100.0 / total) if total > 0 else 0
+                except Exception:
+                    v = 0
+                return max(0, min(100, v))
+
+            def _text(done, total):
+                if by_bytes:
+                    return "%s / %s" % (fmt_bytes(done), fmt_bytes(total))
+                return "第 %d / %d 个文件" % (min(done, total), total)
+
+            done_bytes = 0        # 已完成文件累计
             for idx, fname in enumerate(keep):
                 dst = os.path.join(model_dir(model), fname)
+                fsz = file_sizes.get(fname) or 0
+
                 if os.path.exists(dst) and os.path.getsize(dst) > 0:
-                    done += 1
-                    progress("file", int(done / len(keep) * 100), fname + "（已存在）")
+                    actual = os.path.getsize(dst)
+                    done_bytes += actual if by_bytes else 1
+                    progress("file", _pct(done_bytes, total_bytes),
+                             _text(done_bytes, total_bytes))
                     continue
+
                 url = "%s/%s/resolve/main/%s" % (base, repo, fname)
-                progress("file", int(idx / len(keep) * 100), fname)
-                download_file(url, dst)
-                done += 1
-                progress("file", int(done / len(keep) * 100), fname)
+                base_done = done_bytes
+
+                def _cb(got_in_file, file_total, base_done=base_done):
+                    # 第一个参数是本文件已下载字节，第二是该文件总字节（下载函数传的）
+                    if by_bytes:
+                        cur = base_done + got_in_file
+                    else:
+                        # 退化模式：按本文件完成比例折算成 0~1
+                        frac = (got_in_file / file_total) if file_total else 0
+                        cur = base_done + min(1, max(0, frac))
+                    progress("file", _pct(cur, total_bytes), _text(cur, total_bytes))
+
+                download_file(url, dst, on_bytes=_cb)
+                done_bytes += (fsz or (os.path.getsize(dst) if os.path.exists(dst) else 0)) \
+                    if by_bytes else 1
+                progress("file", _pct(done_bytes, total_bytes),
+                         _text(done_bytes, total_bytes))
 
             if is_ready(model):
                 return True, {"model": model, "ready": True,
