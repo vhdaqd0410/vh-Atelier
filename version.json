@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.26",
-  "buildTime": "2026-11-21 11:50:00",
+  "version": "1.82.27",
+  "buildTime": "2026-11-21 12:20:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "修客户版识别失败；失败原因直接显示"
+  "notes": "下载进度改用 spawn，组件面板支持在线下载"
 }

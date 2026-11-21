@@ -275,7 +275,7 @@
         // 避免跑到一半每个序列都失败。FunASR 不需要。
         if (!useFunasrEngine()) {
             // 先补库（66MB 增量包），再补模型（4GB）——顺序不能反
-            if (!fwEngineReady()) {
+            if (!fwEngineReady(true)) {
                 ensureFwEngine(function (e1) {
                     if (e1) { setBusy(false); return; }
                     runBatch();
@@ -794,6 +794,7 @@
     function resetFwEngineState() { __fwEngineState = null; }
 
     // 下载并安装增量包，进度打到状态栏
+        // 下载并安装增量包（spawn + 双通道进度 + 体积兜底探针）
     function installFwEngine(onDone) {
         var pyr = detectPython();
         if (!pyr) { onDone(new Error('未找到 Python')); return; }
@@ -801,61 +802,98 @@
         if (!fs.existsSync(cli)) { onDone(new Error('缺少 py/fw_engine_install.py')); return; }
 
         dlReset('engine', '正在补齐识别组件（约 74MB）');
-        dlProgress(1, '连接下载源…', '');
-        setStatus('正在下载识别引擎组件（约 74MB），首次使用需要等待…', '');
+        dlProgress(1, '正在连接下载源…', '若长时间无变化，检查网络或改用网盘');
 
-        var proc = child_process.execFile(pyr, [cli, '--install'], {
-            cwd: path.dirname(cli),
-            timeout: 1800000,
-            maxBuffer: 1024 * 1024 * 20
-        }, function (err, stdout, stderr) {
-            var data = null;
-            try { data = JSON.parse(String(stdout || '').trim().split('\n').pop()); } catch (e) {}
-            if (err || !data || !data.ok) {
-                var emsg = (data && data.error) || (err && err.message) || '安装失败';
-                dlFail(emsg, function () { installFwEngine(onDone); });
-                onDone(new Error(emsg));
-                return;
+        var lastPct = 0, lastNote = '';
+        function onLine(line) {
+            line = String(line || '').trim();
+            if (line.indexOf('PROGRESS ') !== 0) return;
+            var parts = line.split(' ');
+            var stage = parts[1] || '';
+            var pct = parseInt(parts[2], 10) || 0;
+            var note = parts.slice(3).join(' ');
+
+            function bytesOf(note) {
+                var m = note.match(/([\d.]+)\s*([KMG]?B)\s*\/\s*([\d.]+)\s*([KMG]?B)/i);
+                if (!m) return null;
+                var unit = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+                return {
+                    done: parseFloat(m[1]) * (unit[m[2].toUpperCase()] || 1),
+                    total: parseFloat(m[3]) * (unit[m[4].toUpperCase()] || 1)
+                };
             }
-            resetFwEngineState();
-            dlDone('识别组件已就绪，可以开始识别');
-            onDone(null, data);
+
+            if (stage === 'download') {
+                var b = bytesOf(note);
+                var meta = note;
+                if (b) { var i = dlBytes(b.done, b.total); pct = i.pct; meta = i.meta; }
+                lastPct = pct; lastNote = meta;
+                dlProgress(3 + Math.round(pct * 0.82), '下载识别组件 ' + Math.round(pct) + '%', meta);
+            } else if (stage === 'extract') {
+                lastPct = 85 + Math.round(pct * 0.14);
+                dlProgress(lastPct, '解压组件 ' + pct + '%', '解压中，请稍候');
+            } else if (stage === 'retry') {
+                dlProgress(2, '重试中…', note);
+            } else if (stage === 'source') {
+                dlProgress(1, '已连接下载源，开始下载…', note);
+            }
+        }
+
+        // 双通道：stdout 与 stderr 都读
+        var proc = child_process.spawn(pyr, [cli, '--install'], {
+            cwd: path.dirname(cli),
+            windowsHide: true
+        });
+        if (proc.stdout) proc.stdout.on('data', function (c) { String(c).split('\n').forEach(onLine); });
+        if (proc.stderr) proc.stderr.on('data', function (c) { String(c).split('\n').forEach(onLine); });
+
+        // 兜底探针：读不到输出时，用组件目录体积增长刷新界面
+        var probe = setInterval(function () {
+            if (!dlState.active) { clearInterval(probe); return; }
+            try {
+                var sp = path.join(extRoot, 'runtime', 'python', 'Lib', 'site-packages');
+                var sz = 0;
+                ['faster_whisper', 'ctranslate2', 'av'].forEach(function (n) {
+                    var d = path.join(sp, n);
+                    if (!fs.existsSync(d)) return;
+                    var st = fs.statSync(d);
+                    sz += st.size || 0;
+                });
+                if (sz > 0) {
+                    // 有动静就说明在工作，给个大致百分比（组件解压后约 230MB）
+                    var approx = Math.min(84, 3 + Math.round(sz / (230 * 1024 * 1024) * 80));
+                    if (approx > lastPct) {
+                        dlProgress(approx, '正在写入组件 ' + approx + '%',
+                                   '已写入 ' + humanBytes(sz));
+                    }
+                }
+            } catch (e) {}
+        }, 600);
+
+        proc.on('error', function (e) {
+            clearInterval(probe);
+            dlFail(e.message || '启动失败', function () { installFwEngine(onDone); });
+            onDone(new Error(e.message || '启动失败'));
         });
 
-        if (proc && proc.stderr) {
-            proc.stderr.on('data', function (chunk) {
-                String(chunk).split('\n').forEach(function (line) {
-                    line = line.trim();
-                    if (line.indexOf('PROGRESS ') !== 0) return;
-                    var parts = line.split(' ');
-                    var stage = parts[1] || '';
-                    var pct = parseInt(parts[2], 10) || 0;
-                    var note = parts.slice(3).join(' ');
-                    if (stage === 'download') {
-                        // note 形如 "12.3 MB / 73.4 MB"
-                        var m = note.match(/([\d.]+)\s*([KMG]?B)\s*\/\s*([\d.]+)\s*([KMG]?B)/i);
-                        var meta = note;
-                        if (m) {
-                            var unit = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
-                            var done = parseFloat(m[1]) * (unit[m[2].toUpperCase()] || 1);
-                            var total = parseFloat(m[3]) * (unit[m[4].toUpperCase()] || 1);
-                            var info = dlBytes(done, total);
-                            pct = info.pct;
-                            meta = info.meta;
-                        }
-                        dlProgress(3 + Math.round(pct * 0.82),
-                                   '下载识别组件 ' + Math.round(pct) + '%', meta);
-                    } else if (stage === 'extract') {
-                        dlProgress(85 + Math.round(pct * 0.14),
-                                   '解压组件 ' + pct + '%', '解压中，请稍候');
-                    } else if (stage === 'retry') {
-                        dlProgress(2, '重试中…', note);
-                    } else if (stage === 'source') {
-                        dlProgress(1, '连接下载源…', note);
-                    }
-                });
-            });
-        }
+        proc.on('close', function (code) {
+            clearInterval(probe);
+            if (code === 0) {
+                resetFwEngineState();
+                if (fwEngineReady(true)) {
+                    dlDone('识别组件已就绪，可以开始识别');
+                    onDone(null, { ok: true });
+                } else {
+                    dlFail('安装完成但关键文件仍缺失', function () { installFwEngine(onDone); });
+                    onDone(new Error('安装完成但关键文件仍缺失'));
+                }
+            } else {
+                var msg = '安装进程退出（代码 ' + code + '）';
+                dlFail(msg, function () { installFwEngine(onDone); });
+                onDone(new Error(msg));
+            }
+        });
+
         return proc;
     }
 
@@ -988,7 +1026,13 @@
 
     // 确保引擎依赖就位（缺失自动安装），cb(err)
     function ensureFwEngine(cb) {
-        if (fwEngineReady()) { cb(null); return; }
+        if (fwEngineReady(true)) {
+            // 已就绪也要给个明确回应，否则用户点了以为没反应
+            dlReset('engine', '识别组件检查');
+            dlDone('识别组件已就绪，无需下载');
+            cb(null);
+            return;
+        }
         // 静默安装：文案说明清楚，不弹确认框（只 66MB，且不装就用不了）
         setStatus('识别引擎组件缺失，正在自动补齐…', 'warn');
         installFwEngine(function (err) {
@@ -1003,62 +1047,84 @@
     }
 
     // 启动下载，进度打到状态栏
+        // 下载模型（spawn + 双通道进度 + 体积兜底探针）
     function downloadFwModel(model, onDone) {
         var pyr = detectPython();
         if (!pyr) { onDone(new Error('未找到 Python')); return; }
         var cli = path.join(extRoot, 'py', 'fw_model_download.py');
         if (!fs.existsSync(cli)) { onDone(new Error('缺少 py/fw_model_download.py')); return; }
 
+        var modelDir = fwModelPath(model);
         dlReset('model', '正在下载识别模型 ' + model + '（' + fwModelSizeText(model) + '）');
-        dlProgress(1, '连接下载源…', '');
-        setStatus('正在下载识别模型 ' + model + '（' + fwModelSizeText(model) + '），首次使用需要等待…', '');
+        dlProgress(1, '正在连接下载源…', '若长时间无变化，检查网络');
 
-        var proc = child_process.execFile(pyr, [cli, '--model', model], {
-            cwd: path.dirname(cli),
-            timeout: 7200000,       // 大模型慢网速给足 2 小时
-            maxBuffer: 1024 * 1024 * 20
-        }, function (err, stdout, stderr) {
-            var data = null;
-            try { data = JSON.parse(String(stdout || '').trim().split('\n').pop()); } catch (e) {}
-            if (err || !data || !data.ok) {
-                var mmsg = (data && data.error) || (err && err.message) || '下载失败';
-                dlFail(mmsg, function () { downloadFwModel(model, onDone); });
-                onDone(new Error(mmsg));
-                return;
+        function onLine(line) {
+            line = String(line || '').trim();
+            if (line.indexOf('PROGRESS ') !== 0) return;
+            var parts = line.split(' ');
+            var stage = parts[1] || '';
+            var pct = parseInt(parts[2], 10) || 0;
+            var note = parts.slice(3).join(' ');
+            if (stage === 'source') {
+                dlProgress(2, '已连接下载源，开始下载…', note);
+            } else if (stage === 'file') {
+                var m = note.match(/([\d.]+)\s*([KMG]?B)\s*\/\s*([\d.]+)\s*([KMG]?B)/i);
+                var meta = note;
+                if (m) {
+                    var unit = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+                    var d = parseFloat(m[1]) * (unit[m[2].toUpperCase()] || 1);
+                    var t = parseFloat(m[3]) * (unit[m[4].toUpperCase()] || 1);
+                    var inf = dlBytes(d, t);
+                    pct = inf.pct; meta = inf.meta;
+                }
+                dlProgress(4 + Math.round(pct * 0.94), '下载模型 ' + model + '  ' + Math.round(pct) + '%', meta);
+            } else if (stage === 'retry') {
+                dlProgress(2, '重试中…', note);
             }
-            dlDone('模型「' + model + '」已就绪，可以开始识别');
-            onDone(null, data);
+        }
+
+        var proc = child_process.spawn(pyr, [cli, '--model', model], {
+            cwd: path.dirname(cli),
+            windowsHide: true
+        });
+        if (proc.stdout) proc.stdout.on('data', function (c) { String(c).split('\n').forEach(onLine); });
+        if (proc.stderr) proc.stderr.on('data', function (c) { String(c).split('\n').forEach(onLine); });
+
+        // 兜底探针：模型目录体积增长
+        var expectBytes = { tiny: 78e6, base: 145e6, small: 490e6, medium: 1530e6, 'large-v3': 3100e6 }[model] || 1530e6;
+        var probe = setInterval(function () {
+            if (!dlState.active) { clearInterval(probe); return; }
+            try {
+                if (!fs.existsSync(modelDir)) return;
+                var sz = 0;
+                fs.readdirSync(modelDir).forEach(function (f) {
+                    try { sz += fs.statSync(path.join(modelDir, f)).size || 0; } catch (e) {}
+                });
+                if (sz > 0) {
+                    var p = Math.min(96, 4 + Math.round(sz / expectBytes * 92));
+                    dlProgress(p, '下载模型 ' + model + '  ' + p + '%', '已写入 ' + humanBytes(sz));
+                }
+            } catch (e) {}
+        }, 800);
+
+        proc.on('error', function (e) {
+            clearInterval(probe);
+            dlFail(e.message || '启动失败', function () { downloadFwModel(model, onDone); });
+            onDone(new Error(e.message || '启动失败'));
         });
 
-        // 读 stderr 的 PROGRESS 行，转成界面进度
-        if (proc && proc.stderr) {
-            proc.stderr.on('data', function (chunk) {
-                String(chunk).split('\n').forEach(function (line) {
-                    line = line.trim();
-                    if (line.indexOf('PROGRESS ') !== 0) return;
-                    var parts = line.split(' ');
-                    var stage = parts[1] || '';
-                    var pct = parseInt(parts[2], 10) || 0;
-                    var note = parts.slice(3).join(' ');
-                    if (stage === 'source') {
-                        dlProgress(2, '连接下载源…', note);
-                    } else if (stage === 'file') {
-                        var m2 = note.match(/([\d.]+)\s*([KMG]?B)\s*\/\s*([\d.]+)\s*([KMG]?B)/i);
-                        var meta2 = note;
-                        if (m2) {
-                            var u2 = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
-                            var d2 = parseFloat(m2[1]) * (u2[m2[2].toUpperCase()] || 1);
-                            var t2 = parseFloat(m2[3]) * (u2[m2[4].toUpperCase()] || 1);
-                            var i2 = dlBytes(d2, t2);
-                            pct = i2.pct;
-                            meta2 = i2.meta;
-                        }
-                        dlProgress(5 + Math.round(pct * 0.94),
-                                   '下载模型 ' + model + '  ' + Math.round(pct) + '%', meta2);
-                    }
-                });
-            });
-        }
+        proc.on('close', function (code) {
+            clearInterval(probe);
+            if (code === 0 && fwModelReady(model)) {
+                dlDone('模型「' + model + '」已就绪，可以开始识别');
+                onDone(null, { ok: true, model: model });
+            } else {
+                var msg = code === 0 ? '下载完成但文件不完整' : ('下载进程退出（代码 ' + code + '）');
+                dlFail(msg, function () { downloadFwModel(model, onDone); });
+                onDone(new Error(msg));
+            }
+        });
+
         return proc;
     }
 
@@ -1929,4 +1995,39 @@
             if (typeof refreshSequences === 'function') refreshSequences();
         } catch (e) {}
     };
+    // ---------- 对外接口（供组件面板调用，避免两处各写一份下载）----------
+    // 组件面板的「fw-medium / fw-cuda」没有静态 url，走这里的 py 脚本下载。
+    window.__vhSubtitleDownloadModel = function (model, onProgress, onDone) {
+        // onProgress 期望收到 {pct, text, meta}
+        var origBytes = dlBytes;
+        downloadFwModel(model, function (err) {
+            if (onDone) onDone(err || null);
+        });
+        // 把下载状态桥接到组件面板的回调
+        var t = setInterval(function () {
+            if (!dlState.active) { clearInterval(t); return; }
+            if (!onProgress) return;
+            var fill = document.getElementById('dlFill');
+            var txt = document.getElementById('dlText');
+            var meta = document.getElementById('dlMeta');
+            var pct = 0;
+            try { pct = parseFloat(String(fill && fill.style.width || '0').replace('%', '')) || 0; } catch (e) {}
+            onProgress({ pct: pct, text: (txt && txt.textContent) || '', meta: (meta && meta.textContent) || '' });
+        }, 400);
+    };
+
+    window.__vhSubtitleInstallEngine = function (onProgress, onDone) {
+        installFwEngine(function (err) { if (onDone) onDone(err || null); });
+        var t = setInterval(function () {
+            if (!dlState.active) { clearInterval(t); return; }
+            if (!onProgress) return;
+            var fill = document.getElementById('dlFill');
+            var txt = document.getElementById('dlText');
+            var meta = document.getElementById('dlMeta');
+            var pct = 0;
+            try { pct = parseFloat(String(fill && fill.style.width || '0').replace('%', '')) || 0; } catch (e) {}
+            onProgress({ pct: pct, text: (txt && txt.textContent) || '', meta: (meta && meta.textContent) || '' });
+        }, 400);
+    };
+
 })();
