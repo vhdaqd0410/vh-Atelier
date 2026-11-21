@@ -4503,3 +4503,15 @@ button.danger{ background: var(--btn-danger-bg); color: #ffd9d9; border-color: t
   white-space: nowrap;
   box-sizing: border-box;
 }
+
+
+/* 下载反馈区 */
+#dlBox .progress-bar { height: 8px; background: #1a2029; border-radius: 4px; overflow: hidden; }
+#dlBox .progress-bar .fill { height: 100%; background: linear-gradient(90deg,#4a86c8,#6ba8e8); transition: width .2s; }
+#dlBox .dl-ok { color: #7fd68b; }
+#dlBox .dl-err { color: #ff8a8a; }
+#dlBox #dlText { font-size: 12px; color: #cfd8e3; }
+#dlBox #dlMeta { font-size: 11px; color: #7f8a99; }
+#dlBox .dl-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-right: 6px; }
+#dlBox .dl-badge.ok { background: #1b2a1e; color: #7fd68b; border: 1px solid #2f4a34; }
+#dlBox .dl-badge.err { background: #2a1b1b; color: #ff8a8a; border: 1px solid #4a2f2f; }

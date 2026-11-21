@@ -705,18 +705,55 @@
     // ---------- 识别引擎依赖的自检与增量安装 ----------
     // 老版本用户通过「在线更新」拿不到 runtime/ 下的库（更新机制跳过大目录），
     // 但实际只差 66MB 增量包。这里：一进面板就静默检查，缺了自动补。
-    function fwEngineReady() {
-        var need = [
-            'runtime/python/Lib/site-packages/faster_whisper/__init__.py',
-            'runtime/python/Lib/site-packages/ctranslate2/ctranslate2.dll'
-        ];
-        for (var i = 0; i < need.length; i++) {
-            var f = path.join(extRoot, need[i].replace(/\//g, path.sep));
-            try { if (!fs.existsSync(f) || fs.statSync(f).size === 0) return false; }
-            catch (e) { return false; }
+    // 判断识别引擎依赖是否可用。
+    // 注意：不能用「插件目录下有没有 runtime/」来判断 —— 主版用的是系统 Python，
+    // 插件目录里根本没有 runtime/（那是客户版便携 Python 的路径），
+    // 那样判断会让主版永远以为缺组件。
+    // 正确做法：分两种情况
+    //   1) 插件自带 runtime（客户版）-> 查文件
+    //   2) 否则（主版）-> 真跑一次 python -c "import faster_whisper"
+    var __fwEngineState = null;   // 缓存，避免每次识别都起进程
+
+    function fwEngineReady(force) {
+        if (!force && __fwEngineState !== null) return __fwEngineState;
+
+        var bundled = path.join(extRoot, 'runtime', 'python', 'python.exe');
+        var py = detectPython();
+        if (!py) { __fwEngineState = false; return false; }
+
+        // 客户版：插件带着便携 Python，直接查关键文件（快，不启动进程）
+        if (fs.existsSync(bundled)) {
+            var need = [
+                'runtime/python/Lib/site-packages/faster_whisper/__init__.py',
+                'runtime/python/Lib/site-packages/ctranslate2/ctranslate2.dll'
+            ];
+            for (var i = 0; i < need.length; i++) {
+                var f = path.join(extRoot, need[i].replace(/\//g, path.sep));
+                try {
+                    if (!fs.existsSync(f) || fs.statSync(f).size === 0) {
+                        __fwEngineState = false;
+                        return false;
+                    }
+                } catch (e) { __fwEngineState = false; return false; }
+            }
+            __fwEngineState = true;
+            return true;
         }
-        return true;
+
+        // 主版：系统 Python，实际 import 测试（同步执行，约 1-3 秒，只跑一次）
+        try {
+            var r = child_process.spawnSync(py, ['-c', 'import faster_whisper'], {
+                timeout: 20000, windowsHide: true
+            });
+            __fwEngineState = (r && r.status === 0);
+        } catch (e) {
+            __fwEngineState = false;
+        }
+        return __fwEngineState;
     }
+
+    // 引擎状态改变后清缓存（装完重查）
+    function resetFwEngineState() { __fwEngineState = null; }
 
     // 下载并安装增量包，进度打到状态栏
     function installFwEngine(onDone) {
@@ -725,8 +762,9 @@
         var cli = path.join(extRoot, 'py', 'fw_engine_install.py');
         if (!fs.existsSync(cli)) { onDone(new Error('缺少 py/fw_engine_install.py')); return; }
 
-        setStatus('正在下载识别引擎组件（约 66MB），首次使用需要等待…', '');
-        setProgress(2, '下载识别引擎');
+        dlReset('engine', '正在补齐识别组件（约 74MB）');
+        dlProgress(1, '连接下载源…', '');
+        setStatus('正在下载识别引擎组件（约 74MB），首次使用需要等待…', '');
 
         var proc = child_process.execFile(pyr, [cli, '--install'], {
             cwd: path.dirname(cli),
@@ -736,10 +774,13 @@
             var data = null;
             try { data = JSON.parse(String(stdout || '').trim().split('\n').pop()); } catch (e) {}
             if (err || !data || !data.ok) {
-                onDone(new Error((data && data.error) || (err && err.message) || '安装失败'));
+                var emsg = (data && data.error) || (err && err.message) || '安装失败';
+                dlFail(emsg, function () { installFwEngine(onDone); });
+                onDone(new Error(emsg));
                 return;
             }
-            setProgress(100, '识别引擎就绪');
+            resetFwEngineState();
+            dlDone('识别组件已就绪，可以开始识别');
             onDone(null, data);
         });
 
@@ -753,14 +794,158 @@
                     var pct = parseInt(parts[2], 10) || 0;
                     var note = parts.slice(3).join(' ');
                     if (stage === 'download') {
-                        setProgress(3 + Math.round(pct * 0.82), '下载识别引擎 ' + pct + '%  ' + note);
+                        // note 形如 "12.3 MB / 73.4 MB"
+                        var m = note.match(/([\d.]+)\s*([KMG]?B)\s*\/\s*([\d.]+)\s*([KMG]?B)/i);
+                        var meta = note;
+                        if (m) {
+                            var unit = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+                            var done = parseFloat(m[1]) * (unit[m[2].toUpperCase()] || 1);
+                            var total = parseFloat(m[3]) * (unit[m[4].toUpperCase()] || 1);
+                            var info = dlBytes(done, total);
+                            pct = info.pct;
+                            meta = info.meta;
+                        }
+                        dlProgress(3 + Math.round(pct * 0.82),
+                                   '下载识别组件 ' + Math.round(pct) + '%', meta);
                     } else if (stage === 'extract') {
-                        setProgress(85 + Math.round(pct * 0.14), '解压组件 ' + pct + '%');
+                        dlProgress(85 + Math.round(pct * 0.14),
+                                   '解压组件 ' + pct + '%', '解压中，请稍候');
+                    } else if (stage === 'retry') {
+                        dlProgress(2, '重试中…', note);
+                    } else if (stage === 'source') {
+                        dlProgress(1, '连接下载源…', note);
                     }
                 });
             });
         }
         return proc;
+    }
+
+
+    // ---------- 下载反馈区（模型 / 引擎通用）----------
+    var dlState = { active: false, kind: '', startAt: 0, lastBytes: 0, lastAt: 0, speed: 0 };
+
+    function dlEl(id) { return document.getElementById(id); }
+
+    function dlReset(kind, title) {
+        dlState.active = true;
+        dlState.kind = kind || '';
+        dlState.startAt = Date.now();
+        dlState.lastBytes = 0;
+        dlState.lastAt = Date.now();
+        dlState.speed = 0;
+
+        var box = dlEl('dlBox');
+        if (!box) return;
+        box.style.display = '';
+        if (dlEl('dlTitle')) dlEl('dlTitle').textContent = title || '下载中';
+        if (dlEl('dlFill')) dlEl('dlFill').style.width = '0%';
+        if (dlEl('dlText')) { dlEl('dlText').textContent = '准备中…'; dlEl('dlText').className = ''; }
+        if (dlEl('dlMeta')) dlEl('dlMeta').textContent = '';
+        if (dlEl('dlResult')) { dlEl('dlResult').style.display = 'none'; dlEl('dlResult').innerHTML = ''; }
+        if (dlEl('btnDlRetry')) dlEl('btnDlRetry').style.display = 'none';
+        if (dlEl('btnDlClose')) dlEl('btnDlClose').style.display = 'none';
+        // 滚到可见
+        try { box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+    }
+
+    function dlProgress(pct, text, note) {
+        if (!dlState.active) return;
+        if (dlEl('dlFill')) dlEl('dlFill').style.width = Math.min(100, Math.max(0, pct)) + '%';
+        if (dlEl('dlText') && text) dlEl('dlText').textContent = text;
+        if (dlEl('dlMeta') && note !== undefined) dlEl('dlMeta').textContent = note || '';
+        // 同步到面板状态区，双通道可见
+        setProgress(pct, text || '');
+    }
+
+    // 由「已下载字节/总量」算速率与剩余时间
+    function dlBytes(done, total) {
+        var now = Date.now();
+        var dt = (now - dlState.lastAt) / 1000;
+        if (dt >= 0.5) {
+            var delta = done - dlState.lastBytes;
+            if (delta >= 0) dlState.speed = delta / dt;
+            dlState.lastBytes = done;
+            dlState.lastAt = now;
+        }
+        var pct = total > 0 ? done / total * 100 : 0;
+        var meta = humanBytes(done) + (total > 0 ? ' / ' + humanBytes(total) : '');
+        if (dlState.speed > 1024) {
+            meta += '　' + humanBytes(dlState.speed) + '/s';
+            if (total > 0 && dlState.speed > 0) {
+                var left = Math.max(0, (total - done) / dlState.speed);
+                meta += '　剩余 ' + fmtLeft(left);
+            }
+        }
+        return { pct: pct, meta: meta };
+    }
+
+    function humanBytes(n) {
+        if (!n || n < 0) return '0 B';
+        var u = ['B', 'KB', 'MB', 'GB'];
+        var i = 0;
+        while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+        return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i];
+    }
+
+    function fmtLeft(sec) {
+        sec = Math.round(sec);
+        if (sec < 60) return sec + ' 秒';
+        if (sec < 3600) return Math.floor(sec / 60) + ' 分 ' + (sec % 60) + ' 秒';
+        return Math.floor(sec / 3600) + ' 时 ' + Math.floor((sec % 3600) / 60) + ' 分';
+    }
+
+    function dlDone(msg) {
+        dlState.active = false;
+        var box = dlEl('dlBox');
+        if (!box) return;
+        if (dlEl('dlFill')) dlEl('dlFill').style.width = '100%';
+        if (dlEl('dlText')) {
+            dlEl('dlText').className = 'dl-ok';
+            dlEl('dlText').textContent = '✓ ' + (msg || '下载完成');
+        }
+        if (dlEl('dlMeta')) dlEl('dlMeta').textContent = '';
+        if (dlEl('dlResult')) {
+            dlEl('dlResult').style.display = '';
+            dlEl('dlResult').innerHTML =
+                '<span class="dl-badge ok">成功</span><span class="dl-ok">' +
+                escapeHtml(msg || '下载完成') + '</span>';
+        }
+        if (dlEl('btnDlClose')) dlEl('btnDlClose').style.display = '';
+        setStatus('✓ ' + (msg || '下载完成'), 'ok');
+        setProgress(100, msg || '完成');
+        // 成功后 8 秒自动收起，不挡后续操作
+        setTimeout(function () {
+            var b = dlEl('dlBox');
+            if (b && !dlState.active) b.style.display = 'none';
+        }, 8000);
+    }
+
+    function dlFail(msg, onRetry) {
+        dlState.active = false;
+        var box = dlEl('dlBox');
+        if (!box) return;
+        box.style.display = '';
+        if (dlEl('dlText')) {
+            dlEl('dlText').className = 'dl-err';
+            dlEl('dlText').textContent = '✗ 下载失败';
+        }
+        if (dlEl('dlMeta')) dlEl('dlMeta').textContent = '';
+        if (dlEl('dlResult')) {
+            dlEl('dlResult').style.display = '';
+            dlEl('dlResult').innerHTML =
+                '<span class="dl-badge err">失败</span><span class="dl-err">' +
+                escapeHtml(msg || '未知错误') + '</span>';
+        }
+        if (dlEl('btnDlRetry')) {
+            dlEl('btnDlRetry').style.display = onRetry ? '' : 'none';
+            dlEl('btnDlRetry').onclick = function () {
+                if (onRetry) { dlEl('btnDlRetry').style.display = 'none'; onRetry(); }
+            };
+        }
+        if (dlEl('btnDlClose')) dlEl('btnDlClose').style.display = '';
+        setStatus('✗ 下载失败：' + (msg || ''), 'err');
+        setProgress(-1, '');
     }
 
     // 确保引擎依赖就位（缺失自动安装），cb(err)
@@ -786,8 +971,9 @@
         var cli = path.join(extRoot, 'py', 'fw_model_download.py');
         if (!fs.existsSync(cli)) { onDone(new Error('缺少 py/fw_model_download.py')); return; }
 
+        dlReset('model', '正在下载识别模型 ' + model + '（' + fwModelSizeText(model) + '）');
+        dlProgress(1, '连接下载源…', '');
         setStatus('正在下载识别模型 ' + model + '（' + fwModelSizeText(model) + '），首次使用需要等待…', '');
-        setProgress(1, '下载模型 ' + model);
 
         var proc = child_process.execFile(pyr, [cli, '--model', model], {
             cwd: path.dirname(cli),
@@ -797,10 +983,12 @@
             var data = null;
             try { data = JSON.parse(String(stdout || '').trim().split('\n').pop()); } catch (e) {}
             if (err || !data || !data.ok) {
-                onDone(new Error((data && data.error) || (err && err.message) || '下载失败'));
+                var mmsg = (data && data.error) || (err && err.message) || '下载失败';
+                dlFail(mmsg, function () { downloadFwModel(model, onDone); });
+                onDone(new Error(mmsg));
                 return;
             }
-            setProgress(100, '模型就绪');
+            dlDone('模型「' + model + '」已就绪，可以开始识别');
             onDone(null, data);
         });
 
@@ -815,10 +1003,20 @@
                     var pct = parseInt(parts[2], 10) || 0;
                     var note = parts.slice(3).join(' ');
                     if (stage === 'source') {
-                        setStatus('模型下载源：' + note, '');
+                        dlProgress(2, '连接下载源…', note);
                     } else if (stage === 'file') {
-                        var show = 5 + Math.round(pct * 0.94);
-                        setProgress(show, '下载模型 ' + model + '  ' + pct + '%  ' + note);
+                        var m2 = note.match(/([\d.]+)\s*([KMG]?B)\s*\/\s*([\d.]+)\s*([KMG]?B)/i);
+                        var meta2 = note;
+                        if (m2) {
+                            var u2 = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+                            var d2 = parseFloat(m2[1]) * (u2[m2[2].toUpperCase()] || 1);
+                            var t2 = parseFloat(m2[3]) * (u2[m2[4].toUpperCase()] || 1);
+                            var i2 = dlBytes(d2, t2);
+                            pct = i2.pct;
+                            meta2 = i2.meta;
+                        }
+                        dlProgress(5 + Math.round(pct * 0.94),
+                                   '下载模型 ' + model + '  ' + Math.round(pct) + '%', meta2);
                     }
                 });
             });
