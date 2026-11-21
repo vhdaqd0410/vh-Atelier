@@ -13,6 +13,7 @@
     var currentClips = [];       // 当前查看序列的片段
     var subtitles = [];          // 当前查看序列的字幕
     var currentSeqId = null;     // 当前查看的序列 ID
+    var fwModelChecked = false;  // 每次批量只检查一次模型
     var batchResults = [];       // 批量结果 [{ seqId, name, status, count, subtitles }]
     var stopRequested = false;   // 停止标志
     var batchProgressBase = 0;   // 当前序列在总进度里的起点（%）
@@ -584,7 +585,36 @@
                     cb({ seqId: meta.seqId, name: meta.seqName, status: 'err', error: '混音未生成 wav' });
                     return;
                 }
-                runWhisper(meta, wavPath, srtPath, whisperPath, modelPath, lang, useGpu, tmpDir, cb);
+                // 改用 faster-whisper：词级时间戳 + VAD，气口能正确断开。
+                // 旧的 runWhisper 保留，作为新引擎不可用时的兜底。
+                var fw = fasterWhisperReady();
+                if (fw.ok) {
+                    var outJson = path.join(tmpDir, 'fw_' + meta.seqId.slice(0, 8) + '.json');
+                    try { if (fs.existsSync(outJson)) fs.unlinkSync(outJson); } catch (e2) {}
+                    var mName = fwModelName(lang);
+                    if (!fwModelChecked) { fwModelChecked = true; }
+                    runFasterWhisper(meta, wavPath, outJson, {
+                        model: mName,
+                        lang: (lang === 'zh') ? 'zh' : (lang === 'auto' ? 'auto' : lang),
+                        gap: (function () {
+                            var g = parseFloat(el.inpGap && el.inpGap.value);
+                            if (!isFinite(g) || g <= 0) g = 0.45;
+                            if (g < 0.15) g = 0.15;
+                            if (g > 2.0) g = 2.0;
+                            return g;
+                        })(),
+                        useGpu: useGpu
+                    }, function (res) {
+                        // 新引擎失败时退回原生 whisper，保证不会比之前更差
+                        if (res && res.status === 'err') {
+                            runWhisper(meta, wavPath, srtPath, whisperPath, modelPath, lang, useGpu, tmpDir, cb);
+                            return;
+                        }
+                        cb(res);
+                    });
+                } else {
+                    runWhisper(meta, wavPath, srtPath, whisperPath, modelPath, lang, useGpu, tmpDir, cb);
+                }
             });
         }
 
@@ -1146,7 +1176,15 @@
             el.progressTime.textContent = '总耗时 ' + fmtDuration(totalElapsed) + ' · 剩余 0:00';
         }
         var okCount = batchResults.filter(function (r) { return r.status === 'ok'; }).length;
-        setStatus('批量完成：成功 ' + okCount + '/' + batchResults.length + ' 个序列', 'ok');
+        var totalN = batchResults.length;
+        var failList = batchResults.filter(function (r) { return r.status === 'err'; });
+        if (failList.length > 0) {
+            var firstErr = String(failList[0].error || '').slice(0, 120);
+            setStatus('批量完成：成功 ' + okCount + '/' + totalN + ' 个序列' +
+                      '　失败 ' + failList.length + ' 个：' + firstErr, 'err');
+        } else {
+            setStatus('批量完成：成功 ' + okCount + '/' + totalN + ' 个序列', 'ok');
+        }
         renderBatchResults();
         el.resultCard.style.display = 'block';
     }
@@ -1169,6 +1207,13 @@
                 tag.className = 'err-tag';
                 tag.textContent = '✗ 失败';
                 div.title = r.error;
+                // 错误原因直接显示，不要只放在 title 里（悬停才见等于看不见）
+                var why = document.createElement('div');
+                why.className = 'err-why';
+                why.style.cssText = 'font-size:11px;color:#ff8f8f;margin-top:4px;' +
+                                    'line-height:1.5;word-break:break-all;opacity:.92;';
+                why.textContent = String(r.error || '未知错误').slice(0, 260);
+                div.appendChild(why);
             } else {
                 tag.className = 'err-tag';
                 tag.textContent = '已停止';
