@@ -56,7 +56,9 @@
                     return window.__vhSubtitleDownloadModel('medium', onProgress, onDone);
                 }
                 onDone && onDone(new Error('下载模块未就绪，请到「字幕」面板点识别自动下载'));
-            }
+            },
+            // 网盘地址（用户上传后填入）
+            netdisk: ''
         },
         {
             id: 'fw-cuda',
@@ -80,7 +82,8 @@
                     return window.__vhSubtitleInstallGpu(onProgress, onDone);
                 }
                 onDone && onDone(new Error('下载模块未就绪，请到「字幕」面板操作'));
-            }
+            },
+            netdisk: ''
         },
         {
             id: 'funasr',
@@ -161,7 +164,10 @@
                 'bin/whisper/cuda/': 'GPU 加速引擎（可选，1.1 GB）',
                 'models/ggml-belle-large-v3-turbo-zh-q8_0.bin': '中文模型（必需，834 MB）',
                 'models/ggml-large-v3-q5_0.bin': '通用模型（可选，1 GB）'
-            }
+            },
+            url: '',
+            netdisk: '',
+            unzip: true
         },
         {
             id: 'ncm',
@@ -409,6 +415,105 @@
         return st;
     }
 
+
+    // ---------- 从本地压缩包安装 ----------
+    // 选一个 zip，自动解压到插件目录（按包内相对路径落位）。
+    // 支持包内多套一层目录的情况，会自动剥掉。
+    function installFromZip(zipPath, onLog, onProgress) {
+        var log = onLog || function () {};
+        var prog = onProgress || function () {};
+        if (!zipPath || !fs.existsSync(zipPath)) {
+            return { ok: false, msg: '压缩包不存在：' + zipPath };
+        }
+
+        var os2 = require('os');
+        var tmpDir = path.join(os2.tmpdir(), 'vh_zip_' + Date.now());
+        var result = { ok: true, files: 0, bytes: 0, dirs: [], msg: '' };
+
+        try {
+            fs.mkdirSync(tmpDir, { recursive: true });
+            log('正在解压…');
+
+            // PowerShell Expand-Archive 处理中文名最稳
+            var psCmd = "powershell -NoProfile -Command \"Expand-Archive -LiteralPath '" +
+                String(zipPath).replace(/'/g, "''") + "' -DestinationPath '" +
+                String(tmpDir).replace(/'/g, "''") + "' -Force\"";
+            var r = require('child_process').spawnSync('powershell', ['-NoProfile', '-Command',
+                "Expand-Archive -LiteralPath '" + String(zipPath).replace(/'/g, "''") +
+                "' -DestinationPath '" + String(tmpDir).replace(/'/g, "''") + "' -Force"],
+                { timeout: 1800000, windowsHide: true, encoding: 'utf8' });
+            if (r.status !== 0) {
+                // 退化到 tar（Win10 自带）
+                var r2 = require('child_process').spawnSync('tar', ['-xf', zipPath, '-C', tmpDir],
+                    { timeout: 1800000, windowsHide: true, encoding: 'utf8' });
+                if (r2.status !== 0) {
+                    fs.rmSync(tmpDir, { recursive: true, force: true });
+                    return { ok: false, msg: '解压失败：' +
+                        String((r.stderr || r2.stderr) || '未知错误').slice(0, 300) };
+                }
+            }
+
+            // 判断是否需要剥掉外层目录：
+            // 若根下只有一个目录，且该目录里有 runtime/models/bin 之一，则进入该目录
+            var base = tmpDir;
+            try {
+                var ents = fs.readdirSync(tmpDir, { withFileTypes: true })
+                    .filter(function (e) { return e.name !== '__MACOSX'; });
+                if (ents.length === 1 && ents[0].isDirectory()) {
+                    var inner = path.join(tmpDir, ents[0].name);
+                    var marks = ['runtime', 'models', 'bin', 'js', 'py'];
+                    var hit = marks.some(function (m) {
+                        return fs.existsSync(path.join(inner, m));
+                    });
+                    if (hit) base = inner;
+                }
+            } catch (e) {}
+
+            log('正在安装到插件目录…');
+
+            // 递归复制到插件根
+            function copyAll(srcDir, rel) {
+                var ents;
+                try { ents = fs.readdirSync(srcDir, { withFileTypes: true }); } catch (e) { return; }
+                ents.forEach(function (e) {
+                    var s = path.join(srcDir, e.name);
+                    var relPath = rel ? (rel + '/' + e.name) : e.name;
+                    var d = path.join(extRoot, relPath.replace(/\//g, path.sep));
+                    if (e.isDirectory()) {
+                        try { fs.mkdirSync(d, { recursive: true }); } catch (er) {}
+                        copyAll(s, relPath);
+                    } else {
+                        try {
+                            var dd = path.dirname(d);
+                            if (!fs.existsSync(dd)) fs.mkdirSync(dd, { recursive: true });
+                            fs.copyFileSync(s, d);
+                            result.files++;
+                            try { result.bytes += fs.statSync(s).size; } catch (er) {}
+                            if (result.files % 200 === 0) prog(result.files);
+                        } catch (er) {}
+                    }
+                });
+            }
+            copyAll(base, '');
+
+            // 记录装了哪些顶层目录，供界面显示
+            try {
+                result.dirs = fs.readdirSync(base).filter(function (n) {
+                    try { return fs.statSync(path.join(base, n)).isDirectory(); } catch (e) { return false; }
+                });
+            } catch (e) {}
+
+            log('完成：' + result.files + ' 个文件');
+            result.msg = '已安装 ' + result.files + ' 个文件';
+        } catch (e) {
+            result.ok = false;
+            result.msg = '安装失败：' + (e.message || e);
+        } finally {
+            try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) {}
+        }
+        return result;
+    }
+
     function installFromDir(dir, onLog) {
         var log = onLog || function () {};
         if (!dir || !fs.existsSync(dir)) {
@@ -497,6 +602,7 @@
         state: dlState,
         netdiskHelp: showNetdiskHelp,
         installFromDir: installFromDir,
+        installFromZip: installFromZip,
         extRoot: extRoot
     };
 })();

@@ -176,6 +176,110 @@
     // ---------- 模型状态 ----------
     var PORT = 17892;
 
+    // ---------- 自动启动 Breeze 本地服务 ----------
+    // 原来只有调用、没有启动，导致首次使用永远报「需要先启动一次服务」。
+    var __bzStarting = false, __bzReady = false;
+
+    function findNodeForBreeze() {
+        var path = require('path'), os = require('os'), fs2 = require('fs');
+        var cands = [
+            path.join(extRoot, 'runtime', 'node', 'node.exe'),
+            path.join(extRoot, '..', '..', '..', 'ProgramFiles', 'nodejs', 'node.exe')
+        ];
+        // 便携 Node 优先
+        for (var i = 0; i < cands.length; i++) {
+            try { if (fs2.existsSync(cands[i])) return cands[i]; } catch (e) {}
+        }
+        // PATH 里的 node
+        try {
+            var cp = require('child_process');
+            var r = cp.spawnSync('where', ['node'], { encoding: 'utf8', timeout: 8000, windowsHide: true });
+            if (r && r.status === 0 && r.stdout) {
+                var lines = String(r.stdout).split(/\r?\n/).filter(function (x) { return x.trim(); });
+                if (lines.length) return lines[0].trim();
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function pingBreeze(cb) {
+        var done = false;
+        var timer = setTimeout(function () { if (!done) { done = true; cb(false); } }, 1500);
+        fetch('http://127.0.0.1:' + PORT + '/api/model/status')
+            .then(function (r) { return r.json(); })
+            .then(function () { if (!done) { done = true; clearTimeout(timer); cb(true); } })
+            .catch(function () { if (!done) { done = true; clearTimeout(timer); cb(false); } });
+    }
+
+    // 确保服务在跑；就绪后 cb(ok, msg)
+    function ensureBreezeServer(cb) {
+        if (__bzReady) { cb(true, '已就绪'); return; }
+        pingBreeze(function (alive) {
+            if (alive) { __bzReady = true; cb(true, '已就绪'); return; }
+            if (__bzStarting) {
+                // 正在启动，轮询等待
+                waitBreeze(cb, 0);
+                return;
+            }
+
+            var nodeExe = findNodeForBreeze();
+            if (!nodeExe) {
+                cb(false, '未找到 Node 运行环境，无法启动 Breeze 服务');
+                return;
+            }
+            var serverJs = path.join(extRoot, 'breeze', 'server.js');
+            try {
+                if (!fs.existsSync(serverJs)) {
+                    cb(false, '缺少 breeze/server.js，安装包可能不完整');
+                    return;
+                }
+            } catch (e) {
+                cb(false, '检查 breeze/server.js 失败：' + e.message);
+                return;
+            }
+
+            __bzStarting = true;
+            if (el.modelStat) el.modelStat.textContent = '正在启动 Breeze 服务…';
+
+            try {
+                var cp2 = require('child_process');
+                var child = cp2.spawn(nodeExe, [serverJs], {
+                    cwd: path.join(extRoot, 'breeze'),
+                    windowsHide: true,
+                    detached: false,
+                    stdio: 'ignore'
+                });
+                child.on('error', function () { __bzStarting = false; });
+            } catch (e) {
+                __bzStarting = false;
+                cb(false, '启动失败：' + e.message);
+                return;
+            }
+
+            waitBreeze(cb, 0);
+        });
+    }
+
+    function waitBreeze(cb, tries) {
+        if (tries > 30) {          // 最多等 15 秒
+            __bzStarting = false;
+            cb(false, 'Breeze 服务启动超时（15 秒）');
+            return;
+        }
+        setTimeout(function () {
+            pingBreeze(function (alive) {
+                if (alive) {
+                    __bzReady = true;
+                    __bzStarting = false;
+                    cb(true, '已启动');
+                } else {
+                    waitBreeze(cb, tries + 1);
+                }
+            });
+        }, 500);
+    }
+
+
     function checkModel() {
         var ready = false;
         try {
@@ -215,7 +319,15 @@
                     if (el.btnDlModel) el.btnDlModel.disabled = !!j.active;
                 })
                 .catch(function () {
-                    if (el.modelStat) el.modelStat.textContent = '需要先启动一次 Breeze 服务才能下载';
+                    // 服务没起来：自动启动，而不是让用户自己想办法
+                    if (el.modelStat) el.modelStat.textContent = '正在启动 Breeze 服务…';
+                    ensureBreezeServer(function (ok, msg) {
+                        if (ok) {
+                            checkModel();      // 起来后重新读状态
+                        } else if (el.modelStat) {
+                            el.modelStat.textContent = msg + '（可到「组件」面板下载 Breeze 包后用本地安装）';
+                        }
+                    });
                 });
         }
         return ready;
@@ -223,16 +335,24 @@
 
     function downloadModel() {
         if (el.btnDlModel) { el.btnDlModel.disabled = true; el.btnDlModel.textContent = '启动中…'; }
-        fetch('http://127.0.0.1:' + PORT + '/api/model/download', { method: 'POST' })
+        // 先确保服务在跑，否则请求必然失败
+        ensureBreezeServer(function (ok, msg) {
+            if (!ok) {
+                if (el.btnDlModel) { el.btnDlModel.disabled = false; el.btnDlModel.textContent = '重试'; }
+                if (el.modelStat) el.modelStat.textContent = msg;
+                return;
+            }
+            fetch('http://127.0.0.1:' + PORT + '/api/model/download', { method: 'POST' })
             .then(function (r) { return r.json(); })
             .then(function () {
                 if (el.btnDlModel) el.btnDlModel.textContent = '下载中…';
                 setTimeout(checkModel, 1000);
             })
-            .catch(function (e) {
-                if (el.btnDlModel) { el.btnDlModel.disabled = false; el.btnDlModel.textContent = '重试'; }
-                if (el.modelStat) el.modelStat.textContent = '下载请求失败：' + e.message;
-            });
+                .catch(function (e) {
+                    if (el.btnDlModel) { el.btnDlModel.disabled = false; el.btnDlModel.textContent = '重试'; }
+                    if (el.modelStat) el.modelStat.textContent = '下载请求失败：' + e.message;
+                });
+        });
     }
 
     // ---------- 音色库（直接读 engine/voices 目录）----------

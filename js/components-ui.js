@@ -8,7 +8,7 @@
     function initEl() {
         el.list = $('cpList');
         el.recheck = $('cpRecheck');
-        el.installBtn = $('cpInstallDir');
+        el.installBtn = $('cpInstallZip');
 
         el.ndCard = $('cpNetdiskCard');
         el.ndTip = $('cpNetdiskTip');
@@ -77,8 +77,10 @@
                 okTag.style.cssText = 'font-size:10.5px;color:#7fd68b;flex:1;';
                 row.appendChild(okTag);
             } else {
-                // 有在线地址才显示「在线下载」；只有网盘时直接给网盘按钮
-                if (c.url || c.dl) {
+                // 未就位：同时给「在线下载」和「网盘下载」两个入口。
+                // 在线下载：有 dl（脚本下载）走 dl，否则有 url 走 url。
+                var canOnline = !!(c.dl || c.url);
+                if (canOnline) {
                     var btnDl = document.createElement('button');
                     btnDl.className = 'secondary mini';
                     btnDl.textContent = '⬇ 在线下载';
@@ -88,18 +90,24 @@
                         else startDownload(c, card, btnDl);
                     });
                     row.appendChild(btnDl);
+                } else {
+                    var noOnline = document.createElement('span');
+                    noOnline.textContent = '在线下载：暂无分发源';
+                    noOnline.style.cssText = 'flex:1;font-size:10.5px;color:#6b7787;';
+                    row.appendChild(noOnline);
                 }
 
+                // 网盘按钮：始终显示，没有链接时提示待配置
                 var btnNd = document.createElement('button');
                 btnNd.className = 'secondary mini';
-                btnNd.textContent = (c.url || c.dl) ? '📁 网盘' : '📁 网盘下载';
-                btnNd.style.cssText = ((c.url || c.dl) ? 'flex:0 0 auto;' : 'flex:1;') + 'font-size:11px;';
-                if (!(c.url || c.dl)) {
-                    btnNd.style.background = 'linear-gradient(180deg,#537d96,#3f6a87)';
-                    btnNd.style.borderColor = 'rgba(138,180,255,.32)';
-                    btnNd.style.color = '#f0f7ff';
-                }
+                btnNd.textContent = '📁 网盘下载';
+                btnNd.style.cssText = 'flex:0 0 auto;font-size:11px;' +
+                    (canOnline ? '' : 'background:linear-gradient(180deg,#537d96,#3f6a87);');
                 btnNd.addEventListener('click', function () {
+                    if (!c.netdisk) {
+                        showTip('「' + c.name + '」的网盘地址还没配置，请等待补充后再试。', true);
+                        return;
+                    }
                     window.__vhComponents.netdiskHelp(c);
                 });
                 row.appendChild(btnNd);
@@ -203,28 +211,83 @@
                 }, 200);
             });
         }
-        // 从解压目录安装：绑定要放在 bind() 里，doInstallFromDir 此时已定义
+                // 从本地压缩包安装：选 zip -> 自动解压到插件目录
         if (el.installBtn) {
             el.installBtn.addEventListener('click', function () {
-                doInstallFromDir();
+                doInstallZip();
             });
         }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', bind);
-    } else {
-        bind();
+    // 选 zip 并安装
+    function doInstallZip() {
+        var cp, os2, path;
+        try {
+            cp = require('child_process');
+            os2 = require('os');
+            path = require('path');
+        } catch (e) {
+            showTip('无法访问文件系统：' + e.message, true);
+            return;
+        }
+
+        showTip('请在弹出的窗口中选择组件压缩包（zip）…', false);
+
+        var ps = [
+            'Add-Type -AssemblyName System.Windows.Forms;',
+            '$d = New-Object System.Windows.Forms.OpenFileDialog;',
+            '$d.Title = "选择组件压缩包";',
+            '$d.Filter = "压缩包 (*.zip)|*.zip|所有文件 (*.*)|*.*";',
+            'if ($d.ShowDialog() -eq "OK") { $d.FileName }'
+        ].join(' ');
+
+        var r = cp.spawnSync('powershell', ['-NoProfile', '-STA', '-Command', ps],
+            { encoding: 'utf8', timeout: 300000, windowsHide: false });
+
+        var picked = String((r && r.stdout) || '').trim();
+        if (!picked) {
+            showTip('已取消', false);
+            return;
+        }
+
+        showTip('正在安装：' + picked.split('\\').pop() + ' …（大包需要几分钟）', false);
+
+        var comps = window.__vhComponents;
+        if (!comps || !comps.installFromZip) {
+            showTip('安装模块未就绪', true);
+            return;
+        }
+
+        setTimeout(function () {
+            var res = comps.installFromZip(picked,
+                function (msg) { showTip(msg, false); },
+                function (n) { showTip('已写入 ' + n + ' 个文件…', false); });
+
+            if (res && res.ok) {
+                showTip('✓ 安装完成：' + res.msg + '（' + (res.dirs || []).join('、') + '）。正在重新检测…', false);
+                setTimeout(function () { render(); }, 900);
+                try { window.dispatchEvent(new Event('vhComponentsReady')); } catch (e) {}
+            } else {
+                showTip('✗ ' + ((res && res.msg) || '安装失败'), true);
+            }
+        }, 50);
     }
 
-    // 面板切过来时刷新
-    window.__componentsOnShow = function () { render(); };
+    // 底部提示
+    function showTip(msg, isErr) {
+        var el2 = document.getElementById('cpTip');
+        if (!el2) {
+            // 退化到全局状态栏
+            try {
+                var st = document.getElementById('wsStatus');
+                if (st) { st.textContent = msg; st.className = isErr ? 'err' : ''; }
+            } catch (e) {}
+            return;
+        }
+        el2.textContent = msg;
+        el2.style.color = isErr ? '#ff8a8a' : '#8a9bab';
+    }
 
-    window.__vhComponentsUI = { render: render };
-
-    // ---------- 从解压目录安装 ----------
-    // 复用插件里已验证的 folderpicker.ps1 选择目录，
-    // 然后交给 __vhComponents.installFromDir 复制。
     function pickFolder(cb) {
         var fs, path, os2, cp;
         try {

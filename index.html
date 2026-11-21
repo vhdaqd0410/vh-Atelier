@@ -1678,18 +1678,19 @@
                 <button id="cpRecheck" class="secondary" style="flex:1;">🔄 重新检测</button>
             </div>
             <div class="row" style="margin-top:6px;">
-                <button id="cpInstallDir" class="secondary" style="flex:1;"
-                        title="下载网盘包并解压后，选中解压出来的文件夹，自动安装到位">
-                    📂 从解压目录安装
+                <button id="cpInstallZip" class="secondary" style="flex:1;"
+                        title="选择一个组件压缩包（zip），自动解压并安装到插件目录">
+                    📦 从本地压缩包安装
                 </button>
             </div>
             <div class="hint" style="margin-top:6px;line-height:1.6;font-size:10.5px;">
-                网盘包解压后，点上面这个按钮选中解压出来的文件夹，会自动复制到正确位置，不用手动找目录。
+                从网盘下载的组件包（zip）不用手动解压，点上面这个按钮选中它，插件会自动解压并安装到位。
             </div>
         </div>
         <div class="card">
             <h2>组件状态</h2>
             <div id="cpList"></div>
+            <div id="cpTip" style="margin-top:8px;font-size:11px;color:#8a9bab;line-height:1.6;"></div>
         </div>
         <div class="card" id="cpNetdiskCard" style="display:none;">
             <h2>网盘下载说明</h2>
@@ -2884,6 +2885,7 @@
     <script src="js/musiclib.js"></script>
     <script src="js/music.js"></script>
     <script src="js/bgm.js"></script>
+    <script src="js/bgm-online.js"></script>
     <script src="js/export.js"></script>
     <script src="js/en-shared.js"></script>
     <script src="js/en-local.js"></script>
