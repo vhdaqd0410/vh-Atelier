@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "pro",
   "displayName": "vh-Atelier",
-  "version": "1.82.39",
-  "buildTime": "2026-11-21 12:20:00",
+  "version": "1.82.40",
+  "buildTime": "2026-11-21 14:20:00",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "下载进度改用 spawn，组件面板支持在线下载"
+  "notes": "GPU加速包在线下载；安装失败报出具体缺项"
 }

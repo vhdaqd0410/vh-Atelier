@@ -54,11 +54,31 @@ def progress(stage, pct, note=""):
 
 def engine_ready():
     """依赖是否已就位。"""
+    return not verify_report()["missing"]
+
+
+def verify_report():
+    """逐项返回校验结果，便于失败时定位。"""
+    rows, missing = [], []
     for rel in VERIFY:
         p = os.path.join(PLUGIN_ROOT, rel.replace("/", os.sep))
-        if not os.path.exists(p) or os.path.getsize(p) == 0:
-            return False
-    return True
+        exists = os.path.exists(p)
+        size = 0
+        try:
+            if exists:
+                size = os.path.getsize(p)
+        except OSError:
+            size = -1
+        ok = exists and size > 0
+        rows.append({"file": rel, "exists": exists, "size": size, "ok": ok})
+        if not ok:
+            missing.append(rel)
+    return {
+        "root": PLUGIN_ROOT,
+        "rows": rows,
+        "missing": missing,
+        "ok": not missing,
+    }
 
 
 def human(n):
@@ -143,28 +163,45 @@ def install(urls=None):
 
     # 解压到插件根目录（包内路径已经是 runtime/python/... 结构）
     progress("extract", 0, "解压中")
+    written = 0
     try:
+        # 确保目标目录存在（有的机器上 runtime/python 可能整个没有）
+        os.makedirs(os.path.join(PLUGIN_ROOT, "runtime", "python", "Lib", "site-packages"),
+                    exist_ok=True)
         with zipfile.ZipFile(zpath) as z:
             members = [n for n in z.namelist() if not n.endswith("/")]
             for i, n in enumerate(members):
                 z.extract(n, PLUGIN_ROOT)
+                written += 1
                 if i % 200 == 0:
                     progress("extract", int(i / max(1, len(members)) * 100), "")
-        progress("extract", 100, "完成")
+        progress("extract", 100, "完成 %d 个文件" % written)
     except Exception as e:
         shutil.rmtree(tmpdir, ignore_errors=True)
-        return False, "解压失败：%s" % e
+        return False, "解压失败（已写 %d 个文件）：%s" % (written, e)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    if not engine_ready():
-        missing = [r for r in VERIFY
-                   if not os.path.exists(os.path.join(PLUGIN_ROOT, r.replace("/", os.sep)))]
-        return False, "解压完成但关键文件仍缺失：%s" % ", ".join(missing)
+    rep = verify_report()
+    if not rep["ok"]:
+        # 逐步列出：装到哪、每个文件在不在、大小多少
+        detail = []
+        for r in rep["rows"]:
+            if r["ok"]:
+                continue
+            if r["exists"]:
+                detail.append("%s（文件存在但为空，%d 字节）" % (r["file"], r["size"]))
+            else:
+                detail.append("%s（不存在）" % r["file"])
+        msg = ("解压完成但关键组件仍缺失。插件目录：%s；缺：%s；"
+               "提示：若插件目录不是你所装的版本，说明解压到了错误位置" %
+               (PLUGIN_ROOT, "；".join(detail)))
+        return False, msg
 
     return True, {"ready": True, "installed": True,
                   "version": manifest.get("version"),
-                  "files": manifest.get("fileCount")}
+                  "files": manifest.get("fileCount"),
+                  "root": PLUGIN_ROOT}
 
 
 def main():

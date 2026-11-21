@@ -785,6 +785,86 @@
     // 引擎状态改变后清缓存（装完重查）
     function resetFwEngineState() { __fwEngineState = null; }
 
+    // GPU 加速包（CUDA 运行库）安装：独立于 CPU 组件
+    function installFwGpu(onDone) {
+        var pyr = detectPython();
+        if (!pyr) { onDone(new Error('未找到 Python')); return; }
+        var cli = path.join(extRoot, 'py', 'fw_gpu_install.py');
+        if (!fs.existsSync(cli)) { onDone(new Error('缺少 py/fw_gpu_install.py')); return; }
+
+        var ct2 = path.join(extRoot, 'runtime', 'python', 'Lib', 'site-packages', 'ctranslate2');
+        dlReset('gpu', '正在下载 GPU 加速包（约 550MB）');
+        dlProgress(1, '正在连接下载源…', '大文件，按网速约需几分钟');
+
+        function onLine(line) {
+            line = String(line || '').trim();
+            if (line.indexOf('PROGRESS ') !== 0) return;
+            var parts = line.split(' ');
+            var stage = parts[1] || '';
+            var pct = parseInt(parts[2], 10) || 0;
+            var note = parts.slice(3).join(' ');
+            if (stage === 'download') {
+                var m = note.match(/([\d.]+)\s*([KMG]?B)\s*\/\s*([\d.]+)\s*([KMG]?B)/i);
+                var meta = note;
+                if (m) {
+                    var unit = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824 };
+                    var d = parseFloat(m[1]) * (unit[m[2].toUpperCase()] || 1);
+                    var t = parseFloat(m[3]) * (unit[m[4].toUpperCase()] || 1);
+                    var inf = dlBytes(d, t);
+                    pct = inf.pct; meta = inf.meta;
+                }
+                dlProgress(3 + Math.round(pct * 0.88), '下载 GPU 加速包 ' + Math.round(pct) + '%', meta);
+            } else if (stage === 'extract') {
+                dlProgress(92 + Math.round(pct * 0.07), '解压 CUDA 库 ' + pct + '%', '解压中');
+            } else if (stage === 'retry') {
+                dlProgress(2, '重试中…', note);
+            } else if (stage === 'source') {
+                dlProgress(1, '已连接下载源…', note);
+            }
+        }
+
+        var proc = child_process.spawn(pyr, [cli, '--install'], {
+            cwd: path.dirname(cli), windowsHide: true
+        });
+        if (proc.stdout) proc.stdout.on('data', function (c) { String(c).split('\n').forEach(onLine); });
+        if (proc.stderr) proc.stderr.on('data', function (c) { String(c).split('\n').forEach(onLine); });
+
+        // 体积探针：cublasLt 约 660MB，按它判进度
+        var probe = setInterval(function () {
+            if (!dlState.active) { clearInterval(probe); return; }
+            try {
+                var f = path.join(ct2, 'cublasLt64_12.dll');
+                if (!fs.existsSync(f)) return;
+                var sz = fs.statSync(f).size || 0;
+                if (sz > 0) {
+                    var p = Math.min(90, 3 + Math.round(sz / (660 * 1024 * 1024) * 87));
+                    dlProgress(p, '下载 GPU 加速包 ' + p + '%', '已写入 ' + humanBytes(sz));
+                }
+            } catch (e) {}
+        }, 800);
+
+        proc.on('error', function (e) {
+            clearInterval(probe);
+            dlFail(e.message || '启动失败', function () { installFwGpu(onDone); });
+            onDone(new Error(e.message || '启动失败'));
+        });
+
+        proc.on('close', function (code) {
+            clearInterval(probe);
+            var okFile = fs.existsSync(path.join(ct2, 'cublasLt64_12.dll'));
+            if (code === 0 && okFile) {
+                dlDone('GPU 加速包已就绪，重新识别将使用 GPU');
+                onDone(null, { ok: true });
+            } else {
+                var msg = code === 0 ? 'CUDA 库不完整' : ('安装进程退出（代码 ' + code + '）');
+                dlFail(msg, function () { installFwGpu(onDone); });
+                onDone(new Error(msg));
+            }
+        });
+
+        return proc;
+    }
+
     // 下载并安装增量包，进度打到状态栏
         // 下载并安装增量包（spawn + 双通道进度 + 体积兜底探针）
     function installFwEngine(onDone) {
@@ -1975,6 +2055,20 @@
             if (onDone) onDone(err || null);
         });
         // 把下载状态桥接到组件面板的回调
+        var t = setInterval(function () {
+            if (!dlState.active) { clearInterval(t); return; }
+            if (!onProgress) return;
+            var fill = document.getElementById('dlFill');
+            var txt = document.getElementById('dlText');
+            var meta = document.getElementById('dlMeta');
+            var pct = 0;
+            try { pct = parseFloat(String(fill && fill.style.width || '0').replace('%', '')) || 0; } catch (e) {}
+            onProgress({ pct: pct, text: (txt && txt.textContent) || '', meta: (meta && meta.textContent) || '' });
+        }, 400);
+    };
+
+    window.__vhSubtitleInstallGpu = function (onProgress, onDone) {
+        installFwGpu(function (err) { if (onDone) onDone(err || null); });
         var t = setInterval(function () {
             if (!dlState.active) { clearInterval(t); return; }
             if (!onProgress) return;

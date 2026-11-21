@@ -75,8 +75,9 @@
             hint: '检测到 NVIDIA 显卡时才建议安装；没有显卡可以跳过，用 CPU 也能跑',
             optional: true,
             dl: function (onProgress, onDone) {
-                if (window.__vhSubtitleInstallEngine) {
-                    return window.__vhSubtitleInstallEngine(onProgress, onDone);
+                // GPU 包是独立的 CUDA 运行库（约 550MB），不能复用 CPU 组件安装
+                if (window.__vhSubtitleInstallGpu) {
+                    return window.__vhSubtitleInstallGpu(onProgress, onDone);
                 }
                 onDone && onDone(new Error('下载模块未就绪，请到「字幕」面板操作'));
             }
