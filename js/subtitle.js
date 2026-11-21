@@ -744,33 +744,40 @@
     //   2) 否则（主版）-> 真跑一次 python -c "import faster_whisper"
     var __fwEngineState = null;   // 缓存，避免每次识别都起进程
 
-    function fwEngineReady(force) {
+        function fwEngineReady(force) {
         if (!force && __fwEngineState !== null) return __fwEngineState;
 
         var bundled = path.join(extRoot, 'runtime', 'python', 'python.exe');
         var py = detectPython();
-        if (!py) { __fwEngineState = false; return false; }
+        var spDir = path.join(extRoot, 'runtime', 'python', 'Lib', 'site-packages');
+        var needFiles = [
+            path.join(spDir, 'faster_whisper', '__init__.py'),
+            path.join(spDir, 'ctranslate2', 'ctranslate2.dll')
+        ];
 
-        // 客户版：插件带着便携 Python，直接查关键文件（快，不启动进程）
-        if (fs.existsSync(bundled)) {
-            var need = [
-                'runtime/python/Lib/site-packages/faster_whisper/__init__.py',
-                'runtime/python/Lib/site-packages/ctranslate2/ctranslate2.dll'
-            ];
-            for (var i = 0; i < need.length; i++) {
-                var f = path.join(extRoot, need[i].replace(/\//g, path.sep));
-                try {
-                    if (!fs.existsSync(f) || fs.statSync(f).size === 0) {
-                        __fwEngineState = false;
-                        return false;
-                    }
-                } catch (e) { __fwEngineState = false; return false; }
-            }
+        // 先看插件目录里的库文件在不在 —— 这是"组件已装好"的直接证据，
+        // 不该因为缺 python.exe 就否掉（解压成功就是成功）。
+        var filesOk = true;
+        for (var i = 0; i < needFiles.length; i++) {
+            try {
+                if (!fs.existsSync(needFiles[i]) || fs.statSync(needFiles[i]).size === 0) {
+                    filesOk = false;
+                    break;
+                }
+            } catch (e) { filesOk = false; break; }
+        }
+        if (filesOk) {
             __fwEngineState = true;
             return true;
         }
 
-        // 主版：系统 Python，实际 import 测试（同步执行，约 1-3 秒，只跑一次）
+        // 插件目录没有库 → 再看能不能用系统 Python（主版走这条）
+        if (!py) { __fwEngineState = false; return false; }
+        // 有便携 Python 但库不全，说明没装好，直接用系统 Python 也没意义
+        if (fs.existsSync(bundled)) {
+            __fwEngineState = false;
+            return false;
+        }
         try {
             var r = child_process.spawnSync(py, ['-c', 'import faster_whisper'], {
                 timeout: 20000, windowsHide: true
@@ -780,6 +787,28 @@
             __fwEngineState = false;
         }
         return __fwEngineState;
+    }
+
+    // 详细诊断：失败时告诉用户到底缺什么
+    function fwEngineDiag() {
+        var spDir = path.join(extRoot, 'runtime', 'python', 'Lib', 'site-packages');
+        var out = [];
+        var need = [
+            ['faster_whisper/__init__.py', path.join(spDir, 'faster_whisper', '__init__.py')],
+            ['ctranslate2/ctranslate2.dll', path.join(spDir, 'ctranslate2', 'ctranslate2.dll')]
+        ];
+        need.forEach(function (it) {
+            try {
+                if (fs.existsSync(it[1])) {
+                    out.push(it[0] + '（' + Math.round(fs.statSync(it[1]).size / 1024) + ' KB）');
+                } else {
+                    out.push(it[0] + '（缺失）');
+                }
+            } catch (e) { out.push(it[0] + '（读取失败）'); }
+        });
+        var pyBundled = fs.existsSync(path.join(extRoot, 'runtime', 'python', 'python.exe'));
+        return '插件目录：' + extRoot + '；' + out.join('；') +
+               '；便携Python：' + (pyBundled ? '有' : '无');
     }
 
     // 引擎状态改变后清缓存（装完重查）
@@ -956,8 +985,9 @@
                     dlDone('识别组件已就绪，可以开始识别');
                     onDone(null, { ok: true });
                 } else {
-                    dlFail('安装完成但关键文件仍缺失', function () { installFwEngine(onDone); });
-                    onDone(new Error('安装完成但关键文件仍缺失'));
+                    var diag = fwEngineDiag();
+                    dlFail('安装完成但关键文件仍缺失。' + diag, function () { installFwEngine(onDone); });
+                    onDone(new Error('安装完成但关键文件仍缺失。' + diag));
                 }
             } else {
                 var msg = '安装进程退出（代码 ' + code + '）';
