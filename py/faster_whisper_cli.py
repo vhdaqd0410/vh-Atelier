@@ -30,6 +30,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 
 def log(msg):
     print(msg, file=sys.stderr, flush=True)
@@ -160,6 +162,13 @@ def main():
         print(json.dumps({"ok": False, "error": "faster-whisper 未安装：%s" % e}, ensure_ascii=False))
         return
 
+    # 模型路径：优先用插件自带目录（models/faster-whisper/<model>），
+    # 其次才让 faster-whisper 自己去全局缓存找。
+    # 这样整个插件目录可以搬走，也便于离线分发。
+    local_model = os.path.join(HERE, "..", "models", "faster-whisper", args.model)
+    local_model = os.path.abspath(local_model)
+    model_ref = local_model if os.path.isdir(local_model) else args.model
+
     # 设备与精度：有 GPU 就用 float16，否则 int8（CPU 上快很多）
     device = args.device
     compute_type = args.compute_type
@@ -169,12 +178,12 @@ def main():
         compute_type = "float16" if device == "cuda" else "int8"
 
     try:
-        model = WhisperModel(args.model, device=device, compute_type=compute_type)
+        model = WhisperModel(model_ref, device=device, compute_type=compute_type)
     except Exception as e:
         # GPU 不可用就退回 CPU
         log("[warn] %s 加载失败：%s，改用 CPU int8" % (device, e))
         device, compute_type = "cpu", "int8"
-        model = WhisperModel(args.model, device=device, compute_type=compute_type)
+        model = WhisperModel(model_ref, device=device, compute_type=compute_type)
 
     lang = None if args.lang in ("auto", "", None) else args.lang
 

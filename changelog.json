@@ -4,6 +4,29 @@
  "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
  "versions": [
   {
+   "version": "1.82.22",
+   "date": "2026-11-21",
+   "title": "字幕识别模型改为首次使用自动下载，部署包内置 CPU 依赖",
+   "changes": [
+    {
+     "type": "feat",
+     "text": "字幕识别模型改为首次使用时自动下载：内置 hf-mirror 国内镜像回退，下载有进度提示，只下一次"
+    },
+    {
+     "type": "impr",
+     "text": "部署包改为内置 CPU 版依赖（约 190MB），不再需要单独装 Python 库；CPU 模式实测 RTF 约 0.6，比实时快"
+    },
+    {
+     "type": "feat",
+     "text": "组件面板新增两项：字幕识别模型（faster-whisper medium）与 NVIDIA GPU 加速包（可选），状态可查、可手动下载"
+    },
+    {
+     "type": "note",
+     "text": "GPU 加速包约 1.1GB，仅在使用 NVIDIA 显卡时建议安装；不装也能用 CPU 跑"
+    }
+   ]
+  },
+  {
    "version": "1.82.21",
    "date": "2026-11-20",
    "title": "字幕识别改用 faster-whisper，气口正确断开",

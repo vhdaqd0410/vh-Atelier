@@ -271,6 +271,20 @@
         var lang = el.selLang.value;
         var rangeMode = el.selRange.value;   // 'all' | 'inout' | 'selection'
 
+        // 先确认 faster-whisper 模型就位（缺失则提示下载），
+        // 避免跑到一半每个序列都失败。FunASR 不需要。
+        if (!useFunasrEngine()) {
+            var needModel = fwModelName(lang);
+            if (!fwModelReady(needModel)) {
+                ensureFwModel(needModel, function (err) {
+                    if (err) { setStatus('模型准备失败：' + err.message, 'err'); setBusy(false); return; }
+                    setStatus('模型就绪，开始识别…', 'ok');
+                    runBatch();       // 下载完重新走一遍
+                });
+                return;
+            }
+        }
+
         var ffmpegPath = path.join(extRoot, 'bin', 'ffmpeg-win32-x64.exe');
         // 旧字幕插件 CEP 目录（引擎/模型暂不复制，回退复用）
         var legacyExt = path.join(os.homedir(), 'AppData', 'Roaming', 'Adobe', 'CEP', 'extensions', 'com.zhang.whisper-subtitle');
@@ -578,8 +592,11 @@
                 if (fw.ok) {
                     var outJson = path.join(tmpDir, 'fw_' + meta.seqId.slice(0, 8) + '.json');
                     try { if (fs.existsSync(outJson)) fs.unlinkSync(outJson); } catch (e2) {}
+                    // 首次使用要先下载模型：只在第一条序列上做一次
+                    var mName = fwModelName(lang);
+                    if (!fwModelChecked) { fwModelChecked = true; }
                     runFasterWhisper(meta, wavPath, outJson, {
-                        model: fwModelName(lang),
+                        model: mName,
                         lang: (lang === 'zh') ? 'zh' : (lang === 'auto' ? 'auto' : lang),
                         gap: (function () {
                             var g = parseFloat(el.inpGap && el.inpGap.value);
@@ -688,6 +705,92 @@
         var cli = path.join(extRoot, 'py', 'faster_whisper_cli.py');
         if (!fs.existsSync(cli)) return { ok: false, reason: '缺少 py/faster_whisper_cli.py' };
         return { ok: true, py: py, cli: cli };
+    }
+
+    // ---------- 模型就位检查与在线下载 ----------
+    // 部署包不带模型（medium 4GB），首次使用现场下载。
+    // 国内直连 HuggingFace 常失败，脚本里已内置 hf-mirror 回退。
+    function fwModelPath(model) {
+        return path.join(extRoot, 'models', 'faster-whisper', model);
+    }
+
+    function fwModelReady(model) {
+        var need = ['config.json', 'model.bin', 'tokenizer.json', 'vocabulary.txt'];
+        var dir = fwModelPath(model);
+        for (var i = 0; i < need.length; i++) {
+            var f = path.join(dir, need[i]);
+            try { if (!fs.existsSync(f) || fs.statSync(f).size === 0) return false; }
+            catch (e) { return false; }
+        }
+        return true;
+    }
+
+    // 预估体积，用于提示用户要下载多大
+    function fwModelSizeText(model) {
+        var map = { tiny: '约 150MB', base: '约 145MB', small: '约 490MB',
+                    medium: '约 1.5GB', 'large-v3': '约 3.1GB' };
+        return map[model] || '未知大小';
+    }
+
+    // 启动下载，进度打到状态栏
+    function downloadFwModel(model, onDone) {
+        var pyr = detectPython();
+        if (!pyr) { onDone(new Error('未找到 Python')); return; }
+        var cli = path.join(extRoot, 'py', 'fw_model_download.py');
+        if (!fs.existsSync(cli)) { onDone(new Error('缺少 py/fw_model_download.py')); return; }
+
+        setStatus('正在下载识别模型 ' + model + '（' + fwModelSizeText(model) + '），首次使用需要等待…', '');
+        setProgress(1, '下载模型 ' + model);
+
+        var proc = child_process.execFile(pyr, [cli, '--model', model], {
+            cwd: path.dirname(cli),
+            timeout: 7200000,       // 大模型慢网速给足 2 小时
+            maxBuffer: 1024 * 1024 * 20
+        }, function (err, stdout, stderr) {
+            var data = null;
+            try { data = JSON.parse(String(stdout || '').trim().split('\n').pop()); } catch (e) {}
+            if (err || !data || !data.ok) {
+                onDone(new Error((data && data.error) || (err && err.message) || '下载失败'));
+                return;
+            }
+            setProgress(100, '模型就绪');
+            onDone(null, data);
+        });
+
+        // 读 stderr 的 PROGRESS 行，转成界面进度
+        if (proc && proc.stderr) {
+            proc.stderr.on('data', function (chunk) {
+                String(chunk).split('\n').forEach(function (line) {
+                    line = line.trim();
+                    if (line.indexOf('PROGRESS ') !== 0) return;
+                    var parts = line.split(' ');
+                    var stage = parts[1] || '';
+                    var pct = parseInt(parts[2], 10) || 0;
+                    var note = parts.slice(3).join(' ');
+                    if (stage === 'source') {
+                        setStatus('模型下载源：' + note, '');
+                    } else if (stage === 'file') {
+                        var show = 5 + Math.round(pct * 0.94);
+                        setProgress(show, '下载模型 ' + model + '  ' + pct + '%  ' + note);
+                    }
+                });
+            });
+        }
+        return proc;
+    }
+
+    // 识别前确保模型就位；缺失时询问并下载
+    function ensureFwModel(model, cb) {
+        if (fwModelReady(model)) { cb(null); return; }
+        var size = fwModelSizeText(model);
+        var ok = confirm('识别模型「' + model + '」还没下载（' + size + '）。\n\n' +
+                         '现在下载？需要联网，下载期间请勿关闭 PR。\n' +
+                         '（只下载一次，之后直接使用）');
+        if (!ok) { cb(new Error('已取消：需要先下载识别模型')); return; }
+        downloadFwModel(model, function (err, info) {
+            if (err) { cb(err); return; }
+            cb(null, info);
+        });
     }
 
     function runFasterWhisper(meta, wavPath, outJson, opts, cb) {
@@ -1413,6 +1516,7 @@
 
     // ---------- 英译中（剧情参考）：调共享翻译引擎 translate.js（MyMemory 免费接口）----------
     var transBusy = false;
+    var fwModelChecked = false;
 
     function translateToChinese() {
         runTranslate('zh');
