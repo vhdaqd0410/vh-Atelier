@@ -448,6 +448,32 @@
     if (name.indexOf('成片') >= 0) return '0';
     return '';
   }
+
+  // 目录号归一：每个版本一个唯一的数字前缀。
+  // 历史版本里的目录号是从名字猜的，「无音乐有字幕」会被猜成 2，与「无音乐无字幕」撞号，
+  // 撞号就是自动填充把两个版本填进同一个文件夹的根因。按列表顺序补空号，绝不重复。
+  function normalizeFolderKeys(list) {
+    var used = {};
+    (list || []).forEach(function (v) {
+      var k = parseInt(v.folderKey, 10);
+      if (isNaN(k) || k < 0 || used[k]) {
+        k = 0;
+        while (used[k]) k++;
+      }
+      v.folderKey = String(k);
+      used[k] = true;
+    });
+    return list;
+  }
+  // 新增版本时直接给「最大号 +1」，不再靠名字猜
+  function nextFreeKey(list) {
+    var max = -1;
+    (list || []).forEach(function (v) {
+      var k = parseInt(v.folderKey, 10);
+      if (!isNaN(k) && k > max) max = k;
+    });
+    return String(max + 1);
+  }
   function loadVersions() {
     try {
       var raw = localStorage.getItem('pr_me_versions_v1');
@@ -460,8 +486,8 @@
             if (!v.keepList) v.keepList = [0, 1];
             if (!v.outDir) v.outDir = '';
             if (v.enabled === undefined) v.enabled = true;
-            if (!v.folderKey) v.folderKey = inferFolderKey(v.name);
           });
+          normalizeFolderKeys(arr);
           return arr;
         }
       }
@@ -744,6 +770,15 @@
     nameInput.placeholder = '版本名';
     nameInput.value = v.name;
     head.appendChild(nameInput);
+    // 目录号：对应交付文件夹的数字前缀，自动填充按它匹配
+    var keyInput = document.createElement('input');
+    keyInput.type = 'text';
+    keyInput.className = 'v-key';
+    keyInput.placeholder = '#';
+    keyInput.title = '对应交付文件夹的数字前缀（0/1/2…）。自动填充优先按这个号匹配，改文件夹编号时改这里。';
+    keyInput.value = (v.folderKey != null ? String(v.folderKey) : '');
+    keyInput.style.cssText = 'flex:0 0 34px;width:34px;text-align:center;font-size:11px;padding:3px 2px;';
+    head.appendChild(keyInput);
     var delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'v-del';
@@ -865,7 +900,7 @@
   }
 
   function addVersion() {
-    versions.push({ id: genId(), name: '新版本', preset: '', muteMode: 'none', keepList: [0, 1], outDir: '', enabled: true, folderKey: '' });
+    versions.push({ id: genId(), name: '新版本', preset: '', muteMode: 'none', keepList: [0, 1], outDir: '', enabled: true, folderKey: nextFreeKey(versions) });
     saveVersions();
     renderVersions();
     captureBaseline();
@@ -1738,7 +1773,12 @@
   }
 
   // ── 交付结构自动填充 ────────────────────────
-  // 扫描根目录下的子文件夹，按数字前缀 + 名称关键词匹配到各版本和字幕目录
+  // 分级匹配，每个文件夹只分配一次，版本增删都不影响：
+  //   1) 版本卡片的「#目录号」→ 同前缀文件夹
+  //   2) 上次分配的文件夹名还在 → 沿用
+  //   3) 版本名关键词（无音乐无字幕 / 无音乐 / 无字幕 / 成片）
+  //   4) 兜底：按前缀顺序把剩下的文件夹补给还没匹配上的版本
+  // 字幕目录单独预留（名字像「字幕/字幕文件/SRT」这类），不会被某个版本抢走。
   function autofillFromRoot() {
     var root = (deliveryRoot.value || '').trim();
     if (!root || !fs.existsSync(root)) { setLog('交付根目录不存在：' + root, true); return; }
@@ -1748,51 +1788,107 @@
         .filter(function (d) { return d.isDirectory(); })
         .map(function (d) { return d.name; });
     } catch (e) { setLog('读取根目录失败：' + e.message, true); return; }
+    if (subs.length === 0) { setLog('根目录下没有子文件夹：' + root, true); return; }
 
-    // 数字前缀提取："1.有音乐无字幕版本" -> {n:1, name}
     function prefixOf(name) {
-      var m = name.match(/^(\d+)\s*[.、_\-]?/);
+      var m = String(name).match(/^(\d+)\s*[.、_\-]?/);
       return m ? parseInt(m[1], 10) : null;
     }
-
-    // 按数字前缀匹配版本（folderKey），数字对不上时用名称关键词兜底
-    function keyOf(v) {
-      return v.folderKey || inferFolderKey(v.name);
+    // 字幕目录：名字含字幕/srt，且不像某个版本（无字幕/无音乐/有字幕/成片）
+    function looksLikeSrtDir(name) {
+      if (!/字幕|srt|subtitle/i.test(name)) return false;
+      return !/无字幕|无音乐|有字幕|成片/i.test(name);
     }
-    var matched = 0;
-    versions.forEach(function (v) {
-      var key = keyOf(v);
-      var hit = null;
-      if (key) {
-        var want = parseInt(key, 10);
-        if (!isNaN(want)) hit = subs.find(function (s) { return prefixOf(s) === want; });
-      }
-      // 兜底：名称关键词
-      if (!hit) {
-        var kw = '';
-        if (v.name.indexOf('无音乐') >= 0 || /bgm/i.test(v.name)) kw = '无音乐';
-        else if (v.name.indexOf('无字幕') >= 0) kw = '无字幕';
-        else if (v.name.indexOf('成片') >= 0) kw = '成片';
-        if (kw) hit = subs.find(function (s) { return s.indexOf(kw) >= 0; });
-      }
-      if (hit) {
-        v.outDir = path.join(root, hit);
-        matched++;
-      }
+
+    var sorted = subs.slice().sort(function (a, b) {
+      var pa = prefixOf(a), pb = prefixOf(b);
+      if (pa !== null && pb !== null) return (pa - pb) || String(a).localeCompare(String(b));
+      if (pa !== null) return -1;
+      if (pb !== null) return 1;
+      return String(a).localeCompare(String(b));
     });
 
-    // 字幕目录：优先数字前缀 3，其次名称含「字幕」
-    var srtHit = subs.find(function (s) { return prefixOf(s) === 3; });
-    if (!srtHit) srtHit = subs.find(function (s) { return s.indexOf('字幕') >= 0; });
-    if (srtHit) {
-      subtitleDir.value = path.join(root, srtHit);
+    var srtHit = sorted.filter(looksLikeSrtDir)[0] || null;
+    var pool = sorted.filter(function (s) { return s !== srtHit; });
+
+    normalizeFolderKeys(versions);   // 目录号先归一，历史撞号在这里被纠正
+
+    var used = {};
+    var done = {};
+    function freeDir(pred) {
+      for (var i = 0; i < pool.length; i++) {
+        var s = pool[i];
+        if (!used[s] && (!pred || pred(s))) return s;
+      }
+      return null;
+    }
+    function assign(v, s) {
+      used[s] = true;
+      done[v.id] = true;
+      v.outDir = path.join(root, s);
+      v.dirName = s;
     }
 
+    // 1) 目录号精确匹配
+    versions.forEach(function (v) {
+      var want = parseInt(v.folderKey, 10);
+      if (isNaN(want)) return;
+      var hit = freeDir(function (s) { return prefixOf(s) === want; });
+      if (hit) assign(v, hit);
+    });
+    // 2) 上次的文件夹名还在就沿用
+    versions.forEach(function (v) {
+      if (done[v.id]) return;
+      if (v.dirName) {
+        var hit = freeDir(function (s) { return s === v.dirName; });
+        if (hit) assign(v, hit);
+      }
+    });
+    // 3) 版本名关键词（组合条件排前面，避免「无音乐有字幕」被「无音乐」抢走）
+    versions.forEach(function (v) {
+      if (done[v.id]) return;
+      var n = String(v.name || '');
+      var conds = [];
+      if (n.indexOf('无音乐') >= 0) {
+        conds.push(function (s) { return s.indexOf('无音乐') >= 0 && s.indexOf('无字幕') >= 0; });
+        conds.push(function (s) { return s.indexOf('无音乐') >= 0; });
+      } else if (/bgm/i.test(n)) {
+        conds.push(function (s) { return /bgm|无音乐/i.test(s); });
+      }
+      if (n.indexOf('无字幕') >= 0) {
+        conds.push(function (s) { return s.indexOf('无字幕') >= 0 && s.indexOf('无音乐') < 0; });
+      }
+      if (n.indexOf('成片') >= 0) {
+        conds.push(function (s) { return s.indexOf('成片') >= 0; });
+      }
+      for (var i = 0; i < conds.length; i++) {
+        var hit = freeDir(conds[i]);
+        if (hit) { assign(v, hit); return; }
+      }
+    });
+    // 4) 兜底：剩下的文件夹按前缀顺序补位
+    versions.forEach(function (v) {
+      if (done[v.id]) return;
+      var hit = freeDir(null);
+      if (hit) assign(v, hit);
+    });
+
+    if (srtHit) {
+      subtitleDir.value = path.join(root, srtHit);
+      var cfg = getSubtitleCfg();
+      cfg.dir = subtitleDir.value;
+      setSubtitleCfg(cfg);
+    }
+
+    var matched = versions.filter(function (v) { return done[v.id]; }).length;
+    var detail = versions.map(function (v) { return v.name + '→' + (v.dirName || '未匹配'); }).join('；');
     saveVersions();
     renderVersions();
     setDeliveryRoot(root);
     captureBaseline();
-    setLog('已从 ' + root + ' 填充 ' + matched + ' 个版本路径' + (srtHit ? ' + 字幕目录' : ''), matched > 0 ? 'success' : 'warn');
+    setLog('已填充 ' + matched + '/' + versions.length + ' 个版本：' + detail +
+      (srtHit ? '｜字幕→' + srtHit : '｜未找到字幕目录'),
+      matched === versions.length ? 'success' : 'warn');
   }
 
   // ── 事件绑定 ──────────────────────────────────
@@ -1982,6 +2078,7 @@
     if (!v) return;
     if (e.target.classList.contains('v-name')) v.name = e.target.value;
     else if (e.target.classList.contains('v-dir')) v.outDir = e.target.value;
+    else if (e.target.classList.contains('v-key')) v.folderKey = String(e.target.value).replace(/\D/g, '');
     saveVersions();
   });
   versionsWrap.addEventListener('change', function (e) {

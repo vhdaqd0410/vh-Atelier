@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "main",
   "displayName": "vh-Atelier",
-  "version": "1.82.32",
-  "buildTime": "2026-11-21 15:40:00",
+  "version": "1.82.33",
+  "buildTime": "2026-11-24 15:26:35",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "识别失败显示真实原因；新增环境自检"
+  "notes": "剧本翻译缓存持久化+清除；字幕默认英文并记忆；交付目录号唯一分配，多版本自动填充不再串号"
 }

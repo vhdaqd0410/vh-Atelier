@@ -2157,8 +2157,26 @@
             el.selModel.disabled = false;
         }
     }
-    el.selLang.addEventListener('change', syncModelByLang);
-    syncModelByLang();
+    // 语言选择持久化：默认英文，改过之后记住上次的选择（关插件重开仍然生效）
+    var LANG_KEY = 'vh_sub_lang_v1';
+    var DEFAULT_LANG = 'en';
+    function langExists(v) {
+        var opts = (el.selLang && el.selLang.options) || [];
+        for (var i = 0; i < opts.length; i++) if (opts[i].value === v) return true;
+        return false;
+    }
+    function restoreLang() {
+        var saved = '';
+        try { saved = localStorage.getItem(LANG_KEY) || ''; } catch (e) {}
+        if (!saved || !langExists(saved)) saved = langExists(DEFAULT_LANG) ? DEFAULT_LANG : el.selLang.value;
+        el.selLang.value = saved;
+        syncModelByLang();
+    }
+    el.selLang.addEventListener('change', function () {
+        try { localStorage.setItem(LANG_KEY, el.selLang.value); } catch (e) {}
+        syncModelByLang();
+    });
+    restoreLang();
 
     // ---------- 英译中（剧情参考）：调共享翻译引擎 translate.js（MyMemory 免费接口）----------
     var transBusy = false;
