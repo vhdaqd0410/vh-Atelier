@@ -370,6 +370,11 @@
                 showScriptMsg('解析剧本失败：' + msg + '\n\n文件：' + docx);
                 return;
             }
+            if (data.warning) {
+                try {
+                    if (window.__vhLog && window.__vhLog.warn) window.__vhLog.warn('[script] ' + data.warning);
+                } catch (_e) {}
+            }
             openScriptReader(data, docx, projectName, restoreEp);
         } catch (e) {
             showScriptMsg('调用解析器失败：' + e.message);
