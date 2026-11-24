@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.50.9",
-  "buildTime": "2026-10-24 10:49:12",
+  "version": "1.50.10",
+  "buildTime": "2026-11-24 15:35:59",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "时间轴工具条新增「另存分集工程」：按指定集数复制当前工程为多份（命名 <项目ID>-第N集），并自动逐个打开、切到对应序列；与主插件 v1.82.12 同步"
+  "notes": "翻译缓存持久化+清除；交付目录号唯一分配，多版本自动填充不再串号"
 }

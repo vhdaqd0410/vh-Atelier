@@ -11,6 +11,9 @@
     var os = require('os');
     var child_process = require('child_process');
 
+    // 翻译缓存状态（顶层声明，供 openScriptReader 与持久化函数共用）
+    var __transCacheFile = null;
+
     // 插件根目录（js/ 的上一级），供定位 py/ 等资源
     var extRoot = (function () {
         try {
@@ -639,6 +642,12 @@
         var transState = document.createElement('span');
         transState.style.cssText = 'font-size:11px;color:#888;';
         head.appendChild(transState);
+        // 清除本剧本的翻译缓存（连本地缓存文件一起删，下次需要就重新翻）
+        var clearTransBtn = document.createElement('button');
+        clearTransBtn.textContent = '🗑 清除翻译';
+        clearTransBtn.title = '清除这个剧本的本地翻译缓存（点两次确认）';
+        clearTransBtn.style.cssText = 'background:#3a2626;color:#e08a8a;border:1px solid #5a2a2a;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:12px;';
+        head.appendChild(clearTransBtn);
         var mailBtn = document.createElement('button');
         mailBtn.textContent = '📮';
         mailBtn.title = '设置翻译邮箱（MyMemory 提额 10 倍）';
@@ -691,6 +700,56 @@
         var translating = false;
         var transMap = {};           // 批量翻译缓存：'__'+epkey -> {台词行:译文}
         var lineTransMap = {};       // 单句翻译缓存
+        // 加载本剧本的翻译缓存：上次翻译过的，这次打开直接可用，不用再翻一遍
+        loadTransCache(docxPath);
+        try {
+            var _nEp = Object.keys(transMap).filter(function (k) { return k.indexOf('__') === 0; }).length;
+            var _nLn = Object.keys(lineTransMap).length;
+            if (_nEp || _nLn) transState.textContent = '（缓存 ' + _nEp + ' 集 / ' + _nLn + ' 句）';
+        } catch (e) {}
+
+    // ---------- 翻译缓存持久化（按剧本文件分文件存，避开 localStorage 5MB 限制） ----------
+    function __tlog(msg) {
+        try {
+            if (window.console && console.log) console.log('[trans] ' + msg);
+        } catch (e) {}
+    }
+
+    // 不用 require('crypto')：CEP 环境不一定拿得到，抛错会被上层吞掉，表现为「从不落盘」
+    function transCachePathFor(srcPath) {
+        var s = String(srcPath || 'unknown');
+        var h1 = 5381, h2 = 0;
+        for (var i = 0; i < s.length; i++) {
+            var c = s.charCodeAt(i);
+            h1 = ((h1 << 5) + h1 + c) | 0;
+            h2 = (c + (h2 << 6) + (h2 << 16) - h2) | 0;
+        }
+        var key = 'k' + (h1 >>> 0).toString(16) + (h2 >>> 0).toString(16);
+        var dir = path.join(extRoot, 'collect', 'trans_cache');
+        return { dir: dir, file: path.join(dir, key + '.json') };
+    }
+
+    function loadTransCache(srcPath) {
+        try {
+            if (!srcPath) return;
+            var info = transCachePathFor(srcPath);
+            __transCacheFile = info.file;
+            if (!fs.existsSync(info.file)) return;
+            var obj = JSON.parse(fs.readFileSync(info.file, 'utf8'));
+            if (obj && obj.batch) Object.keys(obj.batch).forEach(function (k) { transMap[k] = obj.batch[k]; });
+            if (obj && obj.line) Object.keys(obj.line).forEach(function (k) { lineTransMap[k] = obj.line[k]; });
+        } catch (e) { __tlog('加载失败: ' + (e && e.message)); }
+    }
+
+    function saveTransCache() {
+        try {
+            if (!__transCacheFile) return;
+            var dir = path.dirname(__transCacheFile);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(__transCacheFile, JSON.stringify({ batch: transMap, line: lineTransMap, savedAt: Date.now() }), 'utf8');
+            __tlog('已保存 → ' + __transCacheFile);
+        } catch (e) { __tlog('保存失败: ' + (e && e.message)); }
+    }
         var searchKeyword = '';      // 关键词搜索（非集号时）
         var searchHits = [];         // 当前命中的 <mark> 元素列表
         var hitIdx = -1;             // 当前定位到第几个命中（0 基）
@@ -1562,6 +1621,7 @@
             translateLine(en, function (err, zh) {
                 if (err || !zh) { trn.textContent = '译'; window.__copyFlash && window.__copyFlash('翻译失败'); return; }
                 lineTransMap[line] = zh;
+                saveTransCache();     // 单句翻译也落盘，关掉再开还在
                 trn.textContent = '译';
                 ensureZh(dlg, zh);
             });
@@ -1636,7 +1696,12 @@
         function doTranslate() {
             if (translating) return;
             var key = curEp ? String(curEp) : 'all';
-            if (transMap['__' + key]) { curEpKey = key; render(); transState.textContent = '（已翻译）'; return; }
+            if (transMap['__' + key]) {
+                curEpKey = key;
+                render();
+                transState.textContent = '（已翻译，读自本地缓存）';
+                return;
+            }
             var targets = [];
             epLines(curEp).forEach(function (x) {
                 if (x.type !== 'dialogue') return;
@@ -1654,8 +1719,9 @@
                     transMap['__' + key] = results;
                     translating = false;
                     transBtn.disabled = false;
-                    transState.textContent = '已翻译 ' + targets.length + ' 条';
+                    transState.textContent = '已翻译 ' + targets.length + ' 条（已保存）';
                     curEpKey = key;
+                    saveTransCache();     // 落盘，下次打开直接可用
                     render();
                     return;
                 }
@@ -1670,6 +1736,38 @@
             next();
         }
 
+        // 清除翻译：第一下待确认，4 秒内再点才真删，避免误删
+        var clearArmed = false, clearTimer = null;
+        function clearTransCache() {
+            var count = Object.keys(transMap).length + Object.keys(lineTransMap).length;
+            Object.keys(transMap).forEach(function (k) { delete transMap[k]; });
+            Object.keys(lineTransMap).forEach(function (k) { delete lineTransMap[k]; });
+            var removed = false;
+            try {
+                if (__transCacheFile && fs.existsSync(__transCacheFile)) {
+                    fs.unlinkSync(__transCacheFile);
+                    removed = true;
+                }
+            } catch (e) { __tlog('删除缓存文件失败: ' + (e && e.message)); }
+            __tlog('清除翻译：' + count + ' 段，文件删除=' + removed);
+            render();
+            transState.textContent = removed ? ('已清除本地翻译缓存（' + count + ' 段）') : '已清除当前记忆（无缓存文件）';
+        }
+        clearTransBtn.addEventListener('click', function () {
+            if (!clearArmed) {
+                clearArmed = true;
+                clearTransBtn.textContent = '确认清除？';
+                clearTimer = setTimeout(function () {
+                    clearArmed = false;
+                    clearTransBtn.textContent = '🗑 清除翻译';
+                }, 4000);
+                return;
+            }
+            clearTimeout(clearTimer);
+            clearArmed = false;
+            clearTransBtn.textContent = '🗑 清除翻译';
+            clearTransCache();
+        });
         transBtn.addEventListener('click', doTranslate);
         mailBtn.addEventListener('click', function () {
             var U = window.__vhUtils || {};
