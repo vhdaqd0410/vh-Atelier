@@ -1754,7 +1754,10 @@ function meProjectInfo() {
         try { dir = p.path; } catch (e) {}
         try { saved = p.saved; } catch (e) {}
         try { if (app.project.activeSequence) seqName = app.project.activeSequence.name; } catch (e) {}
-        return JSON.stringify({ name: name, dir: dir, saved: !!saved, seq: seqName });
+        // path / root 供超分队列锁定「提交时的工程」：下载时据此判断要不要导入素材箱
+        var root = '';
+        try { var pd = meProjectDir(); if (pd && pd.indexOf("OK:") === 0) root = pd.slice(3); } catch (e) {}
+        return JSON.stringify({ name: name, dir: dir, path: dir, root: root, saved: !!saved, seq: seqName });
     } catch (e) { return JSON.stringify({ error: e.toString() }); }
 }
 

@@ -384,6 +384,17 @@ def _open_url_retry(url, headers=None, timeout=60, tries=3, log=None):
     return None, last or '连接失败'
 
 
+def _unique_final(dest):
+    """绝不覆盖已有文件：目标已存在就顺延 _2/_3…，返回真正可用的落盘路径。"""
+    if not os.path.exists(dest):
+        return dest
+    base, ext = os.path.splitext(dest)
+    n = 2
+    while os.path.exists('%s_%d%s' % (base, n, ext)):
+        n += 1
+    return '%s_%d%s' % (base, n, ext)
+
+
 def _download_to_file(url, dest, progress_cb=None, log=None, timeout=60, tries=3):
     """把 URL 内容下载到 dest。
     关键加固：
@@ -454,21 +465,8 @@ def _download_to_file(url, dest, progress_cb=None, log=None, timeout=60, tries=3
     # 落地：目标文件可能被 PR / 播放器占用（WinError 32），
     # 这种目录通常是 PR 已导入的素材目录，直接删除会断开 PR 引用。
     # 策略：先试 os.replace；被占用则改用带序号的新名，不碰旧文件。
-    final = dest
+    final = _unique_final(dest)
     try:
-        if os.path.exists(dest):
-            try:
-                os.remove(dest)
-            except OSError as e:
-                # 被占用（共享冲突 / 拒绝访问）：不删旧文件，换名保存
-                if getattr(e, 'winerror', None) in (32, 33) or e.errno in (13, 32):
-                    base, ext = os.path.splitext(dest)
-                    n = 2
-                    while os.path.exists('%s_%d%s' % (base, n, ext)):
-                        n += 1
-                    final = '%s_%d%s' % (base, n, ext)
-                else:
-                    raise
         os.replace(part, final)
     except Exception as e:
         try:

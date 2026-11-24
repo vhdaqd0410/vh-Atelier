@@ -526,8 +526,11 @@
       if (!fs.existsSync(tmpRoot)) { try { fs.mkdirSync(tmpRoot, { recursive: true }); } catch (e) {} }
       var folderId = enFolder && enFolder.value ? enFolder.value : '14086';
       var resolution = enRes ? (enRes.value || '720p') : '720p';
+      // 先锁定「点按钮时打开的工程」：整批任务都跟着这个工程走，中途切工程也不会跑偏
+      await captureProjectCtx();
       // 结果目录（项目根/超分结果）
       await resolveResultDir();
+      if (projCtx) projCtx.targetDir = resultDir;
 
       // 区间来源：选了「入点→出点」则只导出该区间（而不是整集）
       var useRange = (enClipSrcMode() === 'inout');
@@ -582,7 +585,7 @@
 
       // ===== 阶段2：交给后台队列轮询（不阻塞界面） =====
       if (!tasks.length) { log('没有任何任务提交', 'err'); return; }
-      tasks.forEach(function (tk) { bgEnqueue(tk.taskId, tk.seqName, taskMode); });
+      tasks.forEach(function (tk) { bgEnqueue(tk.taskId, tk.seqName, taskMode, projCtx); });
       log('════ 全部 ' + tasks.length + ' 集已提交到后台队列 ════', 'ok');
       log('💡 ' + modeCN + '在云端处理中，无需等待——可直接改选其他序列继续提交；结果完成后会自动下载并导入素材箱', 'ok');
       setProg(100, '已提交 ' + tasks.length + ' 个任务，后台自动处理');
@@ -604,13 +607,89 @@
   // 「等待云端处理 + 下载导入」交给这个独立轮询器，不阻塞界面。
   // 两个模式的队列共用同一个轮询器（每次分别查 enhance / erase 两种任务列表）。
 
-  function bgEnqueue(taskId, seqName, mode) {
+  // ===== 目标工程锁定 + 唯一文件名 =====
+  // 提交任务时把「当时的工程路径 / 结果目录」写进队列记录并持久化，下载时用它。
+  // 不能等下载那一刻再问「当前打开的工程是哪个」——中途切工程，结果就会落到别的项目里。
+  var projCtx = null;
+
+  // meProjectInfo 在不同版本里返回格式不同（"OK:{...}" 或裸 JSON，字段 path 或 dir），统一解析
+  function _parseProjInfo(r) {
+    if (!r) return null;
+    var o = null;
+    try {
+      o = JSON.parse(r.indexOf('OK:') === 0 ? r.slice(3) : r);
+    } catch (e) { return null; }
+    if (!o || o.error) return null;
+    return { path: o.path || o.dir || '', root: o.root || o.dir || '', name: o.name || '' };
+  }
+
+  async function captureProjectCtx() {
+    var ctx = null;
+    try {
+      ctx = _parseProjInfo(await evalHost('meProjectInfo()'));
+    } catch (e) {}
+    if (!ctx) ctx = { path: '', root: '', name: '' };
+    ctx.at = Date.now();
+    ctx.targetDir = resultDir || '';
+    projCtx = ctx;
+    return ctx;
+  }
+
+  // 记录里锁定的目标目录：不存在就建；建不出来返回空，由调用方兜底
+  function dirOfRecord(rec) {
+    var d = (rec && rec.targetDir) || '';
+    if (!d) return '';
+    try { fs.mkdirSync(d, { recursive: true }); } catch (e) {}
+    try { if (fs.existsSync(d)) return d; } catch (e) {}
+    return '';
+  }
+
+  // 唯一文件名：base + tag + ext，已被占用就加 (2)(3)…，绝不覆盖已有文件。
+  function pickSaveName(dir, base, tag, ext, existsFn) {
+    var exists = existsFn || function (q) { try { return fs.existsSync(q); } catch (e) { return false; } };
+    var head = String(base || 'result') + (tag || '');
+    var name = head + ext;
+    if (!exists(path.join(dir, name))) return name;
+    var n = 2;
+    while (exists(path.join(dir, head + '(' + n + ')' + ext))) n++;
+    return head + '(' + n + ')' + ext;
+  }
+
+  function stampOf(ms) {
+    var d = new Date(ms || Date.now());
+    function p2(n) { return (n < 10 ? '0' : '') + n; }
+    return p2(d.getMonth() + 1) + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes());
+  }
+
+  // 后台记录用固定名：<集名><后缀>_<提交时间>-<任务尾号>.mp4
+  function saveNameForRecord(rec, dir, isErase) {
+    var base = String(rec.seqName || ('task_' + rec.taskId)).replace(/\.mp4$/i, '').replace(/_nosub$/i, '');
+    var tag = '_' + stampOf(rec.addedAt) + '-' + String(rec.taskId).slice(-4);
+    return pickSaveName(dir, base + (isErase ? '_erased' : '_720p'), tag, '.mp4');
+  }
+
+  // 当前打开的工程是否就是提交时的那个
+  async function isSameProject(projPath) {
+    if (!projPath) return true;   // 旧记录没有工程信息：按老行为放行
+    try {
+      var cur = _parseProjInfo(await evalHost('meProjectInfo()'));
+      if (!cur) return false;
+      function norm(x) { return String(x || '').replace(/\\/g, '/').toLowerCase(); }
+      return norm(cur.path) === norm(projPath);
+    } catch (e) { return false; }
+  }
+
+  function bgEnqueue(taskId, seqName, mode, ctx) {
+    var c = ctx || projCtx || null;
     bgQueue.push({
       taskId: String(taskId),
       seqName: seqName || '',
       mode: mode || taskMode,
       status: 'queued',
-      addedAt: Date.now()
+      addedAt: Date.now(),
+      projPath: (c && c.path) || '',
+      projName: (c && c.name) || '',
+      targetDir: (c && c.targetDir) || ''
     });
     bgSave();
     bgRender();
@@ -641,7 +720,10 @@
             seqName: q.seqName || '',
             mode: q.mode || 'enhance',
             status: 'queued',
-            addedAt: q.addedAt || now
+            addedAt: q.addedAt || now,
+            projPath: q.projPath || '',
+            projName: q.projName || '',
+            targetDir: q.targetDir || ''
           });
         }
       });
@@ -711,15 +793,20 @@
     var isErase = (q.mode === 'erase');
     var binName = isErase ? '去字幕' : '超分';
     try {
-      var dir = resultDir || (await resolveResultDir());
-      var srcBase = String(q.seqName || ('task_' + q.taskId)).replace(/\.mp4$/i, '').replace(/_nosub$/i, '');
-      var saveName = srcBase + (isErase ? '_erased.mp4' : '_720p.mp4');
+      // 目录优先级：提交时锁定的工程目录 → 本次运行目录 → 当前工程
+      var dir = dirOfRecord(q) || resultDir || (await resolveResultDir());
+      var saveName = saveNameForRecord(q, dir, isErase);
       var f = await downloadTask(q.taskId, dir, saveName, null, q.mode);
       if (f && fs.existsSync(f)) {
         log('📥 已下载：' + f, 'ok');
-        var imp = await importToBin([f], binName);
-        if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
-        else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
+        // 只有当前打开的仍是提交时那个工程，才自动导入素材箱
+        if (await isSameProject(q.projPath)) {
+          var imp = await importToBin([f], binName);
+          if (imp && imp.ok) log('📥 已导入素材箱「' + binName + '」：' + (imp.imported || []).join('、'), 'ok');
+          else log('⚠ 导入素材箱失败：' + ((imp && (imp.error || JSON.stringify(imp))) || '未知'), 'warn');
+        } else {
+          log('⚠ 当前打开的工程不是提交时的「' + (q.projName || q.projPath) + '」，文件只下载不导入；切回该工程后可手动拖进素材箱', 'warn');
+        }
         q.status = 'imported';
       } else {
         log('⚠ 下载失败（任务 ' + q.taskId + '），原因未知', 'warn');
@@ -786,7 +873,9 @@
         var dlFile = '';
         try {
           var srcBase = path.basename(tk.outFile).replace(/\.mp4$/i, '');
-          dlFile = await downloadTask(tk.taskId, dir, srcBase + (isErase ? '_erased.mp4' : '_720p.mp4'), null, mode);
+          var dlName = pickSaveName(dir, srcBase + (isErase ? '_erased' : '_720p'),
+            '_' + stampOf(Date.now()) + '-' + String(tk.taskId).slice(-4), '.mp4');
+          dlFile = await downloadTask(tk.taskId, dir, dlName, null, mode);
         } catch (e) {
           // 保留具体原因：外层只知道"下载失败"，这里能区分网络/令牌过期/磁盘问题
           try { window.__vhLog && window.__vhLog.err((isErase ? '去字幕' : '超分') + '结果下载失败 task=' + tk.taskId, e); } catch (_) {}
@@ -986,13 +1075,14 @@
       if (pctEl) pctEl.textContent = Math.round(pct) + '%';
     }
     try {
-      var dir = resultDir || (await resolveResultDir());
+      var dir = await resolveResultDir();   // 手动下载按「此刻打开的工程」走，避免沿用上一次运行的旧目录
       for (var k = 0; k < jobs.length; k++) {
         if (stopFlag) { log('⏹ 已停止批量下载', 'warn'); break; }
         var job = jobs[k];
         setProg((k / jobs.length) * 100, '[' + (k + 1) + '/' + jobs.length + '] 下载 ' + prettyName(job.name));
         var srcBase = String(job.name || ('task_' + job.id)).replace(/\.mp4$/i, '').replace(/_nosub$/i, '');
-        var saveName = srcBase + (taskMode === 'erase' ? '_erased.mp4' : '_720p.mp4');
+        var saveName = pickSaveName(dir, srcBase + (taskMode === 'erase' ? '_erased' : '_720p'),
+          '_' + stampOf(Date.now()) + '-' + String(job.id).slice(-4), '.mp4');
         try {
           var f = await downloadTask(job.id, dir, saveName, null, taskMode);
           if (f && fs.existsSync(f)) {
@@ -1034,9 +1124,10 @@
     var progEl = makeDlProgress(taskId);
     (async function () {
       try {
-        var dir = resultDir || (await resolveResultDir());
+        var dir = await resolveResultDir();   // 手动下载按「此刻打开的工程」走
         var srcBase = String(srcName || 'task_' + taskId).replace(/\.mp4$/i, '').replace(/_nosub$/i, '');
-        var saveName = srcBase + (isErase ? '_erased.mp4' : '_720p.mp4');
+        var saveName = pickSaveName(dir, srcBase + (isErase ? '_erased' : '_720p'),
+          '_' + stampOf(Date.now()) + '-' + String(taskId).slice(-4), '.mp4');
         var dlFile = await downloadTask(taskId, dir, saveName, function (pct) {
           if (progEl) { progEl.textContent = '下载中 ' + pct + '%'; progEl.style.color = '#b39ddb'; }
         }, mode);
@@ -1598,7 +1689,9 @@
       }
       var folderId = enFolder && enFolder.value ? enFolder.value : ENHANCE_FOLDER;
       var resolution = enRes ? (enRes.value || ENHANCE_RES) : ENHANCE_RES;
+      await captureProjectCtx();
       await resolveResultDir();
+      if (projCtx) projCtx.targetDir = resultDir;
 
       var safe = String(c.seqName).replace(/[\\/:*?"<>|]/g, '_');
       if (!fs.existsSync(tmpRoot)) { try { fs.mkdirSync(tmpRoot, { recursive: true }); } catch (e) {} }
@@ -1624,7 +1717,7 @@
       setProg(100, '已提交，后台处理中');
 
       // 交给后台队列：不阻塞界面，完成后自动下载导入
-      bgEnqueue(tid, c.seqName || ('片段 ' + fmtSec(c.startSec)), taskMode);
+      bgEnqueue(tid, c.seqName || ('片段 ' + fmtSec(c.startSec)), taskMode, projCtx);
       log('💡 ' + modeCN + '在云端处理中，无需等待——可立即选其他片段继续处理', 'ok');
       log('════ 选中片段已提交 ════', 'ok');
       try { refreshTaskList(); } catch (e) {}
