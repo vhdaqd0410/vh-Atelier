@@ -3,8 +3,8 @@
   "repo": "vhdaqd0410/vh-Atelier",
   "branch": "vh-ate",
   "displayName": "vh-Atelier A",
-  "version": "1.50.10",
-  "buildTime": "2026-11-24 15:35:59",
+  "version": "1.50.11",
+  "buildTime": "2026-11-24 17:01:50",
   "skipDirs": [
     "collect",
     "bin",
@@ -23,5 +23,5 @@
     "backups",
     "cover_cache"
   ],
-  "notes": "翻译缓存持久化+清除；交付目录号唯一分配，多版本自动填充不再串号"
+  "notes": "剧本解析对坏 docx 容错（ZIP 目录不在末尾时自动截断解析）"
 }

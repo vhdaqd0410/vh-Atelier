@@ -22,6 +22,7 @@ import re
 import json
 import html as htmlmod
 import zipfile
+import struct
 import difflib
 
 # 让 stdout 输出 UTF-8（Windows 下避免 GBK 崩溃）
@@ -64,10 +65,43 @@ def parse_episode(user_input):
     return cn_to_int(m.group(1))
 
 # ---------- docx 解析 ----------
+_LAST_NOTE = ['']
+
+def _open_docx_zip(path):
+    """打开 docx；对「ZIP 目录不在文件末尾」的文件做容错。
+
+    常见坏法：复制/同步没完成，或文件尾部被追加了一段无效数据。ZIP 结构本身完整，
+    但 zipfile 只在文件末尾找 EOCD，找不到就报 File is not a zip file。
+    这里按文件内最后一个 EOCD 的位置截断后再打开。返回 (ZipFile, 提示文本)。
+    """
+    try:
+        return zipfile.ZipFile(path), ''
+    except zipfile.BadZipFile:
+        pass
+    raw = open(path, 'rb').read()
+    if raw[:4] == b'\xd0\xcf\x11\xe0':
+        raise ValueError('这是 Word 97-2003 的 .doc（或加密文档），不是 docx；请用 Word 另存为 .docx 再解析')
+    e = raw.rfind(b'PK\x05\x06')
+    if e < 0:
+        raise ValueError('文件不是完整的 docx（找不到 ZIP 目录）。多半是复制/同步没完成，请重新复制一份')
+    clen = struct.unpack_from('<H', raw, e + 20)[0]
+    end = e + 22 + clen
+    if end > len(raw):
+        raise ValueError('文件不是完整的 docx（ZIP 目录被截断），请重新复制一份')
+    try:
+        z = zipfile.ZipFile(io.BytesIO(raw[:end]))
+    except Exception:
+        raise ValueError('文件不是完整的 docx（ZIP 结构损坏），请重新复制或用 Word 另存一份')
+    extra = len(raw) - end
+    return z, ('文件尾部多出 %d 字节无效数据，已按 ZIP 结构自动截断解析；建议用 Word 另存一份干净的 .docx' % extra)
+
 def docx_to_lines(path):
     """解出 word/document.xml 的文本行（每段一行）"""
-    z = zipfile.ZipFile(path)
-    xml = z.read('word/document.xml').decode('utf-8', errors='replace')
+    z, _note = _open_docx_zip(path)
+    try:
+        xml = z.read('word/document.xml').decode('utf-8', errors='replace')
+    except KeyError:
+        raise ValueError('这个文件里没有 word/document.xml，可能不是 Word 文档')
     paras = re.findall(r'<w:p[ >].*?</w:p>', xml, re.S)
     lines = []
     for para in paras:

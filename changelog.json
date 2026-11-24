@@ -4,6 +4,21 @@
   "_维护": "每次发版在 versions 数组开头插入一条，version 与 version.json 的 version 保持一致",
   "versions": [
     {
+      "version": "1.50.11",
+      "date": "2026-11-24",
+      "title": "剧本解析对坏 docx 容错",
+      "items": [
+        {
+          "kind": "fix",
+          "text": "修「解析剧本失败：File is not a zip file」：文件尾部多出无效数据导致 ZIP 目录不在末尾时，按文件内最后一个 ZIP 目录截断解析，内容完整就能读出来"
+        },
+        {
+          "kind": "impr",
+          "text": "解析失败提示改成可操作的话（.doc 改名 / 复制没完成 / ZIP 损坏分别说明），自动修复后往运行日志记一条"
+        }
+      ]
+    },
+    {
       "version": "1.50.10",
       "date": "2026-11-24",
       "title": "翻译缓存持久化+清除；交付目录号防串号",

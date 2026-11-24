@@ -5,7 +5,7 @@
 结构: { ok, lines: [ {text, episode} ] }  episode 为该段所属集数（第X集），无则 null
 用法: python docx_read.py --docx <path> [--out <json>]
 """
-import sys, re, json, zipfile, html as htmlmod
+import sys, io, struct, re, json, zipfile, html as htmlmod
 # PyMuPDF(fitz) 会打 deprecation warning 到 stdout，污染 JSON 输出；提前静音
 import warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning)
@@ -46,9 +46,43 @@ def cn_to_int(s):
     return total
 
 
+_LAST_NOTE = ['']
+
+def _open_docx_zip(path):
+    """打开 docx；对「ZIP 目录不在文件末尾」的文件做容错。
+
+    常见坏法：复制/同步没完成，或文件尾部被追加了一段无效数据。ZIP 结构本身完整，
+    但 zipfile 只在文件末尾找 EOCD，找不到就报 File is not a zip file。
+    这里按文件内最后一个 EOCD 的位置截断后再打开。返回 (ZipFile, 提示文本)。
+    """
+    try:
+        return zipfile.ZipFile(path), ''
+    except zipfile.BadZipFile:
+        pass
+    raw = open(path, 'rb').read()
+    if raw[:4] == b'\xd0\xcf\x11\xe0':
+        raise ValueError('这是 Word 97-2003 的 .doc（或加密文档），不是 docx；请用 Word 另存为 .docx 再解析')
+    e = raw.rfind(b'PK\x05\x06')
+    if e < 0:
+        raise ValueError('文件不是完整的 docx（找不到 ZIP 目录）。多半是复制/同步没完成，请重新复制一份')
+    clen = struct.unpack_from('<H', raw, e + 20)[0]
+    end = e + 22 + clen
+    if end > len(raw):
+        raise ValueError('文件不是完整的 docx（ZIP 目录被截断），请重新复制一份')
+    try:
+        z = zipfile.ZipFile(io.BytesIO(raw[:end]))
+    except Exception:
+        raise ValueError('文件不是完整的 docx（ZIP 结构损坏），请重新复制或用 Word 另存一份')
+    extra = len(raw) - end
+    return z, ('文件尾部多出 %d 字节无效数据，已按 ZIP 结构自动截断解析；建议用 Word 另存一份干净的 .docx' % extra)
+
 def docx_to_lines(path):
-    z = zipfile.ZipFile(path)
-    xml = z.read('word/document.xml').decode('utf-8', errors='replace')
+    z, note = _open_docx_zip(path)
+    _LAST_NOTE[0] = note
+    try:
+        xml = z.read('word/document.xml').decode('utf-8', errors='replace')
+    except KeyError:
+        raise ValueError('这个文件里没有 word/document.xml，可能不是 Word 文档')
     # 段落 + 段内行（w:br 分出的可视行也拆开，接近原排版）
     paras = re.findall(r'<w:p[ >].*?</w:p>', xml, re.S)
     lines = []
@@ -215,6 +249,8 @@ def main():
         # 集数清单
         eps = sorted(set(x['episode'] for x in parsed if x['episode'] is not None))
         result = {'ok': True, 'fileName': docx_path.split('\\')[-1], 'episodes': eps, 'lines': parsed}
+        if _LAST_NOTE[0]:
+            result['warning'] = _LAST_NOTE[0]
         txt = json.dumps(result, ensure_ascii=False)
         if out_path:
             with open(out_path, 'w', encoding='utf-8') as f:
