@@ -49,6 +49,8 @@ JOBS = [
     ("test-musicagg-bar.py",    "python", True, "歌词浮窗尺寸 + 播放栏歌词动画与配色", None),
     ("test-musicagg-layout.py", "python", True, "真实渲染验证：浮层定位与多宽度布局（需 Chrome）", None),
     ("test-srt-sidecar.js", "node", True, "字幕侧车归位：AMA/PR 命名差异、晚到、批量兜底、作用域防回归", None),
+    ("test-enhance-save.js", "node", True, "超分/去字幕结果下载：唯一命名 + 目标工程锁定（防覆盖、防落到别的项目）", None),
+    ("test-enhance-unique.py", "python", True, "超分结果落盘：同名文件顺延 _2/_3，绝不覆盖旧文件", None),
     ("test-en-shared.js", "node", True, "公共模块：序列选择 + 时间轴区间读取（两面板共用）", None),
     ("test-localsub.js", "node", True, "本地去字幕：处理完导入素材箱 + 截帧框选区域", None),
     ("test-ame-channel.js", "node", True, "AME 队列通道：选了 AME 必须真入队（防误走 PR 直渲）", None),
